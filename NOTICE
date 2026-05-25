@@ -1,0 +1,18 @@
+Lliam-GOV is a hardened, CMMC-L2 / ISO/IEC 42001-aligned fork of
+Hermes Agent (https://github.com/NousResearch/hermes-agent), released
+by Nous Research under the MIT License. The upstream LICENSE file is
+retained at the repository root.
+
+The agent runtime, conversation loop, provider adapters, terminal
+backends, plugin framework, skill system, dashboard UI, and gateway
+scaffolding are upstream Hermes work. Lliam-GOV's contribution is a
+documented governance overlay — FIPS-validated encryption at rest,
+append-only hash-chained audit logging, messaging-gateway narrowing
+(Slack, email, Telegram only), egress allowlist with TLS enforcement,
+isolation enforcement, CUI marking and audit instrumentation,
+supply-chain hygiene, and a human-approval gate over dynamic agent
+self-modification — plus the AIMS documented-information set that
+frames the agent as evidence for the Katmai ISO 42001 program.
+
+Lliam-GOV is maintained by Jerome Davis. No original authorship of
+the upstream Hermes Agent codebase is claimed.
