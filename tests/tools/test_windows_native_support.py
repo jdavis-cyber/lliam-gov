@@ -706,7 +706,8 @@ class TestNpmBareSpawnsResolved:
         [
             "hermes_cli/tools_config.py",
             "hermes_cli/doctor.py",
-            "gateway/platforms/whatsapp.py",
+            # Lliam-GOV: gateway/platforms/whatsapp.py was deleted in
+            # plan §6.5 gateway trim.
             "tools/browser_tool.py",
         ],
     )

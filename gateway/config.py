@@ -104,6 +104,20 @@ class Platform(Enum):
     members created on-demand by ``_missing_()`` so that
     ``Platform("irc")`` works without modifying this enum.  Dynamic members
     are cached in ``_value2member_map_`` for identity-stable comparisons.
+
+    Lliam-GOV (Phase 1, plan §6.5): the OPERABLE built-in surface is
+    narrowed to LOCAL, TELEGRAM, SLACK, and EMAIL.  Adapter modules for
+    Discord, WhatsApp, Signal, Matrix, HomeAssistant, SMS, DingTalk,
+    Feishu, WeCom, Weixin, BlueBubbles, QQBot, Yuanbao, API server,
+    generic Webhook, and MSGraph webhook were deleted from
+    ``gateway/platforms/`` in the same commit, and the gateway dispatch
+    in ``gateway/run.py`` no longer instantiates them — message ingress
+    via those channels is impossible because the adapter code is absent.
+    The enum members for the removed platforms are retained as
+    cross-reference placeholders to avoid an AttributeError fan-out
+    across ~50 sites in ``tools/send_message_tool.py``,
+    ``gateway/session.py``, this file, and several others.  Removing
+    those dead references is a Phase 1 follow-up.
     """
     LOCAL = "local"
     TELEGRAM = "telegram"

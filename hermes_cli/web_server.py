@@ -4672,17 +4672,29 @@ def start_server(
     global _DASHBOARD_EMBEDDED_CHAT_ENABLED
     _DASHBOARD_EMBEDDED_CHAT_ENABLED = embedded_chat
 
+    # Lliam-GOV (plan §6.5, §5.4): the dashboard is loopback-only.  The
+    # ``allow_public`` parameter is retained in the signature for upstream
+    # API stability but is treated as a hard refusal — any non-loopback
+    # host raises SystemExit unconditionally, even if the caller passes
+    # allow_public=True.  Operators who need remote dashboard access must
+    # tunnel via SSH; there is no in-process break-glass.
     _LOCALHOST = ("127.0.0.1", "localhost", "::1")
-    if host not in _LOCALHOST and not allow_public:
-        raise SystemExit(
-            f"Refusing to bind to {host} — the dashboard exposes API keys "
-            f"and config without robust authentication.\n"
-            f"Use --insecure to override (NOT recommended on untrusted networks)."
-        )
     if host not in _LOCALHOST:
+        raise SystemExit(
+            f"Lliam-GOV: refusing to bind dashboard to {host} — only "
+            f"loopback ({', '.join(_LOCALHOST)}) is permitted.  The "
+            f"upstream --host / --insecure break-glass flags were "
+            f"physically removed in plan §6.5.  Tunnel remote access "
+            f"via `ssh -L 9119:127.0.0.1:9119 <host>` instead."
+        )
+    if allow_public:
+        # Defense-in-depth: even if a stale caller still passes
+        # allow_public=True, the host check above already blocked any
+        # non-loopback bind.  Log a warning so the misuse is visible.
         _log.warning(
-            "Binding to %s with --insecure — the dashboard has no robust "
-            "authentication. Only use on trusted networks.", host,
+            "Lliam-GOV: allow_public=True ignored — dashboard is "
+            "loopback-only per plan §6.5.  Update the caller to stop "
+            "passing this argument."
         )
 
     # Record the bound host so host_header_middleware can validate incoming

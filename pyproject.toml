@@ -3,12 +3,15 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hermes-agent"
+name = "lliam-gov"
 version = "0.14.0"
-description = "The self-improving AI agent — creates skills from experience, improves them during use, and runs anywhere"
+description = "Lliam-GOV — a CMMC L2 / ISO 42001-aligned fork of Hermes Agent (Nous Research, MIT). See NOTICE for attribution."
 readme = "README.md"
 requires-python = ">=3.11"
-authors = [{ name = "Nous Research" }]
+authors = [
+  { name = "Jerome Davis", email = "jdavis.cyber@gmail.com" },
+  { name = "Nous Research (upstream)" },
+]
 license = { text = "MIT" }
 dependencies = [
   # Core — every direct dep is exact-pinned to ==X.Y.Z (no ranges).
@@ -133,23 +136,23 @@ azure-identity = ["azure-identity==1.25.3"]
 termux = [
   # Baseline Android / Termux path for reliable fresh installs.
   "python-telegram-bot[webhooks]==22.6",
-  "hermes-agent[cron]",
-  "hermes-agent[cli]",
-  "hermes-agent[pty]",
-  "hermes-agent[mcp]",
-  "hermes-agent[honcho]",
-  "hermes-agent[acp]",
+  "lliam-gov[cron]",
+  "lliam-gov[cli]",
+  "lliam-gov[pty]",
+  "lliam-gov[mcp]",
+  "lliam-gov[honcho]",
+  "lliam-gov[acp]",
 ]
 termux-all = [
   # Best-effort "install all" profile for Termux. Same policy as [all]:
   # only includes extras that aren't covered by `tools/lazy_deps.py`.
   # Backends like telegram/slack/dingtalk/feishu/honcho lazy-install at
   # first use, so they're no longer eager-installed here.
-  "hermes-agent[termux]",
-  "hermes-agent[google]",
-  "hermes-agent[homeassistant]",
-  "hermes-agent[sms]",
-  "hermes-agent[web]",
+  "lliam-gov[termux]",
+  "lliam-gov[google]",
+  "lliam-gov[homeassistant]",
+  "lliam-gov[sms]",
+  "lliam-gov[web]",
 ]
 dingtalk = ["dingtalk-stream==0.24.3", "alibabacloud-dingtalk==2.2.42", "qrcode==7.4.2"]
 feishu = ["lark-oapi==1.5.3", "qrcode==7.4.2"]
@@ -193,20 +196,26 @@ all = [
   # [all], `uv sync --locked` on Windows tried to build it from sdist
   # and failed on `make`. Lazy-install routes that build to first use,
   # where the user is expected to have a toolchain available.
-  "hermes-agent[cron]",
-  "hermes-agent[cli]",
-  "hermes-agent[dev]",
-  "hermes-agent[pty]",
-  "hermes-agent[mcp]",
-  "hermes-agent[homeassistant]",
-  "hermes-agent[sms]",
-  "hermes-agent[acp]",
-  "hermes-agent[google]",
-  "hermes-agent[web]",
-  "hermes-agent[youtube]",
+  "lliam-gov[cron]",
+  "lliam-gov[cli]",
+  "lliam-gov[dev]",
+  "lliam-gov[pty]",
+  "lliam-gov[mcp]",
+  "lliam-gov[homeassistant]",
+  "lliam-gov[sms]",
+  "lliam-gov[acp]",
+  "lliam-gov[google]",
+  "lliam-gov[web]",
+  "lliam-gov[youtube]",
 ]
 
 [project.scripts]
+# Lliam-GOV CLI alias (documented entry point per plan §6.2). Wraps the
+# upstream Hermes CLI binary 1:1 — both names work identically; lliam-gov
+# is the documented one. The hermes / hermes-agent / hermes-acp aliases
+# remain so upstream documentation, scripts, and packaging tools that
+# reference them continue to function.
+lliam-gov = "hermes_cli.main:main"
 hermes = "hermes_cli.main:main"
 hermes-agent = "run_agent:main"
 hermes-acp = "acp_adapter.entry:main"

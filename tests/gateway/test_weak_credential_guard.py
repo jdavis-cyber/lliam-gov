@@ -106,36 +106,3 @@ class TestPlatformTokenPlaceholderGuard:
 # ---------------------------------------------------------------------------
 
 
-class TestAPIServerPlaceholderKeyGuard:
-    """Verify that the API server rejects placeholder keys on network hosts."""
-
-    @pytest.mark.asyncio
-    async def test_refuses_wildcard_with_placeholder_key(self):
-        from gateway.platforms.api_server import APIServerAdapter
-
-        adapter = APIServerAdapter(
-            PlatformConfig(enabled=True, extra={"host": "0.0.0.0", "key": "changeme"})
-        )
-        result = await adapter.connect()
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_refuses_wildcard_with_asterisk_key(self):
-        from gateway.platforms.api_server import APIServerAdapter
-
-        adapter = APIServerAdapter(
-            PlatformConfig(enabled=True, extra={"host": "0.0.0.0", "key": "***"})
-        )
-        result = await adapter.connect()
-        assert result is False
-
-    def test_allows_loopback_with_placeholder_key(self):
-        """Loopback with a placeholder key is fine — not network-exposed."""
-        from gateway.platforms.api_server import APIServerAdapter
-        from gateway.platforms.base import is_network_accessible
-
-        adapter = APIServerAdapter(
-            PlatformConfig(enabled=True, extra={"host": "127.0.0.1", "key": "changeme"})
-        )
-        # On loopback the placeholder guard doesn't fire
-        assert is_network_accessible(adapter._host) is False

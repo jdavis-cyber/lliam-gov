@@ -41,16 +41,26 @@ def get_hermes_home_override() -> str | None:
 
 
 def get_hermes_home() -> Path:
-    """Return the Hermes home directory (default: ~/.hermes).
+    """Return the Hermes home directory (default: ~/.lliam-gov).
 
-    Reads HERMES_HOME env var, falls back to ~/.hermes.
+    Reads HERMES_HOME env var, falls back to ~/.lliam-gov.
     This is the single source of truth — all other copies should import this.
+
+    NOTE (Lliam-GOV facelift, Phase 1): the default flipped from ~/.hermes
+    to ~/.lliam-gov.  The HERMES_HOME env var name itself is unchanged per
+    plan §6.3.  ~20 call sites across the codebase still construct
+    ``Path.home() / ".hermes"`` directly as their HERMES_HOME fallback
+    (mcp_serve.py, tools/mcp_oauth.py, hermes_cli/{main,env_loader,
+    slack_cli,kanban_db,auth,gateway}.py, gateway/platforms/telegram.py,
+    agent/secret_sources/bitwarden.py, agent/lsp/install.py, several plugin
+    adapters).  Lliam-GOV deployments MUST set HERMES_HOME explicitly to
+    avoid a split-brain state directory.  See operator runbook (Phase 5).
 
     When ``HERMES_HOME`` is unset but an ``active_profile`` file indicates
     a non-default profile is active, logs a loud one-shot warning to
     ``errors.log`` so cross-profile data corruption is diagnosable instead
     of silent.  Behavior is unchanged otherwise — we still return
-    ``~/.hermes`` — because raising here would brick 30+ module-level
+    ``~/.lliam-gov`` — because raising here would brick 30+ module-level
     callers that import this at load time.  Subprocess spawners are
     expected to propagate ``HERMES_HOME`` explicitly (see the systemd
     template in ``hermes_cli/gateway.py`` and the kanban dispatcher in
@@ -72,7 +82,7 @@ def get_hermes_home() -> Path:
             # Inline the default-root resolution from get_default_hermes_root()
             # to stay import-safe (this function is called from module scope
             # in 30+ files; we cannot afford to trigger logging setup here).
-            active_path = (Path.home() / ".hermes" / "active_profile")
+            active_path = (Path.home() / ".lliam-gov" / "active_profile")
             active = active_path.read_text().strip() if active_path.exists() else ""
         except (UnicodeDecodeError, OSError):
             active = ""
@@ -86,9 +96,9 @@ def get_hermes_home() -> Path:
             import sys
             msg = (
                 f"[HERMES_HOME fallback] HERMES_HOME is unset but active "
-                f"profile is {active!r}. Falling back to ~/.hermes, which "
-                f"is the DEFAULT profile — not {active!r}. Any data this "
-                f"process writes will land in the wrong profile. The "
+                f"profile is {active!r}. Falling back to ~/.lliam-gov, "
+                f"which is the DEFAULT profile — not {active!r}. Any data "
+                f"this process writes will land in the wrong profile. The "
                 f"subprocess spawner should pass HERMES_HOME explicitly "
                 f"(see issue #18594)."
             )
@@ -98,26 +108,26 @@ def get_hermes_home() -> Path:
             except Exception:
                 pass
 
-    return Path.home() / ".hermes"
+    return Path.home() / ".lliam-gov"
 
 
 def get_default_hermes_root() -> Path:
     """Return the root Hermes directory for profile-level operations.
 
-    In standard deployments this is ``~/.hermes``.
+    In standard deployments this is ``~/.lliam-gov``.
 
     In Docker or custom deployments where ``HERMES_HOME`` points outside
-    ``~/.hermes`` (e.g. ``/opt/data``), returns ``HERMES_HOME`` directly
+    ``~/.lliam-gov`` (e.g. ``/opt/data``), returns ``HERMES_HOME`` directly
     — that IS the root.
 
     In profile mode where ``HERMES_HOME`` is ``<root>/profiles/<name>``,
     returns ``<root>`` so that ``profile list`` can see all profiles.
-    Works both for standard (``~/.hermes/profiles/coder``) and Docker
+    Works both for standard (``~/.lliam-gov/profiles/coder``) and Docker
     (``/opt/data/profiles/coder``) layouts.
 
     Import-safe — no dependencies beyond stdlib.
     """
-    native_home = Path.home() / ".hermes"
+    native_home = Path.home() / ".lliam-gov"
     env_home = os.environ.get("HERMES_HOME", "")
     if not env_home:
         return native_home

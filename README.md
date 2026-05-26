@@ -1,3 +1,11 @@
+# Lliam-GOV
+
+**Lliam-GOV is a hardened, CMMC L2 / ISO/IEC 42001-aligned fork of [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) under the MIT License.** It is the operating AI system Jerome Davis uses as evidence inside Katmai's ISO 42001 AI Management System. The upstream agent runtime, conversation loop, provider adapters, plugin framework, skills, and dashboard UI are all upstream Hermes work; Lliam-GOV's contribution is a documented governance overlay — FIPS-validated encryption at rest, append-only hash-chained audit logging, messaging-gateway narrowing (Slack, email, Telegram only), egress allowlist with TLS enforcement, isolation enforcement, CUI marking and audit instrumentation, supply-chain hygiene, and a human-approval gate over dynamic agent self-modification. See `NOTICE` for full attribution.
+
+> The remainder of this README (below) is upstream Hermes Agent's documentation. It is preserved verbatim because it is what's accurate about the agent runtime. Lliam-GOV-specific install, configure, operate, and governance docs live under `docs/install/`, `docs/configure/`, `docs/operate/`, and `docs/governance/` (added in Phase 4–5 of the Lliam-GOV build).
+
+---
+
 <p align="center">
   <img src="assets/banner.png" alt="Hermes Agent" width="100%">
 </p>

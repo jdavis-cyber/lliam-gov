@@ -10686,11 +10686,14 @@ def cmd_dashboard(args):
     from hermes_cli.web_server import start_server
 
     embedded_chat = args.tui or os.environ.get("HERMES_DASHBOARD_TUI") == "1"
+    # Lliam-GOV (plan §6.5, §5.4): host is force-pinned to 127.0.0.1.
+    # The --host and --insecure CLI flags were physically removed; the
+    # `allow_public=` argument is therefore always False.  No break-glass.
     start_server(
-        host=args.host,
+        host="127.0.0.1",
         port=args.port,
         open_browser=not args.no_open,
-        allow_public=getattr(args, "insecure", False),
+        allow_public=False,
         embedded_chat=embedded_chat,
     )
 
@@ -13739,16 +13742,14 @@ Examples:
     dashboard_parser.add_argument(
         "--port", type=int, default=9119, help="Port (default 9119)"
     )
-    dashboard_parser.add_argument(
-        "--host", default="127.0.0.1", help="Host (default 127.0.0.1)"
-    )
+    # Lliam-GOV (plan §6.5, §5.4): the dashboard is loopback-only.  The
+    # upstream `--host` and `--insecure` break-glass flags are physically
+    # removed so the 127.0.0.1 binding cannot be defeated by config or
+    # CLI argument.  Operators who need remote dashboard access must
+    # tunnel via `ssh -L 9119:127.0.0.1:9119` (documented in
+    # docs/operate/dashboard.md, added in Phase 5).
     dashboard_parser.add_argument(
         "--no-open", action="store_true", help="Don't open browser automatically"
-    )
-    dashboard_parser.add_argument(
-        "--insecure",
-        action="store_true",
-        help="Allow binding to non-localhost (DANGEROUS: exposes API keys on the network)",
     )
     dashboard_parser.add_argument(
         "--tui",
