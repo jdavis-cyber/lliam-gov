@@ -1,0 +1,1363 @@
+"control_id","standard","statement_verbatim","source_pdf","rev3_equivalent_id","rev3_statement_verbatim","lliam_owner","evidence_artifact","cross_mappings","current_state","notes"
+"SP800-171_3.1.1","SP 800-171 Rev. 2","3.1.1      Limit system access to authorized users, processes acting on behalf of authorized users, and
+  devices (including other systems).
+
+  DISCUSSION
+  Access control policies (e.g., identity- or role-based policies, control matrices, and cryptography)
+  control access between active entities or subjects (i.e., users or processes acting on behalf of users)
+  and passive entities or objects (e.g., devices, files, records, and domains) in systems. Access
+  enforcement mechanisms can be employed at the application and service level to provide
+  increased information security. Other systems include systems internal and external to the
+  organization. This requirement focuses on account management for systems and applications. The
+  definition of and enforcement of access authorizations, other than those determined by account
+  type (e.g., privileged verses non-privileged) are addressed in requirement 3.1.2.","NIST_SP_800-171_r2.pdf","03.01.01","03.01.01 Account Management
+  a. Define the types of system accounts allowed and prohibited.
+  b. Create, enable, modify, disable, and remove system accounts in accordance with
+  policy, procedures, prerequisites, and criteria.
+  c. Specify:
+  1. Authorized users of the system,
+  2. Group and role membership, and
+  3. Access authorizations (i.e., privileges) for each account.
+  d. Authorize access to the system based on:
+  1. A valid access authorization and
+  2. Intended system usage.
+  e. Monitor the use of system accounts.
+
+  6
+
+NIST SP 800-171r3                                          Protecting Controlled Unclassified Information
+May 2024
+
+  f. Disable system accounts when:
+  1. The accounts have expired,
+  2. The accounts have been inactive for [Assignment: organization-defined time
+  period],
+  3. The accounts are no longer associated with a user or individual,
+  4. The accounts are in violation of organizational policy, or
+  5. Significant risks associated with individuals are discovered.
+  g. Notify account managers and designated personnel or roles within:
+  1. [Assignment: organization-defined time period] when accounts are no longer
+  required.
+  2. [Assignment: organization-defined time period] when users are terminated
+  or transferred.
+  3. [Assignment: organization-defined time period] when system usage or the
+  need-to-know changes for an individual.
+  h. Require that users log out of the system after [Assignment: organization-defined
+  time period] of expected inactivity or when [Assignment: organization-defined
+  circumstances].
+
+  DISCUSSION
+  This requirement focuses on account management for systems and applications. The
+  definition and enforcement of access authorizations other than those determined by
+  account type (e.g., privileged access, non-privileged access) are addressed in
+  03.01.02. System account types include individual, group, temporary, system, guest,
+  anonymous, emergency, developer, and service. Users who require administra","lliam_gov/security/principal.py + gateway allowlists","evidence/audit/principal-events.jsonl","ISO 27001 A.8.5; ISO 42001 A.3.2","not_implemented",""
+"SP800-171_3.1.2","SP 800-171 Rev. 2","3.1.2      Limit system access to the types of transactions and functions that authorized users are
+  permitted to execute.
+
+  CHAPTER THREE                                                                                            PAGE 10
+
+  DISCUSSION
+  Organizations may choose to define access privileges or other attributes by account, by type of
+  account, or a combination of both. System account types include individual, shared, group, system,
+  anonymous, guest, emergency, developer, manufacturer, vendor, and temporary. Other attributes
+  required for authorizing access include restrictions on time-of-day, day-of-week, and point-of-
+  origin. In defining other account attributes, organizations consider system-related requirements
+  (e.g., system upgrades scheduled maintenance,) and mission or business requirements, (e.g., time
+  zone differences, customer requirements, remote access to support travel requirements).
+
+  Derived Security Requirements","NIST_SP_800-171_r2.pdf","03.01.02","03.01.02 Access Enforcement
+  Enforce approved authorizations for logical access to CUI and system resources in
+  accordance with applicable access control policies.
+
+  DISCUSSION
+  Access control policies control access between active entities or subjects (i.e., users
+  or system processes acting on behalf of users) and passive entities or objects (i.e.,
+  devices, files, records, domains) in organizational systems. Types of system access
+  include remote access and access to systems that communicate through external
+  networks, such as the internet. Access enforcement mechanisms can also be
+  employed at the application and service levels to provide increased protection for
+  CUI. This recognizes that the system can host many applications and services in
+  support of mission and business functions. Access control policies are defined in
+  03.15.01.
+
+  REFERENCES
+  Source Control: AC-03
+  Supporting Publications: SP 800-46 [14], SP 800-57-1 [15], SP 800-57-2 [16], SP 800-
+  57-3 [17], SP 800-77 [18], SP 800-113 [19], SP 800-114 [20], SP 800-121 [21], SP 800-
+  162 [22], SP 800-178 [23], SP 800-192 [24], IR 7874 [25], IR 7966 [26]","lliam_gov/security/capabilities.py","evidence/audit/tool-dispatch.jsonl","ISO 27001 A.8.5","not_implemented",""
+"SP800-171_3.1.13","SP 800-171 Rev. 2","3.1.13   Employ cryptographic mechanisms to protect the confidentiality of remote access sessions.
+
+This publication is available free of charge from: https://doi.org/10.6028/NIST.SP.800-171r2
+  DISCUSSION
+  Cryptographic standards include FIPS-validated cryptography and NSA-approved cryptography.
+  See [NIST CRYPTO]; [NIST CAVP]; [NIST CMVP]; National Security Agency Cryptographic Standards.","NIST_SP_800-171_r2.pdf","03.01.13 (WITHDRAWN — moved to SC family in r3)","","lliam_gov/security/egress.py","evidence/audit/egress-events.jsonl","ISO 27001 A.8.24","not_implemented","r3 withdrew 3.1.13 — remote-access crypto moved to SC family"
+"SP800-171_3.1.20","SP 800-171 Rev. 2","3.1.20   Verify and control/limit connections to and use of external systems.
+
+  DISCUSSION
+  External systems are systems or components of systems for which organizations typically have no
+  direct supervision and authority over the application of security requirements and controls or the
+  determination of the effectiveness of implemented controls on those systems. External systems
+  include personally owned systems, components, or devices and privately-owned computing and
+  communications devices resident in commercial or public facilities. This requirement also
+  addresses the use of external systems for the processing, storage, or transmission of CUI, including
+  accessing cloud services (e.g., infrastructure as a service, platform as a service, or software as a
+  service) from organizational systems.
+  Organizations establish terms and conditions for the use of external systems in accordance with
+  organizational security policies and procedures. Terms and conditions address as a minimum, the
+  types of applications that can be accessed on organizational systems from external systems. If
+
+  23 Mobile devices and computing platforms include, for example, smartphones and tablets.
+
+  CHAPTER THREE                                                                                         PAGE 15
+
+  terms and conditions with the owners of external systems cannot be established, organizations
+  may impose restrictions on organizational personnel using those external systems.
+  This requirement recognizes that there are circumstances where individuals using external systems
+  (e.g., contractors, coalition partners) need to access organizational systems. In those situations,
+  organizations need confidence that the external systems contain the necessary controls so as not
+  to compromise, damage, or otherwise harm organizational systems. Verification that the required
+  controls have been effectively implemented can be achieved by third-party, independent
+  assessments, attestations, or other means, depending on the assurance or confidence level
+  required by organizations.
+  Note that while “external” typically refers to outside of the organization’s direct supervision and
+  authority, that is not always the case. Regarding the protection of CUI across an organization, the
+  organization may have systems that process CUI and others that do not. And among the systems
+  that process CUI there are likely access restrictions for CUI that apply between systems. Therefore,
+
+This publication is available free of charge from: https://doi.org/10.6028/NIST.SP.800-171r2
+  from the perspective of a given system, other systems within the organization may be considered
+  “external"" to that system.","NIST_SP_800-171_r2.pdf","03.01.20","03.01.20 Use of External Systems
+  a. Prohibit the use of external systems unless the systems are specifically
+  authorized.
+  b. Establish the following security requirements to be satisfied on external systems
+  prior to allowing use of or access to those systems by authorized individuals:
+  [Assignment: organization-defined security requirements].
+  c. Permit authorized individuals to use external systems to access the
+  organizational system or to process, store, or transmit CUI only after:
+
+  17
+
+NIST SP 800-171r3                                          Protecting Controlled Unclassified Information
+May 2024
+
+  1. Verifying that the security requirements on the external systems as specified
+  in the organization’s system security plans have been satisfied and
+  2. Retaining approved system connection or processing agreements with the
+  organizational entities hosting the external systems.
+  d. Restrict the use of organization-controlled portable storage devices by
+  authorized individuals on external systems.
+
+  DISCUSSION
+  External systems are systems that are used by but are not part of the organization.
+  These systems include personally owned systems, system components, or devices;
+  privately owned computing and communication devices in commercial or public
+  facilities; systems owned or controlled by nonfederal organizations; and systems
+  managed by contractors. Organizations have the option to prohibit the use of any
+  type of external system or specified types of external systems (e.g., prohibit the use
+  of external systems that are not organizationally owned). Terms and conditions are
+  consistent with the trust relationships established with the entities that own,
+  operate, or maintain external systems and include descriptions of shared
+  responsibilities.
+
+  Authorized individuals include organizational personnel, contractors, or other
+  individuals with authorized access to the organizational system and over whom
+  organizations have the author","lliam_gov/security/egress.py","evidence/audit/egress-allowlist.yaml","ISO 27001 A.8.20-A.8.23","not_implemented",""
+"SP800-171_3.3.1","SP 800-171 Rev. 2","3.3.1   Create and retain system audit logs and records to the extent needed to enable the
+  monitoring, analysis, investigation, and reporting of unlawful or unauthorized system activity.
+
+  CHAPTER THREE                                                                                        PAGE 17
+
+  DISCUSSION
+  An event is any observable occurrence in a system, which includes unlawful or unauthorized
+  system activity. Organizations identify event types for which a logging functionality is needed as
+  those events which are significant and relevant to the security of systems and the environments
+  in which those systems operate to meet specific and ongoing auditing needs. Event types can
+  include password changes, failed logons or failed accesses related to systems, administrative
+  privilege usage, or third-party credential usage. In determining event types that require logging,
+  organizations consider the monitoring and auditing appropriate for each of the CUI security
+  requirements. Monitoring and auditing requirements can be balanced with other system needs.
+  For example, organizations may determine that systems must have the capability to log every file
+  access both successful and unsuccessful, but not activate that capability except for specific
+  circumstances due to the potential burden on system performance.
+  Audit records can be generated at various levels of abstraction, including at the packet level as
+
+This publication is available free of charge from: https://doi.org/10.6028/NIST.SP.800-171r2
+  information traverses the network. Selecting the appropriate level of abstraction is a critical aspect
+  of an audit logging capability and can facilitate the identification of root causes to problems.
+  Organizations consider in the definition of event types, the logging necessary to cover related
+  events such as the steps in distributed, transaction-based processes (e.g., processes that are
+  distributed across multiple organizations) and actions that occur in service-oriented or cloud-
+  based architectures.
+  Audit record content that may be necessary to satisfy this requirement includes time stamps,
+  source and destination addresses, user or process identifiers, event descriptions, success or fail
+  indications, filenames involved, and access control or flow control rules invoked. Event outcomes
+  can include indicators of event success or failure and event-specific results (e.g., the security state
+  of the system after the event occurred).
+  Detailed information that organizations may consider in audit records includes full text recording
+  of privileged commands or the individual identities of group account users. Organizations consider
+  limiting the additional audit log information to only that information explicitly needed for specific
+  audit requirements. This facilitates the use of audit trails and audit logs by not including
+  information that could potentially be misleading or could make it more difficult to locate
+  information of interest. Audit logs are reviewed and analyzed as often as needed to provide
+  important information to organizations to facilitate risk-based decision making.
+  [SP 800-92] provides guidance on security log management.","NIST_SP_800-171_r2.pdf","03.03.01","03.03.01 Event Logging
+  a. Specify the following event types selected for logging within the system:
+  [Assignment: organization-defined event types].
+  b. Review and update the event types selected for logging [Assignment:
+  organization-defined frequency].
+
+  DISCUSSION
+  An event is any observable occurrence in a system, including unlawful or
+  unauthorized system activity. Organizations identify event types for which a logging
+  functionality is needed. This includes events that are relevant to the security of
+  systems and the environments in which those systems operate to meet specific and
+  ongoing auditing needs. Event types can include password changes, the execution of
+  privileged functions, failed logons or accesses related to systems, administrative
+  privilege usage, or third-party credential usage. In determining event types that
+  require logging, organizations consider the system monitoring and auditing that are
+  appropriate for each of the security requirements. When defining event types,
+  organizations consider the logging necessary to cover related events, such as the
+
+  21
+
+NIST SP 800-171r3                                           Protecting Controlled Unclassified Information
+May 2024
+
+  steps in distributed, transaction-based processes (e.g., processes that are distributed
+  across multiple organizations) and actions that occur in service-oriented or cloud-
+  based architectures.
+
+  Monitoring and auditing requirements can be balanced with other system needs. For
+  example, organizations may determine that systems must have the capability to log
+  every file access — both successful and unsuccessful — but only activate that
+  capability under specific circumstances due to the potential burden on system
+  performance. The event types that are logged by organizations may change over
+  time. Reviewing and updating the set of logged event types are necessary to ensure
+  that the current set of event types remains relevant.
+
+  REFERENCES
+  Sou","lliam_gov/security/audit_logger.py","evidence/audit/tool-calls-*.jsonl + AEP exports","ISO 27001 A.8.15; ISO 42001 Clause 7.5/9.1","not_implemented",""
+"SP800-171_3.3.2","SP 800-171 Rev. 2","3.3.2   Ensure that the actions of individual system users can be uniquely traced to those users, so
+  they can be held accountable for their actions.
+
+  DISCUSSION
+  This requirement ensures that the contents of the audit record include the information needed to
+  link the audit event to the actions of an individual to the extent feasible. Organizations consider
+  logging for traceability including results from monitoring of account usage, remote access, wireless
+  connectivity, mobile device connection, communications at system boundaries, configuration
+  settings, physical access, nonlocal maintenance, use of maintenance tools, temperature and
+  humidity, equipment delivery and removal, system component inventory, use of mobile code, and
+  use of Voice over Internet Protocol (VoIP).
+
+  Derived Security Requirements","NIST_SP_800-171_r2.pdf","03.03.02","03.03.02 Audit Record Content
+  a. Include the following content in audit records:
+  1. What type of event occurred
+  2. When the event occurred
+  3. Where the event occurred
+  4. Source of the event
+  5. Outcome of the event
+  6. Identity of the individuals, subjects, objects, or entities associated with the
+  event
+  b. Provide additional information for audit records as needed.
+
+  DISCUSSION
+  Audit record content that may be necessary to support the auditing function
+  includes time stamps, source and destination addresses, user or process identifiers,
+  event descriptions, file names, and the access control or flow control rules that are
+  invoked. Event outcomes can include indicators of event success or failure and
+  event-specific results (e.g., the security state of the system after the event
+  occurred). Detailed information that organizations consider in audit records may
+  include a full text recording of privileged commands or the individual identities of
+  group account users.
+
+  22
+
+NIST SP 800-171r3                                          Protecting Controlled Unclassified Information
+May 2024
+
+  REFERENCES
+  Source Controls: AU-03, AU-03(01)
+  Supporting Publications: None","lliam_gov/security/audit_logger.py (principal field on every entry)","evidence/audit/tool-calls-*.jsonl","ISO 27001 A.8.15","not_implemented",""
+"SP800-171_3.3.4","SP 800-171 Rev. 2","3.3.4   Alert in the event of an audit logging process failure.
+
+  DISCUSSION
+  Audit logging process failures include software and hardware errors, failures in the audit record
+  capturing mechanisms, and audit record storage capacity being reached or exceeded. This
+  requirement applies to each audit record data storage repository (i.e., distinct system component
+  where audit records are stored), the total audit record storage capacity of organizations (i.e., all
+
+This publication is available free of charge from: https://doi.org/10.6028/NIST.SP.800-171r2
+  audit record data storage repositories combined), or both.","NIST_SP_800-171_r2.pdf","03.03.04","03.03.04 Response to Audit Logging Process Failures
+  a. Alert organizational personnel or roles within [Assignment: organization-defined
+  time period] in the event of an audit logging process failure.
+  b. Take the following additional actions: [Assignment: organization-defined
+  additional actions].
+
+  DISCUSSION
+  Audit logging process failures include software and hardware errors, failures in audit
+  log capturing mechanisms, and reaching or exceeding audit log storage capacity.
+  Response actions include overwriting the oldest audit records, shutting down the
+  system, and stopping the generation of audit records. Organizations may choose to
+  define additional actions for audit logging process failures based on the type of
+  failure, the location of the failure, the severity of the failure, or a combination of
+
+  23
+
+NIST SP 800-171r3                                           Protecting Controlled Unclassified Information
+May 2024
+
+  such factors. When the audit logging process failure is related to storage, the
+  response is carried out for the audit log storage repository (i.e., the distinct system
+  component where the audit logs are stored), the system on which the audit logs
+  reside, the total audit log storage capacity of the organization (i.e., all audit log
+  storage repositories combined), or all three. Organizations may decide to take no
+  additional actions after alerting designated roles or personnel.
+
+  REFERENCES
+  Source Control: AU-05
+  Supporting Publications: None","lliam_gov/security/audit_logger.py fail-closed branch","tests/test_audit_logger.py::test_fail_closed","ISO 27001 A.8.16","not_implemented",""
+"SP800-171_3.3.8","SP 800-171 Rev. 2","3.3.8   Protect audit information and audit logging tools from unauthorized access, modification, and
+  deletion.
+
+  DISCUSSION
+  Audit information includes all information (e.g., audit records, audit log settings, and audit reports)
+  needed to successfully audit system activity. Audit logging tools are those programs and devices
+  used to conduct audit and logging activities. This requirement focuses on the technical protection
+  of audit information and limits the ability to access and execute audit logging tools to authorized
+  individuals. Physical protection of audit information is addressed by media protection and physical
+  and environmental protection requirements.","NIST_SP_800-171_r2.pdf","03.03.08","03.03.08 Protection of Audit Information
+  a. Protect audit information and audit logging tools from unauthorized access,
+  modification, and deletion.
+  b. Authorize access to management of audit logging functionality to only a subset
+  of privileged users or roles.
+
+  DISCUSSION
+  Audit information includes the information needed to successfully audit system
+  activity, such as audit records, audit log settings, audit reports, and personally
+  identifiable information. Audit logging tools are programs and devices used to
+  conduct audit and logging activities. The protection of audit information focuses on
+  technical protection and limits the ability to access and execute audit logging tools
+  to authorized individuals. The physical protection of audit information is addressed
+  by media and physical protection requirements.
+
+  Individuals or roles with privileged access to a system and who are also the subject
+  of an audit by that system may affect the reliability of the audit information by
+  inhibiting audit activities or modifying audit records. Requiring privileged access to
+  be further defined between audit-related privileges and other privileges limits the
+  number of users or roles with audit-related privileges.
+
+  REFERENCES
+  Source Controls: AU-09, AU-09(04)
+  Supporting Publications: None","lliam_gov/security/audit_logger.py (mode 0600, hash-chained)","evidence/audit/chain-integrity-report.txt","ISO 27001 A.8.15","not_implemented",""
+"SP800-171_3.3.9","SP 800-171 Rev. 2","3.3.9   Limit management of audit logging functionality to a subset of privileged users.
+
+  DISCUSSION
+
+This publication is available free of charge from: https://doi.org/10.6028/NIST.SP.800-171r2
+  Individuals with privileged access to a system and who are also the subject of an audit by that
+  system, may affect the reliability of audit information by inhibiting audit logging activities or
+  modifying audit records. This requirement specifies that privileged access be further defined
+  between audit-related privileges and other privileges, thus limiting the users with audit-related
+  privileges.","NIST_SP_800-171_r2.pdf","03.03.09","03.03.09 Withdrawn
+  Incorporated into 03.03.08.
+
+3.4. Configuration Management
+
+03.04.01 Baseline Configuration
+  a. Develop and maintain under configuration control, a current baseline
+  configuration of the system.
+
+  26
+
+NIST SP 800-171r3                                          Protecting Controlled Unclassified Information
+May 2024
+
+  b. Review and update the baseline configuration of the system [Assignment:
+  organization-defined frequency] and when system components are installed or
+  modified.
+
+  DISCUSSION
+  Baseline configurations for the system and system components include aspects of
+  connectivity, operation, and communications. Baseline configurations are
+  documented, formally reviewed, and agreed-upon specifications for the system or
+  configuration items within the system. Baseline configurations serve as a basis for
+  future builds, releases, or changes to the system and include information about
+  system components, operational procedures, network topology, and the placement
+  of components in the system architecture. Maintaining baseline configurations
+  requires creating new baselines as the system changes over time. Baseline
+  configurations of the system reflect the current enterprise architecture.
+
+  REFERENCES
+  Source Control: CM-02
+  Supporting Publications: SP 800-124 [28], SP 800-128 [41], IR 8011-2 [42], IR 8011-3
+  [43]
+
+03.04.02 Configuration Settings
+  a. Establish, document, and implement the following configuration settings for the
+  system that reflect the most restrictive mode consistent with operational
+  requirements: [Assignment: organization-defined configuration settings].
+  b. Identify, document, and approve any deviations from established configuration
+  settings.
+
+  DISCUSSION
+  Configuration settings are the set of parameters that can be changed in hardware,
+  software, or firmware components of the system and that affect the security
+  posture or functionality of the system. Security-related configuration settings can ","lliam-gov audit / rotate-key CLI ACL","evidence/audit/cli-access-log.jsonl","ISO 27001 A.8.5","not_implemented",""
+"SP800-171_3.4.6","SP 800-171 Rev. 2","3.4.6   Employ the principle of least functionality by configuring organizational systems to provide
+  only essential capabilities.
+
+  DISCUSSION
+  Systems can provide a wide variety of functions and services. Some of the functions and services
+  routinely provided by default, may not be necessary to support essential organizational missions,
+  functions, or operations. It is sometimes convenient to provide multiple services from single
+  system components. However, doing so increases risk over limiting the services provided by any
+  one component. Where feasible, organizations limit component functionality to a single function
+  per component.
+  Organizations review functions and services provided by systems or components of systems, to
+  determine which functions and services are candidates for elimination. Organizations disable
+  unused or unnecessary physical and logical ports and protocols to prevent unauthorized
+  connection of devices, transfer of information, and tunneling. Organizations can utilize network
+  scanning tools, intrusion detection and prevention systems, and end-point protections such as
+  firewalls and host-based intrusion detection systems to identify and prevent the use of prohibited
+  functions, ports, protocols, and services.","NIST_SP_800-171_r2.pdf","03.04.06","03.04.06 Least Functionality
+  a. Configure the system to provide only mission-essential capabilities.
+  b. Prohibit or restrict use of the following functions, ports, protocols, connections,
+  and services: [Assignment: organization-defined functions, ports, protocols,
+  connections, and services].
+  c. Review the system [Assignment: organization-defined frequency] to identify
+  unnecessary or nonsecure functions, ports, protocols, connections, and services.
+  d. Disable or remove functions, ports, protocols, connections, and services that are
+  unnecessary or nonsecure.
+
+  DISCUSSION
+  Systems can provide a variety of functions and services. Some functions and services
+  that are routinely provided by default may not be necessary to support essential
+  organizational missions, functions, or operations. It may be convenient to provide
+  multiple services from single system components. However, doing so increases risk
+  over limiting the services provided by any one component. Where feasible,
+  organizations limit functionality to a single function per component.
+
+  Organizations review the functions and services provided by the system or system
+  components to determine which functions and services are candidates for
+  elimination. Organizations disable unused or unnecessary physical and logical ports
+  and protocols to prevent the unauthorized connection of devices, the transfer of
+  information, and tunneling. Organizations can employ network scanning tools,
+  intrusion detection and prevention systems, and endpoint protection systems (e.g.,
+  firewalls and host-based intrusion detection systems) to identify and prevent the use
+  of prohibited functions, ports, protocols, system connections, and services.
+  Bluetooth, File Transfer Protocol (FTP), and peer-to-peer networking are examples of
+  the types of protocols that organizations consider eliminating, restricting, or
+  disabling.
+
+  REFERENCES
+  Source Controls: CM-07, CM-07(01)
+  Supporting Publications: SP ","gateway/platforms/{slack,email,telegram}.py (other adapters deleted) + hermes_cli/web_server.py + hermes_cli/main.py (loopback-only)","evidence/phase1/noise-floor-2026-05-25.md","ISO 27001 A.8.20-A.8.23","implemented",""
+"SP800-171_3.5.10","SP 800-171 Rev. 2","3.5.10   Store and transmit only cryptographically-protected passwords.
+
+  CHAPTER THREE                                                                                          PAGE 25
+
+  DISCUSSION
+  Cryptographically-protected passwords use salted one-way cryptographic hashes of passwords.
+  See [NIST CRYPTO].","NIST_SP_800-171_r2.pdf","03.05.10","03.05.10 Withdrawn
+  Incorporated into 03.05.07.","lliam_gov/security/key_manager.py (keyring-only secret store)","evidence/audit/keychain-access.jsonl","ISO 27001 A.5.17 / A.8.5","not_implemented",""
+"SP800-171_3.8.9","SP 800-171 Rev. 2","3.8.9    Protect the confidentiality of backup CUI at storage locations.
+
+  For ease of use, the security requirements are organized into fourteen families. Each family
+  contains the requirements related to the general security topic of the family. The families are
+  closely aligned with the minimum-security requirements for federal information and systems
+  described in [FIPS 200]. The contingency planning, system and services acquisition, and planning
+  requirements are not included within the scope of this publication due to the tailoring criteria. 18
+  Table 1 lists the security requirement families addressed in this publication.
+
+  TABLE 1: SECURITY REQUIREMENT FAMILIES
+
+  FAMILY                                                    FAMILY
+  Access Control                                              Media Protection
+  Awareness and Training                                      Personnel Security
+  Audit and Accountability                                    Physical Protection
+  Configuration Management                                    Risk Assessment
+  Identification and Authentication                           Security Assessment
+  Incident Response                                           System and Communications Protection
+  Maintenance                                                 System and Information Integrity
+
+  18 Three exceptions include: a requirement to protect the confidentiality of system backups (derived from CP-9) from
+
+  the contingency planning family; a requirement to develop and implement a system security plan (derived from PL-2)
+  from the planning family; and a requirement to implement system security engineering principles (derived from SA-8)
+  from the system and services acquisition family. The requirements are included in the CUI media protection, security
+  assessment, and system and communications protection requirements families, respectively.
+
+  CHAPTER TWO                                                                                                   PAGE 7
+
+  A discussion section follows each CUI security requirement providing additional information to
+  facilitate the implementation and assessment of the requirements. This information is derived
+  primarily from the security controls discussion sections in [SP 800-53] and is provided to give
+  organizations a better understanding of the mechanisms and procedures used to implement the
+  controls used to protect CUI. The discussion section is informative, not normative. It is not
+  intended to extend the scope of a requirement or to influence the solutions organizations may
+  use to satisfy a requirement. The use of examples is notional, not exhaustive, and not reflective
+  of potential options available to organizations. Figure 1 illustrates basic security requirement
+  3.8.3 with its supporting discussion section and informative references.
+
+This publication is available free of charge from: https://doi.org/10.6028/NIST.SP.800-171r2","NIST_SP_800-171_r2.pdf","03.08.09","03.08.09 System Backup – Cryptographic Protection
+  a. Protect the confidentiality of backup information.
+  b. Implement cryptographic mechanisms to prevent the unauthorized disclosure of
+  CUI at backup storage locations.
+
+  DISCUSSION
+  The selection of cryptographic mechanisms is based on the need to protect the
+  confidentiality of backup information. Hardware security module (HSM) devices
+  safeguard and manage cryptographic keys and provide cryptographic processing.
+  Cryptographic operations (e.g., encryption, decryption, and signature generation
+  and verification) are typically hosted on the HSM device, and many implementations
+  provide hardware-accelerated mechanisms for cryptographic operations. This
+  requirement is related to 03.13.11.
+
+  REFERENCES
+  Source Controls: CP-09, CP-09(08)
+  Supporting Publications: SP 800-34 [52], SP 800-130 [53], SP 800-152 [54]
+
+3.9. Personnel Security
+
+03.09.01 Personnel Screening
+  a. Screen individuals prior to authorizing access to the system.
+  b. Rescreen individuals in accordance with [Assignment: organization-defined
+  conditions requiring rescreening].
+
+  DISCUSSION
+  Personnel security screening activities involve the assessment of the conduct,
+  integrity, judgment, loyalty, reliability, and stability of an individual (i.e., the
+  individual’s trustworthiness) prior to authorizing access to the system or when
+  elevating system access. The screening and rescreening activities reflect applicable
+  federal laws, Executive Orders, directives, policies, regulations, and criteria
+  established for the level of access required for the assigned position.
+
+  48
+
+NIST SP 800-171r3                                          Protecting Controlled Unclassified Information
+May 2024
+
+  REFERENCES
+  Source Control: PS-03
+  Supporting Publications: SP 800-181 [34]
+
+03.09.02 Personnel Termination and Transfer
+  a. When individual employment is terminated:
+  1. Disable system access within [Assignment: organization-defined time p","lliam_gov/security/key_manager.py (AES-256-GCM on backups)","evidence/audit/backup-encryption-test.txt","ISO 27001 A.8.13; ISO 42001 A.4.3","not_implemented",""
+"SP800-171_3.13.1","SP 800-171 Rev. 2","3.13.1   Monitor, control, and protect communications (i.e., information transmitted or received by
+  organizational systems) at the external boundaries and key internal boundaries of
+  organizational systems.
+
+  DISCUSSION
+  Communications can be monitored, controlled, and protected at boundary components and by
+  restricting or prohibiting interfaces in organizational systems. Boundary components include
+  gateways, routers, firewalls, guards, network-based malicious code analysis and virtualization
+  systems, or encrypted tunnels implemented within a system security architecture (e.g., routers
+  protecting firewalls or application gateways residing on protected subnetworks). Restricting or
+  prohibiting interfaces in organizational systems includes restricting external web communications
+  traffic to designated web servers within managed interfaces and prohibiting external traffic that
+  appears to be spoofing internal addresses.
+  Organizations consider the shared nature of commercial telecommunications services in the
+  implementation of security requirements associated with the use of such services. Commercial
+  telecommunications services are commonly based on network components and consolidated
+  management systems shared by all attached commercial customers and may also include third
+  party-provided access lines and other service elements. Such transmission services may represent
+  sources of increased risk despite contract security provisions.
+  [SP 800-41] provides guidance on firewalls and firewall policy. [SP 800-125B] provides guidance on
+  security for virtualization technologies.","NIST_SP_800-171_r2.pdf","03.13.01","03.13.01 Boundary Protection
+  a. Monitor and control communications at external managed interfaces to the
+  system and key internal managed interfaces within the system.
+  b. Implement subnetworks for publicly accessible system components that are
+  physically or logically separated from internal networks.
+  c. Connect to external systems only through managed interfaces that consist of
+  boundary protection devices arranged in accordance with an organizational
+  security architecture.
+
+  DISCUSSION
+  Managed interfaces include gateways, routers, firewalls, network-based malicious
+  code analysis, virtualization systems, and encrypted tunnels implemented within a
+  security architecture. Subnetworks that are either physically or logically separated
+  from internal networks are referred to as demilitarized zones or DMZs. Restricting or
+  prohibiting interfaces within organizational systems includes restricting external web
+  traffic to designated web servers within managed interfaces, prohibiting external
+  traffic that appears to be spoofing internal addresses, and prohibiting internal traffic
+  that appears to be spoofing external addresses.
+
+  REFERENCES
+  Source Control: SC-07
+  Supporting Publications: SP 800-41 [64], SP 800-125B [65], SP 800-160-1 [11], SP
+  800-189 [67], SP 800-207 [66]","lliam_gov/security/egress.py + gateway/platforms/{slack,email,telegram}.py (other adapters deleted)","evidence/audit/boundary-controls.txt","ISO 27001 A.8.20-A.8.23","not_implemented",""
+"SP800-171_3.13.8","SP 800-171 Rev. 2","3.13.8   Implement cryptographic mechanisms to prevent unauthorized disclosure of CUI during
+  transmission unless otherwise protected by alternative physical safeguards.
+
+  DISCUSSION
+  This requirement applies to internal and external networks and any system components that can
+  transmit information including servers, notebook computers, desktop computers, mobile devices,
+  printers, copiers, scanners, and facsimile machines. Communication paths outside the physical
+  protection of controlled boundaries are susceptible to both interception and modification.
+  Organizations relying on commercial providers offering transmission services as commodity
+  services rather than as fully dedicated services (i.e., services which can be highly specialized to
+  individual customer needs), may find it difficult to obtain the necessary assurances regarding the
+  implementation of the controls for transmission confidentiality. In such situations, organizations
+  determine what types of confidentiality services are available in commercial telecommunication
+  service packages. If it is infeasible or impractical to obtain the necessary safeguards and assurances
+  of the effectiveness of the safeguards through appropriate contracting vehicles, organizations
+  implement compensating safeguards or explicitly accept the additional risk. An example of an
+  alternative physical safeguard is a protected distribution system (PDS) where the distribution
+  medium is protected against electronic or physical intercept, thereby ensuring the confidentiality
+  of the information being transmitted. See [NIST CRYPTO].","NIST_SP_800-171_r2.pdf","03.13.08","03.13.08 Transmission and Storage Confidentiality
+  Implement cryptographic mechanisms to prevent the unauthorized disclosure of CUI
+  during transmission and while in storage.
+
+  DISCUSSION
+  This requirement applies to internal and external networks and any system
+  components that can transmit CUI, including servers, notebook computers, desktop
+  computers, mobile devices, printers, copiers, scanners, facsimile machines, and
+  radios. Unprotected communication paths are susceptible to interception and
+  modification. Encryption protects CUI from unauthorized disclosure during
+  transmission and while in storage. Cryptographic mechanisms that protect the
+  confidentiality of CUI during transmission include TLS and IPsec. Information in
+  storage (i.e., information at rest) refers to the state of CUI when it is not in process
+  or in transit and resides on internal or external storage devices, storage area
+  network devices, and databases. Protecting CUI in storage does not focus on the
+  type of storage device or the frequency of access to that device but rather on the
+  state of the information. This requirement relates to 03.13.11.
+
+  REFERENCES
+  Source Controls: SC-08, SC-08(01), SC-28, SC-28(01)
+  Supporting Publications: FIPS 140-3 [38], FIPS 197 [68], SP 800-46 [14], SP 800-52
+  [69], SP 800-56A [73], SP 800-56B [74], SP 800-56C [75], SP 800-57-1 [15], SP 800-57-
+  2 [16], SP 800-57-3 [17], SP 800-77 [18], SP 800-111 [51], SP 800-113 [19], SP 800-
+  114 [20], SP 800-121 [21], SP 800-124 [28], SP 800-177 [70]","lliam_gov/security/egress.py (TLS 1.2+, verify=True)","evidence/audit/tls-policy-test.txt","ISO 27001 A.8.24","not_implemented",""
+"SP800-171_3.13.11","SP 800-171 Rev. 2","3.13.11    Employ FIPS-validated cryptography when used to protect the confidentiality of CUI.
+
+  DISCUSSION
+  Cryptography can be employed to support many security solutions including the protection of
+  controlled unclassified information, the provision of digital signatures, and the enforcement of
+  information separation when authorized individuals have the necessary clearances for such
+  information but lack the necessary formal access approvals. Cryptography can also be used to
+  support random number generation and hash generation. Cryptographic standards include FIPS-
+  validated cryptography and/or NSA-approved cryptography. See [NIST CRYPTO]; [NIST CAVP];
+  and [NIST CMVP].","NIST_SP_800-171_r2.pdf","03.13.11","03.13.11        Cryptographic Protection
+  Implement the following types of cryptography when used to protect the confidentiality of
+  CUI: [Assignment: organization-defined types of cryptography].
+
+  DISCUSSION
+  Cryptography is implemented in accordance with applicable laws, Executive Orders,
+  directives, policies, regulations, standards, and guidelines. FIPS-validated cryptography is
+  recommended for the protection of CUI.
+
+  REFERENCES
+  Source Control: SC-13
+  Supporting Publications: FIPS 140-3 [38]
+
+The term organization is used in many security requirements, and its meaning depends on
+context. For example, in a security requirement with an ODP, an organization can refer to either
+the federal agency or the nonfederal organization establishing the parameter values for the
+requirement.
+
+Appendix C describes the security control tailoring criteria used to develop the security
+requirements and the results of the tailoring process. The appendix provides a list of controls
+from SP 800-53 that support the requirements and the controls that have been eliminated from
+the moderate baseline in accordance with the tailoring criteria.
+
+  ASSESSING SECURITY REQUIREMENTS
+  SP 800-171A [84] provides a set of procedures to assess the security requirements described in
+  this publication. The assessment procedures are based on the procedures described in SP 800-53A
+  [57].
+
+15 With few exceptions, the security controls in SP 800-53 are policy-, technology-, and sector-neutral, meaning that the controls focus on the
+
+fundamental measures necessary to protect information across the information life cycle.
+
+  5
+
+NIST SP 800-171r3                                            Protecting Controlled Unclassified Information
+May 2024
+
+3. The Security Requirements
+This section describes 17 families of security requirements for protecting the confidentiality of
+CUI in nonfederal systems and organizations. When used in the context of the requirements in
+Sec. 3, the term system is defined","lliam_gov/security/runtime_guard.py (FIPS-OpenSSL hard gate)","evidence/audit/fips-mode-startup-check.txt","ISO 27001 A.8.24; FIPS 140-3","not_implemented",""
+"SP800-171_3.13.16","SP 800-171 Rev. 2","3.13.16    Protect the confidentiality of CUI at rest.
+
+  DISCUSSION
+  Information at rest refers to the state of information when it is not in process or in transit and is
+  located on storage devices as specific components of systems. The focus of protection at rest is
+  not on the type of storage device or the frequency of access but rather the state of the
+  information. Organizations can use different mechanisms to achieve confidentiality protections,
+  including the use of cryptographic mechanisms and file share scanning. Organizations may also
+  use other controls including secure off-line storage in lieu of online storage when adequate
+  protection of information at rest cannot otherwise be achieved or continuous monitoring to
+  identify malicious code at rest. See [NIST CRYPTO].","NIST_SP_800-171_r2.pdf","03.13.16","03.13.16 Withdrawn
+  Incorporated into 03.13.08.
+
+3.14. System and Information Integrity
+
+03.14.01 Flaw Remediation
+  a. Identify, report, and correct system flaws.
+  b. Install security-relevant software and firmware updates within [Assignment:
+  organization-defined time period] of the release of the updates.
+
+  DISCUSSION
+  Organizations identify systems that are affected by announced software and
+  firmware flaws, including potential vulnerabilities that result from those flaws, and
+  report this information to designated personnel with information security
+
+  63
+
+NIST SP 800-171r3                                          Protecting Controlled Unclassified Information
+May 2024
+
+  responsibilities. Security-relevant updates include patches, service packs, hot fixes,
+  and anti-virus signatures. Organizations address the flaws discovered during security
+  assessments, continuous monitoring, incident response activities, and system error
+  handling. Organizations can take advantage of available resources (e.g., CWE or CVE
+  databases) when remediating system flaws. Organization-defined time periods for
+  updating security-relevant software and firmware may vary based on a variety of
+  factors, including the criticality of the update (i.e., severity of the vulnerability
+  related to the discovered flaw). Some types of flaw remediation may require more
+  testing than other types.
+
+  REFERENCES
+  Source Control: SI-02
+  Supporting Publications: SP 800-39 [60], SP 800-40 [56], SP 800-128 [41]
+
+03.14.02 Malicious Code Protection
+  a. Implement malicious code protection mechanisms at system entry and exit
+  points to detect and eradicate malicious code.
+  b. Update malicious code protection mechanisms as new releases are available in
+  accordance with configuration management policies and procedures.
+  c. Configure malicious code protection mechanisms to:
+  1. Perform scans of the system [Assignment: organization-defined frequency]
+  and real-time scans of files from ext","lliam_gov/security/key_manager.py","evidence/audit/at-rest-encryption-test.txt","ISO 27001 A.8.24; ISO 42001 A.4.3","not_implemented",""
+"SP800-171_3.14.2","SP 800-171 Rev. 2","3.14.2   Provide protection from malicious code at designated locations within organizational systems.
+
+  DISCUSSION
+  Designated locations include system entry and exit points which may include firewalls, remote-
+  access servers, workstations, electronic mail servers, web servers, proxy servers, notebook
+
+This publication is available free of charge from: https://doi.org/10.6028/NIST.SP.800-171r2
+  computers, and mobile devices. Malicious code includes viruses, worms, Trojan horses, and
+  spyware. Malicious code can be encoded in various formats (e.g., UUENCODE, Unicode), contained
+  within compressed or hidden files, or hidden in files using techniques such as steganography.
+  Malicious code can be inserted into systems in a variety of ways including web accesses, electronic
+  mail, electronic mail attachments, and portable storage devices. Malicious code insertions occur
+  through the exploitation of system vulnerabilities.
+  Malicious code protection mechanisms include anti-virus signature definitions and reputation-
+  based technologies. A variety of technologies and methods exist to limit or eliminate the effects of
+  malicious code. Pervasive configuration management and comprehensive software integrity
+  controls may be effective in preventing execution of unauthorized code. In addition to commercial
+  off-the-shelf software, malicious code may also be present in custom-built software. This could
+  include logic bombs, back doors, and other types of cyber-attacks that could affect organizational
+  missions/business functions. Traditional malicious code protection mechanisms cannot always
+  detect such code. In these situations, organizations rely instead on other safeguards including
+  secure coding practices, configuration management and control, trusted procurement processes,
+  and monitoring practices to help ensure that software does not perform functions other than the
+  functions intended.
+  [SP 800-83] provides guidance on malware incident prevention.","NIST_SP_800-171_r2.pdf","03.14.02","03.14.02 Malicious Code Protection
+  a. Implement malicious code protection mechanisms at system entry and exit
+  points to detect and eradicate malicious code.
+  b. Update malicious code protection mechanisms as new releases are available in
+  accordance with configuration management policies and procedures.
+  c. Configure malicious code protection mechanisms to:
+  1. Perform scans of the system [Assignment: organization-defined frequency]
+  and real-time scans of files from external sources at endpoints or system
+  entry and exit points as the files are downloaded, opened, or executed; and
+  2. Block malicious code, quarantine malicious code, or take other mitigation
+  actions in response to malicious code detection.
+
+  DISCUSSION
+  Malicious code insertions occur through the exploitation of system vulnerabilities.
+  Malicious code can be inserted into the system in a variety of ways, including email,
+  the internet, and portable storage devices. Malicious code includes viruses, worms,
+  Trojan horses, and spyware. Malicious code can be encoded in various formats,
+  contained in compressed or hidden files, or hidden in files using techniques such as
+  steganography. Malicious code may be present in commercial off-the-shelf software
+  and custom-built software and could include logic bombs, backdoors, and other
+  types of attacks that could affect organizational mission and business functions.
+  Periodic scans of the system and real-time scans of files from external sources as
+  files are downloaded, opened, or executed can detect malicious code. Malicious
+  code protection mechanisms can also monitor systems for anomalous or unexpected
+  behaviors and take appropriate actions.
+
+  64
+
+NIST SP 800-171r3                                         Protecting Controlled Unclassified Information
+May 2024
+
+  Malicious code protection mechanisms include signature- and non-signature-based
+  technologies. Non-signature-based detection mechanisms include artificial
+  intelligen","evidence/sbom/ + hermes_cli/security_advisories.py + Katmai endpoint EDR (host-level)","evidence/sbom/cyclonedx-*.json + evidence/audit/sca-review-*.md","ISO 27001 A.8.7 / A.8.8","not_implemented",""
+"SP800-171_3.14.3","SP 800-171 Rev. 2","3.14.3   Monitor system security alerts and advisories and take action in response.
+
+  DISCUSSION
+  There are many publicly available sources of system security alerts and advisories. For example,
+  the Department of Homeland Security’s Cybersecurity and Infrastructure Security Agency (CISA)
+  generates security alerts and advisories to maintain situational awareness across the federal
+  government and in nonfederal organizations. Software vendors, subscription services, and
+  industry information sharing and analysis centers (ISACs) may also provide security alerts and
+  advisories. Examples of response actions include notifying relevant external organizations, for
+  example, external mission/business partners, supply chain partners, external service providers,
+  and peer or supporting organizations
+  [SP 800-161] provides guidance on supply chain risk management.
+
+  Derived Security Requirements","NIST_SP_800-171_r2.pdf","03.14.03","03.14.03 Security Alerts, Advisories, and Directives
+  a. Receive system security alerts, advisories, and directives from external
+  organizations on an ongoing basis.
+  b. Generate and disseminate internal system security alerts, advisories, and
+  directives, as necessary.
+
+  DISCUSSION
+  There are many publicly available sources of system security alerts and advisories.
+  The Department of Homeland Security’s Cybersecurity and Infrastructure Security
+  Agency (CISA), the National Security Agency (NSA), and the Federal Bureau of
+  Investigation (FBI) generate security alerts and advisories to maintain situational
+  awareness across the Federal Government and in nonfederal organizations.
+  Software vendors, subscription services, and industry Information Sharing and
+  Analysis Centers (ISACs) may also provide security alerts and advisories. Compliance
+  with security directives is essential due to the critical nature of many of these
+  directives and the potential immediate adverse effects on organizational operations
+
+  65
+
+NIST SP 800-171r3                                          Protecting Controlled Unclassified Information
+May 2024
+
+  and assets, individuals, other organizations, and the Nation should the directives not
+  be implemented in a timely manner.
+
+  REFERENCES
+  Source Control: SI-05
+  Supporting Publications: SP 800-161 [33]","evidence/sbom/ + hermes_cli/security_advisories.py (quarterly cadence)","evidence/audit/sca-review-*.md","ISO 27001 A.5.7","not_implemented",""
+"ISO42001_A.3.2","ISO/IEC 42001:2023","A.3.2               AI roles and responsibilities                    Roles and responsibilities for AI shall be defined and allo-
+  cated according to the needs of the organization.","ISO_42001-2023.pdf","","","lliam_gov/security/principal.py + AIMS RACI","docs/governance/raci.md","ISO 27001 A.5.2 / A.5.3","not_implemented","Plan §3.4 cited A.10.2 'Allocation of responsibilities' — actual ID is A.3.2 'AI roles and responsibilities'"
+"ISO42001_A.4.3","ISO/IEC 42001:2023","A.4.3               Data resources                                   As part of resource identification, the organization shall
+  document information about the data resources utilized
+  for the AI system.","ISO_42001-2023.pdf","","","lliam_gov/security/key_manager.py + lliam_gov/security/cui.py","evidence/audit/at-rest-encryption-test.txt","SP 800-171 §3.13.16; ISO 27001 A.8.24","not_implemented","Plan §3.4 cited A.8.4 'Data governance' — actual A.8.4 is 'Communication of incidents'; data governance lives at A.4.3 'Data resources'"
+"ISO42001_A.5.2","ISO/IEC 42001:2023","A.5.2               AI system impact assessment                      The organization shall establish a process to assess the
+  process                                          potential consequences for individuals or groups of indi-
+  viduals, or both, and societies that can result from the AI
+  system throughout its life cycle.","ISO_42001-2023.pdf","","","lliam_gov/security/selfmod_gate.py + docs/governance/impact-assessment.md","docs/governance/impact-assessment.md","—","not_implemented","Plan §3.4 cited A.8.2 — actual ID is A.5.2 'AI system impact assessment'"
+"ISO42001_A.6.1.2","ISO/IEC 42001:2023","A.6.1.2             Objectives for responsible develop- The organization shall identify and document objectives
+  ment of AI system                   to guide the responsible development AI systems, and take
+  those objectives into account and integrate measures to
+  achieve them in the development life cycle.","ISO_42001-2023.pdf","","","docs/governance/control-matrix.md + plan §1","docs/governance/control-matrix.md","—","not_implemented","Plan §3.4 cited A.9.2 — actual ID is A.6.1.2 'Objectives for responsible development of AI systems'"
+"ISO42001_A.6.2.4","ISO/IEC 42001:2023","A.6.2.4             AI system verification and valida-               The organization shall define and document verification
+  tion                                             and validation measures for the AI system and specify
+  criteria for their use.","ISO_42001-2023.pdf","","","lliam_gov/security/selfmod_gate.py","evidence/audit/selfmod-events.jsonl","—","not_implemented","Plan §3.4 cited A.6.2.4 'Concepts' — actual A.6.2.4 is 'AI system verification and validation'. Most relevant to selfmod gate."
+"ISO42001_A.6.2.6","ISO/IEC 42001:2023","A.6.2.6             AI system operation and monitor-                 The organization shall define and document the necessary
+  ing                                              elements for the ongoing operation of the AI system. At the
+  minimum, this should include system and performance
+  monitoring, repairs, updates and support.","ISO_42001-2023.pdf","","","lliam_gov/security/selfmod_gate.py + lliam_gov/security/audit_logger.py","evidence/audit/operation-monitoring-*.md","—","not_implemented","Added by Phase 2 review — A.6.2.6 'AI system operation and monitoring' covers Lliam-GOV's runtime monitoring posture"
+"ISO42001_A.6.2.8","ISO/IEC 42001:2023","A.6.2.8             AI system recording of event logs                The organization shall determine at which phases of the
+  AI system life cycle, record keeping of event logs should be
+  enabled, but at the minimum when the AI system is in use.
+  A.7 Data for AI systems
+  Objective: To ensure that the organization understands the role and impacts of data in AI systems in the appli-
+  cation and development, provision or use of AI systems throughout their life cycles.
+  Topic                                            Control","ISO_42001-2023.pdf","","","lliam_gov/security/audit_logger.py","evidence/audit/tool-calls-*.jsonl","ISO 27001 A.8.15; SP 800-171 §3.3.1","not_implemented","Added by Phase 2 review — A.6.2.8 'AI system recording of event logs' is the direct AIMS counterpart to the audit log"
+"ISO42001_A.7.4","ISO/IEC 42001:2023","A.7.4               Quality of data for AI systems                   The organization shall define and document requirements
+  for data quality and ensure that data used to develop and
+  operate the AI system meet those requirements.","ISO_42001-2023.pdf","","","lliam_gov/security/audit_logger.py + evidence/sbom/ + hermes_cli/security_advisories.py","evidence/audit/data-quality-events.jsonl","ISO 27001 A.5.34","not_implemented","Plan cited 'Quality of system and data'; actual title is 'Quality of data for AI systems'"
+"ISO42001_Clause_4","ISO/IEC 42001:2023","
+  4 Context of the organization
+
+  4.1 Understanding the organization and its context
+  The organization shall determine external and internal issues that are relevant to its purpose and that
+  affect its ability to achieve the intended result(s) of its AI management system.
+  The organization shall determine whether climate change is a relevant issue.
+  The organization shall consider the intended purpose of the AI systems that are developed, provided or
+  used by the organization. The organization shall determine its roles with respect to these AI systems.
+  NOTE 1      To understand the organization and its context, it can be helpful for the organization to determine its
+  role relative to the AI system. These roles can include, but are not limited to, one or more of the following:
+
+  —     AI providers, including AI platform providers, AI product or service providers;
+
+  —     AI producers, including AI developers, AI designers, AI operators, AI testers and evaluators, AI deployers, AI
+  human factor professionals, domain experts, AI impact assessors, procurers, AI governance and oversight
+  professionals;
+
+  —     AI customers, including AI users;
+
+  —     AI partners, including AI system integrators and data providers;
+
+  —     AI subjects, including data subjects and other subjects;
+
+  —     relevant authorities, including policymakers and regulators.
+
+  A detailed description of these roles is provided by ISO/IEC 22989. Furthermore, the types of roles and their
+  relationship to the AI system life cycle are also described in the NIST AI risk management framework.[29] The
+  organization’s roles can determine the applicability and extent of applicability of the requirements and controls
+  in this document.
+
+  NOTE 2     External and internal issues to be addressed under this clause can vary according to the organization’s
+  roles and jurisdiction and their impact on its ability to achieve the intended outcome(s) of its AI management
+  system. These can include, but are not limited to:
+
+  a)    external context related considerations such as:
+
+  1)    applicable legal requirements, including prohibited uses of AI;
+
+  2)    policies, guidelines and decisions from regulators that have an impact on the interpretation or
+  enforcement of legal requirements in the development and use of AI systems;
+
+  1) Under preparation. Stage at the time of publication ISO/IEC DIS 5259-1:2023.
+
+  © ISO/IEC 2023 – All rights reserved                                       ﻿                                                                           5
+  ﻿
+Copyright by ISO. Licensed to Katmai user. ANSI store order # X_1174151. Downloaded 02/27/2026. Single user license only. Copying and networking prohibited.
+
+ISO/IEC 42001:2023(E)
+
+  3)     incentives or consequences associated with the intended purpose and the use of AI systems;
+
+  4)     culture, traditions, values, norms and ethics with respect to development and use of AI;
+
+  5)     competitive landscape and trends for new products and services using AI systems;
+
+b)     internal context related considerations such as:
+
+  1)     organizational context, governance, objectives (see 6.2), policies and procedures;
+
+  2)     contractual obligations;
+
+  3)     intended purpose of the AI system to be developed or used.
+
+NOTE 3     Role determination can be formed by obligations related to categories of data the organization
+processes (e.g. personally identifiable information (PII) processor or PII controller when processing PII). See
+ISO/IEC 29100 for PII and related roles. Roles can also be informed by legal requirements specific to AI systems.
+
+4.2 Understanding the needs and expectations of interested parties
+The organization shall determine:
+— the interested parties that are relevant to the AI management system;
+— the relevant requirements of these interested parties;
+— which of these requirements will be addressed through the AI management system.
+NOTE Relevant interested parties can have requirements related to climate change.
+
+4.3 Determining the scope of the AI management system
+The organization shall determine the boundaries and applicability of the AI management system to
+establish its scope.
+When determining this scope, the organization shall consider:
+— the external and internal issues referred to in 4.1;
+— the requirements referred to in 4.2.
+The scope shall be available as documented information.
+The scope of the AI management system shall determine the organization’s activities with respect to
+this document’s requirements on the AI management system, leadership, planning, support, operation,
+performance, evaluation, improvement, controls and objectives.
+
+4.4 AI management system
+The organization shall establish, implement, maintain, continually improve and document an AI
+management system, including the processes needed and their interactions, in accordance with the
+requirements of this document.
+
+6            ﻿ © ISO/IEC 2023 – All rights reserved
+  ﻿
+  Copyright by ISO. Licensed to Katmai user. ANSI store order # X_1174151. Downloaded 02/27/2026. Single user license only. Copying and networking prohibited.
+
+  ISO/IEC 42001:2023(E)","ISO_42001-2023.pdf","","","AIMS scope (Katmai-owned)","docs/governance/aims-scope.md","—","not_implemented","Body clause, not Annex A"
+"ISO42001_Clause_6","ISO/IEC 42001:2023","
+6 Planning
+
+6.1 Actions to address risks and opportunities
+
+6.1.1        General
+
+When planning for the AI management system, the organization shall consider the issues referred to in
+4.1 and the requirements referred to in 4.2 and determine the risks and opportunities that need to be
+addressed to:
+— give assurance that the AI management system can achieve its intended result(s);
+— prevent or reduce undesired effects;
+— achieve continual improvement.
+The organization shall establish and maintain AI risk criteria that support:
+— distinguishing acceptable from non-acceptable risks;
+— performing AI risk assessments;
+— conducting AI risk treatment;
+— assessing AI risk impacts.
+NOTE 1      Considerations to determine the amount and type of risk that an organization is willing to pursue or
+retain are provided in ISO/IEC 38507 and ISO/IEC 23894.
+
+The organization shall determine the risks and opportunities according to:
+— the domain and application context of an AI system;
+— the intended use;
+— the external and internal context described in 4.1.
+NOTE 2    More than one AI system can be considered in the scope of the AI management system. In this case the
+determination of opportunities and uses is performed for each AI system or groupings of AI systems.
+
+The organization shall plan:
+a)     actions to address these risks and opportunities;
+b) how to:
+  1) integrate and implement the actions into its AI management system processes;
+  2) evaluate the effectiveness of these actions.
+
+8            ﻿ © ISO/IEC 2023 – All rights reserved
+  ﻿
+  Copyright by ISO. Licensed to Katmai user. ANSI store order # X_1174151. Downloaded 02/27/2026. Single user license only. Copying and networking prohibited.
+
+  ISO/IEC 42001:2023(E)
+
+  The organization shall retain documented information on actions taken to identify and address AI risks
+  and AI opportunities.
+  NOTE 3     Guidance on how to implement risk management for organizations developing, providing or using AI
+  products, systems and services is provided in ISO/IEC 23894.
+
+  NOTE 4  The context of the organization and its activities can have an impact on the organization’s risk
+  management activities.
+
+  NOTE 5      The way of defining risk and therefore of envisioning risk management can vary across sectors and
+  industries. The definition of risk in 3.7 allows a broad vision of risk adaptable to any sector, such as the sectors
+  mentioned in Annex D. In any case, it is the role of the organization, as part of risk assessment, to first adopt a
+  vision of risk adapted to its context. This can include approaching risk through definitions used in sectors where
+  the AI system is developed for and used, such as the definition from ISO/IEC Guide 51.
+
+  6.1.2      AI risk assessment
+
+  The organization shall define and establish an AI risk assessment process that:
+  a)    is informed by and aligned with the AI policy (see 5.2) and AI objectives (see 6.2);
+  NOTE      When assessing the consequences as part of 6.1.2 d) 1), the organization can utilize an AI system
+  impact assessment as indicated in 6.1.4.
+
+  b) is designed such that repeated AI risk assessments can produce consistent, valid and comparable
+  results;
+  c)    identifies risks that aid or prevent achieving its AI objectives;
+  d) analyses the AI risks to:
+  1) assess the potential consequences to the organization, individuals and societies that would
+  result if the identified risks were to materialize;
+  2) assess, where applicable, the realistic likelihood of the identified risks;
+  3) determine the levels of risk;
+  e)    evaluates the AI risks to:
+  1) compare the results of the risk analysis with the risk criteria (see 6.1.1);
+  2) prioritize the assessed risks for risk treatment.
+  The organization shall retain documented information about the AI risk assessment process.
+
+  6.1.3      AI risk treatment
+
+  Taking the risk assessment results into account, the organization shall define an AI risk treatment
+  process to:
+  a)    select appropriate AI risk treatment options;
+  b) determine all controls that are necessary to implement the AI risk treatment options chosen and
+  compare the controls with those in Annex A to verify that no necessary controls have been omitted;
+  NOTE 1      Annex A provides reference controls for meeting organizational objectives and addressing risks
+  related to the design and use of AI systems.
+
+  c)    consider the controls from Annex A that are relevant for the implementation of the AI risk treatment
+  options;
+  d) identify if additional controls are necessary beyond those in Annex A in order to implement all risk
+  treatment options;
+
+  © ISO/IEC 2023 – All rights reserved                                       ﻿                                                                           9
+  ﻿
+Copyright by ISO. Licensed to Katmai user. ANSI store order # X_1174151. Downloaded 02/27/2026. Single user license only. Copying and networking prohibited.
+
+ISO/IEC 42001:2023(E)
+
+e)   consider the guidance in Annex B for the implementation of controls determined in b) and c);
+  NOTE 2     Control objectives are implicitly included in the controls chosen. The organization can select an
+  appropriate set of control objectives and controls from Annex A. The Annex A controls are not exhaustive
+  and additional control objectives and controls can be needed. If different or additional controls are necessary
+  beyond those in Annex A, the organization can design such controls or take them from existing sources. AI
+  risk management can be integrated in other management systems, if applicable.
+
+f)   produce a statement of applicability that contains the necessary controls [see b), c) and d)] and
+  provide justification for inclusion and exclusion of controls. Justification for exclusion can include
+  where the controls are not deemed necessary by the risk assessment and where they are not
+  required by (or are subject to exceptions under) applicable external requirements.
+  NOTE 3      The organization can provide documented justifications for excluding any control objectives in
+  general or for specific AI systems, whether those listed in Annex A or established by the organization itself.
+
+g) formulate an AI risk treatment plan.
+The organization shall obtain approval from the designated management for the AI risk treatment plan
+and for acceptance of the residual AI risks. The necessary controls shall be:
+— aligned to the objectives in 6.2;
+— available as documented information;
+— communicated within the organization;
+— available to interested parties, as appropriate.
+The organization shall retain documented information about the AI risk treatment process.
+
+6.1.4     AI system impact assessment
+
+The organization shall define a process for assessing the potential consequences for individuals or
+groups of individuals, or both, and societies that can result from the development, provision or use of AI
+systems.
+The AI system impact assessment shall determine the potential consequences an AI system’s
+deployment, intended use and foreseeable misuse has on individuals or groups of individuals, or both,
+and societies.
+The AI system impact assessment shall take into account the specific technical and societal context
+where the AI system is deployed and applicable jurisdictions.
+The result of the AI system impact assessment shall be documented. Where appropriate, the result of
+the system impact assessment can be made available to relevant interested parties as defined by the
+organization.
+The organization shall consider the results of the AI system impact assessment in the risk assessment
+(see 6.1.2). A.5 in Table A.1 provides controls for assessing impacts of AI systems.
+NOTE        In some contexts (such as safety or privacy critical AI systems), the organization can require that
+discipline-specific AI system impact assessments (e.g. safety, privacy or security impact) be performed as part of
+the overall risk management activities of an organization.
+
+6.2 AI objectives and planning to achieve them
+The organization shall establish AI objectives at relevant functions and levels.
+The AI objectives shall:
+a)   be consistent with the AI policy (see 5.2);
+
+10        ﻿ © ISO/IEC 2023 – All rights reserved
+  ﻿
+ Copyright by ISO. Licensed to Katmai user. ANSI store order # X_1174151. Downloaded 02/27/2026. Single user license only. Copying and networking prohibited.
+
+  ISO/IEC 42001:2023(E)
+
+  b) be measurable (if practicable);
+  c)    take into account applicable requirements;
+  d) be monitored;
+  e)    be communicated;
+  f)    be updated as appropriate;
+  g) be available as documented information.
+  When planning how to achieve its AI objectives, the organization shall determine:
+  — what will be done;
+  — what resources will be required;
+  — who will be responsible;
+  — when it will be completed;
+  — how the results will be evaluated.
+  NOTE        A non-exclusive list of AI objectives relating to risk management is provided in Annex C. Control
+  objectives and controls for identifying objectives for responsible development and use of AI systems and
+  measures to achieve them are provided in A.6.1 and A.9.3 in Table A.1. Implementation guidance for these
+  controls is provided in B.6.1 and B.9.3.
+
+  6.3 Planning of changes
+  When the organization determines the need for changes to the AI management system, the changes
+  shall be carried out in a planned manner.","ISO_42001-2023.pdf","","","Hardening overlay design","docs/governance/control-matrix.md","ISO 27001 Clause 6","not_implemented","Body clause"
+"ISO42001_Clause_7.5","ISO/IEC 42001:2023","
+7.5 Documented information
+
+7.5.1     General
+
+The organization’s AI management system shall include:
+a)   documented information required by this document;
+b) documented information determined by the organization as being necessary for the effectiveness
+  of the AI management system.
+NOTE       The extent of documented information for an AI management system can differ from one organization
+to another due to:
+
+—    the size of organization and its type of activities, processes, products and services;
+
+—    the complexity of processes and their interactions;
+
+—    the competence of persons.
+
+7.5.2     Creating and updating documented information
+
+When creating and updating documented information, the organization shall ensure appropriate:
+— identification and description (e.g. a title, date, author or reference number);
+— format (e.g. language, software version, graphics) and media (e.g. paper, electronic);
+— review and approval for suitability and adequacy.
+
+12        ﻿ © ISO/IEC 2023 – All rights reserved
+  ﻿
+ Copyright by ISO. Licensed to Katmai user. ANSI store order # X_1174151. Downloaded 02/27/2026. Single user license only. Copying and networking prohibited.
+
+  ISO/IEC 42001:2023(E)
+
+  7.5.3      Control of documented information
+
+  Documented information required by the AI management system and by this document shall be
+  controlled to ensure:
+  a)    it is available and suitable for use, where and when it is needed;
+  b) it is adequately protected (e.g. from loss of confidentiality, improper use or loss of integrity).
+  For the control of documented information, the organization shall address the following activities, as
+  applicable:
+  — distribution, access, retrieval and use;
+  — storage and preservation, including preservation of legibility;
+  — control of changes (e.g. version control);
+  — retention and disposition.
+  Documented information of external origin determined by the organization to be necessary for the
+  planning and operation of the AI management system shall be identified as appropriate and controlled.
+  NOTE      Access can imply a decision regarding the permission to view the documented information only, or
+  the permission and authority to view and change the documented information.","ISO_42001-2023.pdf","","","lliam_gov/security/audit_logger.py + this matrix + NOTICE","evidence/* tree","ISO 27001 Clause 7.5","not_implemented","Body clause"
+"ISO42001_Clause_8","ISO/IEC 42001:2023","
+  8 Operation
+
+  8.1 Operational planning and control
+  The organization shall plan, implement and control the processes needed to meet requirements, and to
+  implement the actions determined in Clause 6, by:
+  — establishing criteria for the processes;
+  — implementing control of the processes in accordance with the criteria.
+  The organization shall implement the controls determined according to 6.1.3 that are related to the
+  operation of the AI management system (e.g. AI system development and usage life cycle related
+  controls).
+  The effectiveness of these controls shall be monitored and corrective actions shall be considered
+  if the intended results are not achieved. Annex A lists reference controls and Annex B provides
+  implementation guidance for them.
+  Documented information shall be available to the extent necessary to have confidence that the
+  processes have been carried out as planned.
+  The organization shall control planned changes and review the consequences of unintended changes,
+  taking action to mitigate any adverse effects, as necessary.
+  The organization shall ensure that externally provided processes, products or services that are relevant
+  to the AI management system are controlled.
+
+  8.2 AI risk assessment
+  The organization shall perform AI risk assessments in accordance with 6.1.2 at planned intervals or
+  when significant changes are proposed or occur.
+  The organization shall retain documented information of the results of all AI risk assessments.
+
+  © ISO/IEC 2023 – All rights reserved                                       ﻿                                                                      13
+  ﻿
+Copyright by ISO. Licensed to Katmai user. ANSI store order # X_1174151. Downloaded 02/27/2026. Single user license only. Copying and networking prohibited.
+
+ISO/IEC 42001:2023(E)
+
+8.3 AI risk treatment
+The organization shall implement the AI risk treatment plan according to 6.1.3 and verify its
+effectiveness.
+When risk assessments identify new risks that require treatment, a risk treatment process in
+accordance with 6.1.3 shall be performed for these risks.
+When risk treatment options as defined by the risk treatment plan are not effective, these treatment
+options shall be reviewed and revalidated following the risk treatment process according to 6.1.3 and
+the risk treatment plan shall be updated.
+The organization shall retain documented information of the results of all AI risk treatments.
+
+8.4 AI system impact assessment
+The organization shall perform AI system impact assessments according to 6.1.4 at planned intervals
+or when significant changes are proposed to occur.
+The organization shall retain documented information of the results of all AI system impact
+assessments.","ISO_42001-2023.pdf","","","Hardening overlay live operation","evidence/audit/*","ISO 27001 Clause 8","not_implemented","Body clause"
+"ISO42001_Clause_9.1","ISO/IEC 42001:2023","
+9.1 Monitoring, measurement, analysis and evaluation
+The organization shall determine:
+— what needs to be monitored and measured;
+— the methods for monitoring, measurement, analysis and evaluation, as applicable, to ensure valid
+  results;
+— when the monitoring and measuring shall be performed;
+— when the results from monitoring and measurement shall be analysed and evaluated.
+Documented information shall be available as evidence of the results.
+The organization shall evaluate the performance and the effectiveness of the AI management system.","ISO_42001-2023.pdf","","","evidence/sbom/ + hermes_cli/security_advisories.py + audit log review","evidence/audit/sca-review-*.md","ISO 27001 Clause 9.1","not_implemented","Body clause"
+"ISO42001_Clause_10","ISO/IEC 42001:2023","
+  10 Improvement
+
+  10.1 Continual improvement
+  The organization shall continually improve the suitability, adequacy and effectiveness of the AI
+  management system.
+
+  © ISO/IEC 2023 – All rights reserved                                       ﻿                                                                      15
+  ﻿
+Copyright by ISO. Licensed to Katmai user. ANSI store order # X_1174151. Downloaded 02/27/2026. Single user license only. Copying and networking prohibited.
+
+ISO/IEC 42001:2023(E)
+
+10.2 Nonconformity and corrective action
+When a nonconformity occurs, the organization shall:
+a)   react to the nonconformity and as applicable:
+  1) take action to control and correct it;
+  2) deal with the consequences;
+b) evaluate the need for action to eliminate the cause(s) of the nonconformity, so that it does not recur
+  or occur elsewhere, by:
+  1) reviewing the nonconformity;
+  2) determining the causes of the nonconformity;
+  3) determining if similar nonconformities exist or can potentially occur;
+c)   implement any action needed;
+d) review the effectiveness of any corrective action taken;
+e)   make changes to the AI management system, if necessary.
+Corrective actions shall be appropriate to the effects of the nonconformities encountered.
+Documented information shall be available as evidence of:
+— the nature of the nonconformities and any subsequent actions taken;
+— the results of any corrective action.
+
+16        ﻿ © ISO/IEC 2023 – All rights reserved
+  ﻿
+ Copyright by ISO. Licensed to Katmai user. ANSI store order # X_1174151. Downloaded 02/27/2026. Single user license only. Copying and networking prohibited.
+
+  ISO/IEC 42001:2023(E)","ISO_42001-2023.pdf","","","Quarterly improvement cycle","docs/governance/improvement-log.md","ISO 27001 Clause 10","not_implemented","Body clause"
+"ISO27001_A.5.7","ISO/IEC 27001:2022","5.7       Threat intelligence                 Control
+  Information relating to information security threats shall be collected
+  and analysed to produce threat intelligence.","ISO 27001-2022.pdf","","","evidence/sbom/ + hermes_cli/security_advisories.py","evidence/audit/sca-review-*.md","SP 800-171 §3.14.3","not_implemented",""
+"ISO27001_A.5.20","ISO/IEC 27001:2022","5.20   Addressing information security Control
+  within supplier agreements
+  Relevant information security requirements shall be established and
+  agreed with each supplier based on the type of supplier relationship.","ISO 27001-2022.pdf","","","evidence/sbom/ + hermes_cli/security_advisories.py + NOTICE (Hermes is primary supplier)","NOTICE + evidence/sbom/cyclonedx-*.json","—","not_implemented",""
+"ISO27001_A.5.21","ISO/IEC 27001:2022","5.21   Managing information security Control
+  in the information and commu-
+  Processes and procedures shall be defined and implemented to manage
+  nication technology (ICT) supply
+  the information security risks associated with the ICT products and
+  chain
+  services supply chain.","ISO 27001-2022.pdf","","","evidence/sbom/ + hermes_cli/security_advisories.py + quarterly Hermes review","evidence/audit/sca-review-*.md + evidence/audit/upstream-cherrypicks-*.md","—","not_implemented",""
+"ISO27001_A.5.22","ISO/IEC 27001:2022","5.22   Monitoring, review and change Control
+  management of supplier services
+  The organization shall regularly monitor, review, evaluate and manage
+  change in supplier information security practices and service delivery.","ISO 27001-2022.pdf","","","Quarterly Hermes CHANGELOG review","evidence/audit/upstream-review-*.md","—","not_implemented",""
+"ISO27001_A.5.23","ISO/IEC 27001:2022","5.23   Information security for use of Control
+  cloud services
+  Processes for acquisition, use, management and exit from cloud services
+  shall be established in accordance with the organization’s information
+  security requirements.","ISO 27001-2022.pdf","","","Operator runbook (model-endpoint posture)","docs/operate/model-endpoints.md","—","not_implemented",""
+"ISO27001_A.5.31","ISO/IEC 27001:2022","5.31      Legal, statutory, regulatory and Control
+  contractual requirements
+  Legal, statutory, regulatory and contractual requirements relevant to
+  information security and the organization’s approach to meet these
+  requirements shall be identified, documented and kept up to date.","ISO 27001-2022.pdf","","","GOVERNANCE_ONLY (Jerome as AIMS PM; Jack as authorizing reviewer)","docs/governance/legal-mapping.md","—","not_implemented",""
+"ISO27001_A.5.32","ISO/IEC 27001:2022","5.32      Intellectual property rights        Control
+  The organization shall implement appropriate procedures to protect
+  intellectual property rights.","ISO 27001-2022.pdf","","","NOTICE + LICENSE (MIT compliance)","NOTICE + LICENSE","—","implemented",""
+"ISO27001_A.6.3","ISO/IEC 27001:2022","6.3      Planning of changes
+
+When the organization determines the need for changes to the information security management
+system, the changes shall be carried out in a planned manner.
+
+© ISO/IEC 2022 – All rights reserved                           ﻿                                                5
+﻿
+
+  Licensed to Jennifer Armstrong (jarmstrong@katmaicorp.com)
+  ISO Store Order: OP-745504 license #1/ Downloaded: 2024-01-29
+  Single user licence only, copying and networking prohibited.
+ISO/IEC 27001:2022(E)
+
+7	​Support","ISO 27001-2022.pdf","","","docs/operate/* operator runbook","docs/operate/","—","not_implemented",""
+"ISO27001_A.8.5","ISO/IEC 27001:2022","8.5    Secure authentication             Control
+  Secure authentication technologies and procedures shall be implemented
+  based on information access restrictions and the topic-specific policy
+  on access control.","ISO 27001-2022.pdf","","","lliam_gov/security/principal.py + gateway Bearer/HMAC","evidence/audit/auth-events.jsonl","SP 800-171 §3.1.1 / §3.1.2","not_implemented",""
+"ISO27001_A.8.6","ISO/IEC 27001:2022","8.6    Capacity management               Control
+  The use of resources shall be monitored and adjusted in line with current
+  and expected capacity requirements.","ISO 27001-2022.pdf","","","lliam_gov/security/audit_logger.py monthly rotation + capacity check","evidence/audit/capacity-checks-*.md","—","not_implemented",""
+"ISO27001_A.8.8","ISO/IEC 27001:2022","8.8    Management of technical vul- Control
+  nerabilities
+  Information about technical vulnerabilities of information systems in
+  use shall be obtained, the organization’s exposure to such vulnerabilities
+  shall be evaluated and appropriate measures shall be taken.","ISO 27001-2022.pdf","","","evidence/sbom/ + hermes_cli/security_advisories.py","evidence/audit/sca-review-*.md","SP 800-171 §3.14.2","not_implemented",""
+"ISO27001_A.8.10","ISO/IEC 27001:2022","8.10   Information deletion              Control
+  Information stored in information systems, devices or in any other
+  storage media shall be deleted when no longer required.","ISO 27001-2022.pdf","","","lliam_gov/security/cui.py on-delete sanitization","evidence/audit/deletion-events.jsonl","—","not_implemented",""
+"ISO27001_A.8.11","ISO/IEC 27001:2022","8.11   Data masking                      Control
+  Data masking shall be used in accordance with the organization’s
+  topic-specific policy on access control and other related topic-specific
+  policies, and business requirements, taking applicable legislation into
+  consideration.","ISO 27001-2022.pdf","","","lliam_gov/security/audit_logger.py params_hash pattern","tests/test_audit_logger.py::test_no_raw_params","—","not_implemented",""
+"ISO27001_A.8.12","ISO/IEC 27001:2022","8.12   Data leakage prevention           Control
+  Data leakage prevention measures shall be applied to systems, net-
+  works and any other devices that process, store or transmit sensitive
+  information.","ISO 27001-2022.pdf","","","lliam_gov/security/egress.py allowlist + lliam_gov/security/cui.py marking","evidence/audit/egress-events.jsonl + evidence/audit/cui-access-*.jsonl","—","not_implemented",""
+"ISO27001_A.8.15","ISO/IEC 27001:2022","8.15   Logging                           Control
+  Logs that record activities, exceptions, faults and other relevant events
+  shall be produced, stored, protected and analysed.","ISO 27001-2022.pdf","","","lliam_gov/security/audit_logger.py","evidence/audit/tool-calls-*.jsonl","SP 800-171 §3.3.1 / §3.3.2 / §3.3.8","not_implemented",""
+"ISO27001_A.8.16","ISO/IEC 27001:2022","8.16   Monitoring activities             Control
+  Networks, systems and applications shall be monitored for anomalous
+  behaviour and appropriate actions taken to evaluate potential infor-
+  mation security incidents.","ISO 27001-2022.pdf","","","lliam_gov/security/audit_logger.py review cadence","evidence/audit/audit-log-review-*.md","SP 800-171 §3.3.4","not_implemented",""
+"ISO27001_A.8.20","ISO/IEC 27001:2022","8.20      Networks security                   Control
+  Networks and network devices shall be secured, managed and controlled
+  to protect information in systems and applications.","ISO 27001-2022.pdf","","","lliam_gov/security/egress.py + gateway/platforms/{slack,email,telegram}.py (other adapters deleted)","evidence/audit/boundary-controls.txt","SP 800-171 §3.13.1","scaffolded",""
+"ISO27001_A.8.21","ISO/IEC 27001:2022","8.21      Security of network services        Control
+  Security mechanisms, service levels and service requirements of network
+  services shall be identified, implemented and monitored.","ISO 27001-2022.pdf","","","lliam_gov/security/egress.py (TLS 1.2+, verify=True)","evidence/audit/tls-policy-test.txt","—","not_implemented",""
+"ISO27001_A.8.22","ISO/IEC 27001:2022","8.22      Segregation of networks             Control
+  Groups of information services, users and information systems shall
+  be segregated in the organization’s networks.","ISO 27001-2022.pdf","","","hermes_cli/web_server.py + hermes_cli/main.py (loopback-only)","evidence/audit/dashboard-bind-test.txt","—","implemented",""
+"ISO27001_A.8.23","ISO/IEC 27001:2022","8.23      Web filtering                       Control
+  Access to external websites shall be managed to reduce exposure to
+  malicious content.","ISO 27001-2022.pdf","","","lliam_gov/security/egress.py allowlist","evidence/audit/egress-events.jsonl","—","not_implemented",""
+"ISO27001_A.8.24","ISO/IEC 27001:2022","8.24      Use of cryptography                 Control
+  Rules for the effective use of cryptography, including cryptographic key
+  management, shall be defined and implemented.","ISO 27001-2022.pdf","","","lliam_gov/security/key_manager.py + lliam_gov/security/runtime_guard.py FIPS gate","evidence/audit/at-rest-encryption-test.txt + evidence/audit/fips-mode-startup-check.txt","SP 800-171 §3.13.11 / §3.13.16; ISO 42001 A.4.3","not_implemented",""
+"ISO27001_A.8.28","ISO/IEC 27001:2022","8.28      Secure coding                       Control
+  Secure coding principles shall be applied to software development.","ISO 27001-2022.pdf","","","Hermes upstream practice + PR review","(upstream CONTRIBUTING.md + repo PR review)","—","not_implemented",""
+"ISO27001_A.8.30","ISO/IEC 27001:2022","8.30      Outsourced development              Control
+  The organization shall direct, monitor and review the activities related
+  to outsourced system development.","ISO 27001-2022.pdf","","","Hermes upstream lineage","NOTICE","—","implemented",""
