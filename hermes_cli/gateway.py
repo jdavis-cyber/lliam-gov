@@ -2106,13 +2106,18 @@ def _hermes_home_for_target_user(target_home_dir: str) -> str:
 
     When installing a system service via sudo, get_hermes_home() resolves to
     root's home.  This translates it to the target user's equivalent path:
-      /root/.hermes                    → /home/alice/.hermes
-      /root/.hermes/profiles/coder     → /home/alice/.hermes/profiles/coder
-      /opt/custom-hermes               → /opt/custom-hermes  (kept as-is)
+      /root/.lliam-gov                    → /home/alice/.lliam-gov
+      /root/.lliam-gov/profiles/coder     → /home/alice/.lliam-gov/profiles/coder
+      /opt/custom-hermes                  → /opt/custom-hermes  (kept as-is)
+
+    Lliam-GOV facelift (Phase 1): the literal ``.hermes`` references here are
+    among the ~20 ``Path.home() / ".hermes"`` bypass sites flagged in
+    ``hermes_constants.py``'s docstring.  Flipped to ``.lliam-gov`` because
+    the systemd-unit generator must agree with the runtime default.
     """
     current_hermes = get_hermes_home().resolve()
-    current_default = (Path.home() / ".hermes").resolve()
-    target_default = Path(target_home_dir) / ".hermes"
+    current_default = (Path.home() / ".lliam-gov").resolve()
+    target_default = Path(target_home_dir) / ".lliam-gov"
 
     # Default ~/.hermes → remap to target user's default
     if current_hermes == current_default:
