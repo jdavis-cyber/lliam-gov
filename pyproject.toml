@@ -67,6 +67,13 @@ dependencies = [
   # (which is a silent killer on Windows — see CONTRIBUTING.md) and
   # `os.killpg` (which doesn't exist on Windows).
   "psutil==7.2.2",
+  # Phase 3 — encryption-at-rest (lliam_gov/security/key_manager.py).
+  # AES-256-GCM via cryptography.hazmat.primitives.ciphers.aead.AESGCM,
+  # scrypt-derived key, machine secret stored in macOS Keychain.
+  # Plan §5.1; control matrix rows SP800-171_3.5.10/3.8.9/3.13.16/3.13.11,
+  # ISO27001_A.8.24, ISO42001_A.4.3.
+  "cryptography==46.0.7",
+  "keyring==25.7.0",
 ]
 
 [project.optional-dependencies]
