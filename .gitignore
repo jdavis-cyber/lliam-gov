@@ -75,3 +75,7 @@ models-dev-upstream/
 hermes_cli/tui_dist/*
 hermes_cli/scripts/
 docs/superpowers/*
+
+# Lliam-GOV Phase 2: pdftotext cache (regenerable from source PDFs)
+evidence/phase2/.pdftext-cache/
+
