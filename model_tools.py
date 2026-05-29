@@ -494,6 +494,40 @@ def _compute_tool_definitions(
 # so if something slips through, the LLM sees a sensible message.
 _AGENT_LOOP_TOOLS = {"todo", "memory", "session_search", "delegate_task"}
 _READ_SEARCH_TOOLS = {"read_file", "search_files"}
+_tool_audit_logger = None
+
+
+def _get_tool_audit_logger():
+    """Return the process audit logger for tool dispatch events."""
+
+    global _tool_audit_logger
+    if _tool_audit_logger is None:
+        from lliam_gov.security.audit_logger import AuditLogger
+
+        _tool_audit_logger = AuditLogger()
+    return _tool_audit_logger
+
+
+def _tool_audit_failure(exc: Exception) -> str:
+    return json.dumps(
+        {"error": f"Audit logging failed closed: {exc}"},
+        ensure_ascii=False,
+    )
+
+
+def _audit_tool_event(**kwargs) -> str | None:
+    """Append a tool audit event.
+
+    Returns a JSON error string when audit logging fails, because tool
+    dispatch must fail closed if audit evidence cannot be written.
+    """
+
+    try:
+        _get_tool_audit_logger().log_event(**kwargs)
+    except Exception as exc:
+        logger.error("tool audit logging failed closed: %s", exc, exc_info=True)
+        return _tool_audit_failure(exc)
+    return None
 
 
 # =========================================================================
@@ -796,6 +830,19 @@ def handle_function_call(
                 logger.debug("pre_tool_call hook error: %s", _hook_err)
 
             if block_message is not None:
+                audit_error = _audit_tool_event(
+                    event_type="tool_call_blocked",
+                    session_id=session_id or "",
+                    tool_name=function_name,
+                    tool_call_id=tool_call_id or "",
+                    params=function_args,
+                    duration_ms=0,
+                    blocked=True,
+                    block_reason=block_message,
+                    error=block_message,
+                )
+                if audit_error is not None:
+                    return audit_error
                 return json.dumps({"error": block_message}, ensure_ascii=False)
 
         # ACP/Zed edit approval runs before any file mutation.  The requester
@@ -828,6 +875,17 @@ def handle_function_call(
         # dashboards, budget alerts, and regression canaries without having
         # to wrap every tool manually.  We use monotonic() so the value is
         # unaffected by wall-clock adjustments during the call.
+        audit_error = _audit_tool_event(
+            event_type="tool_call_start",
+            session_id=session_id or "",
+            tool_name=function_name,
+            tool_call_id=tool_call_id or "",
+            params=function_args,
+            blocked=False,
+        )
+        if audit_error is not None:
+            return audit_error
+
         _dispatch_start = time.monotonic()
         if function_name == "execute_code":
             # Prefer the caller-provided list so subagents can't overwrite
@@ -845,6 +903,18 @@ def handle_function_call(
                 user_task=user_task,
             )
         duration_ms = int((time.monotonic() - _dispatch_start) * 1000)
+        audit_error = _audit_tool_event(
+            event_type="tool_call_end",
+            session_id=session_id or "",
+            tool_name=function_name,
+            tool_call_id=tool_call_id or "",
+            params=function_args,
+            duration_ms=duration_ms,
+            blocked=False,
+            error=None,
+        )
+        if audit_error is not None:
+            return audit_error
 
         try:
             from hermes_cli.plugins import invoke_hook
@@ -891,6 +961,21 @@ def handle_function_call(
     except Exception as e:
         error_msg = f"Error executing {function_name}: {str(e)}"
         logger.exception(error_msg)
+        duration_ms = 0
+        if "_dispatch_start" in locals():
+            duration_ms = int((time.monotonic() - _dispatch_start) * 1000)
+        audit_error = _audit_tool_event(
+            event_type="tool_call_error",
+            session_id=session_id or "",
+            tool_name=function_name,
+            tool_call_id=tool_call_id or "",
+            params=function_args,
+            duration_ms=duration_ms,
+            blocked=False,
+            error=error_msg,
+        )
+        if audit_error is not None:
+            return audit_error
         return json.dumps({"error": _sanitize_tool_error(error_msg)}, ensure_ascii=False)
 
 
