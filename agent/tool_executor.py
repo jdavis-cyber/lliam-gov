@@ -62,6 +62,47 @@ def _ra():
     return run_agent
 
 
+def _audit_tool_event(**kwargs) -> str | None:
+    """Append a Lliam-GOV tool audit event through the shared dispatcher."""
+    from model_tools import _audit_tool_event as audit_tool_event
+
+    return audit_tool_event(**kwargs)
+
+
+def _inline_agent_tool_names(agent) -> set[str]:
+    names = {"todo", "memory", "session_search", "delegate_task", "clarify"}
+    names.update(getattr(agent, "_context_engine_tool_names", set()) or set())
+    return names
+
+
+def _is_inline_agent_tool(agent, function_name: str) -> bool:
+    if function_name in _inline_agent_tool_names(agent):
+        return True
+    memory_manager = getattr(agent, "_memory_manager", None)
+    return bool(memory_manager and memory_manager.has_tool(function_name))
+
+
+def _audit_blocked_tool(
+    agent,
+    function_name: str,
+    function_args: dict,
+    *,
+    tool_call_id: str = "",
+    block_reason: str,
+) -> str | None:
+    return _audit_tool_event(
+        event_type="tool_call_blocked",
+        session_id=agent.session_id or "",
+        tool_name=function_name,
+        tool_call_id=tool_call_id or "",
+        params=function_args,
+        duration_ms=0,
+        blocked=True,
+        block_reason=block_reason,
+        error=block_reason,
+    )
+
+
 def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effective_task_id: str, api_call_count: int = 0) -> None:
     """Execute multiple tool calls concurrently using a thread pool.
 
@@ -139,6 +180,20 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
             if not guardrail_decision.allows_execution:
                 block_result = agent._guardrail_block_result(guardrail_decision)
                 blocked_by_guardrail = True
+
+        if block_result is not None:
+            block_reason = block_message
+            if block_reason is None and blocked_by_guardrail:
+                block_reason = guardrail_decision.message or guardrail_decision.code
+            audit_error = _audit_blocked_tool(
+                agent,
+                function_name,
+                function_args,
+                tool_call_id=tool_call.id,
+                block_reason=block_reason or "Tool blocked",
+            )
+            if audit_error is not None:
+                block_result = audit_error
 
         parsed_calls.append((tool_call, function_name, function_args, block_result, blocked_by_guardrail))
 
@@ -514,6 +569,38 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                 _guardrail_block_decision = guardrail_decision
 
         _execution_blocked = _block_msg is not None or _guardrail_block_decision is not None
+        _audit_failure_result = None
+        if _execution_blocked:
+            if _block_msg is not None:
+                _block_reason = _block_msg
+            else:
+                _block_reason = (
+                    _guardrail_block_decision.message
+                    or _guardrail_block_decision.code
+                    or "Tool blocked"
+                )
+            _audit_failure_result = _audit_blocked_tool(
+                agent,
+                function_name,
+                function_args,
+                tool_call_id=tool_call.id,
+                block_reason=_block_reason,
+            )
+        _inline_audit = (
+            not _execution_blocked
+            and _is_inline_agent_tool(agent, function_name)
+        )
+        if _inline_audit:
+            _audit_failure_result = _audit_tool_event(
+                event_type="tool_call_start",
+                session_id=agent.session_id or "",
+                tool_name=function_name,
+                tool_call_id=tool_call.id or "",
+                params=function_args,
+                blocked=False,
+            )
+            if _audit_failure_result is not None:
+                _execution_blocked = True
 
         if _execution_blocked:
             # Tool blocked by plugin or guardrail policy — skip counters,
@@ -587,7 +674,10 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
 
         tool_start_time = time.time()
 
-        if _block_msg is not None:
+        if _audit_failure_result is not None:
+            function_result = _audit_failure_result
+            tool_duration = 0.0
+        elif _block_msg is not None:
             # Tool blocked by plugin policy — return error without executing.
             function_result = json.dumps({"error": _block_msg}, ensure_ascii=False)
             tool_duration = 0.0
@@ -791,6 +881,20 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
         # Log tool errors to the persistent error log so [error] tags
         # in the UI always have a corresponding detailed entry on disk.
         _is_error_result, _ = _detect_tool_failure(function_name, function_result)
+        if _inline_audit and _audit_failure_result is None:
+            audit_error = _audit_tool_event(
+                event_type="tool_call_end",
+                session_id=agent.session_id or "",
+                tool_name=function_name,
+                tool_call_id=tool_call.id or "",
+                params=function_args,
+                duration_ms=int(tool_duration * 1000),
+                blocked=False,
+                error=None,
+            )
+            if audit_error is not None:
+                function_result = audit_error
+                _is_error_result, _ = _detect_tool_failure(function_name, function_result)
         if not _execution_blocked:
             function_result = agent._append_guardrail_observation(
                 function_name,
