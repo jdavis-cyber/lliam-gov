@@ -2302,8 +2302,106 @@ class TestConcurrentToolExecution:
             mock_todo.assert_called_once()
         assert "ok" in result
 
+    def test_invoke_agent_loop_tool_writes_start_and_end_audit_events(
+        self, agent, monkeypatch
+    ):
+        """Agent-owned tools should produce audit events like registry tools."""
+        audit_events = []
+
+        class FakeAuditLogger:
+            def log_event(self, **kwargs):
+                audit_events.append(kwargs)
+
+        monkeypatch.setattr("model_tools._get_tool_audit_logger", FakeAuditLogger)
+
+        with patch("tools.todo_tool.todo_tool", return_value='{"ok":true}'):
+            result = agent._invoke_tool(
+                "todo",
+                {"todos": [{"content": "audit me"}]},
+                "task-1",
+                tool_call_id="call-1",
+            )
+
+        assert result == '{"ok":true}'
+        assert [event["event_type"] for event in audit_events] == [
+            "tool_call_start",
+            "tool_call_end",
+        ]
+        assert audit_events[0]["tool_name"] == "todo"
+        assert audit_events[0]["tool_call_id"] == "call-1"
+        assert audit_events[0]["session_id"] == agent.session_id
+        assert audit_events[0]["params"] == {"todos": [{"content": "audit me"}]}
+        assert audit_events[1]["duration_ms"] >= 0
+        assert audit_events[1]["blocked"] is False
+        assert audit_events[1]["error"] is None
+
+    def test_invoke_agent_loop_tool_error_writes_error_audit_event(
+        self, agent, monkeypatch
+    ):
+        """Agent-owned tool exceptions should leave error audit evidence."""
+        audit_events = []
+
+        class FakeAuditLogger:
+            def log_event(self, **kwargs):
+                audit_events.append(kwargs)
+
+        monkeypatch.setattr("model_tools._get_tool_audit_logger", FakeAuditLogger)
+
+        with (
+            patch("tools.todo_tool.todo_tool", side_effect=RuntimeError("todo boom")),
+            pytest.raises(RuntimeError, match="todo boom"),
+        ):
+            agent._invoke_tool(
+                "todo",
+                {"todos": []},
+                "task-1",
+                tool_call_id="call-1",
+            )
+
+        assert [event["event_type"] for event in audit_events] == [
+            "tool_call_start",
+            "tool_call_error",
+        ]
+        assert audit_events[1]["tool_name"] == "todo"
+        assert audit_events[1]["duration_ms"] >= 0
+        assert "todo boom" in audit_events[1]["error"]
+
+    def test_invoke_agent_loop_audit_failure_blocks_execution(
+        self, agent, monkeypatch
+    ):
+        """Agent-owned tools should fail closed before side effects."""
+
+        class FailingAuditLogger:
+            def log_event(self, **kwargs):
+                raise RuntimeError("audit unavailable")
+
+        monkeypatch.setattr("model_tools._get_tool_audit_logger", FailingAuditLogger)
+
+        with patch(
+            "tools.todo_tool.todo_tool",
+            side_effect=AssertionError("should not run"),
+        ) as mock_todo:
+            result = json.loads(
+                agent._invoke_tool(
+                    "todo",
+                    {"todos": []},
+                    "task-1",
+                    tool_call_id="call-1",
+                )
+            )
+
+        mock_todo.assert_not_called()
+        assert "audit unavailable" in result["error"]
+
     def test_invoke_tool_blocked_returns_error_and_skips_execution(self, agent, monkeypatch):
         """_invoke_tool should return error JSON when a plugin blocks the tool."""
+        audit_events = []
+
+        class FakeAuditLogger:
+            def log_event(self, **kwargs):
+                audit_events.append(kwargs)
+
+        monkeypatch.setattr("model_tools._get_tool_audit_logger", FakeAuditLogger)
         monkeypatch.setattr(
             "hermes_cli.plugins.get_pre_tool_call_block_message",
             lambda *args, **kwargs: "Blocked by test policy",
@@ -2313,6 +2411,19 @@ class TestConcurrentToolExecution:
 
         assert json.loads(result) == {"error": "Blocked by test policy"}
         mock_todo.assert_not_called()
+        assert audit_events == [
+            {
+                "event_type": "tool_call_blocked",
+                "session_id": agent.session_id,
+                "tool_name": "todo",
+                "tool_call_id": "",
+                "params": {"todos": []},
+                "duration_ms": 0,
+                "blocked": True,
+                "block_reason": "Blocked by test policy",
+                "error": "Blocked by test policy",
+            }
+        ]
 
     def test_invoke_tool_blocked_skips_handle_function_call(self, agent, monkeypatch):
         """Blocked registry tools should not reach handle_function_call."""
@@ -2327,12 +2438,19 @@ class TestConcurrentToolExecution:
 
     def test_sequential_blocked_tool_skips_checkpoints_and_callbacks(self, agent, monkeypatch):
         """Sequential path: blocked tool should not trigger checkpoints or start callbacks."""
+        audit_events = []
+
+        class FakeAuditLogger:
+            def log_event(self, **kwargs):
+                audit_events.append(kwargs)
+
         tool_call = _mock_tool_call(name="write_file",
                                     arguments='{"path":"test.txt","content":"hello"}',
                                     call_id="c1")
         mock_msg = _mock_assistant_msg(content="", tool_calls=[tool_call])
         messages = []
 
+        monkeypatch.setattr("model_tools._get_tool_audit_logger", FakeAuditLogger)
         monkeypatch.setattr(
             "hermes_cli.plugins.get_pre_tool_call_block_message",
             lambda *args, **kwargs: "Blocked by policy",
@@ -2353,6 +2471,19 @@ class TestConcurrentToolExecution:
         assert len(messages) == 1
         assert messages[0]["role"] == "tool"
         assert json.loads(messages[0]["content"]) == {"error": "Blocked by policy"}
+        assert audit_events == [
+            {
+                "event_type": "tool_call_blocked",
+                "session_id": agent.session_id,
+                "tool_name": "write_file",
+                "tool_call_id": "c1",
+                "params": {"path": "test.txt", "content": "hello"},
+                "duration_ms": 0,
+                "blocked": True,
+                "block_reason": "Blocked by policy",
+                "error": "Blocked by policy",
+            }
+        ]
 
     def test_blocked_memory_tool_does_not_reset_counter(self, agent, monkeypatch):
         """Blocked memory tool should not reset the nudge counter."""
