@@ -67,6 +67,14 @@ from agent.trajectory import has_incomplete_scratchpad
 from agent.usage_pricing import estimate_usage_cost, normalize_usage
 from hermes_constants import display_hermes_home as _dhh_fn, PARTIAL_STREAM_STUB_ID
 from hermes_logging import set_session_context
+from lliam_gov.security.audit_logger import AuditLoggerError
+from lliam_gov.security.session_audit import (
+    audit_failure_result,
+    audit_session_event,
+    session_open_params,
+    turn_end_params,
+    turn_start_params,
+)
 from tools.schema_sanitizer import strip_pattern_and_format
 from tools.skill_provenance import set_current_write_origin
 from utils import base_url_host_matches, env_var_enabled
@@ -341,11 +349,35 @@ def run_conversation(
     agent._persist_user_message_override = persist_user_message
     # Generate unique task_id if not provided to isolate VMs between concurrent tasks
     effective_task_id = task_id or str(uuid.uuid4())
+    turn_started_at = time.monotonic()
     # Expose the active task_id so tools running mid-turn (e.g. delegate_task
     # in delegate_tool.py) can identify this agent for the cross-agent file
     # state registry.  Set BEFORE any tool dispatch so snapshots taken at
     # child-launch time see the parent's real id, not None.
     agent._current_task_id = effective_task_id
+
+    try:
+        if not getattr(agent, "_lliam_audit_session_open_logged", False):
+            audit_session_event(
+                agent,
+                "session_open",
+                params=session_open_params(agent),
+            )
+            agent._lliam_audit_session_open_logged = True
+        audit_session_event(
+            agent,
+            "conversation_turn_start",
+            params=turn_start_params(
+                agent,
+                conversation_history=conversation_history,
+                stream_callback=stream_callback,
+                task_id=effective_task_id,
+            ),
+        )
+    except AuditLoggerError as exc:
+        logger.error("Audit logging failed closed before conversation start: %s", exc)
+        agent._stream_callback = None
+        return audit_failure_result(agent, exc)
     
     # Reset retry counters and iteration budget at the start of each turn
     # so subagent usage from a previous turn doesn't eat into the next one.
@@ -4107,6 +4139,35 @@ def run_conversation(
         )
     else:
         logger.info(_diag_msg, *_diag_args)
+
+    try:
+        _audit_params = turn_end_params(
+            agent,
+            api_call_count=api_call_count,
+            completed=completed,
+            failed=failed,
+            interrupted=interrupted,
+            message_count=len(messages),
+            turn_exit_reason=_turn_exit_reason,
+        )
+        audit_session_event(
+            agent,
+            "conversation_turn_end",
+            params=_audit_params,
+            duration_ms=int((time.monotonic() - turn_started_at) * 1000),
+        )
+        audit_session_event(
+            agent,
+            "session_close",
+            params=_audit_params,
+            duration_ms=int((time.monotonic() - turn_started_at) * 1000),
+        )
+    except AuditLoggerError as exc:
+        logger.error("Audit logging failed closed after conversation end: %s", exc)
+        final_response = f"Audit logging failed closed: {exc}"
+        completed = False
+        failed = True
+        _turn_exit_reason = "audit_logging_failed_closed"
 
     # File-mutation verifier footer.
     # If one or more ``write_file`` / ``patch`` calls failed during this
