@@ -6218,6 +6218,13 @@ def cmd_security(args):
     sys.exit(2)
 
 
+def cmd_audit(args):
+    """Dispatch `hermes audit <subcmd>`."""
+    from hermes_cli.audit_cli import cmd_audit as _cmd_audit
+
+    sys.exit(int(_cmd_audit(args) or 0))
+
+
 def cmd_dump(args):
     """Dump setup summary for support/debugging."""
     from hermes_cli.dump import run_dump
@@ -12138,6 +12145,13 @@ def main():
     )
     audit_parser.set_defaults(func=cmd_security)
     security_parser.set_defaults(func=cmd_security)
+
+    # =========================================================================
+    # audit command — governance audit evidence export/import
+    # =========================================================================
+    from hermes_cli.audit_cli import register_audit_parser
+
+    register_audit_parser(subparsers)
 
     # =========================================================================
     # dump command
