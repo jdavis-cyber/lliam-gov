@@ -2837,6 +2837,73 @@ class TestRunConversation:
         assert result["final_response"] == "Final answer"
         assert result["completed"] is True
 
+    def test_run_conversation_writes_session_and_turn_audit_events(
+        self, agent, tmp_path, monkeypatch
+    ):
+        self._setup_agent(agent)
+        agent.model = "test-model"
+        agent.provider = "test-provider"
+        agent.api_mode = "chat_completions"
+        resp = _mock_response(content="Final answer", finish_reason="stop")
+        agent.client.chat.completions.create.return_value = resp
+
+        from lliam_gov.security import audit_logger
+
+        monkeypatch.setattr(audit_logger, "get_hermes_home", lambda: tmp_path)
+
+        with (
+            patch.object(agent, "_persist_session"),
+            patch.object(agent, "_save_trajectory"),
+            patch.object(agent, "_cleanup_task_resources"),
+        ):
+            result = agent.run_conversation("hello from the user")
+
+        assert result["completed"] is True
+        audit_files = sorted((tmp_path / "audit").glob("tool-calls-*.jsonl"))
+        assert len(audit_files) == 1
+
+        audit_logger.verify_audit_chain(audit_files[0])
+        records = [
+            json.loads(line)
+            for line in audit_files[0].read_text(encoding="utf-8").splitlines()
+        ]
+        assert [record["event_type"] for record in records] == [
+            "session_open",
+            "conversation_turn_start",
+            "conversation_turn_end",
+            "session_close",
+        ]
+        assert all(record["session_id"] == agent.session_id for record in records)
+        assert all(record["model_id"] == "test-model" for record in records)
+        assert "hello from the user" not in audit_files[0].read_text(encoding="utf-8")
+        assert all("params_hash" in record for record in records)
+
+    def test_run_conversation_fails_closed_when_audit_logger_cannot_append(
+        self, agent, monkeypatch
+    ):
+        self._setup_agent(agent)
+        agent.client.chat.completions.create.return_value = _mock_response(
+            content="Final answer", finish_reason="stop"
+        )
+
+        from lliam_gov.security.audit_logger import AuditLoggerOpenError
+
+        def _raise_open_error(*_args, **_kwargs):
+            raise AuditLoggerOpenError("audit path unavailable")
+
+        monkeypatch.setattr(
+            "lliam_gov.security.audit_logger.AuditLogger.log_event",
+            _raise_open_error,
+        )
+
+        result = agent.run_conversation("hello")
+
+        assert result["completed"] is False
+        assert result["failed"] is True
+        assert result["api_calls"] == 0
+        assert "Audit logging failed closed" in result["final_response"]
+        agent.client.chat.completions.create.assert_not_called()
+
     def test_ollama_small_runtime_context_fails_before_api_call(self, agent, caplog):
         self._setup_agent(agent)
         agent.model = "qwen3.5:9b"
