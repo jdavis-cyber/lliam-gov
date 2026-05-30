@@ -2366,6 +2366,40 @@ class TestConcurrentToolExecution:
         assert audit_events[1]["duration_ms"] >= 0
         assert "todo boom" in audit_events[1]["error"]
 
+    def test_sequential_agent_loop_tool_error_writes_error_audit_event(
+        self, agent, monkeypatch
+    ):
+        """Sequential inline agent-owned tools should not leave dangling starts."""
+        audit_events = []
+
+        class FakeAuditLogger:
+            def log_event(self, **kwargs):
+                audit_events.append(kwargs)
+
+        monkeypatch.setattr("model_tools._get_tool_audit_logger", FakeAuditLogger)
+
+        tool_call = _mock_tool_call(
+            name="todo",
+            arguments='{"todos":[]}',
+            call_id="call-1",
+        )
+        mock_msg = _mock_assistant_msg(content="", tool_calls=[tool_call])
+
+        with (
+            patch("tools.todo_tool.todo_tool", side_effect=RuntimeError("todo boom")),
+            pytest.raises(RuntimeError, match="todo boom"),
+        ):
+            agent._execute_tool_calls_sequential(mock_msg, [], "task-1")
+
+        assert [event["event_type"] for event in audit_events] == [
+            "tool_call_start",
+            "tool_call_error",
+        ]
+        assert audit_events[1]["tool_name"] == "todo"
+        assert audit_events[1]["tool_call_id"] == "call-1"
+        assert audit_events[1]["duration_ms"] >= 0
+        assert "todo boom" in audit_events[1]["error"]
+
     def test_invoke_agent_loop_audit_failure_blocks_execution(
         self, agent, monkeypatch
     ):
@@ -2470,6 +2504,54 @@ class TestConcurrentToolExecution:
         assert starts == []
         assert len(messages) == 1
         assert messages[0]["role"] == "tool"
+        assert json.loads(messages[0]["content"]) == {"error": "Blocked by policy"}
+        assert audit_events == [
+            {
+                "event_type": "tool_call_blocked",
+                "session_id": agent.session_id,
+                "tool_name": "write_file",
+                "tool_call_id": "c1",
+                "params": {"path": "test.txt", "content": "hello"},
+                "duration_ms": 0,
+                "blocked": True,
+                "block_reason": "Blocked by policy",
+                "error": "Blocked by policy",
+            }
+        ]
+
+    def test_concurrent_blocked_tool_skips_checkpoint_before_audit(
+        self, agent, monkeypatch
+    ):
+        """Concurrent blocked writes must fail before checkpoint side effects."""
+        audit_events = []
+
+        class FakeAuditLogger:
+            def log_event(self, **kwargs):
+                audit_events.append(kwargs)
+
+        tool_call = _mock_tool_call(
+            name="write_file",
+            arguments='{"path":"test.txt","content":"hello"}',
+            call_id="c1",
+        )
+        mock_msg = _mock_assistant_msg(content="", tool_calls=[tool_call])
+        messages = []
+
+        monkeypatch.setattr("model_tools._get_tool_audit_logger", FakeAuditLogger)
+        monkeypatch.setattr(
+            "hermes_cli.plugins.get_pre_tool_call_block_message",
+            lambda *args, **kwargs: "Blocked by policy",
+        )
+        agent._checkpoint_mgr.enabled = True
+        agent._checkpoint_mgr.ensure_checkpoint = MagicMock(
+            side_effect=AssertionError("checkpoint should not run")
+        )
+
+        with patch("run_agent.handle_function_call", side_effect=AssertionError("should not run")):
+            agent._execute_tool_calls_concurrent(mock_msg, messages, "task-1")
+
+        agent._checkpoint_mgr.ensure_checkpoint.assert_not_called()
+        assert len(messages) == 1
         assert json.loads(messages[0]["content"]) == {"error": "Blocked by policy"}
         assert audit_events == [
             {
@@ -2871,12 +2953,49 @@ class TestRunConversation:
             "session_open",
             "conversation_turn_start",
             "conversation_turn_end",
-            "session_close",
         ]
         assert all(record["session_id"] == agent.session_id for record in records)
         assert all(record["model_id"] == "test-model" for record in records)
         assert "hello from the user" not in audit_files[0].read_text(encoding="utf-8")
         assert all("params_hash" in record for record in records)
+
+    def test_run_conversation_does_not_close_session_after_each_turn(
+        self, agent, tmp_path, monkeypatch
+    ):
+        self._setup_agent(agent)
+        agent.client.chat.completions.create.side_effect = [
+            _mock_response(content="First answer", finish_reason="stop"),
+            _mock_response(content="Second answer", finish_reason="stop"),
+        ]
+
+        from lliam_gov.security import audit_logger
+
+        monkeypatch.setattr(audit_logger, "get_hermes_home", lambda: tmp_path)
+
+        with (
+            patch.object(agent, "_persist_session"),
+            patch.object(agent, "_save_trajectory"),
+            patch.object(agent, "_cleanup_task_resources"),
+        ):
+            first = agent.run_conversation("first")
+            second = agent.run_conversation("second")
+
+        assert first["completed"] is True
+        assert second["completed"] is True
+        audit_files = sorted((tmp_path / "audit").glob("tool-calls-*.jsonl"))
+        assert len(audit_files) == 1
+
+        records = [
+            json.loads(line)
+            for line in audit_files[0].read_text(encoding="utf-8").splitlines()
+        ]
+        assert [record["event_type"] for record in records] == [
+            "session_open",
+            "conversation_turn_start",
+            "conversation_turn_end",
+            "conversation_turn_start",
+            "conversation_turn_end",
+        ]
 
     def test_run_conversation_fails_closed_when_audit_logger_cannot_append(
         self, agent, monkeypatch

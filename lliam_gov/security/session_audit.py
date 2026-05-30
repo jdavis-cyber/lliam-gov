@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from lliam_gov.security.audit_logger import AuditLogger, AuditLoggerError
+from lliam_gov.security.audit_logger import AuditLoggerError, get_shared_audit_logger
 
 
 def audit_session_event(
@@ -22,7 +22,7 @@ def audit_session_event(
 
     logger = getattr(agent, "_lliam_audit_logger", None)
     if logger is None:
-        logger = AuditLogger(
+        logger = get_shared_audit_logger(
             session_id=getattr(agent, "session_id", None),
             principal=_principal(agent),
         )

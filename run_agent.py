@@ -2212,6 +2212,22 @@ class AIAgent:
         """
         task_id = getattr(self, "session_id", None) or ""
 
+        try:
+            if (
+                getattr(self, "_lliam_audit_session_open_logged", False)
+                and not getattr(self, "_lliam_audit_session_close_logged", False)
+            ):
+                from lliam_gov.security.session_audit import audit_session_event
+
+                audit_session_event(
+                    self,
+                    "session_close",
+                    params={"reason": "agent_close"},
+                )
+                self._lliam_audit_session_close_logged = True
+        except Exception:
+            logger.debug("session_close audit event failed during agent close", exc_info=True)
+
         # 1. Kill background processes for this task
         try:
             from tools.process_registry import process_registry

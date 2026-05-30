@@ -4156,12 +4156,6 @@ def run_conversation(
             params=_audit_params,
             duration_ms=int((time.monotonic() - turn_started_at) * 1000),
         )
-        audit_session_event(
-            agent,
-            "session_close",
-            params=_audit_params,
-            duration_ms=int((time.monotonic() - turn_started_at) * 1000),
-        )
     except AuditLoggerError as exc:
         logger.error("Audit logging failed closed after conversation end: %s", exc)
         final_response = f"Audit logging failed closed: {exc}"
