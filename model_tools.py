@@ -494,18 +494,14 @@ def _compute_tool_definitions(
 # so if something slips through, the LLM sees a sensible message.
 _AGENT_LOOP_TOOLS = {"todo", "memory", "session_search", "delegate_task"}
 _READ_SEARCH_TOOLS = {"read_file", "search_files"}
-_tool_audit_logger = None
 
 
 def _get_tool_audit_logger():
     """Return the process audit logger for tool dispatch events."""
 
-    global _tool_audit_logger
-    if _tool_audit_logger is None:
-        from lliam_gov.security.audit_logger import AuditLogger
+    from lliam_gov.security.audit_logger import get_shared_audit_logger
 
-        _tool_audit_logger = AuditLogger()
-    return _tool_audit_logger
+    return get_shared_audit_logger()
 
 
 def _tool_audit_failure(exc: Exception) -> str:

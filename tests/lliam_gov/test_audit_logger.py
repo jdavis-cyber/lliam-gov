@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,6 +21,7 @@ from lliam_gov.security.audit_logger import (
     AuditLogger,
     AuditLoggerOpenError,
     canonical_json,
+    get_shared_audit_logger,
     params_hash,
     verify_audit_chain,
 )
@@ -62,6 +65,59 @@ def test_log_event_builds_hash_chain_and_verifies(tmp_path: Path) -> None:
         "cmd": "date",
     })
     assert "params" not in records[0]
+
+
+def test_log_event_serializes_concurrent_writes(tmp_path: Path, monkeypatch) -> None:
+    logger = AuditLogger(audit_dir=tmp_path, session_id="s1", principal="jerome")
+    real_append_line = logger._append_line
+    active_appends = 0
+    max_active_appends = 0
+    active_lock = threading.Lock()
+
+    def slow_append(path: Path, line: str) -> None:
+        nonlocal active_appends, max_active_appends
+        with active_lock:
+            active_appends += 1
+            max_active_appends = max(max_active_appends, active_appends)
+        try:
+            time.sleep(0.02)
+            real_append_line(path, line)
+        finally:
+            with active_lock:
+                active_appends -= 1
+
+    monkeypatch.setattr(logger, "_append_line", slow_append)
+
+    threads = [
+        threading.Thread(
+            target=logger.log_event,
+            kwargs={
+                "event_type": "tool_call_start",
+                "tool_name": "terminal",
+                "tool_call_id": f"call-{index}",
+                "at": JANUARY,
+            },
+        )
+        for index in range(8)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert max_active_appends == 1
+    assert verify_audit_chain(tmp_path / "tool-calls-2026-01.jsonl").record_count == 8
+
+
+def test_shared_audit_logger_reuses_single_chain_writer(tmp_path: Path, monkeypatch) -> None:
+    import lliam_gov.security.audit_logger as audit_logger
+
+    monkeypatch.setattr(audit_logger, "get_hermes_home", lambda: tmp_path)
+
+    first = get_shared_audit_logger(session_id="s1", principal="jerome")
+    second = get_shared_audit_logger(session_id="s2", principal="other")
+
+    assert second is first
 
 
 def test_verify_audit_chain_detects_retroactive_tampering(tmp_path: Path) -> None:

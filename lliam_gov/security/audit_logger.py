@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 import platform
 import socket
+import threading
 from typing import Any
 
 from hermes_constants import get_hermes_home
@@ -30,6 +31,8 @@ from hermes_constants import get_hermes_home
 AUDIT_FILE_PREFIX = "tool-calls"
 AUDIT_FILE_SUFFIX = ".jsonl"
 HASH_PREFIX = "sha256:"
+_shared_audit_logger: AuditLogger | None = None
+_shared_audit_logger_lock = threading.Lock()
 
 
 class AuditLoggerError(Exception):
@@ -175,6 +178,7 @@ class AuditLogger:
         self.agent_version = agent_version or _agent_version()
         self._current_month: str | None = None
         self._previous_hash = self.GENESIS_HASH
+        self._lock = threading.RLock()
 
     def log_event(
         self,
@@ -197,44 +201,46 @@ class AuditLogger:
     ) -> AuditWriteResult:
         """Append one audit event, failing closed on open/write errors."""
 
-        event_time = _utc(at)
-        month = event_time.strftime("%Y-%m")
-        self._ensure_month(month)
-        path = self._audit_path(month)
+        with self._lock:
+            event_time = _utc(at)
+            month = event_time.strftime("%Y-%m")
+            self._ensure_month(month)
+            path = self._audit_path(month)
 
-        record: dict[str, Any] = {
-            "timestamp_ms_utc": int(event_time.timestamp() * 1000),
-            "session_id": session_id or self.session_id,
-            "principal": principal or self.principal,
-            "host": host or self.host,
-            "pid": pid or self.pid,
-            "agent_version": agent_version or self.agent_version,
-            "model_id": model_id,
-            "event_type": event_type,
-            "tool_name": tool_name,
-            "tool_call_id": tool_call_id,
-            "params_hash": params_hash({} if params is None else params),
-            "duration_ms": duration_ms,
-            "blocked": blocked,
-            "block_reason": block_reason,
-            "error": error,
-            "prev_hash": self._previous_hash,
-        }
+            record: dict[str, Any] = {
+                "timestamp_ms_utc": int(event_time.timestamp() * 1000),
+                "session_id": session_id or self.session_id,
+                "principal": principal or self.principal,
+                "host": host or self.host,
+                "pid": pid or self.pid,
+                "agent_version": agent_version or self.agent_version,
+                "model_id": model_id,
+                "event_type": event_type,
+                "tool_name": tool_name,
+                "tool_call_id": tool_call_id,
+                "params_hash": params_hash({} if params is None else params),
+                "duration_ms": duration_ms,
+                "blocked": blocked,
+                "block_reason": block_reason,
+                "error": error,
+                "prev_hash": self._previous_hash,
+            }
 
-        line = canonical_json(record)
-        record_hash = sha256_text(line)
-        self._append_line(path, line)
-        self._previous_hash = record_hash
-        return AuditWriteResult(path=path, record_hash=record_hash, record=record)
+            line = canonical_json(record)
+            record_hash = sha256_text(line)
+            self._append_line(path, line)
+            self._previous_hash = record_hash
+            return AuditWriteResult(path=path, record_hash=record_hash, record=record)
 
     def verify_current_month(self) -> AuditChainVerification:
-        if self._current_month is None:
-            return AuditChainVerification(
-                path=self._audit_path(_utc(None).strftime("%Y-%m")),
-                record_count=0,
-                last_hash=self.GENESIS_HASH,
-            )
-        return verify_audit_chain(self._audit_path(self._current_month))
+        with self._lock:
+            if self._current_month is None:
+                return AuditChainVerification(
+                    path=self._audit_path(_utc(None).strftime("%Y-%m")),
+                    record_count=0,
+                    last_hash=self.GENESIS_HASH,
+                )
+            return verify_audit_chain(self._audit_path(self._current_month))
 
     def _ensure_month(self, month: str) -> None:
         self._ensure_dirs()
@@ -300,6 +306,31 @@ class AuditLogger:
 
     def _audit_path(self, month: str) -> Path:
         return self.audit_dir / f"{AUDIT_FILE_PREFIX}-{month}{AUDIT_FILE_SUFFIX}"
+
+
+def get_shared_audit_logger(
+    *,
+    audit_dir: str | Path | None = None,
+    session_id: str | None = None,
+    principal: str | None = None,
+) -> AuditLogger:
+    """Return the process-wide audit logger used by session and tool events."""
+
+    global _shared_audit_logger
+    target_dir = (
+        Path(audit_dir) if audit_dir is not None else get_hermes_home() / "audit"
+    )
+    with _shared_audit_logger_lock:
+        if (
+            _shared_audit_logger is None
+            or _shared_audit_logger.audit_dir != target_dir
+        ):
+            _shared_audit_logger = AuditLogger(
+                audit_dir=target_dir,
+                session_id=session_id,
+                principal=principal,
+            )
+        return _shared_audit_logger
 
 
 def _utc(value: datetime | None) -> datetime:

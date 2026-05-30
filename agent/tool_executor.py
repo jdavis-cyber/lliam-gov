@@ -103,6 +103,29 @@ def _audit_blocked_tool(
     )
 
 
+def _audit_inline_tool_exception(
+    agent,
+    function_name: str,
+    function_args: dict,
+    *,
+    tool_call_id: str = "",
+    duration_ms: int,
+    error: Exception,
+) -> None:
+    audit_error = _audit_tool_event(
+        event_type="tool_call_error",
+        session_id=agent.session_id or "",
+        tool_name=function_name,
+        tool_call_id=tool_call_id or "",
+        params=function_args,
+        duration_ms=duration_ms,
+        blocked=False,
+        error=f"Error executing {function_name}: {error}",
+    )
+    if audit_error is not None:
+        logger.error("inline tool error audit failed closed: %s", audit_error)
+
+
 def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effective_task_id: str, api_call_count: int = 0) -> None:
     """Execute multiple tool calls concurrently using a thread pool.
 
@@ -141,28 +164,6 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
         if not isinstance(function_args, dict):
             function_args = {}
 
-        # Checkpoint for file-mutating tools
-        if function_name in {"write_file", "patch"} and agent._checkpoint_mgr.enabled:
-            try:
-                file_path = function_args.get("path", "")
-                if file_path:
-                    work_dir = agent._checkpoint_mgr.get_working_dir_for_path(file_path)
-                    agent._checkpoint_mgr.ensure_checkpoint(work_dir, f"before {function_name}")
-            except Exception:
-                pass
-
-        # Checkpoint before destructive terminal commands
-        if function_name == "terminal" and agent._checkpoint_mgr.enabled:
-            try:
-                cmd = function_args.get("command", "")
-                if _is_destructive_command(cmd):
-                    cwd = function_args.get("workdir") or os.getenv("TERMINAL_CWD", os.getcwd())
-                    agent._checkpoint_mgr.ensure_checkpoint(
-                        cwd, f"before terminal: {cmd[:60]}"
-                    )
-            except Exception:
-                pass
-
         block_result = None
         blocked_by_guardrail = False
         try:
@@ -194,6 +195,30 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
             )
             if audit_error is not None:
                 block_result = audit_error
+
+        if block_result is None:
+            # Checkpoint for file-mutating tools only after block/audit
+            # preflight has succeeded, preserving fail-closed ordering.
+            if function_name in {"write_file", "patch"} and agent._checkpoint_mgr.enabled:
+                try:
+                    file_path = function_args.get("path", "")
+                    if file_path:
+                        work_dir = agent._checkpoint_mgr.get_working_dir_for_path(file_path)
+                        agent._checkpoint_mgr.ensure_checkpoint(work_dir, f"before {function_name}")
+                except Exception:
+                    pass
+
+            # Checkpoint before destructive terminal commands
+            if function_name == "terminal" and agent._checkpoint_mgr.enabled:
+                try:
+                    cmd = function_args.get("command", "")
+                    if _is_destructive_command(cmd):
+                        cwd = function_args.get("workdir") or os.getenv("TERMINAL_CWD", os.getcwd())
+                        agent._checkpoint_mgr.ensure_checkpoint(
+                            cwd, f"before terminal: {cmd[:60]}"
+                        )
+                except Exception:
+                    pass
 
         parsed_calls.append((tool_call, function_name, function_args, block_result, blocked_by_guardrail))
 
@@ -573,12 +598,14 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
         if _execution_blocked:
             if _block_msg is not None:
                 _block_reason = _block_msg
-            else:
+            elif _guardrail_block_decision is not None:
                 _block_reason = (
                     _guardrail_block_decision.message
                     or _guardrail_block_decision.code
                     or "Tool blocked"
                 )
+            else:
+                _block_reason = "Tool blocked"
             _audit_failure_result = _audit_blocked_tool(
                 agent,
                 function_name,
@@ -688,70 +715,126 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
             tool_duration = 0.0
         elif function_name == "todo":
             from tools.todo_tool import todo_tool as _todo_tool
-            function_result = _todo_tool(
-                todos=function_args.get("todos"),
-                merge=function_args.get("merge", False),
-                store=agent._todo_store,
-            )
-            tool_duration = time.time() - tool_start_time
+            try:
+                function_result = _todo_tool(
+                    todos=function_args.get("todos"),
+                    merge=function_args.get("merge", False),
+                    store=agent._todo_store,
+                )
+            except Exception as tool_error:
+                tool_duration = time.time() - tool_start_time
+                if _inline_audit and _audit_failure_result is None:
+                    _audit_inline_tool_exception(
+                        agent,
+                        function_name,
+                        function_args,
+                        tool_call_id=tool_call.id,
+                        duration_ms=int(tool_duration * 1000),
+                        error=tool_error,
+                    )
+                raise
+            else:
+                tool_duration = time.time() - tool_start_time
             if agent._should_emit_quiet_tool_messages():
                 agent._vprint(f"  {_get_cute_tool_message_impl('todo', function_args, tool_duration, result=function_result)}")
         elif function_name == "session_search":
-            session_db = agent._get_session_db_for_recall()
-            if not session_db:
-                from hermes_state import format_session_db_unavailable
-                function_result = json.dumps({"success": False, "error": format_session_db_unavailable()})
+            try:
+                session_db = agent._get_session_db_for_recall()
+                if not session_db:
+                    from hermes_state import format_session_db_unavailable
+                    function_result = json.dumps({"success": False, "error": format_session_db_unavailable()})
+                else:
+                    from tools.session_search_tool import session_search as _session_search
+                    function_result = _session_search(
+                        query=function_args.get("query", ""),
+                        role_filter=function_args.get("role_filter"),
+                        limit=function_args.get("limit", 3),
+                        session_id=function_args.get("session_id"),
+                        around_message_id=function_args.get("around_message_id"),
+                        window=function_args.get("window", 5),
+                        sort=function_args.get("sort"),
+                        db=session_db,
+                        current_session_id=agent.session_id,
+                    )
+            except Exception as tool_error:
+                tool_duration = time.time() - tool_start_time
+                if _inline_audit and _audit_failure_result is None:
+                    _audit_inline_tool_exception(
+                        agent,
+                        function_name,
+                        function_args,
+                        tool_call_id=tool_call.id,
+                        duration_ms=int(tool_duration * 1000),
+                        error=tool_error,
+                    )
+                raise
             else:
-                from tools.session_search_tool import session_search as _session_search
-                function_result = _session_search(
-                    query=function_args.get("query", ""),
-                    role_filter=function_args.get("role_filter"),
-                    limit=function_args.get("limit", 3),
-                    session_id=function_args.get("session_id"),
-                    around_message_id=function_args.get("around_message_id"),
-                    window=function_args.get("window", 5),
-                    sort=function_args.get("sort"),
-                    db=session_db,
-                    current_session_id=agent.session_id,
-                )
-            tool_duration = time.time() - tool_start_time
+                tool_duration = time.time() - tool_start_time
             if agent._should_emit_quiet_tool_messages():
                 agent._vprint(f"  {_get_cute_tool_message_impl('session_search', function_args, tool_duration, result=function_result)}")
         elif function_name == "memory":
             target = function_args.get("target", "memory")
             from tools.memory_tool import memory_tool as _memory_tool
-            function_result = _memory_tool(
-                action=function_args.get("action"),
-                target=target,
-                content=function_args.get("content"),
-                old_text=function_args.get("old_text"),
-                store=agent._memory_store,
-            )
-            # Bridge: notify external memory provider of built-in memory writes
-            if agent._memory_manager and function_args.get("action") in {"add", "replace"}:
-                try:
-                    agent._memory_manager.on_memory_write(
-                        function_args.get("action", ""),
-                        target,
-                        function_args.get("content", ""),
-                        metadata=agent._build_memory_write_metadata(
-                            task_id=effective_task_id,
-                            tool_call_id=getattr(tool_call, "id", None),
-                        ),
+            try:
+                function_result = _memory_tool(
+                    action=function_args.get("action"),
+                    target=target,
+                    content=function_args.get("content"),
+                    old_text=function_args.get("old_text"),
+                    store=agent._memory_store,
+                )
+                # Bridge: notify external memory provider of built-in memory writes
+                if agent._memory_manager and function_args.get("action") in {"add", "replace"}:
+                    try:
+                        agent._memory_manager.on_memory_write(
+                            function_args.get("action", ""),
+                            target,
+                            function_args.get("content", ""),
+                            metadata=agent._build_memory_write_metadata(
+                                task_id=effective_task_id,
+                                tool_call_id=getattr(tool_call, "id", None),
+                            ),
+                        )
+                    except Exception:
+                        pass
+            except Exception as tool_error:
+                tool_duration = time.time() - tool_start_time
+                if _inline_audit and _audit_failure_result is None:
+                    _audit_inline_tool_exception(
+                        agent,
+                        function_name,
+                        function_args,
+                        tool_call_id=tool_call.id,
+                        duration_ms=int(tool_duration * 1000),
+                        error=tool_error,
                     )
-                except Exception:
-                    pass
-            tool_duration = time.time() - tool_start_time
+                raise
+            else:
+                tool_duration = time.time() - tool_start_time
             if agent._should_emit_quiet_tool_messages():
                 agent._vprint(f"  {_get_cute_tool_message_impl('memory', function_args, tool_duration, result=function_result)}")
         elif function_name == "clarify":
             from tools.clarify_tool import clarify_tool as _clarify_tool
-            function_result = _clarify_tool(
-                question=function_args.get("question", ""),
-                choices=function_args.get("choices"),
-                callback=agent.clarify_callback,
-            )
-            tool_duration = time.time() - tool_start_time
+            try:
+                function_result = _clarify_tool(
+                    question=function_args.get("question", ""),
+                    choices=function_args.get("choices"),
+                    callback=agent.clarify_callback,
+                )
+            except Exception as tool_error:
+                tool_duration = time.time() - tool_start_time
+                if _inline_audit and _audit_failure_result is None:
+                    _audit_inline_tool_exception(
+                        agent,
+                        function_name,
+                        function_args,
+                        tool_call_id=tool_call.id,
+                        duration_ms=int(tool_duration * 1000),
+                        error=tool_error,
+                    )
+                raise
+            else:
+                tool_duration = time.time() - tool_start_time
             if agent._should_emit_quiet_tool_messages():
                 agent._vprint(f"  {_get_cute_tool_message_impl('clarify', function_args, tool_duration, result=function_result)}")
         elif function_name == "delegate_task":
@@ -771,6 +854,17 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
             try:
                 function_result = agent._dispatch_delegate_task(function_args)
                 _delegate_result = function_result
+            except Exception as tool_error:
+                if _inline_audit and _audit_failure_result is None:
+                    _audit_inline_tool_exception(
+                        agent,
+                        function_name,
+                        function_args,
+                        tool_call_id=tool_call.id,
+                        duration_ms=int((time.time() - tool_start_time) * 1000),
+                        error=tool_error,
+                    )
+                raise
             finally:
                 agent._delegate_spinner = None
                 tool_duration = time.time() - tool_start_time
