@@ -6,7 +6,7 @@
 **Repo:** `jdavis-cyber/lliam-gov` · local `/Volumes/WORKSPACE/1-Projects/lliam-gov`
 **Linear project:** Lliam-GOV Build (`60a51de4-6ae1-4406-9e3d-3ce2d86cc1f5`) · team AI Program Management
 **Canonical plan of record:** *Hermes-to-Lliam ISO 42001 Plan — Comprehensive Edition, Revision 3* (2026-05-25), `/Volumes/WORKSPACE/0-Orientation/Hermes-to-Lliam-ISO42001-Plan-COMPREHENSIVE-v3-2026-05-25.docx`
-**Status:** PLAN ONLY — awaiting Jerome's green-light before any execution. No commits pushed.
+**Status:** ✅ **APPROVED — Jerome, 2026-05-30.** All §7 decisions accepted per recommendation **except** pen-test (AI-228) and the Katmai IT review, which **WAIT for Jerome's explicit go and gate no build work** (see §7). D2 held: Linear team estimation is disabled. Build execution by this Claude Code (Opus 4.8) session, Phase 4+; Phase-3 finish begins on confirm.
 
 ---
 
@@ -108,7 +108,7 @@ Phase 3 (finish) ──> Phase 4 ──> Phase 5 ──> Phase 6 ──> [Katmai
 - **Phase 2 exit gate (control set sign-off) is already MET** — Jerome signed off in writing 2026-05-25 (Open Brain `iso42001/decision`). The 55-row matrix is locked for Phase-3 entry.
 - **Phase 3 / 5 exits are evidence-producing, not CB-gated** — they populate `evidence/` and flip matrix `current_state` rows. These rows are the audit currency.
 - **Phase 6 is the convergence with the ISO 42001 cert program — and the swap point.** AI-230 ingests the Lliam-GOV evidence package into the **Katmai ISO 42001 Audit** NotebookLM (`fab3c86a-…`); AI-233 registers Lliam-GOV as an in-scope AI system in the **AIMS asset inventory**. **This is gated on Jerome's decision to swap Lliam-GOV in for Lliam-OPS as the AIMS target (D9).** Until then, Lliam-GOV is proven in parallel; it becomes load-bearing *operating evidence* only after the swap is authorized.
-- **Katmai IT posture/documentation review** (plan §11.13, R15) is a **milestone, not a blocking gate**. Recommended: pre-surface posture expectations in a working session *during Phase 4* so Phase-6 review returns no surprises.
+- **Katmai IT review + pen-test gate NOTHING (Jerome, 2026-05-30).** The Katmai IT posture/documentation review, the company-laptop install (AI-234), and the pen-test (AI-228) all **wait for Jerome's explicit go**, which itself follows **Katmai committing to allow the install**. They are off the critical path entirely — Phases 0–5 proceed regardless. Evidence supplied to Katmai at that point is **outside ISO 42001 scope/controls** and is provided only after that commitment, never beforehand.
 - **Alignment surface:** the ISO-cert WBS (225 tasks) lives in `katmai-ims/dashboard/state.json` and syncs to Linear via `katmai-ims/scripts/linear_state_sync.py`. The `LG-*` build WBS is *distinct* from that cert WBS; they meet at Phase 6 (asset inventory + audit-notebook ingest). No need to reconcile the two WBS trees before Phase 6.
 
 ---
@@ -143,7 +143,7 @@ Effort key: **S** ≈ ≤0.5 day · **M** ≈ 1–2 days · **L** ≈ 3–5 days
 | AI-225 5.1 | M | AEP exports covering each applicable control | L |
 | AI-226 5.2 | L | Every matrix row → code lines + test cases + audit signatures; 100% mapped | M — completeness audit |
 | AI-227 5.3 | S | CycloneDX SBOM under `evidence/sbom/`; dependency-review record | L |
-| AI-228 5.4 | M | Focused pen-test (grounded in Pen-Test notebook `d0b83dce-…`); CMMC-L2-relevant findings empty or remediated | M — scope/authorization (see D6) |
+| AI-228 5.4 | M | Focused pen-test (grounded in Pen-Test notebook `d0b83dce-…`); CMMC-L2-relevant findings empty or remediated | ⛔ **WAITS for Jerome's go — gates nothing.** Removed from Phase-5 critical path; Phase 5 exits without it. Katmai-facing, out-of-ISO-scope. |
 | AI-229 5.5 | M | Chaos: kill audit→fail-closed; kill keyring→fail-closed; kill egress-deny→fail-closed; reject self-mod→no live leak | M — destructive tests; run in isolated workspace |
 
 ### Phase 6 — Katmai AIMS integration  (≈ 1 week + external review)
@@ -193,8 +193,8 @@ Effort key: **S** ≈ ≤0.5 day · **M** ≈ 1–2 days · **L** ≈ 3–5 days
 | **D2** | **Set S/M/L/XL estimates** in Linear (all currently `None`)? | Linear hygiene / your board | Yes — apply §4 estimates so the board reflects load |
 | **D3** | **FIPS-OpenSSL provisioning (R6)** — when/where do we provision FIPS-mode OpenSSL? Dev (Mac mini) can run `LLIAM_GOV_ALLOW_NON_FIPS=1`; Katmai MacBook cannot | Host/runtime decision; DoD hard requirement | Dev with non-FIPS override through Phase 5; provision FIPS on Katmai MacBook at Phase 6 install |
 | **D4** | **Execution engine** — Phase 3 was Codex (`codex/*` branches). Who runs Phases 4–6: Codex, this Claude Code/Opus 4.8 session, or both? | Tooling + branch-naming convention | This session (Opus 4.8 Max Effort) for Phase 4+; adopt `claude/ai-NNN-*` prefix |
-| **D5** | **Katmai IT pre-surface session** (R15) — schedule a posture working-session during Phase 4? | External stakeholder, your calendar | Yes — book it early in Phase 4 |
-| **D6** | **Pen-test (AI-228) + chaos (AI-229) scope** — self-run grounded in the Pen-Test notebook, or any external involvement? | Authorization + scope | Self-run, isolated workspace, notebook-grounded; documented as internal exercise |
+| **D5** | **Katmai IT review** | External stakeholder | ⛔ **DECIDED — WAIT for Jerome.** Gates **no build work.** The Katmai IT posture/documentation review + company-laptop install wait until Katmai commits to allowing install; Katmai-facing evidence (out of ISO 42001 scope/controls) is supplied only then, never beforehand. |
+| **D6** | **Pen-test (AI-228)** + chaos (AI-229) | Authorization + scope | ⛔ **DECIDED — pen-test (AI-228) WAITs for Jerome's go and gates nothing.** Chaos (AI-229) proceeds as internal build validation (flag if it should also wait). |
 | **D7** | **Authorize git hygiene now** — ff-pull local `main`, prune 7 stale branches + 4 worktrees? | Touches your local repo | Yes — safe, all merged |
 | **D8** | **Confirm per-issue PR strategy** (§6) over per-phase mega-PRs? | Review cadence | Per-issue (recommended) |
 | **D9** | **The swap** — promote Lliam-GOV to AIMS target and retire Lliam-OPS, or keep both parallel? Gates Phase 6 (AI-230/233 registration + notebook ingest) | This is the strategic call; Lliam-GOV is currently a parallel candidate, not the cert artifact | Build + prove through Phase 5 first; decide the swap at the Phase-5→6 boundary on evidence |
