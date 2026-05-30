@@ -1001,7 +1001,13 @@ def _load_auth_store(auth_file: Optional[Path] = None) -> Dict[str, Any]:
         return {"version": AUTH_STORE_VERSION, "providers": {}}
 
     try:
-        raw = json.loads(auth_file.read_text())
+        # LG-3.7 / AI-215: decrypt-on-read is unconditional — a plaintext store
+        # is returned verbatim, an encrypted one (LLIAM_GOV_ENCRYPT_STATE writes)
+        # is decrypted via the Keychain-anchored key. Reads of a plaintext file
+        # never touch the key manager.
+        from lliam_gov.security.state_codec import decode_state_bytes
+
+        raw = json.loads(decode_state_bytes(auth_file.read_bytes()))
     except Exception as exc:
         corrupt_path = auth_file.with_suffix(".json.corrupt")
         try:
@@ -1045,6 +1051,13 @@ def _save_auth_store(auth_store: Dict[str, Any]) -> Path:
     auth_store["version"] = AUTH_STORE_VERSION
     auth_store["updated_at"] = datetime.now(timezone.utc).isoformat()
     payload = json.dumps(auth_store, indent=2) + "\n"
+    # LG-3.7 / AI-215: encrypt the credential store at rest when the production
+    # profile enables it (LLIAM_GOV_ENCRYPT_STATE=1). Default-off leaves the
+    # payload as plaintext JSON; decrypt-on-read in _load_auth_store is
+    # unconditional, so the file loads either way. (SP 800-171 3.5.10/3.13.16.)
+    from lliam_gov.security.state_codec import encode_state_bytes
+
+    on_disk = encode_state_bytes(payload.encode("utf-8"))
     tmp_path = auth_file.with_name(f"{auth_file.name}.tmp.{os.getpid()}.{uuid.uuid4().hex}")
     try:
         # Create with 0o600 atomically via os.open(O_EXCL) + fdopen to close
@@ -1056,8 +1069,8 @@ def _save_auth_store(auth_store: Dict[str, Any]) -> Path:
             os.O_WRONLY | os.O_CREAT | os.O_EXCL,
             stat.S_IRUSR | stat.S_IWUSR,
         )
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(payload)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(on_disk)
             handle.flush()
             os.fsync(handle.fileno())
         atomic_replace(tmp_path, auth_file)

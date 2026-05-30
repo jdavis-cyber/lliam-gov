@@ -1235,7 +1235,11 @@ def _read_nous_auth() -> Optional[dict]:
     try:
         if not _AUTH_JSON_PATH.is_file():
             return None
-        data = json.loads(_AUTH_JSON_PATH.read_text())
+        # LG-3.7 / AI-215: route this raw auth.json reader through the codec so
+        # an encrypted store still loads (decrypt-on-read; plaintext passthrough).
+        from lliam_gov.security.state_codec import decode_state_bytes
+
+        data = json.loads(decode_state_bytes(_AUTH_JSON_PATH.read_bytes()))
         if data.get("active_provider") != "nous":
             return None
         provider = data.get("providers", {}).get("nous", {})
