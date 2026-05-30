@@ -43,6 +43,18 @@ def state_encryption_enabled() -> bool:
     return os.environ.get(STATE_ENCRYPTION_ENV) == "1"
 
 
+def managed_state_paths() -> list:
+    """Return the persisted-state files routed through encryption.
+
+    Single source of truth for which files ``rotate-key`` re-keys. Currently the
+    credential/auth store only (LG-3.7 scope, Jerome 2026-05-30); satellite
+    credential files are added here as their routing PRs land.
+    """
+    from hermes_constants import get_hermes_home
+
+    return [get_hermes_home() / "auth.json"]
+
+
 def looks_encrypted(raw: bytes) -> bool:
     """Static check: does ``raw`` look like the EncryptedFile wire format?
 
@@ -94,5 +106,6 @@ __all__ = [
     "decode_state_bytes",
     "encode_state_bytes",
     "looks_encrypted",
+    "managed_state_paths",
     "state_encryption_enabled",
 ]
