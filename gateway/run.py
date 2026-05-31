@@ -6256,6 +6256,32 @@ class GatewayRunner:
         # the registry fall-through implemented elsewhere.
         return None
     def _is_user_authorized(self, source: SessionSource) -> bool:
+        """Audit-wrapped inbound authorization gate (LG-3.6 / AI-214, plan §5.2).
+
+        Delegates to :meth:`_is_user_authorized_impl` for the decision, then
+        records the allow/deny outcome to the hash-chained audit log keyed to the
+        principal (SP 800-171 3.3.1 / 3.3.2; ISO 27001 A.8.15; ISO 42001
+        A.6.2.8). Fail-closed: if the decision cannot be recorded durably the
+        request is denied — Lliam-GOV never authorizes an inbound request
+        without a durable audit record.
+        """
+        from lliam_gov.security.audit_logger import AuditLoggerError
+        from lliam_gov.security.gateway_audit import audit_gateway_auth
+
+        authorized = self._is_user_authorized_impl(source)
+        try:
+            audit_gateway_auth(source, authorized=authorized)
+        except AuditLoggerError:
+            _platform = getattr(source, "platform", None)
+            logger.error(
+                "Inbound auth audit failed closed; denying user_id=%s on %s",
+                getattr(source, "user_id", None),
+                getattr(_platform, "value", _platform),
+            )
+            return False
+        return authorized
+
+    def _is_user_authorized_impl(self, source: SessionSource) -> bool:
         """
         Check if a user is authorized to use the bot.
         
