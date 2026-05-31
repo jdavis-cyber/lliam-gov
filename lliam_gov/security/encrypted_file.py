@@ -165,7 +165,19 @@ class EncryptedFile:
 
     def _atomic_write(self, payload: bytes) -> None:
         directory = self.path.parent
-        directory.mkdir(mode=_DIR_MODE, parents=True, exist_ok=True)
+        # mkdir(..., exist_ok=True) leaves a *pre-existing* directory's perms
+        # alone, so a legacy state/cache dir created world- or group-readable
+        # would keep sensitive filenames and metadata exposed even though the
+        # file content is now encrypted. Tighten unconditionally — mirrors the
+        # audit logger's _ensure_dirs() posture and fail-closes on permission
+        # error rather than silently writing into an exposed directory.
+        try:
+            directory.mkdir(mode=_DIR_MODE, parents=True, exist_ok=True)
+            os.chmod(directory, _DIR_MODE)
+        except OSError as exc:
+            raise EncryptedFileError(
+                f"cannot prepare encrypted-file directory {directory}: {exc}"
+            ) from exc
         # Temp file in the SAME directory so os.replace is a same-filesystem
         # atomic rename (cross-device would not be atomic).
         fd, tmp_name = _mkstemp_secure(directory, self.path.name)

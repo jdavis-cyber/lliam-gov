@@ -17,6 +17,7 @@ from cryptography.exceptions import InvalidTag
 
 from lliam_gov.security.encrypted_file import (
     EncryptedFile,
+    EncryptedFileError,
     PlaintextDetectedError,
     get_shared_key_manager,
     reset_shared_key_manager,
@@ -94,6 +95,46 @@ def test_leaf_dir_created_0700(tmp_path, km):
     ef = EncryptedFile(nested / "state.bin", key_manager=km)
     ef.write_bytes(b"x")
     assert stat.S_IMODE(os.stat(nested).st_mode) == 0o700
+
+
+def test_existing_permissive_dir_is_tightened(tmp_path, km):
+    # mkdir(..., exist_ok=True) leaves a pre-existing directory's perms alone,
+    # which used to leave sensitive filenames/metadata exposed in a legacy
+    # state dir created world-readable. _atomic_write must tighten on every
+    # write so the directory matches the file's 0600 posture.
+    parent = tmp_path / "legacy-state"
+    parent.mkdir(mode=0o755)  # legacy world-readable directory
+    os.chmod(parent, 0o755)  # belt-and-suspenders against umask
+    assert stat.S_IMODE(os.stat(parent).st_mode) == 0o755
+
+    ef = EncryptedFile(parent / "state.bin", key_manager=km)
+    ef.write_bytes(b"x")
+
+    assert stat.S_IMODE(os.stat(parent).st_mode) == 0o700
+
+
+def test_atomic_write_fails_closed_when_dir_cannot_be_tightened(
+    tmp_path, monkeypatch, km,
+):
+    # If the directory can't be chmod-ed to 0700 (foreign owner, read-only
+    # mount), don't silently write encrypted bytes into an exposed location —
+    # raise EncryptedFileError so the caller sees the failure.
+    parent = tmp_path / "blocked-state"
+    parent.mkdir()
+    real_chmod = os.chmod
+
+    def _chmod(path, mode):
+        if Path(path) == parent and mode == 0o700:
+            raise PermissionError("simulated foreign-owned dir")
+        return real_chmod(path, mode)
+
+    monkeypatch.setattr("lliam_gov.security.encrypted_file.os.chmod", _chmod)
+
+    ef = EncryptedFile(parent / "state.bin", key_manager=km)
+    with pytest.raises(EncryptedFileError):
+        ef.write_bytes(b"x")
+    # Encrypted file was NOT written into the exposed directory.
+    assert not (parent / "state.bin").exists()
 
 
 # ─── Tamper detection (fail-closed) ─────────────────────────────────────────
