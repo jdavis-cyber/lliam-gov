@@ -97,3 +97,42 @@ def test_read_nous_access_token_refreshes_expiring_cached_token(tmp_path, monkey
     )
 
     assert managed_tool_gateway.read_nous_access_token() == "fresh-token"
+
+
+def test_read_nous_provider_state_decrypts_encrypted_auth_store(tmp_path, monkeypatch):
+    """LG-3.7 / AI-215 P2: _read_nous_provider_state must route through
+    state_codec.decode_state_bytes so an encrypted auth.json (LLIAM_GOV_ENCRYPT_STATE=1)
+    still resolves Nous provider state. Without this, the probe silently reports
+    "no Nous credentials" on the encrypted profile."""
+    from lliam_gov.security.key_manager import KeyManager
+    from lliam_gov.security.state_codec import encode_state_bytes
+
+    class _FakeKeyring:
+        def __init__(self):
+            self._store = {}
+        def get_password(self, s, a):
+            return self._store.get((s, a))
+        def set_password(self, s, a, v):
+            self._store[(s, a)] = v
+        def delete_password(self, s, a):
+            self._store.pop((s, a), None)
+
+    km = KeyManager(service="mtg-test", backend=_FakeKeyring())
+    km.init()
+
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setenv("LLIAM_GOV_ENCRYPT_STATE", "1")
+    import lliam_gov.security.state_codec as state_codec
+    monkeypatch.setattr(state_codec, "_shared_km", lambda: km)
+
+    plaintext = json.dumps({
+        "providers": {
+            "nous": {"access_token": "nous-encrypted-token"},
+        },
+    }).encode("utf-8")
+    ciphertext = encode_state_bytes(plaintext)
+    assert ciphertext != plaintext
+    (tmp_path / "auth.json").write_bytes(ciphertext)
+
+    state = managed_tool_gateway._read_nous_provider_state()
+    assert state == {"access_token": "nous-encrypted-token"}
