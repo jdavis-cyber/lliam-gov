@@ -129,6 +129,69 @@ class TestXAIProviderIsAvailable:
         from plugins.web.xai.provider import XAIWebSearchProvider
         assert XAIWebSearchProvider().is_available() is False
 
+    def test_available_when_auth_store_is_encrypted(self, monkeypatch, tmp_path):
+        """LG-3.7 / AI-215 P2: when LLIAM_GOV_ENCRYPT_STATE=1, the probe must
+        route through state_codec.decode_state_bytes so an encrypted auth.json
+        decrypts transparently — otherwise the probe silently reports "no
+        credentials" for OAuth users on the encrypted profile, and per-capability
+        backend selection falls through (web search reports xai unavailable
+        even though the canonical resolver could use the tokens)."""
+        from lliam_gov.security.key_manager import KeyManager
+        from lliam_gov.security.state_codec import encode_state_bytes
+
+        class _FakeKeyring:
+            def __init__(self):
+                self._store = {}
+            def get_password(self, s, a):
+                return self._store.get((s, a))
+            def set_password(self, s, a, v):
+                self._store[(s, a)] = v
+            def delete_password(self, s, a):
+                self._store.pop((s, a), None)
+
+        km = KeyManager(service="xai-test", backend=_FakeKeyring())
+        km.init()
+
+        monkeypatch.delenv("XAI_API_KEY", raising=False)
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("LLIAM_GOV_ENCRYPT_STATE", "1")
+        # Pin the codec onto our test KeyManager so we don't trip the FIPS gate
+        # or touch the real Keychain.
+        import lliam_gov.security.state_codec as state_codec
+        monkeypatch.setattr(state_codec, "_shared_km", lambda: km)
+
+        plaintext = json.dumps({
+            "version": 1,
+            "providers": {
+                "xai-oauth": {"tokens": {"access_token": "ya29.encrypted-token"}},
+            },
+        }).encode("utf-8")
+        ciphertext = encode_state_bytes(plaintext)
+        # Sanity: encryption actually happened.
+        assert ciphertext != plaintext
+        (tmp_path / "auth.json").write_bytes(ciphertext)
+
+        from plugins.web.xai.provider import XAIWebSearchProvider
+        assert XAIWebSearchProvider().is_available() is True
+
+    def test_unavailable_when_encrypted_store_undecryptable(self, monkeypatch, tmp_path):
+        """If the auth.json is encrypted but the key is unavailable, the probe
+        must NOT crash — it falls back to reporting "no credentials" (matches
+        the probe's broad-except contract). Truthful diagnosis happens in the
+        canonical _load_auth_store resolver, not in availability scans."""
+        from lliam_gov.security.key_manager import FORMAT_VERSION
+
+        monkeypatch.delenv("XAI_API_KEY", raising=False)
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        # Bytes that pass looks_encrypted() (version byte + minimum frame) but
+        # cannot actually be decrypted by any KeyManager.
+        bogus = bytes([FORMAT_VERSION]) + b"\x00" * 64
+        (tmp_path / "auth.json").write_bytes(bogus)
+
+        from plugins.web.xai.provider import XAIWebSearchProvider
+        # Must not raise; reports unavailable.
+        assert XAIWebSearchProvider().is_available() is False
+
     def test_is_available_does_not_call_resolver(self, monkeypatch):
         """Regression guard: ``is_available()`` must NEVER touch the resolver,
         because the OAuth resolver can trigger a network refresh."""

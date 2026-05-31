@@ -34,10 +34,15 @@ def auth_json_path():
 
 def _read_nous_provider_state() -> Optional[dict]:
     try:
+        from lliam_gov.security.state_codec import decode_state_bytes
+
         path = auth_json_path()
         if not path.is_file():
             return None
-        data = json.loads(path.read_text())
+        # LG-3.7 / AI-215 P2: decrypt-on-read so an encrypted auth store
+        # (LLIAM_GOV_ENCRYPT_STATE=1) still resolves Nous provider state.
+        # decode_state_bytes is a no-op on plaintext.
+        data = json.loads(decode_state_bytes(path.read_bytes()).decode("utf-8"))
         providers = data.get("providers", {})
         if not isinstance(providers, dict):
             return None
