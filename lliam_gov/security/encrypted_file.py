@@ -212,10 +212,60 @@ def _mkstemp_secure(directory: Path, base_name: str) -> tuple[int, str]:
     return tempfile.mkstemp(prefix=f".{base_name}.", suffix=".tmp", dir=str(directory))
 
 
+def rekey_files(
+    paths: list[str | Path],
+    *,
+    key_manager: KeyManager | None = None,
+) -> list[Path]:
+    """Atomically re-encrypt the given encrypted files under fresh key material.
+
+    Implements the §5.1 ``rotate-key`` re-keying that the key manager defers to
+    this layer: decrypt every currently-encrypted file with the active key,
+    rotate the Keychain material, re-derive, then re-encrypt each file with the
+    new key via :meth:`EncryptedFile.write_bytes` (the same atomic
+    write-new/fsync/0600/replace path).
+
+    Files that are absent or still plaintext are skipped (a plaintext file has
+    nothing to re-key). Returns the list of paths that were re-encrypted.
+
+    Crash-safety: each file is rewritten with the per-file atomic swap, so no
+    file is ever left half-written. Plaintext for all files is buffered in memory
+    *before* the key is rotated; the residual whole-set window (a crash after
+    rotation but before every file is rewritten leaves not-yet-rewritten files
+    under the prior key) is acceptable for the single-operator profile and is
+    called out in the operator runbook. The set this is used on is small
+    (the credential store).
+    """
+    km = key_manager or get_shared_key_manager()
+
+    # Phase 1 — decrypt everything still under the current key.
+    buffered: list[tuple[Path, bytes]] = []
+    for raw_path in paths:
+        path = Path(raw_path)
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        if not km.is_encrypted(data):
+            continue
+        buffered.append((path, km.decrypt(data)))
+
+    # Phase 2 — rotate Keychain material and re-derive the working key.
+    km.rotate_key()
+    km.init()
+
+    # Phase 3 — re-encrypt each file under the new key (per-file atomic swap).
+    rekeyed: list[Path] = []
+    for path, plaintext in buffered:
+        EncryptedFile(path, key_manager=km).write_bytes(plaintext)
+        rekeyed.append(path)
+    return rekeyed
+
+
 __all__ = [
     "EncryptedFile",
     "EncryptedFileError",
     "PlaintextDetectedError",
     "get_shared_key_manager",
     "reset_shared_key_manager",
+    "rekey_files",
 ]

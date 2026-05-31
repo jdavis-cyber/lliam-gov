@@ -10776,6 +10776,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "dump", "fallback", "gateway", "hooks", "import", "insights",
         "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate",
         "model", "pairing", "plugins", "portal", "postinstall", "profile", "proxy",
+        "rotate-key",
         "send", "sessions", "setup",
         "skills", "slack", "status", "tools", "uninstall", "update",
         "version", "webhook", "whatsapp", "chat", "secrets", "security",
@@ -12156,6 +12157,13 @@ def main():
     from hermes_cli.audit_cli import register_audit_parser
 
     register_audit_parser(subparsers)
+
+    # =========================================================================
+    # rotate-key command — §5.1 encryption-key rotation (LG-3.8 / AI-216)
+    # =========================================================================
+    from hermes_cli.key_cli import register_rotate_key_parser
+
+    register_rotate_key_parser(subparsers)
 
     # =========================================================================
     # dump command
