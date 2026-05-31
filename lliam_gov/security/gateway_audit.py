@@ -34,6 +34,7 @@ evidence); ISO/IEC 27001 A.8.15; ISO/IEC 42001 A.6.2.8.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any, Protocol
 
 from lliam_gov.security.audit_logger import AuditLogger, get_shared_audit_logger
@@ -111,4 +112,46 @@ def audit_gateway_auth(
     )
 
 
-__all__ = ["GATEWAY_AUTH_EVENT", "audit_gateway_auth"]
+def audit_adapter_auth_deny(
+    *,
+    platform: str,
+    user_id: str | None,
+    chat_id: str | None,
+    user_name: str | None = None,
+    chat_type: str = "dm",
+    reason: str = "unauthorized_user",
+    logger: AuditLogger | None = None,
+) -> None:
+    """Record an adapter-level auth deny that bypasses the GatewayRunner chokepoint.
+
+    Some retained adapters reject inbound traffic before a ``SessionSource`` is
+    ever constructed and before ``GatewayRunner._is_user_authorized`` is reached
+    — email drops non-allowlisted senders during fetch dispatch
+    (``gateway/platforms/email.py``); Slack button-click handlers
+    (slash-confirm, approval) explicitly bypass the message auth flow and
+    short-circuit on unauthorized users (``gateway/platforms/slack.py``). Those
+    paths must still produce a §5.2 audit record so the LG-3.6 trail is
+    complete; this helper builds the minimal duck-typed source the audit chain
+    needs and forwards to :func:`audit_gateway_auth`.
+
+    Raises:
+        AuditLoggerError: propagated from :func:`audit_gateway_auth`. The caller
+            is already denying the inbound action and must log this failure but
+            cannot change the outcome (the deny stands either way).
+    """
+    source = SimpleNamespace(
+        user_id=user_id,
+        user_name=user_name,
+        chat_id=chat_id,
+        chat_type=chat_type,
+        platform=SimpleNamespace(value=platform),
+        is_bot=False,
+    )
+    audit_gateway_auth(source, authorized=False, reason=reason, logger=logger)
+
+
+__all__ = [
+    "GATEWAY_AUTH_EVENT",
+    "audit_adapter_auth_deny",
+    "audit_gateway_auth",
+]

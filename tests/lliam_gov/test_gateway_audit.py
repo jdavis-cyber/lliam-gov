@@ -19,7 +19,11 @@ from lliam_gov.security.audit_logger import (
     AuditLoggerError,
     verify_audit_chain,
 )
-from lliam_gov.security.gateway_audit import GATEWAY_AUTH_EVENT, audit_gateway_auth
+from lliam_gov.security.gateway_audit import (
+    GATEWAY_AUTH_EVENT,
+    audit_adapter_auth_deny,
+    audit_gateway_auth,
+)
 
 
 def _logger(tmp_path: Path) -> AuditLogger:
@@ -131,3 +135,66 @@ def test_fails_closed_when_chain_unwritable(tmp_path):
     broken = AuditLogger(audit_dir=blocker / "audit")
     with pytest.raises(AuditLoggerError):
         audit_gateway_auth(_source(), authorized=True, logger=broken)
+
+
+# -- audit_adapter_auth_deny (pre-chokepoint deny helper) ---------------------
+
+
+def test_adapter_deny_records_platform_and_principal(tmp_path):
+    log = _logger(tmp_path)
+    audit_adapter_auth_deny(
+        platform="email",
+        user_id="evil@example.com",
+        chat_id="evil@example.com",
+        logger=log,
+    )
+    rows = _records(tmp_path)
+    assert len(rows) == 1
+    assert rows[0]["event_type"] == GATEWAY_AUTH_EVENT
+    assert rows[0]["tool_name"] == "email"
+    assert rows[0]["principal"] == "evil@example.com"
+    assert rows[0]["blocked"] is True
+    assert rows[0]["block_reason"] == "unauthorized_user"
+
+
+def test_adapter_deny_carries_custom_reason(tmp_path):
+    log = _logger(tmp_path)
+    audit_adapter_auth_deny(
+        platform="slack",
+        user_id="U999",
+        user_name="Mallory",
+        chat_id="C123",
+        reason="unauthorized_approval_click",
+        logger=log,
+    )
+    rows = _records(tmp_path)
+    assert rows[0]["tool_name"] == "slack"
+    assert rows[0]["principal"] == "U999"
+    assert rows[0]["block_reason"] == "unauthorized_approval_click"
+
+
+def test_adapter_deny_does_not_leak_user_name(tmp_path):
+    log = _logger(tmp_path)
+    audit_adapter_auth_deny(
+        platform="slack",
+        user_id="U1",
+        user_name="Mallory Top Secret",
+        chat_id="C1",
+        logger=log,
+    )
+    raw = next(tmp_path.glob("tool-calls-*.jsonl")).read_text()
+    assert "Mallory Top Secret" not in raw
+    assert _records(tmp_path)[0]["params_hash"].startswith("sha256:")
+
+
+def test_adapter_deny_propagates_chain_failure(tmp_path):
+    blocker = tmp_path / "blocked"
+    blocker.write_text("not a directory")
+    broken = AuditLogger(audit_dir=blocker / "audit")
+    with pytest.raises(AuditLoggerError):
+        audit_adapter_auth_deny(
+            platform="email",
+            user_id="x@y",
+            chat_id="x@y",
+            logger=broken,
+        )

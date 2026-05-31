@@ -63,6 +63,43 @@ _slash_user_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
 )
 
 
+def _audit_slack_button_deny(
+    *,
+    user_id: str,
+    user_name: str,
+    channel_id: str,
+    reason: str,
+) -> None:
+    """Record an unauthorized Slack button click as an adapter-level auth deny.
+
+    Slash-confirm and approval button handlers bypass GatewayRunner's auth
+    chokepoint (see callsites above), so the §5.2 audit chain only sees them
+    when this helper fires. Audit errors are logged and swallowed: the deny
+    is already happening and we cannot change that outcome.
+    """
+    try:
+        from lliam_gov.security.audit_logger import AuditLoggerError
+        from lliam_gov.security.gateway_audit import audit_adapter_auth_deny
+
+        try:
+            audit_adapter_auth_deny(
+                platform=Platform.SLACK.value,
+                user_id=user_id,
+                user_name=user_name,
+                chat_id=channel_id,
+                reason=reason,
+            )
+        except AuditLoggerError as exc:
+            logger.error(
+                "[Slack] Failed to record button auth-deny audit for %s (%s): %s",
+                user_name, user_id, exc,
+            )
+    except Exception:
+        logger.exception(
+            "[Slack] Unexpected audit-hook error for %s (%s)", user_name, user_id,
+        )
+
+
 @dataclass
 class _ThreadContextCache:
     """Cache entry for fetched thread context."""
@@ -2404,6 +2441,15 @@ class SlackAdapter(BasePlatformAdapter):
                     "[Slack] Unauthorized slash-confirm click by %s (%s) — ignoring",
                     user_name, user_id,
                 )
+                # LG-3.6 / AI-214: button-click denies bypass GatewayRunner so
+                # the chokepoint audit never fires; record here to keep the §5.2
+                # auth trail complete.
+                _audit_slack_button_deny(
+                    user_id=user_id,
+                    user_name=user_name,
+                    channel_id=channel_id,
+                    reason="unauthorized_slash_confirm",
+                )
                 return
 
         # Parse session_key|confirm_id back out
@@ -2503,6 +2549,13 @@ class SlackAdapter(BasePlatformAdapter):
                 logger.warning(
                     "[Slack] Unauthorized approval click by %s (%s) — ignoring",
                     user_name, user_id,
+                )
+                # LG-3.6 / AI-214: see _handle_slash_confirm_action above.
+                _audit_slack_button_deny(
+                    user_id=user_id,
+                    user_name=user_name,
+                    channel_id=channel_id,
+                    reason="unauthorized_approval_click",
                 )
                 return
 
