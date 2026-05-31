@@ -50,6 +50,18 @@ def managed_state_paths() -> list:
     credential/auth store only (LG-3.7 scope, Jerome 2026-05-30); satellite
     credential files are added here as their routing PRs land.
     """
+    # ── TRIPWIRE ────────────────────────────────────────────────────────────
+    # Adding a second file here GROWS the rekey_files crash window. Today the
+    # set is one file (auth.json) and the window between key rotation and
+    # re-encrypt is microseconds — acceptable per the AI-216 operator-runbook
+    # decision. With N>1 files, a crash between rotate_key() and the final
+    # write_bytes() leaves not-yet-rewritten files encrypted under a key that
+    # is gone from the Keychain → permanent credential loss.
+    #
+    # Before adding a second path: refactor rekey_files() in encrypted_file.py
+    # to write all new ciphertexts to temp files first, then rotate the key,
+    # then swap atomically. See AI-216 Linear comment 2026-05-31 for context.
+    # ────────────────────────────────────────────────────────────────────────
     from hermes_constants import get_hermes_home
 
     return [get_hermes_home() / "auth.json"]
