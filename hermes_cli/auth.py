@@ -1000,14 +1000,37 @@ def _load_auth_store(auth_file: Optional[Path] = None) -> Dict[str, Any]:
     if not auth_file.exists():
         return {"version": AUTH_STORE_VERSION, "providers": {}}
 
-    try:
-        # LG-3.7 / AI-215: decrypt-on-read is unconditional — a plaintext store
-        # is returned verbatim, an encrypted one (LLIAM_GOV_ENCRYPT_STATE writes)
-        # is decrypted via the Keychain-anchored key. Reads of a plaintext file
-        # never touch the key manager.
-        from lliam_gov.security.state_codec import decode_state_bytes
+    # LG-3.7 / AI-215: decrypt-on-read is unconditional — a plaintext store is
+    # returned verbatim, an encrypted one (LLIAM_GOV_ENCRYPT_STATE writes) is
+    # decrypted via the Keychain-anchored key. Reads of a plaintext file never
+    # touch the key manager.
+    from lliam_gov.security.state_codec import decode_state_bytes, looks_encrypted
 
-        raw = json.loads(decode_state_bytes(auth_file.read_bytes()))
+    raw_on_disk = auth_file.read_bytes()
+    try:
+        decoded = decode_state_bytes(raw_on_disk)
+    except Exception as exc:
+        # Encrypted wire format but undecryptable — the Keychain key is
+        # unavailable (locked / wrong profile / rotated out of band) or the
+        # ciphertext was tampered. Unlike corrupt *plaintext* JSON this is
+        # typically RECOVERABLE once the key is restored. Falling through to
+        # "start with an empty store" would silently drop live credentials AND
+        # let the next _save_auth_store overwrite the still-recoverable
+        # ciphertext, making the loss permanent. Fail loud instead.
+        if looks_encrypted(raw_on_disk):
+            raise RuntimeError(
+                f"auth store at {auth_file} is encrypted but could not be "
+                f"decrypted ({exc}). The encryption key is unavailable or the "
+                f"file was tampered; refusing to start with an empty store and "
+                f"overwrite recoverable credentials. Restore the Keychain key, "
+                f"then retry."
+            ) from exc
+        decoded = None  # not encrypted — fall through to corrupt-plaintext path
+
+    try:
+        if decoded is None:
+            raise ValueError("auth store is not decodable plaintext")
+        raw = json.loads(decoded)
     except Exception as exc:
         corrupt_path = auth_file.with_suffix(".json.corrupt")
         try:
