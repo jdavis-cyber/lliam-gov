@@ -79,3 +79,10 @@ docs/superpowers/*
 # Lliam-GOV Phase 2: pdftotext cache (regenerable from source PDFs)
 evidence/phase2/.pdftext-cache/
 
+
+# Claude Code scratch
+.claude/
+
+# macOS AppleDouble shadow files
+._*
+.DS_Store
