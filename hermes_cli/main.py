@@ -13997,9 +13997,15 @@ Examples:
         cmd_chat(args)
         return
 
-    # Execute the command
+    # Execute the command. Governance commands (audit, rotate-key) signal
+    # failure with an integer return code; swallowing it here would exit 0 on
+    # e.g. a failed chain verification, which operator scripts and the AI-217
+    # smoke-evidence gates must be able to detect. Only int codes propagate —
+    # legacy subcommands returning None (or anything else) keep exiting 0.
     if hasattr(args, "func"):
-        args.func(args)
+        rc = args.func(args)
+        if isinstance(rc, int) and rc != 0:
+            sys.exit(rc)
     else:
         parser.print_help()
 
