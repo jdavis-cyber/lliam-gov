@@ -508,7 +508,7 @@ def cmd_finish(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description=__doc__.splitlines()[0],
+        description="Phase-3 smoke-run evidence collector (LG-3.9 / AI-217).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = parser.add_subparsers(dest="command", metavar="<subcommand>")
