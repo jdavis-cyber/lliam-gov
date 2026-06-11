@@ -1,0 +1,19 @@
+{
+  "baseline_audit_records": 12,
+  "elapsed_hours": 24.56,
+  "finished_utc": "2026-06-11T01:17:55Z",
+  "gates": {
+    "aep_export": true,
+    "aep_reimport_verifies": true,
+    "audit_activity": true,
+    "audit_chain_verifies": true,
+    "duration": true,
+    "live_key_rotation": true,
+    "state_encrypted_at_rest": true
+  },
+  "git_head": "f9b73ac9def17e1c75201ddf074e4b57e9997d98",
+  "host": "Williams-Mac-mini.local",
+  "managed_state_plaintext_at_begin": 1,
+  "overall": "PASS",
+  "started_utc": "2026-06-10T00:44:26Z"
+}

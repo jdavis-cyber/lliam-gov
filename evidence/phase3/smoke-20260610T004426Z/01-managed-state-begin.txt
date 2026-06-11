@@ -1,0 +1,6 @@
+# 01 managed state — at-rest posture at start
+# captured_utc: 2026-06-10T00:44:26Z
+
+  /Users/just_jerome/.lliam-gov/auth.json: PLAINTEXT (legacy cleartext)
+
+ACTION REQUIRED: legacy plaintext managed state detected. rotate-key SKIPS plaintext files (rekey_files), so the rotation would prove nothing. Run `uv run python scripts/phase3_smoke_evidence.py migrate` BEFORE starting the agent.

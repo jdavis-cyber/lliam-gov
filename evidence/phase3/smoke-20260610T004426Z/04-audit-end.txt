@@ -1,0 +1,11 @@
+# 04 audit chain — end-of-run verification
+# captured_utc: 2026-06-11T01:17:55Z
+
+$ lliam-gov audit verify-jsonl --input /Users/just_jerome/.lliam-gov/audit/tool-calls-2026-06.jsonl
+  [stdout] Verified 111 audit records from /Users/just_jerome/.lliam-gov/audit/tool-calls-2026-06.jsonl; last_hash=sha256:9939600d6b253012cf005007ce8cc7d3dffb39f63bd8d9c99edbca1e86f43187
+  [exit] 0
+$ lliam-gov audit verify-jsonl --input /Users/just_jerome/.lliam-gov/audit/archive/tool-calls-2026-05.jsonl
+  [stdout] Verified 10 audit records from /Users/just_jerome/.lliam-gov/audit/archive/tool-calls-2026-05.jsonl; last_hash=sha256:701cd10ad84570b69f4a9ea2eef1d230cea72d89151d2300f82b3e58e3444fae
+  [exit] 0
+
+records at begin: 12; records at finish: 121

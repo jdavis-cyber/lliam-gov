@@ -1,0 +1,9 @@
+# 02 audit chain — baseline at start
+# captured_utc: 2026-06-10T00:44:26Z
+
+$ lliam-gov audit verify-jsonl --input /Users/just_jerome/.lliam-gov/audit/tool-calls-2026-06.jsonl
+  [stdout] Verified 2 audit records from /Users/just_jerome/.lliam-gov/audit/tool-calls-2026-06.jsonl; last_hash=sha256:7c5576f495c9045cc535923753f9724ea11e8081b7cc02840d8daca1dba78e7f
+  [exit] 0
+$ lliam-gov audit verify-jsonl --input /Users/just_jerome/.lliam-gov/audit/archive/tool-calls-2026-05.jsonl
+  [stdout] Verified 10 audit records from /Users/just_jerome/.lliam-gov/audit/archive/tool-calls-2026-05.jsonl; last_hash=sha256:701cd10ad84570b69f4a9ea2eef1d230cea72d89151d2300f82b3e58e3444fae
+  [exit] 0

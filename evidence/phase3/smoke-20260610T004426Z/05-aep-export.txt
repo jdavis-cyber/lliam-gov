@@ -1,0 +1,9 @@
+# 05 AEP export + re-import
+# captured_utc: 2026-06-11T01:17:56Z
+
+$ lliam-gov audit export-aep --input /Users/just_jerome/.lliam-gov/audit/tool-calls-2026-06.jsonl --input /Users/just_jerome/.lliam-gov/audit/archive/tool-calls-2026-05.jsonl --output /Users/just_jerome/Desktop/My_PKA/PKM/01_Projects/lliam-gov/evidence/phase3/smoke-20260610T004426Z/aep-export-20260611T011755Z.json
+  [stdout] Exported 121 audit records to /Users/just_jerome/Desktop/My_PKA/PKM/01_Projects/lliam-gov/evidence/phase3/smoke-20260610T004426Z/aep-export-20260611T011755Z.json
+  [exit] 0
+$ lliam-gov audit verify-aep --input /Users/just_jerome/Desktop/My_PKA/PKM/01_Projects/lliam-gov/evidence/phase3/smoke-20260610T004426Z/aep-export-20260611T011755Z.json
+  [stdout] Verified 121 audit records from /Users/just_jerome/Desktop/My_PKA/PKM/01_Projects/lliam-gov/evidence/phase3/smoke-20260610T004426Z/aep-export-20260611T011755Z.json
+  [exit] 0
