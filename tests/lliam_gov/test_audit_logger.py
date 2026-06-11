@@ -282,3 +282,23 @@ def test_params_hash_is_deterministic_canonical_json() -> None:
 
 def stat_mode(path: Path) -> int:
     return os.stat(path).st_mode & 0o777
+
+
+
+def test_persisted_record_masks_raw_params(tmp_path: Path) -> None:
+    """ISO 27001 A.8.11 data masking: persisted audit records carry only the
+    canonical ``params_hash`` and never the raw ``params`` payload."""
+    logger = AuditLogger(audit_dir=tmp_path, session_id="s1", principal="jerome")
+    secret = {"cmd": "deploy", "token": "super-secret-value"}
+    logger.log_event(
+        event_type="tool_call_start",
+        tool_name="terminal",
+        tool_call_id="call-1",
+        params=secret,
+        model_id="gpt-5",
+        at=JANUARY,
+    )
+    record = read_jsonl(tmp_path / "tool-calls-2026-01.jsonl")[0]
+    assert record["params_hash"] == params_hash(secret)
+    assert "params" not in record
+    assert "super-secret-value" not in (tmp_path / "tool-calls-2026-01.jsonl").read_text()

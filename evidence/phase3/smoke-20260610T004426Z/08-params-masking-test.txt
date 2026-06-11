@@ -1,0 +1,22 @@
+# 08 params masking test — ISO 27001 A.8.11 (data masking)
+# captured_utc: 2026-06-11T02:27:55Z
+# git_head: 22d9e163cd5f3bd39ad42208ffbf8749af45386b
+# env: LLIAM_GOV_ENCRYPT_STATE=1 LLIAM_GOV_ALLOW_NON_FIPS=1 UV_PROJECT_ENVIRONMENT=/Users/just_jerome/.venvs/lliam-gov
+# proves: persisted audit records carry canonical params_hash and never the raw params payload
+
+============================= test session starts ==============================
+platform darwin -- Python 3.13.7, pytest-9.0.2, pluggy-1.6.0 -- /Users/just_jerome/.venvs/lliam-gov/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/just_jerome/Desktop/My_PKA/PKM/01_Projects/lliam-gov
+configfile: pyproject.toml
+plugins: anyio-4.12.1, timeout-2.4.0, asyncio-1.3.0
+timeout: 30.0s
+timeout method: signal
+timeout func_only: False
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 2 items
+
+tests/lliam_gov/test_audit_logger.py::test_params_hash_is_deterministic_canonical_json PASSED [ 50%]
+tests/lliam_gov/test_audit_logger.py::test_persisted_record_masks_raw_params PASSED [100%]
+
+============================== 2 passed in 0.06s ===============================
