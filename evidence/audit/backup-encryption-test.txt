@@ -1,0 +1,41 @@
+# SP 800-171 3.8.9 — Encrypt backup CUI at rest — verification evidence
+# Generated: 2026-06-11 (AI-279, WBS LG-3.9 held-back control)
+# Host: Mac mini dev host, LLIAM_GOV_ALLOW_NON_FIPS=1 (sanctioned per plan D3)
+
+## 1. Encrypted backup run (LLIAM_GOV_ENCRYPT_STATE=1)
+Scanning /var/folders/t3/_6xw7th15cqf0kfpv5cswn640000gn/T/tmp.NFVEFI1pFc/home ...
+Backing up 2 files ...
+Encrypted at rest: hermes-backup-2026-06-11-212631.zip.enc (AES-256-GCM)
+
+Backup complete: /private/var/folders/t3/_6xw7th15cqf0kfpv5cswn640000gn/T/tmp.NFVEFI1pFc/out/hermes-backup-2026-06-11-212631.zip.enc
+  Files:       2
+  Original:    60 B
+  Compressed:  268 B
+  Time:        0.0s
+
+Restore with: hermes import hermes-backup-2026-06-11-212631.zip.enc
+
+## 2. Artifact at rest is ciphertext (wire format 0x01, not zip 'PK')
+hermes-backup-2026-06-11-212631.zip.enc
+00000000: 01c1 84c0 0448 761e c8a6 7f2a 115e 923f  .....Hv....*.^.?
+
+## 3. Plaintext CUI not present in artifact
+PASS: marker string absent from ciphertext
+
+## 4. Restore path decrypts (hermes import)
+Encrypted backup detected; decrypting ...
+Backup contains 2 files
+Target: /var/folders/t3/_6xw7th15cqf0kfpv5cswn640000gn/T/tmp.NFVEFI1pFc/restore
+
+Importing 2 files ...
+
+Import complete: 2 files restored in 0.0s
+
+Note: The hermes-agent codebase was not included in the backup.
+Done. Your Hermes configuration has been restored.
+PASS: restored .env identical
+
+## 5. Test suite (fail-closed, tamper, roundtrip, 0600 mode)
+$ uv run pytest -q tests/hermes_cli/test_backup_encryption.py
+.........                                                                [100%]
+9 passed in 0.66s
