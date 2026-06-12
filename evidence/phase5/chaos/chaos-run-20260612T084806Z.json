@@ -1,0 +1,26 @@
+{
+  "generated": "20260612T084806Z",
+  "all_failed_closed": false,
+  "scenarios": [
+    {
+      "scenario": "audit_log_unavailable",
+      "failed_closed": false,
+      "detail": "harness error: No module named 'lliam_gov'"
+    },
+    {
+      "scenario": "keyring_unavailable",
+      "failed_closed": false,
+      "detail": "harness error: No module named 'lliam_gov'"
+    },
+    {
+      "scenario": "egress_misconfigured",
+      "failed_closed": false,
+      "detail": "harness error: No module named 'lliam_gov'"
+    },
+    {
+      "scenario": "selfmod_rejected_no_leak",
+      "failed_closed": false,
+      "detail": "harness error: No module named 'lliam_gov'"
+    }
+  ]
+}
