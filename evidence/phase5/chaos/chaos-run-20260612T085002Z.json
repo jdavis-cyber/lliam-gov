@@ -1,0 +1,26 @@
+{
+  "generated": "20260612T085002Z",
+  "all_failed_closed": true,
+  "scenarios": [
+    {
+      "scenario": "audit_log_unavailable",
+      "failed_closed": true,
+      "detail": "read-only-home dispatch -> {\"error\": \"Audit logging failed closed: cannot prepare audit directory /var/folders/t3/_6xw7th15cqf0kfpv5cswn640000gn/T/lliam-chaos-e_irq4j2/audit: [Errno 13] P"
+    },
+    {
+      "scenario": "keyring_unavailable",
+      "failed_closed": true,
+      "detail": "keychain probe failed closed -> Keychain/key-manager probe failed: keyring locked (chaos injection); protected operations must refuse (fail-closed)."
+    },
+    {
+      "scenario": "egress_misconfigured",
+      "failed_closed": true,
+      "detail": "empty-allowlist egress denied -> egress denied: model-provider.example:443 is not on the Lliam-GOV allowlist (LLIAM_GOV_EGRESS_ALLOWLIST or /var/folders/t3/_6xw7th15cqf0kfpv"
+    },
+    {
+      "scenario": "selfmod_rejected_no_leak",
+      "failed_closed": true,
+      "detail": "rejected proposal 729846c9689e: pending=0, in_rejected=True"
+    }
+  ]
+}

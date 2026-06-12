@@ -1,0 +1,26 @@
+{
+  "generated": "20260612T084859Z",
+  "all_failed_closed": false,
+  "scenarios": [
+    {
+      "scenario": "audit_log_unavailable",
+      "failed_closed": false,
+      "detail": "audit-unwritable dispatch -> SHOULD-NOT-RUN"
+    },
+    {
+      "scenario": "keyring_unavailable",
+      "failed_closed": true,
+      "detail": "keychain probe failed closed -> Keychain/key-manager probe failed: keyring locked (chaos injection); protected operations must refuse (fail-closed)."
+    },
+    {
+      "scenario": "egress_misconfigured",
+      "failed_closed": true,
+      "detail": "empty-allowlist egress denied -> egress denied: model-provider.example:443 is not on the Lliam-GOV allowlist (LLIAM_GOV_EGRESS_ALLOWLIST or /var/folders/t3/_6xw7th15cqf0kfpv"
+    },
+    {
+      "scenario": "selfmod_rejected_no_leak",
+      "failed_closed": true,
+      "detail": "rejected proposal c35b0ad9f9d2: pending=0, in_rejected=True"
+    }
+  ]
+}
