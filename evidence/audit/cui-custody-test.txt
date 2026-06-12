@@ -1,0 +1,12 @@
+# CUI marking + audit-only chain of custody — verification evidence
+# Generated: 2026-06-12 (AI-223, WBS LG-4.6) — NO CUI-based gating, per the §5.6 decision
+
+## 1. Live custody trail: marked path read through dispatch (executes + audits)
+dispatch result (NOT blocked): tool-ran
+cui_access: marker=CUI//SP-PRIV destination=cui_evidence_tool params_hash=sha256:0bc4d407f...
+cui_delete: marker=CUI//SP-PRIV sanitized delete audited, file exists=False
+
+## 2. Test suite (marking, propagation, custody shape, NO-GATING pin, sanitize delete)
+$ uv run pytest -q tests/lliam_gov/test_cui.py
+...........                                                              [100%]
+11 passed in 0.41s

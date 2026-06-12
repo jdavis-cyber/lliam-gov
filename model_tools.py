@@ -912,6 +912,20 @@ def handle_function_call(
         if audit_error is not None:
             return audit_error
 
+        # CUI chain of custody (LG-4.6): evidence marked-path access after a
+        # successful dispatch. Marking + audit only — never blocks. Custody
+        # evidence is the control, so a chain failure here fails closed like
+        # the other tool audit events.
+        try:
+            from lliam_gov.security.cui import scan_args_for_cui
+
+            scan_args_for_cui(
+                function_name, function_args, session_id=session_id or ""
+            )
+        except Exception as cui_exc:
+            logger.error("CUI custody audit failed closed: %s", cui_exc)
+            return _tool_audit_failure(cui_exc)
+
         try:
             from hermes_cli.plugins import invoke_hook
             invoke_hook(

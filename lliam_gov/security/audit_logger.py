@@ -198,6 +198,8 @@ class AuditLogger:
         tool_name: str | None = None,
         tool_call_id: str | None = None,
         params: Any | None = None,
+        marker: str | None = None,
+        destination: str | None = None,
         duration_ms: int | None = None,
         blocked: bool = False,
         block_reason: str | None = None,
@@ -224,6 +226,10 @@ class AuditLogger:
                 "tool_name": tool_name,
                 "tool_call_id": tool_call_id,
                 "params_hash": params_hash({} if params is None else params),
+                # CUI chain-of-custody fields (LG-4.6): marker + destination
+                # are readable evidence; payload content stays hashed.
+                "marker": marker,
+                "destination": destination,
                 "duration_ms": duration_ms,
                 "blocked": blocked,
                 "block_reason": block_reason,
