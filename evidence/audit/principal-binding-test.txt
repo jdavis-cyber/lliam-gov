@@ -1,0 +1,13 @@
+# SP 800-171 3.1.1/3.1.2, ISO 27001 A.8.5 — Principal binding + production root refusal
+# Generated: 2026-06-12 (AI-218, WBS LG-4.1)
+
+## 1. Principal resolved from OS euid (env vars spoofed, ignored)
+Principal(username='just_jerome', uid=501, method='os_euid')
+
+## 2. Production root refusal (structured error)
+PASS: Lliam-GOV refuses to run as root under LLIAM_GOV_PROFILE=production: root execution breaks principal attribution and byp ...
+
+## 3. Test suite
+$ uv run pytest -q tests/lliam_gov/test_principal.py
+........                                                                 [100%]
+8 passed in 0.10s

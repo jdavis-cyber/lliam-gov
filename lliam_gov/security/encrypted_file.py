@@ -61,6 +61,9 @@ def get_shared_key_manager() -> KeyManager:
     global _shared_key_manager
     with _shared_key_manager_lock:
         if _shared_key_manager is None:
+            from lliam_gov.security.principal import require_principal
+
+            require_principal()  # production root refusal (LG-4.1)
             fips_check()
             manager = KeyManager()
             manager.init()

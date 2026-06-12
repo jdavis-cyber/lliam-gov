@@ -170,9 +170,14 @@ class AuditLogger:
         )
         self.archive_dir = self.audit_dir / "archive"
         self.session_id = session_id
-        self.principal = (
-            principal or os.getenv("USER") or os.getenv("LOGNAME") or "unknown"
-        )
+        if principal is None:
+            # Authenticated OS principal (euid -> passwd), not spoofable env
+            # vars (LG-4.1 / AI-218). Explicit principal args win (tests,
+            # gateway-attributed events).
+            from lliam_gov.security.principal import get_principal
+
+            principal = get_principal().username
+        self.principal = principal
         self.host = host or socket.gethostname()
         self.pid = pid or os.getpid()
         self.agent_version = agent_version or _agent_version()
@@ -315,6 +320,12 @@ def get_shared_audit_logger(
     principal: str | None = None,
 ) -> AuditLogger:
     """Return the process-wide audit logger used by session and tool events."""
+
+    # Production root refusal (LG-4.1): the shared audit logger is the choke
+    # point every governed operation passes through.
+    from lliam_gov.security.principal import require_principal
+
+    require_principal()
 
     global _shared_audit_logger
     target_dir = (
