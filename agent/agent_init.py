@@ -1028,6 +1028,11 @@ def init_agent(
     agent._lliam_audit_logger = None
     agent._lliam_audit_session_open_logged = False
     agent._lliam_audit_session_close_logged = False
+    # Egress guard (LG-4.3): no-op unless LLIAM_GOV_EGRESS_ENFORCE=1; the
+    # install itself is idempotent and free when enforcement is off.
+    from lliam_gov.security.egress import install_egress_guard
+
+    install_egress_guard()
     agent._session_init_model_config = {
         "max_iterations": agent.max_iterations,
         "reasoning_config": reasoning_config,
