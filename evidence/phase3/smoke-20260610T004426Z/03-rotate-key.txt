@@ -1,0 +1,11 @@
+# 03 rotate-key — live mid-run key rotation
+# captured_utc: 2026-06-10T04:33:24Z
+
+$ lliam-gov rotate-key
+  [stdout] Rotated encryption key; re-encrypted 1 file.
+  [exit] 0
+  post-rotate: /Users/just_jerome/.lliam-gov/auth.json: ENCRYPTED under new key
+$ lliam-gov audit verify-jsonl --input /Users/just_jerome/.lliam-gov/audit/tool-calls-2026-06.jsonl
+  [stdout] Verified 27 audit records from /Users/just_jerome/.lliam-gov/audit/tool-calls-2026-06.jsonl; last_hash=sha256:5286819a9f8f2a01afba480ae7f340698bec20d9448fca77dc71d7cc79cc9cf2
+  [exit] 0
+  audit chain: key_rotation event recorded and chain verifies

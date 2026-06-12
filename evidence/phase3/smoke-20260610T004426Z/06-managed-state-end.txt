@@ -1,0 +1,4 @@
+# 06 managed state — at-rest posture at finish
+# captured_utc: 2026-06-11T01:17:56Z
+
+  /Users/just_jerome/.lliam-gov/auth.json: ENCRYPTED (EncryptedFile wire format)
