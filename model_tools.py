@@ -841,6 +841,30 @@ def handle_function_call(
                     return audit_error
                 return json.dumps({"error": block_message}, ensure_ascii=False)
 
+        # Capability gate (LG-4.2): under the governed profile every
+        # dispatch must be covered by the session's authorized capability
+        # set. Denials are audited like plugin blocks and fail closed if
+        # the audit write fails.
+        from lliam_gov.security.capabilities import CapabilityDenied, check_dispatch
+
+        try:
+            check_dispatch(function_name)
+        except CapabilityDenied as cap_exc:
+            audit_error = _audit_tool_event(
+                event_type="tool_call_blocked",
+                session_id=session_id or "",
+                tool_name=function_name,
+                tool_call_id=tool_call_id or "",
+                params=function_args,
+                duration_ms=0,
+                blocked=True,
+                block_reason=f"capability_denied: {cap_exc}",
+                error=str(cap_exc),
+            )
+            if audit_error is not None:
+                return audit_error
+            return json.dumps({"error": str(cap_exc)}, ensure_ascii=False)
+
         # ACP/Zed edit approval runs before any file mutation.  The requester
         # is bound via ContextVar only for ACP sessions, so CLI/gateway paths
         # are unaffected when it is unset.
