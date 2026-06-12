@@ -850,7 +850,7 @@ May 2024
 "ISO42001_A.6.2.6","ISO/IEC 42001:2023","A.6.2.6             AI system operation and monitor-                 The organization shall define and document the necessary
   ing                                              elements for the ongoing operation of the AI system. At the
   minimum, this should include system and performance
-  monitoring, repairs, updates and support.","ISO_42001-2023.pdf","","","lliam_gov/security/selfmod_gate.py + lliam_gov/security/audit_logger.py","evidence/audit/operation-monitoring-*.md","—","not_implemented","Added by Phase 2 review — A.6.2.6 'AI system operation and monitoring' covers Lliam-GOV's runtime monitoring posture"
+  monitoring, repairs, updates and support.","ISO_42001-2023.pdf","","","docs/operate/phase3-smoke-runbook.md + lliam_gov/security/audit_logger.py + hermes_cli/audit_cli.py","evidence/audit/operation-monitoring-2026-06.md","—","implemented","Operation & monitoring document authored (AI-281): runtime profile, audit-chain monitoring, fail-closed alerting, performance baselines, monthly/phase-gate review cadence. Owner field corrected — previously pointed at nonexistent selfmod_gate.py (that module is Phase 4 LG-4.5 scope)."
 "ISO42001_A.6.2.8","ISO/IEC 42001:2023","A.6.2.8             AI system recording of event logs                The organization shall determine at which phases of the
   AI system life cycle, record keeping of event logs should be
   enabled, but at the minimum when the AI system is in use.
