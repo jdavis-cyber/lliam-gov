@@ -113,6 +113,12 @@ window between key rotation and re-encrypt is microseconds and accepted for
 the single-operator profile. Do not add a second managed path without the
 `rekey_files()` refactor described at the tripwire.
 
+**Encrypted backups and rotation** (AI-279, SP 800-171 3.8.9): backup
+archives produced under `LLIAM_GOV_ENCRYPT_STATE=1` (`*.zip.enc`) are bound
+to the Keychain key that encrypted them and are NOT re-keyed by
+`rotate-key`. After every rotation, take a fresh `lliam-gov backup` and
+treat pre-rotation encrypted backups as unrecoverable.
+
 If `rotate` fails: **stop the run, preserve `~/.lliam-gov` and the run
 directory as-is**, and investigate before anything else writes state.
 
