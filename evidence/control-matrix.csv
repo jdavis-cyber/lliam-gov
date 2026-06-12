@@ -544,7 +544,7 @@ May 2024
 
 03.09.02 Personnel Termination and Transfer
   a. When individual employment is terminated:
-  1. Disable system access within [Assignment: organization-defined time p","lliam_gov/security/key_manager.py (AES-256-GCM on backups)","evidence/audit/backup-encryption-test.txt","ISO 27001 A.8.13; ISO 42001 A.4.3","not_implemented",""
+  1. Disable system access within [Assignment: organization-defined time p","lliam_gov/security/key_manager.py (AES-256-GCM on backups)","evidence/audit/backup-encryption-test.txt","ISO 27001 A.8.13; ISO 42001 A.4.3","implemented","Backup zip encrypted at rest (AES-256-GCM, Keychain-anchored) when LLIAM_GOV_ENCRYPT_STATE=1; fail-closed if encryption fails. Encrypted backups are bound to the current key: take a fresh backup after rotate-key (AI-279)."
 "SP800-171_3.13.1","SP 800-171 Rev. 2","3.13.1   Monitor, control, and protect communications (i.e., information transmitted or received by
   organizational systems) at the external boundaries and key internal boundaries of
   organizational systems.
