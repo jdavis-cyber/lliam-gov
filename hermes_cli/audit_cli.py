@@ -14,6 +14,21 @@ def cmd_audit(args: argparse.Namespace) -> int:
     """Dispatch ``lliam-gov audit <subcommand>``."""
 
     command = getattr(args, "audit_command", None)
+
+    # SP 800-171 3.3.9: audit management is limited to privileged users.
+    # The gate runs before ANY subcommand, including unknown ones, so the
+    # denial can never be bypassed via dispatch quirks.
+    from lliam_gov.security.privileged_access import (
+        PrivilegedAccessError,
+        require_privileged_user,
+    )
+
+    try:
+        require_privileged_user(f"audit {command}")
+    except PrivilegedAccessError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
     if command == "export-aep":
         return _cmd_export_aep(args)
     if command == "verify-aep":
