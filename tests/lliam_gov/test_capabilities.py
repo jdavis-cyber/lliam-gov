@@ -140,3 +140,30 @@ def test_dispatch_denial_is_audited_and_blocked(enforced):
     ]
     assert blocked and blocked[-1]["blocked"] is True
     assert blocked[-1]["block_reason"].startswith("capability_denied")
+
+
+def test_registry_lookup_resolves_toolset(enforced):
+    """Regression (AEP evidence run, 2026-06-12): _toolset_for must use the
+    real registry singleton. A stale get_registry import silently returned
+    None, making every registry-resolved tool read as unclassified and
+    over-denying. Pin the lookup path that check_dispatch uses when no
+    toolset is passed."""
+    from tools.registry import registry
+
+    registry.register(
+        name="cap_lookup_probe",
+        toolset="file",  # -> fs_write, in GOVERNED_BASELINE
+        schema={"name": "cap_lookup_probe", "parameters": {"type": "object", "properties": {}}},
+        handler=lambda *a, **kw: "ok",
+        check_fn=None,
+        requires_env=None,
+        is_async=False,
+        description="probe",
+        emoji="",
+    )
+    try:
+        # No toolset passed — must resolve via the registry, not deny as
+        # unclassified.
+        check_dispatch("cap_lookup_probe")
+    finally:
+        registry.deregister("cap_lookup_probe")
