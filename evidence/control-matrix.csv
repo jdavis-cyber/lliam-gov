@@ -830,7 +830,7 @@ May 2024
 
   REFERENCES
   Source Control: SI-05
-  Supporting Publications: SP 800-161 [33]","evidence/sbom/ + hermes_cli/security_advisories.py (quarterly cadence)","evidence/sbom/dependency-bump-2026-06-12.md","ISO 27001 A.5.7","implemented","AI-227/AI-320 dependency review + remediation (7 CVEs cleared, 2 documented residual). Test: tests/scripts/test_phase5_pentest.py. Flipped in LG-5.2 crosswalk (AI-226) with committed code+test+evidence."
+  Supporting Publications: SP 800-161 [33]","evidence/sbom/ + hermes_cli/security_advisories.py (quarterly cadence)","evidence/sbom/dependency-bump-2026-06-12.md + evidence/sbom/dependency-residual-2026-06-12-ai321.md","ISO 27001 A.5.7","implemented","AI-227/AI-320 dependency review + remediation (7 CVEs cleared, 2 documented residual); AI-321 cleared starlette PYSEC-2026-161 (FastAPI 0.136.3 + starlette 1.3.1), 1 residual remains (pynacl, upstream discord.py cap, not in governed profile). Test: tests/scripts/test_phase5_pentest.py. Flipped in LG-5.2 crosswalk (AI-226) with committed code+test+evidence."
 "ISO42001_A.3.2","ISO/IEC 42001:2023","A.3.2               AI roles and responsibilities                    Roles and responsibilities for AI shall be defined and allo-
   cated according to the needs of the organization.","ISO_42001-2023.pdf","","","lliam_gov/security/principal.py + AIMS RACI","docs/governance/raci.md","ISO 27001 A.5.2 / A.5.3","not_implemented","Plan §3.4 cited A.10.2 'Allocation of responsibilities' — actual ID is A.3.2 'AI roles and responsibilities'"
 "ISO42001_A.4.3","ISO/IEC 42001:2023","A.4.3               Data resources                                   As part of resource identification, the organization shall
