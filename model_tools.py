@@ -865,6 +865,51 @@ def handle_function_call(
                 return audit_error
             return json.dumps({"error": str(cap_exc)}, ensure_ascii=False)
 
+        # Self-modification gate (LG-4.5): when enabled, selfmod- and
+        # memory-write-tagged dispatch is STAGED as a proposal for human
+        # approval instead of executing. The handler is never invoked, so
+        # a rejected proposal has nothing to leak into live state.
+        from lliam_gov.security.selfmod_gate import (
+            GATED_CAPABILITIES,
+            propose,
+            selfmod_gate_enabled,
+        )
+
+        if selfmod_gate_enabled():
+            from lliam_gov.security.capabilities import capability_for_tool
+            from tools.registry import registry as _tool_registry
+
+            _entry = _tool_registry.get_entry(function_name)
+            _cap = capability_for_tool(
+                function_name, _entry.toolset if _entry else None
+            )
+            if _cap in GATED_CAPABILITIES:
+                try:
+                    proposal_id = propose(
+                        kind=f"tool:{function_name}",
+                        summary=f"staged {function_name} dispatch ({_cap})",
+                        payload={"tool": function_name, "args": function_args},
+                    )
+                except Exception as stage_exc:
+                    return json.dumps(
+                        {"error": f"self-mod staging failed closed: {stage_exc}"},
+                        ensure_ascii=False,
+                    )
+                return json.dumps(
+                    {
+                        "staged": True,
+                        "proposal_id": proposal_id,
+                        "message": (
+                            f"{function_name} is self-modifying ({_cap}) and the "
+                            "Lliam-GOV approval gate is active. The request was "
+                            f"staged as proposal {proposal_id}; a privileged "
+                            "operator must run 'lliam-gov approve "
+                            f"{proposal_id} --note ...' before it can be applied."
+                        ),
+                    },
+                    ensure_ascii=False,
+                )
+
         # ACP/Zed edit approval runs before any file mutation.  The requester
         # is bound via ContextVar only for ACP sessions, so CLI/gateway paths
         # are unaffected when it is unset.
