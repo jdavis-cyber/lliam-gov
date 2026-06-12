@@ -1,0 +1,16 @@
+# ISO 42001 A.6.2.4 — Self-modification gate — verification evidence
+# Generated: 2026-06-12 (AI-222, WBS LG-4.5)
+
+## 1. Live staged dispatch + rejection (handler never invoked)
+staged: True | proposal: 132cbb1f90d5
+handler executed before approval? False
+after rejection: status=rejected, pending=0, handler executed=False
+audit events: ['selfmod_proposed', 'selfmod_rejected']
+
+## 2. Note requirement (free-text reviewer reasoning is mandatory)
+PASS: a free-text note is required: the reviewer's reasoning is part of the human-oversight evid
+
+## 3. Test suite
+$ uv run pytest -q tests/lliam_gov/test_selfmod_gate.py
+.........                                                                [100%]
+9 passed in 0.41s

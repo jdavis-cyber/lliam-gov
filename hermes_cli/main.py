@@ -12165,6 +12165,11 @@ def main():
 
     register_rotate_key_parser(subparsers)
 
+    # Self-modification approval surface (LG-4.5 / AI-222)
+    from hermes_cli.selfmod_cli import register_selfmod_parsers
+
+    register_selfmod_parsers(subparsers)
+
     # =========================================================================
     # dump command
     # =========================================================================
