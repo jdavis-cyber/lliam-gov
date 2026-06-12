@@ -1,0 +1,14 @@
+# Runtime guard posture — workspace/umask/Keychain/FIPS (LG-4.4 / AI-221)
+# Generated: 2026-06-12
+
+## 1. Workspace fail-closed demo (group-readable home refused)
+PASS: Lliam home /var/folders/t3/_6xw7th15cqf0kfpv5cswn640000gn/T/tmpzkry6795 mode 0o750 grants group/world access; required mode is 0700. Fix: chmod 700 /var/folders/t3/_6xw7th15cqf0kfpv5cswn640000gn/T/tmpzkry6795
+PASS: 0700 owned home accepted
+
+## 2. Umask enforcement demo
+umask before: 0o022 -> after enforce: 0o77
+
+## 3. Test suite (workspace pos/neg, umask tighten-only, keychain probe, posture composite)
+$ uv run pytest -q tests/lliam_gov/test_runtime_guard_phase4.py tests/lliam_gov/test_runtime_guard.py
+...................                                                      [100%]
+19 passed in 0.27s
