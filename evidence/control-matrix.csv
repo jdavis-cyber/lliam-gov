@@ -237,7 +237,7 @@ May 2024
   that the current set of event types remains relevant.
 
   REFERENCES
-  Sou","lliam_gov/security/audit_logger.py","evidence/audit/tool-calls-*.jsonl + AEP exports","ISO 27001 A.8.15; ISO 42001 Clause 7.5/9.1","not_implemented",""
+  Sou","lliam_gov/security/audit_logger.py","evidence/phase3/smoke-20260610T004426Z/04-audit-end.txt","ISO 27001 A.8.15; ISO 42001 Clause 7.5/9.1","implemented",""
 "SP800-171_3.3.2","SP 800-171 Rev. 2","3.3.2   Ensure that the actions of individual system users can be uniquely traced to those users, so
   they can be held accountable for their actions.
 
@@ -278,7 +278,7 @@ May 2024
 
   REFERENCES
   Source Controls: AU-03, AU-03(01)
-  Supporting Publications: None","lliam_gov/security/audit_logger.py (principal field on every entry)","evidence/audit/tool-calls-*.jsonl","ISO 27001 A.8.15","not_implemented",""
+  Supporting Publications: None","lliam_gov/security/audit_logger.py (principal field on every entry)","evidence/phase3/smoke-20260610T004426Z/aep-export-20260611T011755Z.json","ISO 27001 A.8.15","implemented",""
 "SP800-171_3.3.4","SP 800-171 Rev. 2","3.3.4   Alert in the event of an audit logging process failure.
 
   DISCUSSION
@@ -316,7 +316,7 @@ May 2024
 
   REFERENCES
   Source Control: AU-05
-  Supporting Publications: None","lliam_gov/security/audit_logger.py fail-closed branch","tests/test_audit_logger.py::test_fail_closed","ISO 27001 A.8.16","not_implemented",""
+  Supporting Publications: None","lliam_gov/security/audit_logger.py fail-closed branch","evidence/phase3/smoke-20260610T004426Z/07-audit-fail-closed-test.txt","ISO 27001 A.8.16","implemented",""
 "SP800-171_3.3.8","SP 800-171 Rev. 2","3.3.8   Protect audit information and audit logging tools from unauthorized access, modification, and
   deletion.
 
@@ -349,7 +349,7 @@ May 2024
 
   REFERENCES
   Source Controls: AU-09, AU-09(04)
-  Supporting Publications: None","lliam_gov/security/audit_logger.py (mode 0600, hash-chained)","evidence/audit/chain-integrity-report.txt","ISO 27001 A.8.15","not_implemented",""
+  Supporting Publications: None","lliam_gov/security/audit_logger.py (mode 0600, hash-chained)","evidence/phase3/smoke-20260610T004426Z/05-aep-export.txt","ISO 27001 A.8.15","implemented",""
 "SP800-171_3.3.9","SP 800-171 Rev. 2","3.3.9   Limit management of audit logging functionality to a subset of privileged users.
 
   DISCUSSION
@@ -460,7 +460,7 @@ May 2024
   DISCUSSION
   Cryptographically-protected passwords use salted one-way cryptographic hashes of passwords.
   See [NIST CRYPTO].","NIST_SP_800-171_r2.pdf","03.05.10","03.05.10 Withdrawn
-  Incorporated into 03.05.07.","lliam_gov/security/key_manager.py (keyring-only secret store)","evidence/audit/keychain-access.jsonl","ISO 27001 A.5.17 / A.8.5","not_implemented",""
+  Incorporated into 03.05.07.","lliam_gov/security/key_manager.py (keyring-only secret store)","evidence/phase3/smoke-20260610T004426Z/03-rotate-key.txt","ISO 27001 A.5.17 / A.8.5","implemented",""
 "SP800-171_3.8.9","SP 800-171 Rev. 2","3.8.9    Protect the confidentiality of backup CUI at storage locations.
 
   For ease of use, the security requirements are organized into fourteen families. Each family
@@ -731,7 +731,7 @@ May 2024
   accordance with configuration management policies and procedures.
   c. Configure malicious code protection mechanisms to:
   1. Perform scans of the system [Assignment: organization-defined frequency]
-  and real-time scans of files from ext","lliam_gov/security/key_manager.py","evidence/audit/at-rest-encryption-test.txt","ISO 27001 A.8.24; ISO 42001 A.4.3","not_implemented",""
+  and real-time scans of files from ext","lliam_gov/security/key_manager.py","evidence/phase3/smoke-20260610T004426Z/06-managed-state-end.txt","ISO 27001 A.8.24; ISO 42001 A.4.3","implemented",""
 "SP800-171_3.14.2","SP 800-171 Rev. 2","3.14.2   Provide protection from malicious code at designated locations within organizational systems.
 
   DISCUSSION
@@ -835,7 +835,7 @@ May 2024
   cated according to the needs of the organization.","ISO_42001-2023.pdf","","","lliam_gov/security/principal.py + AIMS RACI","docs/governance/raci.md","ISO 27001 A.5.2 / A.5.3","not_implemented","Plan §3.4 cited A.10.2 'Allocation of responsibilities' — actual ID is A.3.2 'AI roles and responsibilities'"
 "ISO42001_A.4.3","ISO/IEC 42001:2023","A.4.3               Data resources                                   As part of resource identification, the organization shall
   document information about the data resources utilized
-  for the AI system.","ISO_42001-2023.pdf","","","lliam_gov/security/key_manager.py + lliam_gov/security/cui.py","evidence/audit/at-rest-encryption-test.txt","SP 800-171 §3.13.16; ISO 27001 A.8.24","not_implemented","Plan §3.4 cited A.8.4 'Data governance' — actual A.8.4 is 'Communication of incidents'; data governance lives at A.4.3 'Data resources'"
+  for the AI system.","ISO_42001-2023.pdf","","","lliam_gov/security/key_manager.py + lliam_gov/security/cui.py","evidence/phase3/smoke-20260610T004426Z/06-managed-state-end.txt","SP 800-171 §3.13.16; ISO 27001 A.8.24","implemented","Plan §3.4 cited A.8.4 'Data governance' — actual A.8.4 is 'Communication of incidents'; data governance lives at A.4.3 'Data resources'"
 "ISO42001_A.5.2","ISO/IEC 42001:2023","A.5.2               AI system impact assessment                      The organization shall establish a process to assess the
   process                                          potential consequences for individuals or groups of indi-
   viduals, or both, and societies that can result from the AI
@@ -857,7 +857,7 @@ May 2024
   A.7 Data for AI systems
   Objective: To ensure that the organization understands the role and impacts of data in AI systems in the appli-
   cation and development, provision or use of AI systems throughout their life cycles.
-  Topic                                            Control","ISO_42001-2023.pdf","","","lliam_gov/security/audit_logger.py","evidence/audit/tool-calls-*.jsonl","ISO 27001 A.8.15; SP 800-171 §3.3.1","not_implemented","Added by Phase 2 review — A.6.2.8 'AI system recording of event logs' is the direct AIMS counterpart to the audit log"
+  Topic                                            Control","ISO_42001-2023.pdf","","","lliam_gov/security/audit_logger.py","evidence/phase3/smoke-20260610T004426Z/02-audit-begin.txt","ISO 27001 A.8.15; SP 800-171 §3.3.1","implemented","Added by Phase 2 review — A.6.2.8 'AI system recording of event logs' is the direct AIMS counterpart to the audit log"
 "ISO42001_A.7.4","ISO/IEC 42001:2023","A.7.4               Quality of data for AI systems                   The organization shall define and document requirements
   for data quality and ensure that data used to develop and
   operate the AI system meet those requirements.","ISO_42001-2023.pdf","","","lliam_gov/security/audit_logger.py + evidence/sbom/ + hermes_cli/security_advisories.py","evidence/audit/data-quality-events.jsonl","ISO 27001 A.5.34","not_implemented","Plan cited 'Quality of system and data'; actual title is 'Quality of data for AI systems'"
@@ -1329,14 +1329,14 @@ ISO/IEC 27001:2022(E)
   Data masking shall be used in accordance with the organization’s
   topic-specific policy on access control and other related topic-specific
   policies, and business requirements, taking applicable legislation into
-  consideration.","ISO 27001-2022.pdf","","","lliam_gov/security/audit_logger.py params_hash pattern","tests/test_audit_logger.py::test_no_raw_params","—","not_implemented",""
+  consideration.","ISO 27001-2022.pdf","","","lliam_gov/security/audit_logger.py params_hash pattern","evidence/phase3/smoke-20260610T004426Z/08-params-masking-test.txt","—","implemented",""
 "ISO27001_A.8.12","ISO/IEC 27001:2022","8.12   Data leakage prevention           Control
   Data leakage prevention measures shall be applied to systems, net-
   works and any other devices that process, store or transmit sensitive
   information.","ISO 27001-2022.pdf","","","lliam_gov/security/egress.py allowlist + lliam_gov/security/cui.py marking","evidence/audit/egress-events.jsonl + evidence/audit/cui-access-*.jsonl","—","not_implemented",""
 "ISO27001_A.8.15","ISO/IEC 27001:2022","8.15   Logging                           Control
   Logs that record activities, exceptions, faults and other relevant events
-  shall be produced, stored, protected and analysed.","ISO 27001-2022.pdf","","","lliam_gov/security/audit_logger.py","evidence/audit/tool-calls-*.jsonl","SP 800-171 §3.3.1 / §3.3.2 / §3.3.8","not_implemented",""
+  shall be produced, stored, protected and analysed.","ISO 27001-2022.pdf","","","lliam_gov/security/audit_logger.py","evidence/phase3/smoke-20260610T004426Z/04-audit-end.txt","SP 800-171 §3.3.1 / §3.3.2 / §3.3.8","implemented",""
 "ISO27001_A.8.16","ISO/IEC 27001:2022","8.16   Monitoring activities             Control
   Networks, systems and applications shall be monitored for anomalous
   behaviour and appropriate actions taken to evaluate potential infor-
@@ -1355,7 +1355,7 @@ ISO/IEC 27001:2022(E)
   malicious content.","ISO 27001-2022.pdf","","","lliam_gov/security/egress.py allowlist","evidence/audit/egress-events.jsonl","—","not_implemented",""
 "ISO27001_A.8.24","ISO/IEC 27001:2022","8.24      Use of cryptography                 Control
   Rules for the effective use of cryptography, including cryptographic key
-  management, shall be defined and implemented.","ISO 27001-2022.pdf","","","lliam_gov/security/key_manager.py + lliam_gov/security/runtime_guard.py FIPS gate","evidence/audit/at-rest-encryption-test.txt + evidence/audit/fips-mode-startup-check.txt","SP 800-171 §3.13.11 / §3.13.16; ISO 42001 A.4.3","not_implemented",""
+  management, shall be defined and implemented.","ISO 27001-2022.pdf","","","lliam_gov/security/key_manager.py + lliam_gov/security/runtime_guard.py FIPS gate","evidence/phase3/smoke-20260610T004426Z/06-managed-state-end.txt","SP 800-171 §3.13.11 / §3.13.16; ISO 42001 A.4.3","implemented",""
 "ISO27001_A.8.28","ISO/IEC 27001:2022","8.28      Secure coding                       Control
   Secure coding principles shall be applied to software development.","ISO 27001-2022.pdf","","","Hermes upstream practice + PR review","(upstream CONTRIBUTING.md + repo PR review)","—","not_implemented",""
 "ISO27001_A.8.30","ISO/IEC 27001:2022","8.30      Outsourced development              Control

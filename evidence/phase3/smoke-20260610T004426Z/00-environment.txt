@@ -1,0 +1,14 @@
+# 00 environment — smoke-run start
+# captured_utc: 2026-06-10T00:44:26Z
+
+started_utc:        2026-06-10T00:44:26Z
+host:               Williams-Mac-mini.local
+principal:          just_jerome
+platform:           macOS-26.5-arm64-arm-64bit-Mach-O
+python:             3.13.7
+git_head:           f9b73ac9def17e1c75201ddf074e4b57e9997d98
+git_dirty_files:    1
+hermes_home:        /Users/just_jerome/.lliam-gov
+LLIAM_GOV_ENCRYPT_STATE: 1
+LLIAM_GOV_ALLOW_NON_FIPS: 1
+  note: non-FIPS dev override active — sanctioned for smoke runs on the dev host per plan decision D3 (FIPS provisioning lands at Phase 6 install).
