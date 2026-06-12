@@ -403,7 +403,7 @@ May 2024
   DISCUSSION
   Configuration settings are the set of parameters that can be changed in hardware,
   software, or firmware components of the system and that affect the security
-  posture or functionality of the system. Security-related configuration settings can ","lliam-gov audit / rotate-key CLI ACL","evidence/audit/cli-access-log.jsonl","ISO 27001 A.8.5","not_implemented",""
+  posture or functionality of the system. Security-related configuration settings can ","lliam-gov audit / rotate-key CLI ACL","evidence/audit/privileged-acl-test.txt","ISO 27001 A.8.5","implemented","Audit and rotate-key CLIs gated by require_privileged_user(): effective uid must own the Lliam home; LLIAM_GOV_PRIVILEGED_USERS optionally narrows further; fail-closed on missing home/non-POSIX; root gets no bypass (AI-280)."
 "SP800-171_3.4.6","SP 800-171 Rev. 2","3.4.6   Employ the principle of least functionality by configuring organizational systems to provide
   only essential capabilities.
 

@@ -35,6 +35,19 @@ def cmd_rotate_key(args: argparse.Namespace) -> int:
         state_encryption_enabled,
     )
 
+    # Prereq 0: privileged user (SP 800-171 3.3.9) — key rotation manages
+    # the material protecting the audit chain, so the same ACL applies.
+    from lliam_gov.security.privileged_access import (
+        PrivilegedAccessError,
+        require_privileged_user,
+    )
+
+    try:
+        require_privileged_user("rotate-key")
+    except PrivilegedAccessError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
     # Prereq 1: FIPS backend (fail-closed on non-FIPS production host).
     try:
         fips_check()
