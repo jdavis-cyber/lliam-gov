@@ -10777,6 +10777,9 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate",
         "model", "pairing", "plugins", "portal", "postinstall", "profile", "proxy",
         "rotate-key",
+        "proposals",
+        "approve",
+        "reject",
         "send", "sessions", "setup",
         "skills", "slack", "status", "tools", "uninstall", "update",
         "version", "webhook", "whatsapp", "chat", "secrets", "security",
@@ -12164,6 +12167,11 @@ def main():
     from hermes_cli.key_cli import register_rotate_key_parser
 
     register_rotate_key_parser(subparsers)
+
+    # Self-modification approval surface (LG-4.5 / AI-222)
+    from hermes_cli.selfmod_cli import register_selfmod_parsers
+
+    register_selfmod_parsers(subparsers)
 
     # =========================================================================
     # dump command
