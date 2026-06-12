@@ -126,9 +126,9 @@ def capability_for_tool(tool_name: str, toolset: str | None) -> str:
 
 def _toolset_for(tool_name: str) -> str | None:
     try:
-        from tools.registry import get_registry
+        from tools.registry import registry
 
-        entry = get_registry().get_entry(tool_name)
+        entry = registry.get_entry(tool_name)
         return entry.toolset if entry is not None else None
     except Exception:
         return None
