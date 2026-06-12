@@ -1,0 +1,18 @@
+# ISO 27001 A.8.22 — Segregation of networks — bind verification evidence
+# Generated: 2026-06-11 (AI-287)
+# Control: Lliam-GOV dashboard/web UI is loopback-only. The upstream --host and
+# --insecure break-glass flags were physically removed (WBS LG-1.4 / AI-204);
+# remote access requires an SSH tunnel (ssh -L 9119:127.0.0.1:9119).
+
+## 1. Source assertions
+$ grep -n 'physically' hermes_cli/main.py
+10701:    # The --host and --insecure CLI flags were physically removed; the
+13772:    # upstream `--host` and `--insecure` break-glass flags are physically
+
+$ grep -n 'allow_origin_regex' hermes_cli/web_server.py
+106:    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+
+## 2. Test run — host-header (DNS-rebinding) allowlist + dashboard lifecycle flags
+$ uv run pytest -q tests/hermes_cli/test_web_server_host_header.py tests/hermes_cli/test_dashboard_lifecycle_flags.py
+.....................                                                    [100%]
+21 passed in 0.66s
