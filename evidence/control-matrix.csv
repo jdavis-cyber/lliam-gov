@@ -679,7 +679,7 @@ May 2024
 3. The Security Requirements
 This section describes 17 families of security requirements for protecting the confidentiality of
 CUI in nonfederal systems and organizations. When used in the context of the requirements in
-Sec. 3, the term system is defined","lliam_gov/security/runtime_guard.py (FIPS-OpenSSL hard gate)","evidence/audit/fips-mode-startup-check.txt","ISO 27001 A.8.24; FIPS 140-3","not_implemented",""
+Sec. 3, the term system is defined","lliam_gov/security/runtime_guard.py (FIPS-OpenSSL hard gate)","evidence/audit/fips-mode-startup-check.txt + evidence/audit/poam-rescope-2026-06-12-ai282.md","ISO 27001 A.8.24; FIPS 140-3","not_implemented","POA&M re-scoped 2026-06-12 (AI-282): the control trigger is CUI presence. Current deployment target is the owner's personally-owned MacBook — outside any CMMC L2 boundary — and no CUI is processed (CUI handling is audit-only custody per AI-223, no gating). The affirmative FIPS module is therefore CONDITIONAL: required only if Katmai approves a CUI-in-scope deployment on a Katmai-managed device after demo + audit of the security package. Enforcing control today: runtime_guard.fips_check fails closed — the production/CUI posture refuses to start on a non-FIPS backend. Provisioning path if approved: FIPS-enabled base image (Ubuntu Pro FIPS / RHEL UBI) or cryptography built against the OpenSSL 3.x FIPS provider (CMVP-certified); Apple CoreCrypto is validated but unreachable from the bundled-OpenSSL python cryptography wheels."
 "SP800-171_3.13.16","SP 800-171 Rev. 2","3.13.16    Protect the confidentiality of CUI at rest.
 
   DISCUSSION

@@ -42,6 +42,32 @@ production profile.
 (watch https://pypi.org/project/discord.py/ requires_dist), then re-run
 `uv lock --upgrade-package pynacl` and confirm CVE-2025-69277 cleared.
 
+### Severity adjustment — environmental, Low (2026-06-12)
+
+CVE-2025-69277 is carried at **Low** severity for this system, an
+environmental (CVSS environmental-metric style) adjustment from the base
+rating, justified by technical controls — not by policy intent:
+
+1. **Vulnerable component absent from the governed production profile.**
+   pynacl arrives only via `discord.py[voice]`; that extra is not installed
+   in the governed profile (verified AI-227, re-verified above). The
+   vulnerable code is not present on disk inside the boundary.
+2. **Egress guard blocks the only consumer.** The AI-220 egress control is
+   a deny-all, fail-closed host:port allowlist; Discord endpoints are not
+   allowlisted, so the voice path could not carry traffic even if the
+   extra were installed in error.
+3. **Monitored, not forgotten.** AI-324 tracks the upstream unblock
+   condition.
+
+The operator's intent never to enable Discord as a communications channel
+is noted but carries no weight in this rating; the rating rests on the two
+enforced controls above.
+
+**Revert trigger:** the finding returns to its base severity immediately if
+the `voice`/`messaging` extra is installed in the governed profile or a
+Discord channel is enabled/allowlisted. Any such change must re-open the
+severity decision in AI-324.
+
 ## Validation
 
 - `uv lock` resolved 224 packages clean; `uv sync --extra all` succeeded.
