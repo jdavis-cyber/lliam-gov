@@ -6,10 +6,12 @@
 
 ## ⚡ Governed Quick Install (macOS — demo/eval)
 
-One command provisions the full governed profile on a personal Mac (no CUI in scope). From the repo root:
+Provisions the full governed profile on a personal Mac (no CUI in scope). On a fresh machine, one-time: install the GitHub CLI, authenticate (the repo is **private**), then clone and run the installer:
 
 ```bash
-bash scripts/install-governed-macbook.sh
+brew install gh && gh auth login              # one-time — authorizes the private repo
+gh repo clone jdavis-cyber/lliam-gov && cd lliam-gov
+bash scripts/install-governed-macbook.sh      # provisions the governed profile
 ```
 
 It installs dependencies (`uv sync`), creates a private `~/.lliam-gov` workspace (`0700`), enables encryption-at-rest, the egress allowlist (deny-all default), and the capability + self-modification gates, writes a double-clickable `start-lliam-gov.command` launcher, and runs the fail-closed posture check (`production_posture_check()`). Then connect a model:
