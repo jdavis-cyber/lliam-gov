@@ -4,6 +4,23 @@
 
 > The remainder of this README (below) is upstream Hermes Agent's documentation. It is preserved verbatim because it is what's accurate about the agent runtime. Lliam-GOV-specific install, configure, operate, and governance docs live under `docs/install/`, `docs/configure/`, `docs/operate/`, and `docs/governance/` (added in Phase 4–5 of the Lliam-GOV build).
 
+## ⚡ Governed Quick Install (macOS — demo/eval)
+
+One command provisions the full governed profile on a personal Mac (no CUI in scope). From the repo root:
+
+```bash
+bash scripts/install-governed-macbook.sh
+```
+
+It installs dependencies (`uv sync`), creates a private `~/.lliam-gov` workspace (`0700`), enables encryption-at-rest, the egress allowlist (deny-all default), and the capability + self-modification gates, writes a double-clickable `start-lliam-gov.command` launcher, and runs the fail-closed posture check (`production_posture_check()`). Then connect a model:
+
+```bash
+source ~/.lliam-gov/governed-demo.env
+uv run hermes setup
+```
+
+> **Demo/eval only.** This profile waives the FIPS hard-gate via `LLIAM_GOV_ALLOW_NON_FIPS=1` because **no CUI is in scope** (POA&M AI-282). **Never** set it on a Katmai-managed or CUI-in-scope device — that is the full-production path and a separate controlled decision. Full operator reference: [`docs/operate/production-profile.md`](docs/operate/production-profile.md).
+
 ---
 
 <p align="center">
