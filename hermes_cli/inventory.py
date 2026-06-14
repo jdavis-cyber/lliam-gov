@@ -141,7 +141,7 @@ def build_models_payload(
     )
 
     if include_unconfigured:
-        rows = list(rows) + _append_unconfigured_rows(rows, ctx)
+        rows = list(rows) + _append_unconfigured_rows(rows, ctx, max_models=max_models)
     if picker_hints:
         _apply_picker_hints(rows)
     if canonical_order:
@@ -157,9 +157,28 @@ def build_models_payload(
 # ─── Internal: row post-processing ──────────────────────────────────────
 
 
-def _append_unconfigured_rows(rows: list[dict], ctx: ConfigContext) -> list[dict]:
+_CLI_BACKED_PROVIDER_HINTS = {
+    "anthropic": {
+        "name": "Claude Code CLI",
+        "auth_type": "cli_oauth",
+        "warning": "Use Claude Code CLI login or ANTHROPIC_API_KEY.",
+    },
+    "openai-codex": {
+        "name": "Codex CLI",
+        "auth_type": "cli_oauth",
+        "warning": "Uses your Codex CLI / ChatGPT login; no API key required.",
+    },
+    "google-gemini-cli": {
+        "name": "Gemini / Antigravity CLI",
+        "auth_type": "cli_oauth",
+        "warning": "Uses your Gemini or Antigravity CLI Google login; no API key required.",
+    },
+}
+
+
+def _append_unconfigured_rows(rows: list[dict], ctx: ConfigContext, *, max_models: int) -> list[dict]:
     """Build skeleton rows for canonical providers missing from ``rows``."""
-    from hermes_cli.models import CANONICAL_PROVIDERS, _PROVIDER_LABELS
+    from hermes_cli.models import CANONICAL_PROVIDERS, _PROVIDER_LABELS, _PROVIDER_MODELS
 
     seen = {r["slug"].lower() for r in rows}
     cur = (ctx.current_provider or "").lower()
@@ -167,14 +186,17 @@ def _append_unconfigured_rows(rows: list[dict], ctx: ConfigContext) -> list[dict
     for entry in CANONICAL_PROVIDERS:
         if entry.slug.lower() in seen:
             continue
+        cli_hint = _CLI_BACKED_PROVIDER_HINTS.get(entry.slug)
+        models = list(_PROVIDER_MODELS.get(entry.slug, [])) if cli_hint else []
+        top = models[:max_models] if max_models >= 0 else models
         extras.append(
             {
                 "slug": entry.slug,
-                "name": _PROVIDER_LABELS.get(entry.slug, entry.label),
+                "name": cli_hint.get("name") if cli_hint else _PROVIDER_LABELS.get(entry.slug, entry.label),
                 "is_current": entry.slug.lower() == cur,
                 "is_user_defined": False,
-                "models": [],
-                "total_models": 0,
+                "models": top,
+                "total_models": len(models),
                 "source": "canonical",
             }
         )
@@ -199,6 +221,14 @@ def _apply_picker_hints(rows: list[dict]) -> None:
         # _append_unconfigured_rows). The skeleton rows have empty
         # `models` AND source="canonical"; authenticated rows have
         # populated `models` OR a non-canonical source.
+        cli_hint = _CLI_BACKED_PROVIDER_HINTS.get(row["slug"])
+        if cli_hint:
+            row["authenticated"] = False
+            row["auth_type"] = cli_hint["auth_type"]
+            row["key_env"] = ""
+            row["warning"] = cli_hint["warning"]
+            continue
+
         is_skeleton = row.get("source") == "canonical" and not row.get("models")
         row["authenticated"] = not is_skeleton
         if not is_skeleton or row.get("is_user_defined"):

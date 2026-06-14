@@ -36,7 +36,7 @@ Usage:
     hermes honcho migrate                  # Step-by-step migration guide: OpenClaw native → Hermes + Honcho
     hermes version             Show version
     hermes update              Update to latest version
-    hermes uninstall           Uninstall Hermes Agent
+    hermes uninstall           Uninstall Lliam-GOV
     hermes acp                 Run as an ACP server for editor integration
     hermes sessions browse     Interactive session picker with search
 
@@ -103,7 +103,7 @@ def _print_fast_version_info() -> None:
     from hermes_cli import __release_date__, __version__
 
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-    print(f"Hermes Agent v{__version__} ({__release_date__})")
+    print(f"Lliam-GOV v{__version__} ({__release_date__})")
     print(f"Project: {project_root}")
     print(f"Python: {sys.version.split()[0]}")
 
@@ -1697,7 +1697,7 @@ def cmd_chat(args):
     if not _has_any_provider_configured():
         print()
         print(
-            "It looks like Hermes isn't configured yet -- no API keys or providers found."
+            "It looks like Lliam-GOV isn't configured yet -- no API keys or providers found."
         )
         print()
         print("  Run:  hermes setup")
@@ -2042,14 +2042,14 @@ def cmd_whatsapp(args):
             print("    2. Send a message to the bot's WhatsApp number")
             print("    3. The agent will reply automatically")
             print()
-            print("  Tip: Agent responses are prefixed with '⚕ Hermes Agent'")
+            print("  Tip: Agent responses are prefixed with '⚕ Lliam-GOV'")
         else:
             print("  Next steps:")
             print("    1. Start the gateway:  hermes gateway")
             print("    2. Open WhatsApp → Message Yourself")
             print("    3. Type a message — the agent will reply")
             print()
-            print("  Tip: Agent responses are prefixed with '⚕ Hermes Agent'")
+            print("  Tip: Agent responses are prefixed with '⚕ Lliam-GOV'")
             print("  so you can tell them apart from your own messages.")
         print()
         print("  Or install as a service: hermes gateway install")
@@ -6270,7 +6270,7 @@ def cmd_import(args):
 
 
 def _print_version_info(*, check_updates: bool = True) -> None:
-    print(f"Hermes Agent v{__version__} ({__release_date__})")
+    print(f"Lliam-GOV v{__version__} ({__release_date__})")
     print(f"Project: {PROJECT_ROOT}")
 
     # Show Python version
@@ -6316,7 +6316,7 @@ def cmd_version(args):
 
 
 def cmd_uninstall(args):
-    """Uninstall Hermes Agent."""
+    """Uninstall Lliam-GOV."""
     _require_tty("uninstall")
     from hermes_cli.uninstall import run_uninstall
 
@@ -6665,6 +6665,157 @@ def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
     return True
 
 
+def _desktop_dist_exists(desktop_dir: Path) -> bool:
+    """Return True when a local desktop renderer build is present."""
+
+    return (desktop_dir / "dist" / "index.html").exists()
+
+
+def _desktop_packaged_executable(desktop_dir: Path) -> Optional[Path]:
+    """Return the current platform's unpacked Electron app executable."""
+
+    release_dir = desktop_dir / "release"
+    if sys.platform == "darwin":
+        candidates = [
+            *release_dir.glob("mac*/Lliam-GOV.app/Contents/MacOS/Lliam-GOV"),
+            *release_dir.glob("mac*/Hermes.app/Contents/MacOS/Hermes"),
+        ]
+    elif sys.platform == "win32":
+        candidates = [
+            release_dir / "win-unpacked" / "Lliam-GOV.exe",
+            release_dir / "win-ia32-unpacked" / "Lliam-GOV.exe",
+            release_dir / "win-arm64-unpacked" / "Lliam-GOV.exe",
+            release_dir / "win-unpacked" / "Hermes.exe",
+            release_dir / "win-ia32-unpacked" / "Hermes.exe",
+            release_dir / "win-arm64-unpacked" / "Hermes.exe",
+        ]
+    else:
+        candidates = [
+            release_dir / "linux-unpacked" / "lliam-gov",
+            release_dir / "linux-unpacked" / "Lliam-GOV",
+            release_dir / "linux-unpacked" / "hermes",
+            release_dir / "linux-unpacked" / "Hermes",
+            release_dir / "linux-arm64-unpacked" / "lliam-gov",
+            release_dir / "linux-arm64-unpacked" / "Lliam-GOV",
+            release_dir / "linux-arm64-unpacked" / "hermes",
+            release_dir / "linux-arm64-unpacked" / "Hermes",
+        ]
+
+    existing = [p for p in candidates if p.exists()]
+    if not existing:
+        return None
+    return max(existing, key=lambda p: p.stat().st_mtime)
+
+
+def cmd_desktop(args: argparse.Namespace):
+    """Build and launch the native Electron desktop app."""
+
+    desktop_dir = PROJECT_ROOT / "apps" / "desktop"
+    if not (desktop_dir / "package.json").exists():
+        print(f"Desktop app source not found at: {desktop_dir}")
+        sys.exit(1)
+
+    npm = shutil.which("npm")
+    source_mode = bool(getattr(args, "source", False))
+    skip_build = bool(getattr(args, "skip_build", False))
+    force_build = bool(getattr(args, "force_build", False))
+    build_only = bool(getattr(args, "build_only", False))
+
+    env = os.environ.copy()
+    env.setdefault("HERMES_DESKTOP_HERMES_ROOT", str(PROJECT_ROOT))
+    if getattr(args, "fake_boot", False):
+        env["HERMES_DESKTOP_BOOT_FAKE"] = "1"
+    if getattr(args, "ignore_existing", False):
+        env["HERMES_DESKTOP_IGNORE_EXISTING"] = "1"
+    if getattr(args, "cwd", None):
+        env["HERMES_DESKTOP_CWD"] = str(Path(args.cwd).expanduser().resolve())
+
+    if not skip_build:
+        if not npm:
+            print("Desktop app requires Node.js/npm, but npm was not found on PATH.")
+            print("Install Node.js, then run: lliam-gov desktop")
+            sys.exit(1)
+
+        print("→ Installing desktop workspace dependencies...")
+        install_result = _run_npm_install_deterministic(
+            npm,
+            PROJECT_ROOT,
+            extra_args=("--workspace", "apps/desktop"),
+            capture_output=False,
+        )
+        if install_result.returncode != 0:
+            print("✗ Desktop dependency install failed")
+            print(f"  Run manually:  cd {PROJECT_ROOT} && npm install --workspace apps/desktop")
+            sys.exit(install_result.returncode or 1)
+
+        build_script = "build" if source_mode else "pack"
+        print(
+            "→ Force-building desktop app..."
+            if force_build
+            else f"→ Building desktop {'source bundle' if source_mode else 'packaged app'}..."
+        )
+        build_result = subprocess.run(
+            [npm, "run", build_script],
+            cwd=desktop_dir,
+            env=env,
+            check=False,
+        )
+        if build_result.returncode != 0:
+            print("✗ Desktop build failed")
+            print(f"  Run manually:  cd apps/desktop && npm run {build_script}")
+            sys.exit(build_result.returncode or 1)
+    elif source_mode and not _desktop_dist_exists(desktop_dir):
+        print(f"✗ --skip-build --source was passed but no desktop dist found at: {desktop_dir / 'dist'}")
+        print("  Pre-build first:  cd apps/desktop && npm run build")
+        sys.exit(1)
+    elif not source_mode and _desktop_packaged_executable(desktop_dir) is None:
+        print(f"✗ --skip-build was passed but no packaged desktop app was found at: {desktop_dir / 'release'}")
+        print("  Pre-build first:  cd apps/desktop && npm run pack")
+        sys.exit(1)
+
+    if build_only:
+        if source_mode:
+            if not _desktop_dist_exists(desktop_dir):
+                print(f"✗ --build-only --source produced no dist at: {desktop_dir / 'dist'}")
+                sys.exit(1)
+            print(f"✓ Desktop source build ready at {desktop_dir / 'dist'}")
+        else:
+            packaged_executable = _desktop_packaged_executable(desktop_dir)
+            if packaged_executable is None:
+                print(f"✗ --build-only produced no launchable app at: {desktop_dir / 'release'}")
+                sys.exit(1)
+            print(f"✓ Desktop packaged app ready: {packaged_executable}")
+        return
+
+    if not npm:
+        print("Desktop app requires Node.js/npm, but npm was not found on PATH.")
+        sys.exit(1)
+
+    if source_mode:
+        print("→ Launching Lliam-GOV Desktop from source build...")
+        launch_result = subprocess.run(
+            [npm, "exec", "--", "electron", "."],
+            cwd=desktop_dir,
+            env=env,
+            check=False,
+        )
+        sys.exit(launch_result.returncode)
+
+    packaged_executable = _desktop_packaged_executable(desktop_dir)
+    if packaged_executable is None:
+        print(f"✗ Desktop package build completed but no launchable app was found at: {desktop_dir / 'release'}")
+        sys.exit(1)
+
+    print(f"→ Launching packaged Lliam-GOV Desktop: {packaged_executable}")
+    launch_result = subprocess.run(
+        [str(packaged_executable)],
+        cwd=desktop_dir,
+        env=env,
+        check=False,
+    )
+    sys.exit(launch_result.returncode)
+
+
 def _find_stale_dashboard_pids() -> list[int]:
     """Return PIDs of ``hermes dashboard`` processes other than ourselves.
 
@@ -6990,7 +7141,7 @@ _warn_stale_dashboard_processes = _kill_stale_dashboard_processes
 
 
 def _update_via_zip(args):
-    """Update Hermes Agent by downloading a ZIP archive.
+    """Update Lliam-GOV by downloading a ZIP archive.
 
     Used on Windows when git file I/O is broken (antivirus, NTFS filter
     drivers causing 'Invalid argument' errors on file creation).
@@ -8543,7 +8694,7 @@ def _ensure_fhs_path_guard() -> None:
 
     path_line = 'export PATH="/usr/local/bin:$PATH"'
     path_comment = (
-        "# Hermes Agent — ensure /usr/local/bin is on PATH " "(RHEL non-login shells)"
+        "# Lliam-GOV — ensure /usr/local/bin is on PATH " "(RHEL non-login shells)"
     )
     wrote_any = False
     for candidate in (".bashrc", ".bash_profile"):
@@ -8673,7 +8824,7 @@ def _run_pre_update_backup(args) -> None:
 
 
 def cmd_update(args):
-    """Update Hermes Agent to the latest version.
+    """Update Lliam-GOV to the latest version.
 
     Thin wrapper around ``_cmd_update_impl``: installs hangup protection,
     runs the update, then restores stdio on the way out (even on
@@ -8682,7 +8833,7 @@ def cmd_update(args):
     from hermes_cli.config import is_managed, managed_error
 
     if is_managed():
-        managed_error("update Hermes Agent")
+        managed_error("update Lliam-GOV")
         return
 
     if getattr(args, "check", False):
@@ -8734,7 +8885,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
     )
     assume_yes = bool(getattr(args, "yes", False))
 
-    print("⚕ Updating Hermes Agent...")
+    print("⚕ Updating Lliam-GOV...")
     print()
 
     # On Windows, abort early if another hermes.exe is holding the venv shim
@@ -10669,8 +10820,8 @@ def cmd_dashboard(args):
         print(
             f"Re-install the package into this interpreter so metadata updates apply:\n"
             f"  cd {PROJECT_ROOT}\n"
-            f"  {sys.executable} -m pip install -e .\n"
-            "If `pip` is missing in this venv, use:  uv pip install -e ."
+            f"  {sys.executable} -m pip install -e '.[web]'\n"
+            "If `pip` is missing in this venv, use:  uv pip install -e '.[web]'"
         )
         print(f"Import error: {e}")
         sys.exit(1)
@@ -11485,7 +11636,7 @@ def main():
     setup_parser = subparsers.add_parser(
         "setup",
         help="Interactive setup wizard",
-        description="Configure Hermes Agent with an interactive wizard. "
+        description="Configure Lliam-GOV with an interactive wizard. "
         "Run a specific section: hermes setup model|tts|terminal|gateway|tools|agent",
     )
     setup_parser.add_argument(
@@ -11765,7 +11916,7 @@ def main():
     status_parser = subparsers.add_parser(
         "status",
         help="Show status of all components",
-        description="Display status of Hermes Agent components",
+        description="Display status of Lliam-GOV components",
     )
     status_parser.add_argument(
         "--all", action="store_true", help="Show all details (redacted for sharing)"
@@ -12085,7 +12236,7 @@ def main():
     doctor_parser = subparsers.add_parser(
         "doctor",
         help="Check configuration and dependencies",
-        description="Diagnose issues with Hermes Agent setup",
+        description="Diagnose issues with Lliam-GOV setup",
     )
     doctor_parser.add_argument(
         "--fix", action="store_true", help="Attempt to fix issues automatically"
@@ -12195,7 +12346,7 @@ def main():
     debug_parser = subparsers.add_parser(
         "debug",
         help="Debug tools — upload logs and system info for support",
-        description="Debug utilities for Hermes Agent. Use 'hermes debug share' to "
+        description="Debug utilities for Lliam-GOV. Use 'hermes debug share' to "
         "upload a debug report (system info + recent logs) to a paste "
         "service and get a shareable URL.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -12318,7 +12469,7 @@ Examples:
     config_parser = subparsers.add_parser(
         "config",
         help="View and edit configuration",
-        description="Manage Hermes Agent configuration",
+        description="Manage Lliam-GOV configuration",
     )
     config_subparsers = config_parser.add_subparsers(dest="config_command")
 
@@ -13434,7 +13585,7 @@ Examples:
     # =========================================================================
     update_parser = subparsers.add_parser(
         "update",
-        help="Update Hermes Agent to the latest version",
+        help="Update Lliam-GOV to the latest version",
         description="Pull the latest changes from git and reinstall dependencies",
     )
     update_parser.add_argument(
@@ -13481,8 +13632,8 @@ Examples:
     # =========================================================================
     uninstall_parser = subparsers.add_parser(
         "uninstall",
-        help="Uninstall Hermes Agent",
-        description="Remove Hermes Agent from your system. Can keep configs/data for reinstall.",
+        help="Uninstall Lliam-GOV",
+        description="Remove Lliam-GOV from your system. Can keep configs/data for reinstall.",
     )
     uninstall_parser.add_argument(
         "--full",
@@ -13499,8 +13650,8 @@ Examples:
     # =========================================================================
     acp_parser = subparsers.add_parser(
         "acp",
-        help="Run Hermes Agent as an ACP (Agent Client Protocol) server",
-        description="Start Hermes Agent in ACP mode for editor integration (VS Code, Zed, JetBrains)",
+        help="Run Lliam-GOV as an ACP (Agent Client Protocol) server",
+        description="Start Lliam-GOV in ACP mode for editor integration (VS Code, Zed, JetBrains)",
     )
     _add_accept_hooks_flag(acp_parser)
     acp_parser.add_argument(
@@ -13535,7 +13686,7 @@ Examples:
     )
 
     def cmd_acp(args):
-        """Launch Hermes Agent as an ACP server."""
+        """Launch Lliam-GOV as an ACP server."""
         try:
             from acp_adapter.entry import main as acp_main
 
@@ -13771,7 +13922,7 @@ Examples:
     dashboard_parser = subparsers.add_parser(
         "dashboard",
         help="Start the web UI dashboard",
-        description="Launch the Hermes Agent web dashboard for managing config, API keys, and sessions",
+        description="Launch the Lliam-GOV web dashboard for managing config, API keys, and sessions",
     )
     dashboard_parser.add_argument(
         "--port", type=int, default=9119, help="Port (default 9119)"
@@ -13819,6 +13970,51 @@ Examples:
         help="List running hermes dashboard processes and exit",
     )
     dashboard_parser.set_defaults(func=cmd_dashboard)
+
+    # =========================================================================
+    # desktop command
+    # =========================================================================
+    desktop_parser = subparsers.add_parser(
+        "desktop",
+        aliases=["gui"],
+        help="Build and launch the native desktop app",
+        description="Build and launch the Lliam-GOV Electron desktop app",
+    )
+    desktop_parser.add_argument(
+        "--source",
+        action="store_true",
+        help="Build the renderer and launch Electron from source instead of packaging an app bundle",
+    )
+    desktop_parser.add_argument(
+        "--skip-build",
+        action="store_true",
+        help="Launch an existing build from apps/desktop without rebuilding",
+    )
+    desktop_parser.add_argument(
+        "--force-build",
+        action="store_true",
+        help="Rebuild even when an existing build is present",
+    )
+    desktop_parser.add_argument(
+        "--build-only",
+        action="store_true",
+        help="Build the desktop app and exit without launching it",
+    )
+    desktop_parser.add_argument(
+        "--fake-boot",
+        action="store_true",
+        help="Exercise the desktop boot overlay without starting a real backend",
+    )
+    desktop_parser.add_argument(
+        "--ignore-existing",
+        action="store_true",
+        help="Ignore an existing install and run first-launch bootstrap checks",
+    )
+    desktop_parser.add_argument(
+        "--cwd",
+        help="Working directory to open in the desktop app",
+    )
+    desktop_parser.set_defaults(func=cmd_desktop)
 
     # =========================================================================
     # logs command
