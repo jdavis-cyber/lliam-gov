@@ -51,7 +51,24 @@ chmod 700 "$HERMES_HOME"
 # 4 — egress allowlist (deny-all is the default) -----------------------------
 ALLOW="$HERMES_HOME/egress-allowlist.txt"
 if [ ! -f "$ALLOW" ]; then
-  printf '# One host[:port] per line. Deny-all is the default — add only what you need.\napi.anthropic.com:443\n' > "$ALLOW"
+  # Deny-all is the default. Seed exactly the endpoints the three supported
+  # provider CLIs (Claude Code / Codex / Gemini) need to authenticate and run
+  # inference — nothing else. Without these, a Codex or Gemini turn fails
+  # fail-closed with "… is not on the Lliam-GOV allowlist" even though the
+  # provider shows "Ready". Add your own hosts below as needed.
+  cat > "$ALLOW" <<'ALLOWEOF'
+# One host[:port] per line. Deny-all is the default — add only what you need.
+# --- Anthropic / Claude Code ---
+api.anthropic.com:443
+console.anthropic.com:443
+platform.claude.com:443
+# --- OpenAI Codex (ChatGPT backend + OAuth refresh) ---
+chatgpt.com:443
+auth.openai.com:443
+# --- Google Gemini CLI (Cloud Code inference + OAuth refresh) ---
+cloudcode-pa.googleapis.com:443
+oauth2.googleapis.com:443
+ALLOWEOF
   say "   • seeded egress allowlist: $ALLOW"
 fi
 

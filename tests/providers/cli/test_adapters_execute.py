@@ -61,7 +61,12 @@ def test_adapter_executes_real_subprocess(tmp_path, cls, binary, cred_rel):
 @pytest.mark.parametrize("cls,binary,cred_rel", ADAPTERS)
 def test_adapter_execute_blocked_when_not_authenticated(tmp_path, cls, binary, cred_rel):
     binp = _fake_bin(tmp_path, binary)
-    provider = cls(which=lambda n: str(binp), run=_run_version, home=tmp_path, env={})
+    kwargs = dict(which=lambda n: str(binp), run=_run_version, home=tmp_path, env={})
+    if cls is ClaudeCodeCLIProvider:
+        # Stub the macOS Keychain touchpoint so a real "Claude Code-credentials"
+        # entry on the test host can't leak in (presence-only probe, AI-334).
+        kwargs["keychain_probe"] = lambda: False
+    provider = cls(**kwargs)
     provider.BINARY = str(binp)
     # No credentials written → not authenticated → execution refused cleanly.
     res = provider.execute(ExecutionRequest(prompt="ping"))

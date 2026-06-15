@@ -26,9 +26,22 @@ def _run_version(argv):
     return subprocess.CompletedProcess(argv, 0, stdout="1.0.42 (Claude Code)\n", stderr="")
 
 
-def _make(tmp_path: Path, *, which=_which_found, run=_run_version, env=None, auth_probe=None):
+def _make(
+    tmp_path: Path,
+    *,
+    which=_which_found,
+    run=_run_version,
+    env=None,
+    auth_probe=None,
+    keychain_probe=lambda: False,
+):
     return ClaudeCodeCLIProvider(
-        which=which, run=run, home=tmp_path, env=env or {}, auth_probe=auth_probe
+        which=which,
+        run=run,
+        home=tmp_path,
+        env=env or {},
+        auth_probe=auth_probe,
+        keychain_probe=keychain_probe,
     )
 
 
@@ -66,6 +79,14 @@ def test_not_authenticated_when_no_credentials(tmp_path):
     report = _make(tmp_path).probe()
     assert report.readiness is Readiness.NOT_AUTHENTICATED
     assert report.setup_hint == "claude setup-token"
+
+
+def test_ready_when_credentials_in_macos_keychain(tmp_path):
+    """Claude Code >=2.1.114 stores creds in the Keychain, not the JSON file."""
+    report = _make(tmp_path, keychain_probe=lambda: True).probe()
+    assert report.readiness is Readiness.READY
+    assert report.auth.authenticated is True
+    assert report.auth.source == "claude_code_cli_keychain"
 
 
 def test_not_installed_short_circuits_auth(tmp_path):

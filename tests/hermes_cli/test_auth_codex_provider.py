@@ -69,6 +69,9 @@ def test_read_codex_tokens_missing(tmp_path, monkeypatch):
     # Empty auth store
     (hermes_home / "auth.json").write_text(json.dumps({"version": 1, "providers": {}}))
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+    # Point the Codex CLI credential file at an empty dir so the read-only
+    # bridge (~/.codex/auth.json) finds nothing and the "missing" path holds.
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "no-codex"))
 
     with pytest.raises(AuthError) as exc:
         _read_codex_tokens()

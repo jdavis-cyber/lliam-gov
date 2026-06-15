@@ -33,6 +33,9 @@ WhichFn = Callable[[str], "str | None"]
 RunFn = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 # Optional CLI-driven auth probe: returns "ok" | "expired" | "unauthenticated".
 AuthProbeFn = Callable[[], str]
+# Optional macOS Keychain presence probe: returns True if the Claude Code
+# credential item exists (presence only — never reads the secret value).
+KeychainProbeFn = Callable[[], bool]
 
 
 def _default_run(argv: list[str]) -> "subprocess.CompletedProcess[str]":
@@ -55,12 +58,14 @@ class ClaudeCodeCLIProvider(BaseCLIProvider):
         home: Path | None = None,
         env: Mapping[str, str] | None = None,
         auth_probe: AuthProbeFn | None = None,
+        keychain_probe: KeychainProbeFn | None = None,
     ) -> None:
         self._which = which or shutil.which
         self._run = run or _default_run
         self._home = home or Path.home()
         self._env = env if env is not None else os.environ
         self._auth_probe = auth_probe
+        self._keychain_probe = keychain_probe
 
     @property
     def capabilities(self) -> ProviderCapabilities:
@@ -90,6 +95,36 @@ class ClaudeCodeCLIProvider(BaseCLIProvider):
     def _credentials_path(self) -> Path:
         return self._home / ".claude" / ".credentials.json"
 
+    def _keychain_credentials_present(self) -> bool:
+        """Presence-only check for the macOS Keychain credential (AI-334).
+
+        Claude Code >=2.1.114 stores its OAuth credential in the login Keychain
+        under the service "Claude Code-credentials" instead of writing
+        ~/.claude/.credentials.json. We query *without* ``-w`` so the secret
+        value is never read — only the item's existence (exit code) is observed.
+        Without this, a Mac user who is signed in via the Keychain is wrongly
+        reported as "Needs sign-in".
+        """
+        if self._keychain_probe is not None:
+            return bool(self._keychain_probe())
+
+        import sys
+
+        if sys.platform != "darwin":
+            return False
+        try:
+            # No "-w": we read the item's existence (exit code) only, never the
+            # secret value (AI-334).
+            proc = subprocess.run(
+                ["security", "find-generic-password", "-s", "Claude Code-credentials"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return proc.returncode == 0
+
     def check_auth(self) -> AuthResult:
         """Infer auth state from credential *presence* — never token contents.
 
@@ -113,6 +148,13 @@ class ClaudeCodeCLIProvider(BaseCLIProvider):
                 True,
                 source="claude_code_cli_credentials",
                 detail="Found ~/.claude/.credentials.json",
+            )
+
+        if self._keychain_credentials_present():
+            return AuthResult(
+                True,
+                source="claude_code_cli_keychain",
+                detail="Found 'Claude Code-credentials' in macOS Keychain",
             )
 
         # Presence check only — the value is never read or stored (AI-334).

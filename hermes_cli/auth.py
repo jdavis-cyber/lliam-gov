@@ -3231,12 +3231,21 @@ def _read_codex_tokens(*, _lock: bool = True) -> Dict[str, Any]:
         auth_store = _load_auth_store()
     state = _load_provider_state(auth_store, "openai-codex")
     if not state:
-        raise AuthError(
-            "No Codex credentials stored. Run `hermes auth` to authenticate.",
-            provider="openai-codex",
-            code="codex_auth_missing",
-            relogin_required=True,
-        )
+        # Bridge: on a fresh install Hermes has no Codex tokens of its own yet.
+        # Fall back to the Codex CLI's own credential file (~/.codex/auth.json),
+        # read-only, so signing in with `codex login` is all the user needs —
+        # matching the installer's promise and the "Ready" status. The first
+        # refresh persists a copy into Hermes's own store.
+        imported = _import_codex_cli_tokens()
+        if imported:
+            state = {"tokens": imported, "last_refresh": None}
+        else:
+            raise AuthError(
+                "No Codex credentials stored. Run `codex login` (or `hermes auth`) to authenticate.",
+                provider="openai-codex",
+                code="codex_auth_missing",
+                relogin_required=True,
+            )
     tokens = state.get("tokens")
     if not isinstance(tokens, dict):
         raise AuthError(
