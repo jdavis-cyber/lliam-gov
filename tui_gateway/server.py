@@ -1419,6 +1419,13 @@ def _current_profile_name() -> str:
         return "default"
 
 
+# Backend<->desktop RPC contract level. Reported to the desktop in
+# session.info so it can warn on GUI<->backend skew. Bump when the RPC surface
+# the desktop relies on changes. v2 adds the file.attach RPC (arbitrary
+# non-image file attachment for both local and remote gateways).
+DESKTOP_BACKEND_CONTRACT = 2
+
+
 def _session_info(agent) -> dict:
     reasoning_config = getattr(agent, "reasoning_config", None)
     reasoning_effort = ""
@@ -1430,6 +1437,7 @@ def _session_info(agent) -> dict:
     service_tier = getattr(agent, "service_tier", None) or ""
     info: dict = {
         "model": getattr(agent, "model", ""),
+        "desktop_contract": DESKTOP_BACKEND_CONTRACT,
         "reasoning_effort": reasoning_effort,
         "service_tier": service_tier,
         "fast": service_tier == "priority",
@@ -3748,6 +3756,72 @@ def _(rid, params: dict) -> dict:
         )
     except Exception as e:
         return _err(rid, 5027, str(e))
+
+
+@method("file.attach")
+def _(rid, params: dict) -> dict:
+    """Attach an arbitrary (non-image) file to the session as an @file: ref.
+
+    Contract v2. Local mode: the gateway shares the caller's disk, so we copy
+    the file into the workspace attachment dir so the resulting @file: ref
+    resolves inside the allowed root. Remote mode: the caller uploads bytes via
+    ``data_url`` and we materialise them server-side. Either way we return a
+    workspace-relative ``ref_text`` the desktop injects into the prompt.
+    """
+    session, err = _sess(params, rid)
+    if err:
+        return err
+
+    name = str(params.get("name", "") or "").strip()
+    raw_path = str(params.get("path", "") or "").strip()
+    data_url = params.get("data_url")
+    if not name and raw_path:
+        name = os.path.basename(raw_path)
+    name = os.path.basename(name)  # strip any path components defensively
+    if not name:
+        return _err(rid, 4015, "name or path required")
+
+    workspace = Path(os.environ.get("TERMINAL_CWD", os.getcwd())).expanduser().resolve()
+    attach_dir = workspace / ".hermes" / "desktop-attachments"
+    try:
+        attach_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        return _err(rid, 5027, f"cannot create attachment dir: {e}")
+    dest = attach_dir / name
+
+    uploaded = False
+    try:
+        if data_url:
+            import base64
+
+            payload = data_url.split(",", 1)[1] if "," in data_url else data_url
+            dest.write_bytes(base64.b64decode(payload))
+            uploaded = True
+        else:
+            src = Path(raw_path).expanduser()
+            if not src.is_file():
+                return _err(rid, 4016, f"file not found: {raw_path}")
+            if src.resolve() != dest.resolve():
+                import shutil
+
+                shutil.copyfile(src, dest)
+    except Exception as e:
+        return _err(rid, 5027, f"attach failed: {e}")
+
+    try:
+        ref_target = str(dest.relative_to(workspace))
+    except Exception:
+        ref_target = str(dest)
+    return _ok(
+        rid,
+        {
+            "attached": True,
+            "path": str(dest),
+            "name": name,
+            "ref_text": f"@file:{ref_target}",
+            "uploaded": uploaded,
+        },
+    )
 
 
 @method("input.detect_drop")

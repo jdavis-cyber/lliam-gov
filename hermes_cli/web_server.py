@@ -3295,6 +3295,389 @@ async def get_toolsets():
 
 
 # ---------------------------------------------------------------------------
+# Toolset detail / config / provider / post-setup endpoints
+#
+# These back the desktop "Skills & Tools" panel. They expose the same toolset
+# configuration surface the `hermes tools` CLI drives, so the OWNER can enable
+# or disable toolsets and pick providers from the GUI. This is owner-initiated
+# config over an authenticated localhost API — distinct from (and unaffected
+# by) the agent's runtime self-modification gate.
+# ---------------------------------------------------------------------------
+
+
+class ToolsetToggle(BaseModel):
+    enabled: bool
+
+
+class ToolsetProviderSelect(BaseModel):
+    provider: str
+
+
+class ToolsetPostSetup(BaseModel):
+    key: str
+
+
+def _env_value(key: str):
+    """Read an env var via the config layer (falls back to os.environ)."""
+    try:
+        from hermes_cli.config import get_env_value
+        return get_env_value(key)
+    except Exception:
+        return os.environ.get(key)
+
+
+@app.put("/api/tools/toolsets/{name}")
+async def toggle_toolset(name: str, body: ToolsetToggle):
+    """Enable or disable a configurable toolset for the CLI platform.
+
+    Owner-facing capability switch. Mirrors the `hermes tools` checklist:
+    read the current selection, flip one entry, persist it.
+    """
+    from hermes_cli.tools_config import (
+        _get_effective_configurable_toolsets,
+        _get_platform_tools,
+        _save_platform_tools,
+    )
+
+    configurable = {k for k, _, _ in _get_effective_configurable_toolsets()}
+    if name not in configurable:
+        raise HTTPException(status_code=404, detail=f"Unknown toolset: {name}")
+
+    config = load_config()
+    selected = set(
+        _get_platform_tools(config, "cli", include_default_mcp_servers=False)
+    ) & configurable
+    if body.enabled:
+        selected.add(name)
+    else:
+        selected.discard(name)
+    _save_platform_tools(config, "cli", selected)
+    return {"ok": True, "name": name, "enabled": body.enabled}
+
+
+@app.get("/api/tools/toolsets/{name}/config")
+async def get_toolset_config(name: str):
+    """Return provider/config detail for one toolset (Skills & Tools panel).
+
+    Toolsets without a provider category (e.g. ``cronjob``) return an empty
+    provider list with ``has_category=False`` — the panel renders these as
+    "no configuration required" rather than erroring.
+    """
+    from hermes_cli.tools_config import (
+        TOOL_CATEGORIES,
+        _get_effective_configurable_toolsets,
+        _is_provider_active,
+        _visible_providers,
+    )
+
+    valid = {k for k, _, _ in _get_effective_configurable_toolsets()}
+    if name not in valid:
+        raise HTTPException(status_code=404, detail=f"Unknown toolset: {name}")
+
+    config = load_config()
+    cat = TOOL_CATEGORIES.get(name)
+    providers_out: List[dict] = []
+    active_provider: Optional[str] = None
+
+    if cat:
+        for p in _visible_providers(cat, config):
+            env_vars = []
+            for e in (p.get("env_vars", []) or []):
+                k = e.get("key", "")
+                env_vars.append({
+                    "key": k,
+                    "prompt": e.get("prompt", ""),
+                    "url": e.get("url"),
+                    "default": e.get("default"),
+                    "is_set": bool(_env_value(k)) if k else False,
+                })
+            try:
+                is_active = bool(_is_provider_active(p, config))
+            except Exception:
+                is_active = False
+            pname = p.get("name", "")
+            if is_active and active_provider is None:
+                active_provider = pname
+            providers_out.append({
+                "name": pname,
+                "badge": p.get("badge", ""),
+                "tag": p.get("tag", ""),
+                "env_vars": env_vars,
+                "post_setup": p.get("post_setup"),
+                "requires_nous_auth": bool(p.get("requires_nous_auth", False)),
+                "is_active": is_active,
+            })
+
+    return {
+        "name": name,
+        "has_category": cat is not None,
+        "providers": providers_out,
+        "active_provider": active_provider,
+    }
+
+
+@app.put("/api/tools/toolsets/{name}/provider")
+async def select_toolset_provider(name: str, body: ToolsetProviderSelect):
+    """Set the active provider for a provider-backed toolset (non-interactive).
+
+    Writes only the provider-selection config keys that the CLI's
+    ``_configure_provider`` would write; it does not prompt for or persist
+    secrets (that happens via the env editor) and does not run post-setup.
+    """
+    from hermes_cli.tools_config import TOOL_CATEGORIES, _visible_providers
+
+    cat = TOOL_CATEGORIES.get(name)
+    if not cat:
+        raise HTTPException(status_code=404, detail=f"Toolset has no providers: {name}")
+
+    config = load_config()
+    provider = next(
+        (p for p in _visible_providers(cat, config) if p.get("name") == body.provider),
+        None,
+    )
+    if provider is None:
+        raise HTTPException(status_code=404, detail=f"Unknown provider: {body.provider}")
+
+    managed = provider.get("managed_nous_feature")
+    if provider.get("tts_provider"):
+        sec = config.setdefault("tts", {})
+        sec["provider"] = provider["tts_provider"]
+        sec["use_gateway"] = bool(managed)
+    elif "browser_provider" in provider:
+        sec = config.setdefault("browser", {})
+        sec["cloud_provider"] = provider["browser_provider"]
+        sec["use_gateway"] = bool(managed)
+    elif provider.get("web_backend"):
+        sec = config.setdefault("web", {})
+        sec["backend"] = provider["web_backend"]
+        sec["use_gateway"] = bool(managed)
+    elif provider.get("image_gen_plugin_name"):
+        config.setdefault("image_gen", {})["provider"] = provider["image_gen_plugin_name"]
+    elif provider.get("video_gen_plugin_name"):
+        config.setdefault("video_gen", {})["provider"] = provider["video_gen_plugin_name"]
+    elif managed:
+        config.setdefault(managed, {})["use_gateway"] = True
+    save_config(config)
+    return {"ok": True, "name": name, "provider": body.provider}
+
+
+@app.post("/api/tools/toolsets/{name}/post-setup")
+async def run_toolset_post_setup(name: str, body: ToolsetPostSetup):
+    """Spawn a provider post-setup install hook (npm/pip/binary) detached.
+
+    Returns an ``ActionResponse`` whose ``name`` can be polled via
+    ``/api/actions/{name}/status`` to tail install output.
+    """
+    action = f"toolset-postsetup-{name}-{body.key}"
+    log_name = f"{action}.log"
+    _ACTION_LOG_FILES[action] = log_name
+    _ACTION_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = _ACTION_LOG_DIR / log_name
+    log_file = open(log_path, "ab", buffering=0)
+    log_file.write(
+        f"\n=== {action} started {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n".encode()
+    )
+    code = (
+        "from hermes_cli.tools_config import _run_post_setup; "
+        f"_run_post_setup({body.key!r})"
+    )
+    popen_kwargs: Dict[str, Any] = {
+        "cwd": str(PROJECT_ROOT),
+        "stdin": subprocess.DEVNULL,
+        "stdout": log_file,
+        "stderr": subprocess.STDOUT,
+        "env": {**os.environ, "HERMES_NONINTERACTIVE": "1"},
+    }
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = (
+            subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+            | getattr(subprocess, "DETACHED_PROCESS", 0)
+        )
+    else:
+        popen_kwargs["start_new_session"] = True
+    try:
+        proc = subprocess.Popen([sys.executable, "-c", code], **popen_kwargs)
+    except Exception as exc:
+        _log.exception("Failed to spawn toolset post-setup")
+        raise HTTPException(status_code=500, detail=f"post-setup failed: {exc}")
+    _ACTION_PROCS[action] = proc
+    return {"ok": True, "name": action, "pid": proc.pid, "key": body.key}
+
+
+# ---------------------------------------------------------------------------
+# Messaging platform endpoints (desktop "Messaging" panel)
+#
+# Surface the same per-platform setup metadata the `hermes setup gateway` CLI
+# uses (`_PLATFORMS` / `_all_platforms`), plus live gateway status, so the
+# owner can configure messaging channels from the GUI.
+# ---------------------------------------------------------------------------
+
+
+class MessagingPlatformUpdateBody(BaseModel):
+    enabled: Optional[bool] = None
+    env: Optional[Dict[str, str]] = None
+    clear_env: Optional[List[str]] = None
+
+
+def _messaging_platform_vars(p: dict) -> list:
+    """Return the env-var setup rows for a platform, synthesising a minimal
+    row from the token var / plugin required_env when the platform has no
+    explicit ``vars`` block."""
+    vars_ = p.get("vars")
+    if vars_:
+        return vars_
+    out = []
+    entry = p.get("_registry_entry")
+    if entry is not None:
+        for key in (getattr(entry, "required_env", None) or []):
+            out.append({"name": key, "prompt": key, "password": True})
+    elif p.get("token_var"):
+        out.append({"name": p["token_var"], "prompt": p["token_var"], "password": True})
+    return out
+
+
+def _build_messaging_platform(p: dict, config: dict) -> dict:
+    from hermes_cli.gateway import _platform_status
+
+    key = p["key"]
+    token_var = p.get("token_var", "")
+    status_str = _platform_status(p) or ""
+    configured = bool(status_str) and not status_str.startswith("not configured")
+
+    explicit = cfg_get(config, "platforms", key, "enabled")
+    if explicit is None:
+        explicit = cfg_get(config, key, "enabled")
+    enabled = configured if explicit is None else bool(explicit)
+
+    env_vars = []
+    for v in _messaging_platform_vars(p):
+        vkey = v.get("name", "")
+        val = _env_value(vkey) if vkey else None
+        is_password = bool(v.get("password", False))
+        if val:
+            redacted = redact_key(val) if is_password else val
+        else:
+            redacted = None
+        env_vars.append({
+            "key": vkey,
+            "prompt": v.get("prompt", vkey),
+            "description": v.get("help", ""),
+            "required": vkey == token_var,
+            "is_password": is_password,
+            "is_set": bool(val),
+            "redacted_value": redacted,
+            "advanced": bool(v.get("advanced", False)),
+            "url": v.get("url"),
+        })
+
+    label = p.get("label", key)
+    emoji = p.get("emoji", "")
+    name = f"{emoji} {label}".strip() if emoji else label
+
+    return {
+        "id": key,
+        "name": name,
+        "description": "",
+        "docs_url": "",
+        "configured": configured,
+        "enabled": enabled,
+        "env_vars": env_vars,
+        "gateway_running": False,
+        "home_channel": None,
+        "state": None,
+        "error_code": None,
+        "error_message": None,
+        "updated_at": None,
+    }
+
+
+@app.get("/api/messaging/platforms")
+async def get_messaging_platforms():
+    from hermes_cli.gateway import _all_platforms
+
+    config = load_config()
+    try:
+        platforms_meta = _all_platforms()
+    except Exception:
+        _log.exception("Failed to enumerate messaging platforms")
+        platforms_meta = []
+
+    gateway_running = get_running_pid() is not None
+    runtime_platforms: dict = {}
+    try:
+        runtime = read_runtime_status() or {}
+        runtime_platforms = runtime.get("platforms") or {}
+    except Exception:
+        runtime_platforms = {}
+
+    out = []
+    for p in platforms_meta:
+        info = _build_messaging_platform(p, config)
+        info["gateway_running"] = gateway_running
+        st = runtime_platforms.get(p.get("key"))
+        if isinstance(st, dict):
+            info["state"] = st.get("state")
+            info["error_code"] = st.get("error_code")
+            info["error_message"] = st.get("error_message")
+            info["updated_at"] = st.get("updated_at")
+        out.append(info)
+    return {"platforms": out}
+
+
+@app.put("/api/messaging/platforms/{platform_id}")
+async def update_messaging_platform(platform_id: str, body: MessagingPlatformUpdateBody):
+    from hermes_cli.gateway import _all_platforms
+
+    known = {p.get("key") for p in _all_platforms()}
+    if platform_id not in known:
+        raise HTTPException(status_code=404, detail=f"Unknown platform: {platform_id}")
+
+    if body.env:
+        for k, v in body.env.items():
+            save_env_value(k, v)
+    if body.clear_env:
+        for k in body.clear_env:
+            try:
+                remove_env_value(k)
+            except Exception:
+                pass
+    if body.enabled is not None:
+        config = load_config()
+        config.setdefault("platforms", {}).setdefault(platform_id, {})["enabled"] = body.enabled
+        save_config(config)
+    return {"ok": True, "platform": platform_id}
+
+
+@app.post("/api/messaging/platforms/{platform_id}/test")
+async def test_messaging_platform(platform_id: str):
+    """Validate a platform's configuration (required credentials present).
+
+    This is a configuration check, not a live adapter handshake — it reports
+    whether the required token is set and echoes the gateway's last-known
+    state for the platform.
+    """
+    from hermes_cli.gateway import _all_platforms, _platform_status
+
+    p = next((p for p in _all_platforms() if p.get("key") == platform_id), None)
+    if p is None:
+        raise HTTPException(status_code=404, detail=f"Unknown platform: {platform_id}")
+
+    token_var = p.get("token_var", "")
+    status_str = _platform_status(p) or ""
+    if token_var and not _env_value(token_var):
+        return {
+            "ok": False,
+            "message": f"Missing required credential: {token_var}",
+            "state": status_str,
+        }
+    return {
+        "ok": True,
+        "message": f"Configuration looks valid ({status_str}).",
+        "state": status_str,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Raw YAML config endpoint
 # ---------------------------------------------------------------------------
 
