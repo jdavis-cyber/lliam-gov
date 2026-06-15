@@ -26,6 +26,7 @@ from __future__ import annotations
 from providers.cli.contract import (  # noqa: F401
     AuthResult,
     BaseCLIProvider,
+    CancelToken,
     CLIProvider,
     DetectResult,
     ExecutionRequest,
@@ -37,6 +38,8 @@ from providers.cli.contract import (  # noqa: F401
     ProviderErrorKind,
     ProviderReadinessReport,
     Readiness,
+    ResultEvent,
+    ResultEventKind,
     normalize_readiness,
 )
 from providers.cli.claude_code import ClaudeCodeCLIProvider  # noqa: F401
@@ -53,6 +56,7 @@ __all__ = [
     "AuthResult",
     "BaseCLIProvider",
     "CLIProvider",
+    "CancelToken",
     "ClaudeCodeCLIProvider",
     "CodexCLIProvider",
     "DetectResult",
@@ -67,6 +71,8 @@ __all__ = [
     "ProviderErrorKind",
     "ProviderReadinessReport",
     "Readiness",
+    "ResultEvent",
+    "ResultEventKind",
     "all_providers",
     "cards_for",
     "get_provider",

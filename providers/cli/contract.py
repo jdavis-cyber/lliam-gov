@@ -188,6 +188,42 @@ class ExecutionResult:
     error: ProviderError | None = None
 
 
+class ResultEventKind(str, enum.Enum):
+    """Kinds of normalized streaming result events (AI-327)."""
+
+    TEXT = "text"                       # assistant text/token chunk
+    TOOL_CALL = "tool_call"             # provider invoked a tool (structured)
+    COMMAND_OUTPUT = "command_output"   # output from a command the provider ran
+    ERROR = "error"                     # a ProviderError occurred
+    DONE = "done"                       # terminal; data has ok/exit_code/stderr
+
+
+@dataclass(frozen=True)
+class ResultEvent:
+    """One normalized event in a streaming execution."""
+
+    kind: ResultEventKind
+    text: str = ""
+    data: dict | None = None
+    error: ProviderError | None = None
+
+
+class CancelToken:
+    """Cooperative cancellation signal for streaming execution."""
+
+    def __init__(self) -> None:
+        import threading
+
+        self._event = threading.Event()
+
+    def cancel(self) -> None:
+        self._event.set()
+
+    @property
+    def cancelled(self) -> bool:
+        return self._event.is_set()
+
+
 class BaseCLIProvider(ABC):
     """Reusable base implementing the contract from a few primitive probes.
 
@@ -261,74 +297,208 @@ class BaseCLIProvider(ABC):
             setup_hint=self._setup_hint(readiness),
         )
 
-    # Execution skeleton — concrete adapters override _build_argv().
+    # ── Execution runtime: streaming, cancellable, normalized ─────────────
     def _build_argv(self, request: ExecutionRequest) -> list[str]:  # pragma: no cover
         raise NotImplementedError
 
-    def execute(self, request: ExecutionRequest) -> ExecutionResult:
-        """One-shot execution skeleton with structured error mapping.
+    def _parse_stdout_line(self, line: str) -> "ResultEvent | None":
+        """Map a raw stdout line to a normalized event.
 
-        Refuses to run unless the provider is READY, so callers get a clean
-        ``PROVIDER_AUTH`` / ``PROVIDER_NOT_INSTALLED`` instead of an opaque
-        subprocess failure.
+        Default: each line is a text chunk. Adapters that emit structured
+        output (e.g. ``--output-format stream-json``) override this to also
+        emit ``TOOL_CALL`` / ``COMMAND_OUTPUT`` events.
+        """
+        return ResultEvent(kind=ResultEventKind.TEXT, text=line)
+
+    def _classify_failure(self, stderr: str, returncode: int) -> ProviderError:
+        """Map a non-zero exit + stderr into the error taxonomy."""
+        low = (stderr or "").lower()
+        if any(s in low for s in ("rate limit", "ratelimit", "429", "quota", "overloaded")):
+            return ProviderError(
+                ProviderErrorKind.PROVIDER_RATE_LIMIT,
+                "Provider rate-limited the request.",
+                retryable=True,
+            )
+        if any(s in low for s in ("unauthor", "not logged in", "please run", "login", "401", "403", "authenticat")):
+            return ProviderError(
+                ProviderErrorKind.PROVIDER_AUTH,
+                "Provider rejected auth — re-run the CLI login.",
+                remediation=self.auth_hint,
+            )
+        return ProviderError(
+            ProviderErrorKind.PROVIDER_EXECUTION,
+            f"Provider CLI exited {returncode}.",
+        )
+
+    def stream(self, request: ExecutionRequest, *, cancel: "CancelToken | None" = None):
+        """Execute a prompt, yielding normalized ``ResultEvent``s as they arrive.
+
+        Spawns the provider CLI as a subprocess, streams stdout line-by-line,
+        honors cancellation and timeout, isolates env (PATH/HOME only when
+        ``isolate_env``), and ends with exactly one ``DONE`` event carrying
+        ``ok`` / ``exit_code`` / ``stderr``. The provider CLI owns auth — we
+        never read tokens (AI-334); we only spawn the already-authed CLI.
         """
         import os
+        import queue
         import subprocess
+        import threading
+        import time
 
         report = self.probe()
         if report.readiness is not Readiness.READY:
-            return ExecutionResult(
-                ok=False,
-                error=report.error
-                or ProviderError(
-                    kind=ProviderErrorKind.APP_SETUP,
-                    message="Provider is not ready.",
-                ),
+            err = report.error or ProviderError(
+                ProviderErrorKind.APP_SETUP, "Provider is not ready."
             )
+            yield ResultEvent(kind=ResultEventKind.ERROR, error=err)
+            yield ResultEvent(
+                kind=ResultEventKind.DONE,
+                data={"ok": False, "exit_code": None, "stderr": ""},
+            )
+            return
+
         argv = self._build_argv(request)
         env = None
         if request.isolate_env:
             base = os.environ
             env = {k: base[k] for k in ("PATH", "HOME") if k in base}
+
         try:
-            proc = subprocess.run(
+            proc = subprocess.Popen(
                 argv,
                 cwd=request.cwd,
                 env=env,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=request.timeout_s,
-            )
-        except subprocess.TimeoutExpired:
-            return ExecutionResult(
-                ok=False,
-                error=ProviderError(
-                    kind=ProviderErrorKind.TIMEOUT,
-                    message=f"Provider execution exceeded {request.timeout_s}s.",
-                    retryable=True,
-                ),
+                bufsize=1,
             )
         except FileNotFoundError:
-            return ExecutionResult(
-                ok=False,
+            yield ResultEvent(
+                kind=ResultEventKind.ERROR,
                 error=ProviderError(
-                    kind=ProviderErrorKind.PROVIDER_NOT_INSTALLED,
-                    message="Provider CLI vanished between probe and execute.",
+                    ProviderErrorKind.PROVIDER_NOT_INSTALLED,
+                    "Provider CLI vanished between probe and execute.",
                     remediation=self.install_hint,
                 ),
             )
-        if proc.returncode == 0:
-            return ExecutionResult(
-                ok=True, stdout=proc.stdout, stderr=proc.stderr, exit_code=0
+            yield ResultEvent(
+                kind=ResultEventKind.DONE,
+                data={"ok": False, "exit_code": None, "stderr": ""},
             )
+            return
+
+        q: queue.Queue = queue.Queue()
+
+        def _pump(stream, tag):
+            try:
+                for line in stream:
+                    q.put((tag, line))
+            finally:
+                q.put((tag, None))
+
+        for tag, st in (("out", proc.stdout), ("err", proc.stderr)):
+            threading.Thread(target=_pump, args=(st, tag), daemon=True).start()
+
+        deadline = time.monotonic() + request.timeout_s
+        open_streams = 2
+        stderr_parts: list[str] = []
+        cancelled = False
+        timed_out = False
+
+        while open_streams > 0:
+            if cancel is not None and cancel.cancelled:
+                cancelled = True
+                break
+            if time.monotonic() > deadline:
+                timed_out = True
+                break
+            try:
+                tag, line = q.get(timeout=0.05)
+            except queue.Empty:
+                continue
+            if line is None:
+                open_streams -= 1
+                continue
+            if tag == "out":
+                ev = self._parse_stdout_line(line.rstrip("\n"))
+                if ev is not None:
+                    yield ev
+            else:
+                stderr_parts.append(line)
+
+        stderr = "".join(stderr_parts)
+
+        if cancelled or timed_out:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            if timed_out:
+                err = ProviderError(
+                    ProviderErrorKind.TIMEOUT,
+                    f"Provider execution exceeded {request.timeout_s}s.",
+                    retryable=True,
+                )
+            else:
+                err = ProviderError(ProviderErrorKind.CANCELLED, "Execution cancelled.")
+            yield ResultEvent(kind=ResultEventKind.ERROR, error=err)
+            yield ResultEvent(
+                kind=ResultEventKind.DONE,
+                data={
+                    "ok": False,
+                    "exit_code": None,
+                    "stderr": stderr,
+                    "cancelled": cancelled,
+                    "timed_out": timed_out,
+                },
+            )
+            return
+
+        returncode = proc.wait()
+        if returncode == 0:
+            yield ResultEvent(
+                kind=ResultEventKind.DONE,
+                data={"ok": True, "exit_code": 0, "stderr": stderr},
+            )
+        else:
+            yield ResultEvent(
+                kind=ResultEventKind.ERROR,
+                error=self._classify_failure(stderr, returncode),
+            )
+            yield ResultEvent(
+                kind=ResultEventKind.DONE,
+                data={"ok": False, "exit_code": returncode, "stderr": stderr},
+            )
+
+    def execute(
+        self, request: ExecutionRequest, *, cancel: "CancelToken | None" = None
+    ) -> ExecutionResult:
+        """Collect the streamed events into a single ``ExecutionResult``.
+
+        Refuses to run unless the provider is READY (the stream emits a clean
+        ``PROVIDER_AUTH`` / ``PROVIDER_NOT_INSTALLED`` error instead of an
+        opaque subprocess failure).
+        """
+        stdout_parts: list[str] = []
+        error: ProviderError | None = None
+        ok = False
+        exit_code: int | None = None
+        stderr = ""
+        for ev in self.stream(request, cancel=cancel):
+            if ev.kind in (ResultEventKind.TEXT, ResultEventKind.COMMAND_OUTPUT):
+                stdout_parts.append(ev.text)
+            elif ev.kind is ResultEventKind.ERROR:
+                error = ev.error
+            elif ev.kind is ResultEventKind.DONE and ev.data:
+                ok = bool(ev.data.get("ok"))
+                exit_code = ev.data.get("exit_code")
+                stderr = ev.data.get("stderr", "")
         return ExecutionResult(
-            ok=False,
-            stdout=proc.stdout,
-            stderr=proc.stderr,
-            exit_code=proc.returncode,
-            error=ProviderError(
-                kind=ProviderErrorKind.PROVIDER_EXECUTION,
-                message=f"Provider CLI exited {proc.returncode}.",
-                retryable=False,
-            ),
+            ok=ok,
+            stdout="\n".join(stdout_parts),
+            stderr=stderr,
+            exit_code=exit_code,
+            error=error,
         )
