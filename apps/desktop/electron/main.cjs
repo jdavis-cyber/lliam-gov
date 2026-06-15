@@ -48,6 +48,12 @@ const {
 } = require('./desktop-uninstall.cjs')
 const { isPackagedInstallPath: isPackagedInstallPathUnderRoots } = require('./workspace-cwd.cjs')
 const {
+  resolveManagedBackendRoot,
+  validateMarker: validateBootstrapMarker,
+  buildMarkerPayload: buildBootstrapMarkerPayload,
+  isMarkerStale: isBootstrapMarkerStale
+} = require('./bootstrap-marker.cjs')
+const {
   authModeFromStatus,
   buildGatewayWsUrl,
   buildGatewayWsUrlWithTicket,
@@ -252,7 +258,9 @@ const HERMES_HOME = resolveHermesHome()
 // ACTIVE_HERMES_ROOT — the canonical mutable Lliam-GOV install. Same path
 // install.ps1 / install.sh use, so a desktop-only user and a CLI-only user end
 // up with identical layouts and can share one install.
-const ACTIVE_HERMES_ROOT = path.join(HERMES_HOME, 'lliam-gov')
+// AI-330: managed backend root derived ONLY from HERMES_HOME (never the app
+// bundle path) — this is what makes a packaged app safe to move to /Applications.
+const ACTIVE_HERMES_ROOT = resolveManagedBackendRoot(HERMES_HOME)
 // VENV_ROOT — venv lives inside the repo, exactly like install.ps1 does it.
 const VENV_ROOT = path.join(ACTIVE_HERMES_ROOT, 'venv')
 // BOOTSTRAP_COMPLETE_MARKER — written by the first-launch bootstrap runner
@@ -1991,9 +1999,18 @@ function readBootstrapMarker() {
 
 function isBootstrapComplete() {
   const marker = readBootstrapMarker()
-  if (!marker || typeof marker !== 'object') return false
-  if (marker.schemaVersion !== BOOTSTRAP_MARKER_SCHEMA_VERSION) return false
-  if (typeof marker.pinnedCommit !== 'string' || marker.pinnedCommit.length < 7) return false
+  // AI-330: marker schema/commit validation is delegated to the pure,
+  // unit-tested bootstrap-marker helper (single source of truth).
+  if (!validateBootstrapMarker(marker, BOOTSTRAP_MARKER_SCHEMA_VERSION)) return false
+  // Informational only: a valid-but-stale marker (pinned commit != this build's
+  // install stamp) still runs — users update via the in-app path / `lliam-gov
+  // update` which legitimately moves HEAD. We just note it for diagnostics.
+  if (INSTALL_STAMP && isBootstrapMarkerStale(marker, INSTALL_STAMP)) {
+    rememberLog(
+      `[hermes] managed backend marker is stale (pinned ${String(marker.pinnedCommit).slice(0, 12)} ` +
+        `vs build stamp ${INSTALL_STAMP.commit.slice(0, 12)}); running existing install, update available.`
+    )
+  }
   // We DELIBERATELY do NOT verify that the checkout is currently at the
   // pinned commit -- users update via the in-app update path or `hermes
   // update`, which moves HEAD legitimately. The marker just attests "we
@@ -2006,13 +2023,12 @@ function isBootstrapComplete() {
 
 function writeBootstrapMarker(payload) {
   fs.mkdirSync(path.dirname(BOOTSTRAP_COMPLETE_MARKER), { recursive: true })
-  const merged = {
-    schemaVersion: BOOTSTRAP_MARKER_SCHEMA_VERSION,
+  // AI-330: payload shape built by the pure, unit-tested helper.
+  const merged = buildBootstrapMarkerPayload({
     pinnedCommit: payload.pinnedCommit || null,
     pinnedBranch: payload.pinnedBranch || null,
-    completedAt: new Date().toISOString(),
     desktopVersion: app.getVersion()
-  }
+  })
   writeFileAtomic(BOOTSTRAP_COMPLETE_MARKER, JSON.stringify(merged, null, 2) + '\n', 'utf8')
   return merged
 }
