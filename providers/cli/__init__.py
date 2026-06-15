@@ -24,6 +24,8 @@ adapters (Codex, Gemini) and the desktop first-run UX (AI-329) build on top.
 from __future__ import annotations
 
 from providers.cli.contract import (  # noqa: F401
+    DEFAULT_MAX_OUTPUT_BYTES,
+    ENV_ALLOWLIST,
     AuthResult,
     BaseCLIProvider,
     CancelToken,
@@ -40,7 +42,13 @@ from providers.cli.contract import (  # noqa: F401
     Readiness,
     ResultEvent,
     ResultEventKind,
+    build_isolated_env,
     normalize_readiness,
+)
+from providers.cli.redaction import (  # noqa: F401
+    REDACTION_MARKER,
+    redact_secrets,
+    redacted_snippet,
 )
 from providers.cli.claude_code import ClaudeCodeCLIProvider  # noqa: F401
 from providers.cli.codex import CodexCLIProvider  # noqa: F401
@@ -53,6 +61,9 @@ from providers.cli.registry import (  # noqa: F401
 from providers.cli.cards import ProviderCard, cards_for, to_card  # noqa: F401
 
 __all__ = [
+    "DEFAULT_MAX_OUTPUT_BYTES",
+    "ENV_ALLOWLIST",
+    "REDACTION_MARKER",
     "AuthResult",
     "BaseCLIProvider",
     "CLIProvider",
@@ -74,9 +85,12 @@ __all__ = [
     "ResultEvent",
     "ResultEventKind",
     "all_providers",
+    "build_isolated_env",
     "cards_for",
     "get_provider",
     "normalize_readiness",
     "probe_all",
+    "redact_secrets",
+    "redacted_snippet",
     "to_card",
 ]
