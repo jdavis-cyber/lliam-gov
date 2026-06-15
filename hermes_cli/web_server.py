@@ -1026,9 +1026,14 @@ def get_cli_provider_readiness():
     (AI-334): auth is a presence/boolean signal only.
     """
     try:
-        from providers.cli import probe_all
+        from providers.cli import probe_all, to_card
 
-        return {"providers": [report.to_dict() for report in probe_all()]}
+        return {
+            "providers": [
+                {**report.to_dict(), "card": to_card(report).to_dict()}
+                for report in probe_all()
+            ]
+        }
     except Exception:
         _log.exception("GET /api/providers/cli failed")
         raise HTTPException(status_code=500, detail="Failed to probe CLI providers")
