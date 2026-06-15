@@ -1,0 +1,39 @@
+{
+  "schema": "lliam-gov.qa.provider-smoke",
+  "schemaVersion": 1,
+  "ranAt": "2026-06-15T12:35:21.166336+00:00",
+  "mode": "probe",
+  "os": {
+    "system": "Darwin",
+    "release": "25.5.0",
+    "machine": "arm64"
+  },
+  "desktopVersion": "0.15.1",
+  "providers": [
+    {
+      "id": "claude-code",
+      "display_name": "Claude Code CLI",
+      "readiness": "ready",
+      "version": "1.0.0-mock",
+      "model": "sonnet"
+    },
+    {
+      "id": "codex",
+      "display_name": "Codex CLI",
+      "readiness": "ready",
+      "version": "1.0.0-mock",
+      "model": "gpt-5-codex"
+    },
+    {
+      "id": "gemini",
+      "display_name": "Gemini CLI",
+      "readiness": "ready",
+      "version": "1.0.0-mock",
+      "model": "gemini-2.5-pro"
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "ready": 3
+  }
+}
