@@ -94,10 +94,15 @@ else
   exit 1
 fi
 
-# 8 — model setup + finish ---------------------------------------------------
-printf '\n%s%sOne thing left — connect your AI model:%s\n' "$CYAN" "$BOLD" "$NC"
+# 8 — provider selection + finish -------------------------------------------
+printf '\n%s%sOne thing left — choose your AI provider:%s\n' "$CYAN" "$BOLD" "$NC"
 say "    source \"$ENVF\""
-say "    uv run lliam-gov setup        # choose a provider, paste your API key"
+say "    bash scripts/show-providers.sh   # see Claude Code / Codex / Gemini status + setup"
+printf '\n%s%sLliam-GOV uses a provider CLI for inference — no API keys needed; the CLI owns login.%s\n' "$DIM" "" "$NC"
+say "    • Claude Code:  npm install -g @anthropic-ai/claude-code  &&  claude setup-token"
+say "    • Codex:        npm install -g @openai/codex              &&  codex login"
+say "    • Gemini:       npm install -g @google/gemini-cli         &&  gemini   (browser sign-in)"
+printf '%s    Switch providers anytime — install/login another CLI and re-run show-providers.sh.%s\n' "$DIM" "$NC"
 printf '\n%s%sThen, any time you want to start Lliam-GOV:%s\n' "$CYAN" "$BOLD" "$NC"
 say "    double-click  $LAUNCH"
 printf '%s    (or run:  bash \"%s\")%s\n' "$DIM" "$LAUNCH" "$NC"
