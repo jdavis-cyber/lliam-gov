@@ -1,0 +1,107 @@
+# Lliam-GOV release CI (AI-332) — SCAFFOLD.
+#
+# DISABLED on purpose: GitHub Actions is offline (quota) until next month, and
+# signing certs are not yet provisioned. This file is ready to run once those
+# land — ACTIVATE by renaming to `release.yml`.
+#
+# Hard dependencies (do NOT assume these are satisfied):
+#   * GitHub Actions restored (AI-332).
+#   * Apple Developer ID + Windows Authenticode certs as repo secrets (AI-331; Jerome).
+#   * Backend-distribution-source decision (AI-330) for the publish step.
+# Signing steps are gated on secret presence so a run without certs still
+# produces UNSIGNED artifacts + checksums + SBOM rather than failing.
+
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Release channel (beta|stable)"
+        default: "beta"
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # create the GitHub Release
+  id-token: write   # provenance/attestation when available
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14      # arm64
+          - os: macos-13      # x64
+          - os: windows-latest
+          - os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python (uv)
+        uses: astral-sh/setup-uv@v3
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with: { node-version: "22" }
+
+      - name: Install deps
+        run: |
+          uv sync --frozen || uv sync
+          npm --prefix apps/desktop ci || npm --prefix apps/desktop install
+
+      - name: Python tests (scoped provider boundary)
+        run: uv run pytest tests/providers/cli/ -q
+
+      - name: Desktop platform tests + typecheck
+        run: |
+          npm --prefix apps/desktop run test:desktop:platforms
+          npm --prefix apps/desktop run typecheck
+
+      - name: Release-readiness gate
+        run: python3 scripts/release-readiness.py
+
+      # --- Packaging (electron-builder config already in apps/desktop/package.json) ---
+      - name: Build desktop artifacts
+        env:
+          # Signing secrets — when absent, electron-builder produces unsigned output.
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: npm --prefix apps/desktop run dist
+
+      - name: Generate SHA256SUMS
+        shell: bash
+        run: |
+          cd apps/desktop/release
+          shasum -a 256 * > SHA256SUMS || sha256sum * > SHA256SUMS
+
+      - name: Generate CycloneDX SBOMs
+        shell: bash
+        run: |
+          uv run cyclonedx-py environment -o sbom-python.json || true
+          npx --yes @cyclonedx/cyclonedx-npm --output-file sbom-node.json --prefix apps/desktop || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lliam-gov-${{ matrix.os }}
+          path: |
+            apps/desktop/release/*
+            sbom-*.json
+
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+      # NOTE: publish target (signed GitHub Release vs self-hosted) is the
+      # backend-distribution-source decision (Jerome). Left as a placeholder.
+      - name: Placeholder publish
+        run: echo "Publish step pending backend-distribution-source decision (AI-330)."
