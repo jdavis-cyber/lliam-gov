@@ -40,15 +40,24 @@ from providers.cli.contract import (  # noqa: F401
     normalize_readiness,
 )
 from providers.cli.claude_code import ClaudeCodeCLIProvider  # noqa: F401
+from providers.cli.codex import CodexCLIProvider  # noqa: F401
+from providers.cli.gemini import GeminiCLIProvider  # noqa: F401
+from providers.cli.registry import (  # noqa: F401
+    all_providers,
+    get_provider,
+    probe_all,
+)
 
 __all__ = [
     "AuthResult",
     "BaseCLIProvider",
     "CLIProvider",
     "ClaudeCodeCLIProvider",
+    "CodexCLIProvider",
     "DetectResult",
     "ExecutionRequest",
     "ExecutionResult",
+    "GeminiCLIProvider",
     "HealthResult",
     "InvocationMode",
     "ProviderCapabilities",
@@ -56,5 +65,8 @@ __all__ = [
     "ProviderErrorKind",
     "ProviderReadinessReport",
     "Readiness",
+    "all_providers",
+    "get_provider",
     "normalize_readiness",
+    "probe_all",
 ]
