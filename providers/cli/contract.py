@@ -19,10 +19,63 @@ source label — never the token value.
 from __future__ import annotations
 
 import enum
+import os
 import time
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field
-from typing import Protocol, runtime_checkable
+from typing import Callable, Protocol, runtime_checkable
+
+# ── Subprocess hardening constants (AI-334) ───────────────────────────────────
+#
+# Explicit env allowlist for provider subprocesses. When a request opts into
+# env isolation (the default), the child process inherits ONLY these variables
+# from the parent environment. Everything else — including any Lliam-GOV secrets
+# or stray ``*_API_KEY`` values — is dropped. The provider CLI's own auth store
+# lives under ``HOME`` (or an ``XDG_*`` dir), which is why those are allowed.
+# Deliberately excluded: every ``ANTHROPIC_*`` / ``OPENAI_*`` / ``GOOGLE_*`` /
+# ``*_API_KEY`` / ``*_TOKEN`` variable — the CLI owns auth, not the env (AI-334).
+ENV_ALLOWLIST: tuple[str, ...] = (
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TERM",
+    "TMPDIR",
+    "TZ",
+    # Config/data roots some CLIs use for their (CLI-owned) auth stores.
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    # Windows equivalents (parked posture-guard work owns full Windows support).
+    "APPDATA",
+    "LOCALAPPDATA",
+    "USERPROFILE",
+    "SYSTEMROOT",
+)
+
+#: Default cap on combined stdout+stderr bytes captured from a provider
+#: subprocess. Prevents a runaway/compromised CLI from exhausting memory or
+#: flooding logs. Overridable per request.
+DEFAULT_MAX_OUTPUT_BYTES = 2_000_000
+
+
+def build_isolated_env(
+    allowlist: tuple[str, ...] = ENV_ALLOWLIST,
+    *,
+    base: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Build a minimal child environment from the allowlist only.
+
+    Pure/inspectable so the boundary is unit-testable: given a base env, the
+    output contains exactly the intersection with ``allowlist`` and nothing
+    secret-looking. Never raises.
+    """
+    src = os.environ if base is None else base
+    return {k: src[k] for k in allowlist if k in src}
 
 
 class Readiness(str, enum.Enum):
@@ -45,6 +98,7 @@ class ProviderErrorKind(str, enum.Enum):
     PROVIDER_EXECUTION = "provider_execution"    # CLI ran but failed
     TIMEOUT = "timeout"
     CANCELLED = "cancelled"
+    OUTPUT_LIMIT = "output_limit"                # CLI exceeded output-size cap
 
 
 class InvocationMode(str, enum.Enum):
@@ -170,11 +224,17 @@ class ExecutionRequest:
 
     prompt: str
     model: str | None = None
+    # Explicit working directory. When None, the runtime allocates a fresh,
+    # empty, per-execution temp dir (AI-334: never silently inherit Lliam-GOV's
+    # checkout cwd, which would expose the source tree / enable path hijack).
     cwd: str | None = None
     timeout_s: float = 120.0
-    # Extra env *isolation* hint: when True the adapter starts from a minimal
-    # env (PATH/HOME only) rather than inheriting the full parent environment.
+    # Extra env *isolation* hint: when True the adapter starts from the minimal
+    # ``ENV_ALLOWLIST`` env rather than inheriting the full parent environment.
     isolate_env: bool = True
+    # Cap on combined stdout+stderr bytes captured before the runtime aborts the
+    # subprocess with an OUTPUT_LIMIT error (AI-334 output-size limit).
+    max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES
 
 
 @dataclass(frozen=True)
@@ -238,6 +298,35 @@ class BaseCLIProvider(ABC):
     install_hint: str = ""
     #: Human-facing command to authenticate the provider CLI (no API keys).
     auth_hint: str = ""
+    #: Optional audit sink. Receives a *content-free, redacted* summary dict on
+    #: every execution failure so failures are audit-visible without leaking
+    #: prompt/output/secrets (AI-334). Set by the host (e.g. backend wires it to
+    #: the governance audit log). Never receives raw stdout or the prompt.
+    audit_hook: "Callable[[dict], None] | None" = None
+
+    def _emit_audit(self, summary: dict) -> None:
+        """Best-effort dispatch to ``audit_hook``; never raises into the stream."""
+        hook = self.audit_hook
+        if hook is None:
+            return
+        try:
+            hook(summary)
+        except Exception:  # pragma: no cover - audit must never break execution
+            pass
+
+    def _audit_failure(self, error: "ProviderError", stderr: str, exit_code) -> None:
+        from providers.cli.redaction import redacted_snippet
+
+        self._emit_audit(
+            {
+                "event": "provider_execution_failure",
+                "provider": self.capabilities.id,
+                "error_kind": error.kind.value,
+                "exit_code": exit_code,
+                # Redacted + truncated — safe to persist in an audit record.
+                "stderr_snippet": redacted_snippet(stderr),
+            }
+        )
 
     @property
     @abstractmethod
@@ -339,9 +428,10 @@ class BaseCLIProvider(ABC):
         ``ok`` / ``exit_code`` / ``stderr``. The provider CLI owns auth — we
         never read tokens (AI-334); we only spawn the already-authed CLI.
         """
-        import os
         import queue
+        import shutil
         import subprocess
+        import tempfile
         import threading
         import time
 
@@ -358,119 +448,150 @@ class BaseCLIProvider(ABC):
             return
 
         argv = self._build_argv(request)
-        env = None
-        if request.isolate_env:
-            base = os.environ
-            env = {k: base[k] for k in ("PATH", "HOME") if k in base}
+        # AI-334: env allowlist — isolate to ENV_ALLOWLIST or pass full env only
+        # when the caller explicitly opts out of isolation.
+        env = build_isolated_env() if request.isolate_env else None
+
+        # AI-334: explicit cwd. Never inherit Lliam-GOV's process cwd; when the
+        # caller gives no cwd, run in a fresh empty per-execution temp dir that
+        # we remove afterwards (mitigates malicious-cwd / path-hijack).
+        owns_tmp = request.cwd is None
+        cwd = tempfile.mkdtemp(prefix="lliam-prov-") if owns_tmp else request.cwd
+
+        def _cleanup_tmp() -> None:
+            if owns_tmp:
+                shutil.rmtree(cwd, ignore_errors=True)
 
         try:
-            proc = subprocess.Popen(
-                argv,
-                cwd=request.cwd,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-            )
-        except FileNotFoundError:
-            yield ResultEvent(
-                kind=ResultEventKind.ERROR,
-                error=ProviderError(
-                    ProviderErrorKind.PROVIDER_NOT_INSTALLED,
-                    "Provider CLI vanished between probe and execute.",
-                    remediation=self.install_hint,
-                ),
-            )
-            yield ResultEvent(
-                kind=ResultEventKind.DONE,
-                data={"ok": False, "exit_code": None, "stderr": ""},
-            )
-            return
-
-        q: queue.Queue = queue.Queue()
-
-        def _pump(stream, tag):
             try:
-                for line in stream:
-                    q.put((tag, line))
-            finally:
-                q.put((tag, None))
+                proc = subprocess.Popen(
+                    argv,
+                    cwd=cwd,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,
+                )
+            except FileNotFoundError:
+                yield ResultEvent(
+                    kind=ResultEventKind.ERROR,
+                    error=ProviderError(
+                        ProviderErrorKind.PROVIDER_NOT_INSTALLED,
+                        "Provider CLI vanished between probe and execute.",
+                        remediation=self.install_hint,
+                    ),
+                )
+                yield ResultEvent(
+                    kind=ResultEventKind.DONE,
+                    data={"ok": False, "exit_code": None, "stderr": ""},
+                )
+                return
 
-        for tag, st in (("out", proc.stdout), ("err", proc.stderr)):
-            threading.Thread(target=_pump, args=(st, tag), daemon=True).start()
+            q: queue.Queue = queue.Queue()
 
-        deadline = time.monotonic() + request.timeout_s
-        open_streams = 2
-        stderr_parts: list[str] = []
-        cancelled = False
-        timed_out = False
+            def _pump(stream, tag):
+                try:
+                    for line in stream:
+                        q.put((tag, line))
+                finally:
+                    q.put((tag, None))
 
-        while open_streams > 0:
-            if cancel is not None and cancel.cancelled:
-                cancelled = True
-                break
-            if time.monotonic() > deadline:
-                timed_out = True
-                break
-            try:
-                tag, line = q.get(timeout=0.05)
-            except queue.Empty:
-                continue
-            if line is None:
-                open_streams -= 1
-                continue
-            if tag == "out":
-                ev = self._parse_stdout_line(line.rstrip("\n"))
-                if ev is not None:
-                    yield ev
-            else:
-                stderr_parts.append(line)
+            for tag, st in (("out", proc.stdout), ("err", proc.stderr)):
+                threading.Thread(target=_pump, args=(st, tag), daemon=True).start()
 
-        stderr = "".join(stderr_parts)
+            deadline = time.monotonic() + request.timeout_s
+            open_streams = 2
+            stderr_parts: list[str] = []
+            cancelled = False
+            timed_out = False
+            output_overflow = False
+            output_bytes = 0
+            max_bytes = max(0, int(request.max_output_bytes))
 
-        if cancelled or timed_out:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-            if timed_out:
-                err = ProviderError(
-                    ProviderErrorKind.TIMEOUT,
-                    f"Provider execution exceeded {request.timeout_s}s.",
-                    retryable=True,
+            while open_streams > 0:
+                if cancel is not None and cancel.cancelled:
+                    cancelled = True
+                    break
+                if time.monotonic() > deadline:
+                    timed_out = True
+                    break
+                try:
+                    tag, line = q.get(timeout=0.05)
+                except queue.Empty:
+                    continue
+                if line is None:
+                    open_streams -= 1
+                    continue
+                # AI-334: output-size limit across stdout+stderr combined.
+                if max_bytes and output_bytes >= max_bytes:
+                    output_overflow = True
+                    break
+                output_bytes += len(line.encode("utf-8", "replace"))
+                if tag == "out":
+                    ev = self._parse_stdout_line(line.rstrip("\n"))
+                    if ev is not None:
+                        yield ev
+                else:
+                    stderr_parts.append(line)
+                if max_bytes and output_bytes >= max_bytes:
+                    output_overflow = True
+                    break
+
+            stderr = "".join(stderr_parts)
+
+            if cancelled or timed_out or output_overflow:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                if output_overflow:
+                    err = ProviderError(
+                        ProviderErrorKind.OUTPUT_LIMIT,
+                        f"Provider output exceeded {max_bytes} bytes; aborted.",
+                    )
+                elif timed_out:
+                    err = ProviderError(
+                        ProviderErrorKind.TIMEOUT,
+                        f"Provider execution exceeded {request.timeout_s}s.",
+                        retryable=True,
+                    )
+                else:
+                    err = ProviderError(
+                        ProviderErrorKind.CANCELLED, "Execution cancelled."
+                    )
+                self._audit_failure(err, stderr, None)
+                yield ResultEvent(kind=ResultEventKind.ERROR, error=err)
+                yield ResultEvent(
+                    kind=ResultEventKind.DONE,
+                    data={
+                        "ok": False,
+                        "exit_code": None,
+                        "stderr": stderr,
+                        "cancelled": cancelled,
+                        "timed_out": timed_out,
+                        "output_overflow": output_overflow,
+                    },
+                )
+                return
+
+            returncode = proc.wait()
+            if returncode == 0:
+                yield ResultEvent(
+                    kind=ResultEventKind.DONE,
+                    data={"ok": True, "exit_code": 0, "stderr": stderr},
                 )
             else:
-                err = ProviderError(ProviderErrorKind.CANCELLED, "Execution cancelled.")
-            yield ResultEvent(kind=ResultEventKind.ERROR, error=err)
-            yield ResultEvent(
-                kind=ResultEventKind.DONE,
-                data={
-                    "ok": False,
-                    "exit_code": None,
-                    "stderr": stderr,
-                    "cancelled": cancelled,
-                    "timed_out": timed_out,
-                },
-            )
-            return
-
-        returncode = proc.wait()
-        if returncode == 0:
-            yield ResultEvent(
-                kind=ResultEventKind.DONE,
-                data={"ok": True, "exit_code": 0, "stderr": stderr},
-            )
-        else:
-            yield ResultEvent(
-                kind=ResultEventKind.ERROR,
-                error=self._classify_failure(stderr, returncode),
-            )
-            yield ResultEvent(
-                kind=ResultEventKind.DONE,
-                data={"ok": False, "exit_code": returncode, "stderr": stderr},
-            )
+                err = self._classify_failure(stderr, returncode)
+                self._audit_failure(err, stderr, returncode)
+                yield ResultEvent(kind=ResultEventKind.ERROR, error=err)
+                yield ResultEvent(
+                    kind=ResultEventKind.DONE,
+                    data={"ok": False, "exit_code": returncode, "stderr": stderr},
+                )
+        finally:
+            _cleanup_tmp()
 
     def execute(
         self, request: ExecutionRequest, *, cancel: "CancelToken | None" = None
