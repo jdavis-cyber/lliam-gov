@@ -73,3 +73,21 @@ Fixes #
 
 <!-- If applicable, add screenshots or log output showing the fix/feature in action. -->
 
+
+## Release-impacting changes (AI-337)
+
+<!-- Fill this out if the PR touches the desktop app, packaging/signing, the
+     bootstrap/installer, provider adapters, or update flow. Delete otherwise. -->
+
+- [ ] `python3 scripts/release-readiness.py` passes (0 FAIL).
+- [ ] Scoped, affected-file tests run green locally (note which: ________). The
+      full 24k suite is **not** the gate while Actions is offline.
+- [ ] **Fresh-machine install notes**: I described/tested install → first launch
+      → backend bootstrap on a clean profile (or N/A). Result: ________
+- [ ] **Provider smoke evidence**: at least one provider (Claude Code / Codex /
+      Gemini) detected → model selected → one prompt executed end-to-end (or
+      N/A). Provider + result: ________
+- [ ] No generated artifacts (`apps/desktop/{build,dist,release}`, `node_modules`)
+      added to git; lockfiles consistent.
+- [ ] If merged via documented `--admin` (Actions outage), I noted the override
+      in the merge commit.

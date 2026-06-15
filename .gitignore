@@ -92,3 +92,6 @@ evidence/phase2/.pdftext-cache/
 # macOS AppleDouble shadow files
 ._*
 .DS_Store
+
+# Stray local-only files (AI-337 hygiene)
+download.html
