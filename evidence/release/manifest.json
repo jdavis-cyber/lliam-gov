@@ -1,0 +1,104 @@
+{
+  "schema": "lliam-gov.release.evidence",
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-15T12:32:54.211297+00:00",
+  "desktopVersion": "0.15.1",
+  "summary": {
+    "present": 10,
+    "pending": 3,
+    "total": 13
+  },
+  "items": [
+    {
+      "id": "threat-model",
+      "description": "Provider boundary threat model (T1\u2013T8)",
+      "path": "docs/governance/provider-boundary-threat-model.md",
+      "status": "present",
+      "sha256": "3b16724518b362e4a0bf1c4c236bdb33f5da245bb234b4a3b1b6dab937381189"
+    },
+    {
+      "id": "data-flow",
+      "description": "Architecture / data-flow / provider-boundary notes",
+      "path": "docs/operate/managed-backend-bootstrap.md",
+      "status": "present",
+      "sha256": "7975a533776c830539c19c68ee329c9ccce6a65b4ac6020557e5e0fe22c52eab"
+    },
+    {
+      "id": "sbom-python-node",
+      "description": "CycloneDX SBOMs",
+      "path": "evidence/sbom/cyclonedx-2026-06-12-post-bump.json",
+      "status": "present",
+      "sha256": "a42b5188eaf41214cb28e93da0378321df2f37ac8e7e0d37b2494f4597b92149"
+    },
+    {
+      "id": "dependency-review",
+      "description": "Dependency review",
+      "path": "evidence/sbom/dependency-review-2026-06-12.md",
+      "status": "present",
+      "sha256": "72501feeb10f3265c624aedd1ecc2aa250a5b164ca9b35638d2457e063fc9a74"
+    },
+    {
+      "id": "dependency-policy",
+      "description": "Dependency audit policy",
+      "path": "docs/governance/dependency-audit-policy.md",
+      "status": "present",
+      "sha256": "e860787c70704a1dbf1e4418a580d0203c08f68f232618abac9bb33c9d8766aa"
+    },
+    {
+      "id": "readiness-gate",
+      "description": "Release-readiness gate script",
+      "path": "scripts/release-readiness.py",
+      "status": "present",
+      "sha256": "ddf8b8c66693024c6eea819539486cd4061ccc7c6a4880c3ef88374b2b2f43c2"
+    },
+    {
+      "id": "deployment-tiers",
+      "description": "Deployment tiers + AIMS scope",
+      "path": "evidence/release/deployment-tiers.md",
+      "status": "present",
+      "sha256": "74ed801dd6a006c56d3ccee404f6e07c94d015e7a1236d605461ede07711c1dd"
+    },
+    {
+      "id": "provider-approvals",
+      "description": "Approved providers + external obligations",
+      "path": "evidence/release/provider-approvals.md",
+      "status": "present",
+      "sha256": "313d95dad10f182ac633da8748619750954e453a7c6e72650442bf5ff98ae0bd"
+    },
+    {
+      "id": "residual-risks",
+      "description": "Residual risks & accepted limitations",
+      "path": "evidence/release/residual-risks.md",
+      "status": "present",
+      "sha256": "770b8309253f4a3da2f56af5fb859dcc2c49891d86a34d0fea88185becab2373"
+    },
+    {
+      "id": "audit-aep",
+      "description": "Audit-log AEP exporter",
+      "path": "lliam_gov/security/aep_export.py",
+      "status": "present",
+      "sha256": "9c00b816a986f25b383e2c634160f703623bb4586b6c3d92d117dbe3bab74523"
+    },
+    {
+      "id": "signing-records",
+      "description": "Signing / notarization records",
+      "path": "evidence/release/signing/records.json",
+      "status": "pending",
+      "gating": "PENDING signing certs (AI-331; Jerome)"
+    },
+    {
+      "id": "checksums",
+      "description": "Artifact SHA256SUMS",
+      "path": "evidence/release/checksums/SHA256SUMS",
+      "status": "pending",
+      "gating": "PENDING CI build (AI-332; Actions offline)"
+    },
+    {
+      "id": "qa-matrix",
+      "description": "Fresh-machine QA matrix results",
+      "path": "evidence/release/qa/results.json",
+      "status": "pending",
+      "gating": "PENDING QA run (AI-335; Mac lane proven)"
+    }
+  ]
+}
