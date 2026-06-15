@@ -47,6 +47,7 @@ from providers.cli.registry import (  # noqa: F401
     get_provider,
     probe_all,
 )
+from providers.cli.cards import ProviderCard, cards_for, to_card  # noqa: F401
 
 __all__ = [
     "AuthResult",
@@ -61,12 +62,15 @@ __all__ = [
     "HealthResult",
     "InvocationMode",
     "ProviderCapabilities",
+    "ProviderCard",
     "ProviderError",
     "ProviderErrorKind",
     "ProviderReadinessReport",
     "Readiness",
     "all_providers",
+    "cards_for",
     "get_provider",
     "normalize_readiness",
     "probe_all",
+    "to_card",
 ]

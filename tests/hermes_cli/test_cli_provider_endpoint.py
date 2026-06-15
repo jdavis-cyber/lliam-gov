@@ -57,6 +57,17 @@ def test_endpoint_real_registry_lists_three_providers():
         }
 
 
+def test_endpoint_includes_render_ready_card():
+    payload = get_cli_provider_readiness()
+    for entry in payload["providers"]:
+        card = entry["card"]
+        assert card["id"] == entry["id"]
+        assert card["state"] == entry["readiness"]
+        assert "selectable" in card and isinstance(card["selectable"], bool)
+        # The card's action is a CLI command (or empty) — never an API-key field.
+        assert "action_command" in card
+
+
 def test_endpoint_auth_is_structurally_secret_free():
     """AI-334: the auth object exposes only a boolean signal + non-secret labels.
 
