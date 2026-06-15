@@ -3266,6 +3266,35 @@ def resolve_provider_client(
         return (_to_async_client(client, final_model, is_vision=is_vision) if async_mode
                 else (client, final_model))
 
+    # ── Google Gemini CLI (OAuth → Code Assist) ──────────────────────
+    # Lets auxiliary tasks (title generation, memory flush, compression)
+    # reuse the user's Gemini CLI login instead of failing when no
+    # OpenRouter/Nous/API-key provider is configured. The client fetches a
+    # fresh OAuth access token per call via agent.google_oauth, so it works
+    # whenever the main Gemini provider does.
+    if provider in {"google-gemini-cli", "gemini-cli", "gemini-oauth"}:
+        try:
+            from agent import google_oauth as _gauth
+            if _gauth.load_credentials() is None:
+                logger.warning(
+                    "resolve_provider_client: google-gemini-cli requested but no "
+                    "Gemini credentials found (sign in with the gemini CLI)."
+                )
+                return None, None
+            from agent.gemini_cloudcode_adapter import GeminiCloudCodeClient
+        except ImportError as exc:
+            logger.warning(
+                "resolve_provider_client: google-gemini-cli unavailable: %s", exc
+            )
+            return None, None
+        final_model = _normalize_resolved_model(
+            model or _read_main_model() or "gemini-3-flash-preview", provider
+        )
+        client = GeminiCloudCodeClient()
+        logger.debug("resolve_provider_client: google-gemini-cli (%s)", final_model)
+        return (_to_async_client(client, final_model, is_vision=is_vision) if async_mode
+                else (client, final_model))
+
     # ── Nous Portal (OAuth) ──────────────────────────────────────────
     if provider == "nous":
         # Detect vision tasks: either explicit model override from

@@ -129,6 +129,9 @@ class TestReadCodexAccessToken:
         hermes_home.mkdir(parents=True, exist_ok=True)
         (hermes_home / "auth.json").write_text(json.dumps({"version": 1, "providers": {}}))
         monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        # Isolate the Codex CLI credential bridge (~/.codex/auth.json) so a real
+        # login on the test host can't satisfy the "missing" case.
+        monkeypatch.setenv("CODEX_HOME", str(tmp_path / "no-codex"))
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)):
             result = _read_codex_access_token()
         assert result is None
@@ -3175,3 +3178,42 @@ class TestAuxUnhealthyCache:
             )
             # After the 402, OpenRouter is in the unhealthy cache.
             assert _is_provider_unhealthy("openrouter") is True
+
+
+def test_resolve_provider_client_google_gemini_cli_builds_client():
+    """google-gemini-cli is supported as an auxiliary backend so titles /
+    memory / compression work for users whose only login is the Gemini CLI."""
+    from agent.auxiliary_client import resolve_provider_client
+
+    sentinel = MagicMock(name="GeminiCloudCodeClient")
+    with (
+        patch("agent.google_oauth.load_credentials", return_value=MagicMock()),
+        patch(
+            "agent.gemini_cloudcode_adapter.GeminiCloudCodeClient",
+            return_value=sentinel,
+        ) as mk,
+        patch(
+            "agent.auxiliary_client._read_main_model",
+            return_value="gemini-3-flash-preview",
+        ),
+    ):
+        client, model = resolve_provider_client(
+            "google-gemini-cli", "gemini-3-flash-preview"
+        )
+
+    assert client is sentinel
+    assert model == "gemini-3-flash-preview"
+    assert mk.called
+
+
+def test_resolve_provider_client_google_gemini_cli_no_creds_returns_none():
+    """No Gemini credentials → graceful (None, None), not a crash."""
+    from agent.auxiliary_client import resolve_provider_client
+
+    with patch("agent.google_oauth.load_credentials", return_value=None):
+        client, model = resolve_provider_client(
+            "gemini-cli", "gemini-3-flash-preview"
+        )
+
+    assert client is None
+    assert model is None
