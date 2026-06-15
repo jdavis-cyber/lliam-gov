@@ -190,9 +190,10 @@ def test_include_unconfigured_appends_canonical_skeletons():
     seen_slugs = {r["slug"] for r in payload["providers"]}
     for entry in CANONICAL_PROVIDERS:
         assert entry.slug in seen_slugs, f"missing {entry.slug}"
-    # Skeletons have empty models and source='canonical'.
+    # API-key setup skeletons have empty models and source='canonical'.
+    cli_backed = {"anthropic", "openai-codex", "google-gemini-cli"}
     skeletons = [r for r in payload["providers"]
-                 if r.get("source") == "canonical"]
+                 if r.get("source") == "canonical" and r["slug"] not in cli_backed]
     assert all(r["models"] == [] for r in skeletons)
     assert all(r["total_models"] == 0 for r in skeletons)
 
@@ -237,8 +238,11 @@ def test_picker_hints_adds_warning_to_skeleton_rows():
         payload = build_models_payload(
             ctx, include_unconfigured=True, picker_hints=True,
         )
-    skeleton_rows = [r for r in payload["providers"]
-                     if r.get("source") == "canonical"]
+    cli_backed = {"anthropic", "openai-codex", "google-gemini-cli"}
+    skeleton_rows = [
+        r for r in payload["providers"]
+        if r.get("source") == "canonical" and r["slug"] not in cli_backed
+    ]
     assert skeleton_rows, "test setup: expected at least one skeleton row"
     for row in skeleton_rows:
         assert row["authenticated"] is False
@@ -261,12 +265,67 @@ def test_picker_hints_api_key_warning_format():
         payload = build_models_payload(
             ctx, include_unconfigured=True, picker_hints=True,
         )
-    # anthropic uses api_key + ANTHROPIC_API_KEY.
+    # OpenAI API is API-key only, so it still gets the paste-key setup copy.
+    openai_api = next(
+        r for r in payload["providers"] if r["slug"] == "openai-api"
+    )
+    assert "OPENAI_API_KEY" in openai_api["warning"]
+    assert openai_api["warning"].startswith("paste ")
+
+
+def test_picker_hints_anthropic_prefers_claude_code_cli_path():
+    """Anthropic is not API-key-only in Lliam-GOV; the picker should lead
+    with Claude Code CLI while still mentioning ANTHROPIC_API_KEY as a
+    fallback.
+    """
+    rows = []
+    ctx = _empty_ctx()
+    with _list_auth_returning(rows):
+        payload = build_models_payload(
+            ctx, include_unconfigured=True, picker_hints=True,
+        )
     anthropic = next(
         r for r in payload["providers"] if r["slug"] == "anthropic"
     )
+    assert anthropic["name"] == "Claude Code CLI"
+    assert anthropic["auth_type"] == "cli_oauth"
+    assert anthropic["models"]
+    assert "Claude Code CLI" in anthropic["warning"]
     assert "ANTHROPIC_API_KEY" in anthropic["warning"]
-    assert anthropic["warning"].startswith("paste ")
+    assert not anthropic["warning"].startswith("paste ")
+
+
+def test_cli_backed_unconfigured_rows_are_selectable_with_curated_models():
+    """Desktop model options must expose local-CLI auth paths without
+    requiring an API key first.
+
+    Users can bring credentials from Claude Code, Codex CLI, or the
+    Gemini/Antigravity-style Google CLI flow. Those providers should appear
+    with model choices in the picker even when list_authenticated_providers()
+    returned no authenticated rows yet; API-key providers still remain setup
+    skeletons.
+    """
+    rows = []
+    ctx = _empty_ctx()
+    with _list_auth_returning(rows):
+        payload = build_models_payload(
+            ctx,
+            include_unconfigured=True,
+            picker_hints=True,
+            canonical_order=True,
+        )
+
+    by_slug = {r["slug"]: r for r in payload["providers"]}
+    for slug in ("anthropic", "openai-codex", "google-gemini-cli"):
+        row = by_slug[slug]
+        assert row["authenticated"] is False
+        assert row["models"], f"{slug} should expose curated CLI models"
+        assert row["auth_type"] == "cli_oauth"
+        assert "paste " not in row.get("warning", "").lower()
+
+    openrouter = by_slug["openrouter"]
+    assert openrouter["authenticated"] is False
+    assert openrouter["models"] == []
 
 
 # ─── canonical_order ───────────────────────────────────────────────────

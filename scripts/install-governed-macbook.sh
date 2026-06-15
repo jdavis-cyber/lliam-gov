@@ -79,7 +79,7 @@ cat > "$LAUNCH" <<EOF
 set -euo pipefail
 cd "$REPO_ROOT"
 set -a; . "$ENVF"; set +a
-exec uv run hermes
+exec uv run lliam-gov
 EOF
 chmod +x "$LAUNCH"
 say "   • created start launcher: $LAUNCH"
@@ -97,7 +97,7 @@ fi
 # 8 — model setup + finish ---------------------------------------------------
 printf '\n%s%sOne thing left — connect your AI model:%s\n' "$CYAN" "$BOLD" "$NC"
 say "    source \"$ENVF\""
-say "    uv run hermes setup        # choose a provider, paste your API key"
+say "    uv run lliam-gov setup        # choose a provider, paste your API key"
 printf '\n%s%sThen, any time you want to start Lliam-GOV:%s\n' "$CYAN" "$BOLD" "$NC"
 say "    double-click  $LAUNCH"
 printf '%s    (or run:  bash \"%s\")%s\n' "$DIM" "$LAUNCH" "$NC"

@@ -218,6 +218,38 @@ class TestWebServerEndpoints:
         # Should contain known env var names
         assert any(k.endswith("_API_KEY") or k.endswith("_TOKEN") for k in data.keys())
 
+    def test_model_options_uses_full_picker_payload(self, monkeypatch):
+        """Desktop REST model options should match the TUI picker universe."""
+        import hermes_cli.inventory as inventory
+
+        captured = {}
+
+        def fake_build_models_payload(ctx, **kwargs):
+            captured.update(kwargs)
+            return {"providers": [], "model": "", "provider": ""}
+
+        monkeypatch.setattr(inventory, "load_picker_context", lambda: object())
+        monkeypatch.setattr(inventory, "build_models_payload", fake_build_models_payload)
+
+        resp = self.client.get("/api/model/options")
+
+        assert resp.status_code == 200
+        assert captured["include_unconfigured"] is True
+        assert captured["picker_hints"] is True
+        assert captured["canonical_order"] is True
+
+    def test_get_active_profile_returns_json(self):
+        resp = self.client.get("/api/profiles/active")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["active"] == "default"
+        assert data["current"] == "default"
+
+    def test_get_gui_logs_returns_empty_when_file_missing(self):
+        resp = self.client.get("/api/logs?file=gui")
+        assert resp.status_code == 200
+        assert resp.json() == {"file": "gui", "lines": []}
+
     def test_reveal_env_var(self, tmp_path):
         """POST /api/env/reveal should return the real unredacted value."""
         from hermes_cli.config import save_env_value

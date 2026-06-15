@@ -1,5 +1,5 @@
 """
-Hermes Agent — Web UI server.
+Lliam-GOV — Web UI server.
 
 Provides a FastAPI backend serving the Vite/React frontend and REST API
 endpoints for managing configuration, environment variables, and sessions.
@@ -78,14 +78,16 @@ except ImportError:
 WEB_DIST = Path(os.environ["HERMES_WEB_DIST"]) if "HERMES_WEB_DIST" in os.environ else Path(__file__).parent / "web_dist"
 _log = logging.getLogger(__name__)
 
-app = FastAPI(title="Hermes Agent", version=__version__)
+app = FastAPI(title="Lliam-GOV", version=__version__)
 
 # ---------------------------------------------------------------------------
 # Session token for protecting sensitive endpoints (reveal).
 # Generated fresh on every server start — dies when the process exits.
-# Injected into the SPA HTML so only the legitimate web UI can use it.
+# Injected into the SPA HTML so only the legitimate web UI can use it.  The
+# desktop shell pre-generates this token and passes it to the renderer through
+# IPC; honor that token when present so HTTP and WebSocket auth agree.
 # ---------------------------------------------------------------------------
-_SESSION_TOKEN = secrets.token_urlsafe(32)
+_SESSION_TOKEN = os.environ.get("HERMES_DASHBOARD_SESSION_TOKEN") or secrets.token_urlsafe(32)
 _SESSION_HEADER_NAME = "X-Hermes-Session-Token"
 
 # In-browser Chat tab (/chat, /api/pty, …).  Off unless ``hermes dashboard --tui``
@@ -999,7 +1001,13 @@ def get_model_options():
     try:
         from hermes_cli.inventory import build_models_payload, load_picker_context
 
-        return build_models_payload(load_picker_context(), max_models=50)
+        return build_models_payload(
+            load_picker_context(),
+            include_unconfigured=True,
+            picker_hints=True,
+            canonical_order=True,
+            max_models=50,
+        )
     except Exception:
         _log.exception("GET /api/model/options failed")
         raise HTTPException(status_code=500, detail="Failed to list model options")
@@ -2863,6 +2871,115 @@ def _profile_setup_command(name: str) -> str:
     return "hermes setup" if name == "default" else f"{name} setup"
 
 
+def _parse_csv_query(value: Optional[str]) -> List[str]:
+    if not value:
+        return []
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+@app.get("/api/profiles/sessions")
+async def list_profile_sessions_endpoint(
+    limit: int = 40,
+    offset: int = 0,
+    min_messages: int = 0,
+    archived: str = "exclude",
+    order: str = "recent",
+    profile: str = "all",
+    source: Optional[str] = None,
+    exclude_sources: Optional[str] = None,
+):
+    """Return a unified session list across profiles for the desktop sidebar."""
+    del archived  # The current state schema has no archived flag; keep API parity.
+
+    from hermes_cli import profiles as profiles_mod
+    from hermes_state import SessionDB
+
+    safe_limit = max(1, min(int(limit), 500))
+    safe_offset = max(0, int(offset))
+    min_messages = max(0, int(min_messages))
+    source_filter = (source or "").strip() or None
+    exclude_filter = _parse_csv_query(exclude_sources)
+    order_by_last_active = order != "created"
+    now = time.time()
+
+    try:
+        profile_rows = [_profile_to_dict(p) for p in profiles_mod.list_profiles()]
+    except Exception:
+        _log.exception("GET /api/profiles/sessions failed to list profiles; falling back to directory scan")
+        profile_rows = _fallback_profile_dicts(profiles_mod)
+
+    requested_profile = (profile or "all").strip() or "all"
+    if requested_profile != "all":
+        profile_rows = [p for p in profile_rows if p.get("name") == requested_profile]
+        if not profile_rows:
+            raise HTTPException(status_code=404, detail=f"Profile '{requested_profile}' does not exist.")
+
+    sessions: List[Dict[str, Any]] = []
+    profile_totals: Dict[str, int] = {}
+    errors: List[Dict[str, str]] = []
+
+    for p in profile_rows:
+        name = str(p.get("name") or "default")
+        home = Path(str(p.get("path") or ""))
+        if not home:
+            continue
+
+        db = None
+        try:
+            db = SessionDB(home / "state.db")
+            rows = db.list_sessions_rich(
+                source=source_filter,
+                exclude_sources=exclude_filter,
+                limit=100000,
+                offset=0,
+                order_by_last_active=order_by_last_active,
+            )
+            if min_messages:
+                rows = [r for r in rows if int(r.get("message_count") or 0) >= min_messages]
+
+            profile_totals[name] = len(rows)
+            for row in rows:
+                item = dict(row)
+                item["profile"] = name
+                item["is_default_profile"] = name == "default"
+                item["is_active"] = (
+                    item.get("ended_at") is None
+                    and (now - float(item.get("last_active") or item.get("started_at") or 0)) < 300
+                )
+                sessions.append(item)
+        except Exception as exc:
+            _log.exception("GET /api/profiles/sessions failed for profile %s", name)
+            profile_totals[name] = 0
+            errors.append({"profile": name, "error": str(exc)})
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+    def session_sort_key(row: Dict[str, Any]) -> tuple:
+        primary = row.get("last_active") if order_by_last_active else row.get("started_at")
+        try:
+            primary_num = float(primary or 0)
+        except Exception:
+            primary_num = 0.0
+        return (primary_num, float(row.get("started_at") or 0), str(row.get("id") or ""))
+
+    sessions.sort(key=session_sort_key, reverse=True)
+    total = sum(profile_totals.values())
+    page = sessions[safe_offset:safe_offset + safe_limit]
+
+    return {
+        "sessions": page,
+        "total": total,
+        "limit": safe_limit,
+        "offset": safe_offset,
+        "profile_totals": profile_totals,
+        "errors": errors,
+    }
+
+
 @app.get("/api/profiles")
 async def list_profiles_endpoint():
     from hermes_cli import profiles as profiles_mod
@@ -2871,6 +2988,20 @@ async def list_profiles_endpoint():
     except Exception:
         _log.exception("GET /api/profiles failed; falling back to profile directory scan")
         return {"profiles": _fallback_profile_dicts(profiles_mod)}
+
+
+@app.get("/api/profiles/active")
+async def get_active_profile_endpoint():
+    try:
+        from hermes_cli import profiles as profiles_mod
+
+        return {
+            "active": profiles_mod.get_active_profile(),
+            "current": profiles_mod.get_active_profile_name(),
+        }
+    except Exception:
+        _log.exception("GET /api/profiles/active failed")
+        raise HTTPException(status_code=500, detail="Failed to read active profile")
 
 
 @app.post("/api/profiles")
@@ -3354,6 +3485,9 @@ def _ws_host_origin_is_allowed(ws: "WebSocket") -> bool:
         return True
 
     parsed = urllib.parse.urlparse(origin)
+    if parsed.scheme == "file" and os.environ.get("HERMES_DESKTOP") == "1":
+        return True
+
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return False
 
@@ -3801,8 +3935,8 @@ def mount_spa(application: FastAPI):
 # Built-in dashboard themes — label + description only.  The actual color
 # definitions live in the frontend (web/src/themes/presets.ts).
 _BUILTIN_DASHBOARD_THEMES = [
-    {"name": "default",       "label": "Hermes Teal",         "description": "Classic dark teal — the canonical Hermes look"},
-    {"name": "default-large", "label": "Hermes Teal (Large)", "description": "Hermes Teal with bigger fonts and roomier spacing"},
+    {"name": "default",       "label": "Lliam-GOV Teal",         "description": "Classic dark teal — the canonical Lliam-GOV look"},
+    {"name": "default-large", "label": "Lliam-GOV Teal (Large)", "description": "Lliam-GOV Teal with bigger fonts and roomier spacing"},
     {"name": "midnight",      "label": "Midnight",            "description": "Deep blue-violet with cool accents"},
     {"name": "ember",     "label": "Ember",          "description": "Warm crimson and bronze — forge vibes"},
     {"name": "mono",      "label": "Mono",           "description": "Clean grayscale — minimal and focused"},
@@ -4735,7 +4869,7 @@ def start_server(
                 "(headless Linux). Pass --no-open to suppress this detection."
             )
 
-    print(f"  Hermes Web UI → http://{host}:{port}")
+    print(f"  Lliam-GOV Web UI → http://{host}:{port}")
     # proxy_headers=False so _ws_client_is_allowed sees the real connection peer
     # rather than X-Forwarded-For's rewritten value (which would defeat the
     # loopback gate when behind a reverse proxy).
