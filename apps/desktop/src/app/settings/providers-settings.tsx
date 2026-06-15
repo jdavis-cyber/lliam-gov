@@ -16,6 +16,8 @@ import { cn } from '@/lib/utils'
 import { $desktopOnboarding, startManualProviderOAuth } from '@/store/onboarding'
 import type { EnvVarInfo, OAuthProvider } from '@/types/hermes'
 
+import { FirstRunProviders } from '@/app/onboarding/first-run-providers'
+
 import { isKeyVar, ProviderKeyRows } from './credential-key-ui'
 import { SettingsCategoryHeading, useEnvCredentials } from './env-credentials'
 import { providerGroup, providerMeta, providerPriority } from './helpers'
@@ -215,6 +217,7 @@ export function ProvidersSettings({ onViewChange, view }: ProvidersSettingsProps
   if (showApiKeys) {
     return (
       <SettingsContent>
+        <FirstRunProviders />
         {keyGroups.length > 0 ? (
           <div className="grid gap-2">
             {keyGroups.map(group => (
@@ -237,6 +240,7 @@ export function ProvidersSettings({ onViewChange, view }: ProvidersSettingsProps
 
   return (
     <SettingsContent>
+      <FirstRunProviders />
       <OAuthPicker onWantApiKey={() => onViewChange('keys')} providers={oauthProviders} />
     </SettingsContent>
   )
