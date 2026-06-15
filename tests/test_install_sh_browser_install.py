@@ -17,7 +17,7 @@ def test_install_script_skips_playwright_download_when_system_browser_exists() -
 
     assert "find_system_browser()" in text
     assert "google-chrome google-chrome-stable chromium chromium-browser chrome" in text
-    assert "Skipping Playwright browser download; Hermes will use the system browser." in text
+    assert "Skipping Playwright browser download; Lliam-GOV will use the system browser." in text
 
 
 def test_install_script_persists_system_browser_for_agent_browser() -> None:
