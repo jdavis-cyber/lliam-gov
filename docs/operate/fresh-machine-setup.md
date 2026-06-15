@@ -57,6 +57,11 @@ Re-run `bash scripts/show-providers.sh` until your chosen provider shows
 uv run lliam-gov            # or double-click ~/.lliam-gov/start-lliam-gov.command
 ```
 
+For the desktop app (`uv run lliam-gov desktop`), the same provider choice is
+available in the GUI under **Settings → Providers** — each of Claude Code /
+Codex / Gemini shows its readiness, the exact setup command if needed, and a
+**Test** button that runs one real prompt. No API keys.
+
 ## Switching providers (Katmai policy changes)
 
 Install/log in to a different provider CLI (step 3) and re-run
