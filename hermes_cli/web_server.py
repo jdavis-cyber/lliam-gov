@@ -1039,6 +1039,58 @@ def get_cli_provider_readiness():
         raise HTTPException(status_code=500, detail="Failed to probe CLI providers")
 
 
+class CliExecuteRequest(BaseModel):
+    """Payload for POST /api/providers/cli/{provider_id}/execute."""
+
+    prompt: str
+    model: str | None = None
+    timeout_s: float = 120.0
+
+
+@app.post("/api/providers/cli/{provider_id}/execute")
+def execute_cli_provider(provider_id: str, body: CliExecuteRequest):
+    """Run a one-shot prompt against a selected CLI-backed provider.
+
+    Powers the desktop / first-run "test this provider" action so a user can
+    confirm the provider they picked genuinely works. The provider CLI owns
+    auth — no API keys or tokens are read (AI-334). Returns the normalized
+    ``ExecutionResult`` (refuses cleanly if the provider isn't ready).
+    """
+    try:
+        from providers.cli import ExecutionRequest, get_provider
+
+        provider = get_provider(provider_id)
+        if provider is None:
+            raise HTTPException(status_code=404, detail=f"Unknown CLI provider: {provider_id}")
+        prompt = (body.prompt or "").strip()
+        if not prompt:
+            raise HTTPException(status_code=400, detail="prompt is required")
+        timeout_s = max(1.0, min(float(body.timeout_s or 120.0), 600.0))
+        result = provider.execute(
+            ExecutionRequest(prompt=prompt, model=(body.model or None), timeout_s=timeout_s)
+        )
+        payload = {
+            "ok": result.ok,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "exit_code": result.exit_code,
+            "error": None,
+        }
+        if result.error is not None:
+            payload["error"] = {
+                "kind": result.error.kind.value,
+                "message": result.error.message,
+                "remediation": result.error.remediation,
+                "retryable": result.error.retryable,
+            }
+        return payload
+    except HTTPException:
+        raise
+    except Exception:
+        _log.exception("POST /api/providers/cli/%s/execute failed", provider_id)
+        raise HTTPException(status_code=500, detail="Provider execution failed")
+
+
 @app.get("/api/model/auxiliary")
 def get_auxiliary_models():
     """Return current auxiliary task assignments.
