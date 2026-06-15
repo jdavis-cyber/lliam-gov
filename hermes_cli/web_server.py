@@ -1013,6 +1013,27 @@ def get_model_options():
         raise HTTPException(status_code=500, detail="Failed to list model options")
 
 
+@app.get("/api/providers/cli")
+def get_cli_provider_readiness():
+    """Readiness for CLI-backed providers (Claude Code / Codex / Gemini).
+
+    Unlike ``/api/model/options`` (API-key/SDK providers), this surfaces the
+    CLI-owned-auth providers via the ``providers.cli`` contract. Each entry
+    reports a normalized readiness — ``not_installed`` | ``not_authenticated``
+    | ``ready`` | ``degraded`` | ``unavailable`` — plus an exact CLI setup hint.
+
+    No API keys are involved and no token values are ever read or returned
+    (AI-334): auth is a presence/boolean signal only.
+    """
+    try:
+        from providers.cli import probe_all
+
+        return {"providers": [report.to_dict() for report in probe_all()]}
+    except Exception:
+        _log.exception("GET /api/providers/cli failed")
+        raise HTTPException(status_code=500, detail="Failed to probe CLI providers")
+
+
 @app.get("/api/model/auxiliary")
 def get_auxiliary_models():
     """Return current auxiliary task assignments.
