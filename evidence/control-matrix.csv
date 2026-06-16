@@ -1278,7 +1278,7 @@ ISO27001_A.5.23,ISO/IEC 27001:2022,"5.23   Information security for use of Contr
   cloud services
   Processes for acquisition, use, management and exit from cloud services
   shall be established in accordance with the organization’s information
-  security requirements.",ISO 27001-2022.pdf,,,Operator runbook (model-endpoint posture),docs/operate/model-endpoints.md,—,not_implemented,
+  security requirements.",ISO 27001-2022.pdf,,,Operator runbook (model-endpoint posture),docs/operate/model-endpoints.md,—,evidence_captured, | 2026-06-16: subscription-default posture documented in docs/operate/model-endpoint-posture.md; verified in auth.py (openai-codex oauth_external + anthropic CLAUDE_CODE_OAUTH_TOKEN) — API key is fallback.
 ISO27001_A.5.31,ISO/IEC 27001:2022,"5.31      Legal, statutory, regulatory and Control
   contractual requirements
   Legal, statutory, regulatory and contractual requirements relevant to
