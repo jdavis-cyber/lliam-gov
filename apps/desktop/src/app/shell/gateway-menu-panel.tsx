@@ -3,7 +3,6 @@ import { IconLayoutDashboard } from '@tabler/icons-react'
 import { StatusDot, type StatusTone } from '@/components/status-dot'
 import { Button } from '@/components/ui/button'
 import { Tip } from '@/components/ui/tooltip'
-import { useI18n } from '@/i18n'
 import { Activity, AlertCircle } from '@/lib/icons'
 import type { RuntimeReadinessResult } from '@/lib/runtime-readiness'
 import { cn } from '@/lib/utils'
@@ -41,25 +40,23 @@ export function GatewayMenuPanel({
   onOpenSystem,
   statusSnapshot
 }: GatewayMenuPanelProps) {
-  const { t } = useI18n()
-  const copy = t.shell.gatewayMenu
   const gatewayOpen = gatewayState === 'open'
   const gatewayConnecting = gatewayState === 'connecting'
   const inferenceReady = gatewayOpen && inferenceStatus?.ready === true
 
   const connectionLabel = gatewayOpen
-    ? copy.connected
+    ? 'Connected'
     : gatewayConnecting
-      ? copy.connecting
-      : prettyState(gatewayState || copy.offline)
+      ? 'Connecting'
+      : prettyState(gatewayState || 'offline')
 
   const inferenceLabel = gatewayOpen
     ? inferenceStatus?.ready
-      ? copy.inferenceReady
+      ? 'Inference ready'
       : inferenceStatus
-        ? copy.inferenceNotReady
-        : copy.checkingInference
-    : copy.disconnected
+        ? 'Inference not ready'
+        : 'Checking inference'
+    : 'Disconnected'
 
   const platforms = Object.entries(statusSnapshot?.gateway_platforms || {}).sort(([l], [r]) => l.localeCompare(r))
   const recentLogs = logLines.slice(-5)
@@ -73,16 +70,16 @@ export function GatewayMenuPanel({
           ) : (
             <AlertCircle className={cn('size-3.5', gatewayOpen ? 'text-amber-600' : 'text-destructive')} />
           )}
-          <span className="font-medium">{copy.gateway}</span>
+          <span className="font-medium">Gateway</span>
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <StatusDot tone={inferenceReady ? 'good' : gatewayOpen ? 'warn' : 'bad'} />
             {inferenceLabel}
           </span>
         </div>
         <div className="flex items-center">
-          <Tip label={copy.openSystem}>
+          <Tip label="Open system panel">
             <Button
-              aria-label={copy.openSystem}
+              aria-label="Open system panel"
               className="text-muted-foreground hover:text-foreground"
               onClick={onOpenSystem}
               size="icon-sm"
@@ -95,13 +92,13 @@ export function GatewayMenuPanel({
       </div>
 
       <div className="border-t border-border/50 px-3 py-2 text-xs text-muted-foreground">
-        <div>{copy.connection(connectionLabel)}</div>
+        <div>Connection: {connectionLabel}</div>
         {inferenceStatus?.reason && <div className="mt-1 line-clamp-3">{inferenceStatus.reason}</div>}
       </div>
 
       {recentLogs.length > 0 && (
         <div className="border-t border-border/50 px-3 py-2">
-          <SectionLabel>{copy.recentActivity}</SectionLabel>
+          <SectionLabel>Recent activity</SectionLabel>
           <ul className="mt-1.5 space-y-0.5">
             {recentLogs.map((line, index) => (
               <Tip key={`${index}:${line}`} label={line.trim()}>
@@ -111,21 +108,19 @@ export function GatewayMenuPanel({
               </Tip>
             ))}
           </ul>
-          <Button
-            className="-ml-2 mt-1.5 font-medium text-muted-foreground"
+          <button
+            className="mt-1.5 text-[0.66rem] font-medium text-muted-foreground hover:text-foreground"
             onClick={onOpenSystem}
-            size="xs"
             type="button"
-            variant="text"
           >
-            {copy.viewAllLogs}
-          </Button>
+            View all logs →
+          </button>
         </div>
       )}
 
       {platforms.length > 0 && (
         <div className="border-t border-border/50 px-3 py-2">
-          <SectionLabel>{copy.messagingPlatforms}</SectionLabel>
+          <SectionLabel>Messaging platforms</SectionLabel>
           <ul className="mt-1.5 space-y-1">
             {platforms.map(([name, platform]) => (
               <li className="flex items-center justify-between gap-2 text-xs" key={name}>

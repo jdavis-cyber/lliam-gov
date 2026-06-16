@@ -105,7 +105,7 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
           <OverlayNavItem
             active={activeView === 'providers'}
             icon={Zap}
-            label={t.settings.nav.providers}
+            label="Providers"
             onClick={() => setActiveView('providers')}
           />
           {activeView === 'providers' && (
@@ -113,14 +113,14 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
               <OverlayNavItem
                 active={providerView === 'accounts'}
                 icon={Sparkles}
-                label={t.settings.nav.providerAccounts}
+                label="Accounts"
                 nested
                 onClick={() => openProviderView('accounts')}
               />
               <OverlayNavItem
                 active={providerView === 'keys'}
                 icon={KeyRound}
-                label={t.settings.nav.providerApiKeys}
+                label="API keys"
                 nested
                 onClick={() => openProviderView('keys')}
               />
@@ -143,14 +143,14 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
               <OverlayNavItem
                 active={keysView === 'tools'}
                 icon={Wrench}
-                label={t.settings.nav.keysTools}
+                label="Tools"
                 nested
                 onClick={() => openKeysView('tools')}
               />
               <OverlayNavItem
                 active={keysView === 'settings'}
                 icon={Settings2}
-                label={t.settings.nav.keysSettings}
+                label="Settings"
                 nested
                 onClick={() => openKeysView('settings')}
               />

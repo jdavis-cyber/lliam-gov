@@ -6,7 +6,7 @@ based on the user's configured IANA timezone (e.g. ``Asia/Kolkata``).
 
 Resolution order:
   1. ``HERMES_TIMEZONE`` environment variable
-  2. ``timezone`` key in ``~/.lliam-gov/config.yaml``
+  2. ``timezone`` key in ``~/.hermes/config.yaml``
   3. Falls back to the server's local time (``datetime.now().astimezone()``)
 
 Invalid timezone values log a warning and fall back safely — Hermes never

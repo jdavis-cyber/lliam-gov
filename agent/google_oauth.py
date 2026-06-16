@@ -465,61 +465,11 @@ class GoogleCredentials:
 # Credential I/O (atomic + locked)
 # =============================================================================
 
-def _gemini_cli_credentials_path() -> Path:
-    """Location of the Gemini CLI's own OAuth credential file.
-
-    Overridable via GEMINI_CLI_OAUTH_CREDS for tests / non-default homes.
-    """
-    override = os.getenv("GEMINI_CLI_OAUTH_CREDS", "").strip()
-    if override:
-        return Path(override).expanduser()
-    return Path.home() / ".gemini" / "oauth_creds.json"
-
-
-def _import_gemini_cli_credentials() -> Optional[GoogleCredentials]:
-    """Bridge: read refreshable creds from the Gemini CLI (``~/.gemini/oauth_creds.json``).
-
-    The user authenticates with Google's ``gemini`` CLI, which owns auth. When
-    Lliam-GOV has no Google OAuth credentials of its own yet (a fresh install),
-    we read the Gemini CLI's credential file *read-only* so the provider works
-    immediately — matching the installer's promise that signing in to the
-    provider CLI is all that's required. We never write to the CLI's file; the
-    first refresh persists a copy into Lliam-GOV's own store.
-    """
-    path = _gemini_cli_credentials_path()
-    if not path.is_file():
-        return None
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError, IOError) as exc:
-        logger.debug("Gemini CLI credentials at %s unreadable: %s", path, exc)
-        return None
-    if not isinstance(data, dict):
-        return None
-    refresh_token = str(data.get("refresh_token", "") or "")
-    # A refresh_token is mandatory: the access_token in the CLI file is often
-    # already expired, so without a refresh_token we could not mint a fresh one.
-    if not refresh_token:
-        return None
-    return GoogleCredentials(
-        access_token=str(data.get("access_token", "") or ""),
-        refresh_token=refresh_token,
-        expires_ms=int(data.get("expiry_date", 0) or 0),
-        email="",
-        project_id=str(data.get("project_id", "") or ""),
-    )
-
-
 def load_credentials() -> Optional[GoogleCredentials]:
-    """Load credentials from disk. Returns None if missing or corrupt.
-
-    On a fresh install (no Lliam-GOV-owned credential file yet) this falls back
-    to importing the Gemini CLI's own refreshable OAuth credentials so the
-    google-gemini-cli provider works without a separate ``hermes login``.
-    """
+    """Load credentials from disk. Returns None if missing or corrupt."""
     path = _credentials_path()
     if not path.exists():
-        return _import_gemini_cli_credentials()
+        return None
     try:
         with _credentials_lock():
             raw = path.read_text(encoding="utf-8")
@@ -706,7 +656,7 @@ def get_valid_access_token(*, force_refresh: bool = False) -> str:
     creds = load_credentials()
     if creds is None:
         raise GoogleOAuthError(
-            "No Google OAuth credentials found. Run `hermes login --provider google-gemini-cli` first.",
+            "No Google OAuth credentials found. Run `hermes auth add google-gemini-cli` first.",
             code="google_oauth_not_logged_in",
         )
 
@@ -949,7 +899,15 @@ def start_oauth_flow(
         try:
             import webbrowser
 
-            webbrowser.open(auth_url, new=1, autoraise=True)
+            try:
+                from hermes_cli.auth import (
+                    _can_open_graphical_browser as _can_open_gui,
+                )
+            except Exception:
+                _can_open_gui = lambda: True  # noqa: E731
+
+            if _can_open_gui():
+                webbrowser.open(auth_url, new=1, autoraise=True)
         except Exception as exc:
             logger.debug("webbrowser.open failed: %s", exc)
 

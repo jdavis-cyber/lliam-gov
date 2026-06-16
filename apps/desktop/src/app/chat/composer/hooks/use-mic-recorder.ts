@@ -17,49 +17,39 @@ export interface MicRecording {
   heardSpeech: boolean
 }
 
-export interface MicRecorderErrorCopy {
-  microphoneAccessDenied: string
-  microphoneConstraintsUnsupported: string
-  microphoneInUse: string
-  microphonePermissionDenied: string
-  microphoneStartFailed: string
-  microphoneUnsupported: string
-  noMicrophone: string
-}
-
 interface MicRecorderHandle {
   start: (options?: MicRecorderOptions) => Promise<void>
   stop: () => Promise<MicRecording | null>
   cancel: () => void
 }
 
-function micError(error: unknown, copy: MicRecorderErrorCopy): Error {
+function micError(error: unknown): Error {
   const name = error instanceof DOMException ? error.name : ''
 
   if (name === 'NotAllowedError' || name === 'SecurityError') {
-    return new Error(copy.microphonePermissionDenied)
+    return new Error('Microphone permission was denied.')
   }
 
   if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-    return new Error(copy.noMicrophone)
+    return new Error('No microphone was found.')
   }
 
   if (name === 'NotReadableError' || name === 'TrackStartError') {
-    return new Error(copy.microphoneInUse)
+    return new Error('Microphone is already in use by another app.')
   }
 
   if (name === 'OverconstrainedError') {
-    return new Error(copy.microphoneConstraintsUnsupported)
+    return new Error('Microphone constraints are not supported by this device.')
   }
 
   if (error instanceof Error) {
     return error
   }
 
-  return new Error(copy.microphoneStartFailed)
+  return new Error('Could not start microphone recording.')
 }
 
-export function useMicRecorder(copy: MicRecorderErrorCopy): { handle: MicRecorderHandle; level: number; recording: boolean } {
+export function useMicRecorder(): { handle: MicRecorderHandle; level: number; recording: boolean } {
   const [level, setLevel] = useState(0)
   const [recording, setRecording] = useState(false)
 
@@ -168,13 +158,13 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): { handle: MicRecorde
     }
 
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      throw new Error(copy.microphoneUnsupported)
+      throw new Error('This runtime does not support microphone recording.')
     }
 
     const permitted = await window.hermesDesktop?.requestMicrophoneAccess?.()
 
     if (permitted === false) {
-      throw new Error(copy.microphoneAccessDenied)
+      throw new Error('Microphone access denied.')
     }
 
     let stream: MediaStream
@@ -184,7 +174,7 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): { handle: MicRecorde
         audio: { echoCancellation: true, noiseSuppression: true }
       })
     } catch (error) {
-      throw micError(error, copy)
+      throw micError(error)
     }
 
     const mimeType =
@@ -198,7 +188,7 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): { handle: MicRecorde
       recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
     } catch (error) {
       stream.getTracks().forEach(track => track.stop())
-      throw micError(error, copy)
+      throw micError(error)
     }
 
     chunksRef.current = []
@@ -241,7 +231,7 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): { handle: MicRecorde
     }
 
     recorder.onerror = event => {
-      const error = micError((event as Event & { error?: unknown }).error, copy)
+      const error = micError((event as Event & { error?: unknown }).error)
       const resolver = stopResolverRef.current
       stopResolverRef.current = null
       cleanup()

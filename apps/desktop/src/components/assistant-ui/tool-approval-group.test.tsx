@@ -1,5 +1,5 @@
 import { AssistantRuntimeProvider, type ThreadMessage, useExternalStoreRuntime } from '@assistant-ui/react'
-import { cleanup, render, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { clearAllPrompts, setApprovalRequest } from '@/store/prompts'
@@ -8,11 +8,12 @@ import { $toolDisclosureStates } from '@/store/tool-view'
 
 import { Thread } from './thread'
 
-// Regression coverage for the "approval must never be buried" bug. Tools now
-// render as a flat list (no collapsible "N steps" group), so a pending tool's
-// inline ApprovalBar is always in the visual flow — never inside a `hidden`
-// body. These assert the bar shows only when an approval is live and is never
-// trapped under a `hidden` ancestor.
+// Regression coverage for the "approval buried behind a collapsed tool group"
+// bug. When 2+ tools group into a collapsed "Tool actions · N steps" row, the
+// pending tool's inline ApprovalBar lives inside the group body — which is
+// `hidden` until expanded. A live approval must surface WITHOUT the user
+// expanding anything, so ToolGroupSlot force-opens its body while an approval
+// targeting one of its pending tools is in flight.
 
 const createdAt = new Date('2026-06-03T00:00:00.000Z')
 
@@ -70,7 +71,8 @@ stubOffsetDimension('offsetWidth', 'clientWidth', 800)
 stubOffsetDimension('offsetHeight', 'clientHeight', 600)
 
 // A running assistant message with two tools: a completed read_file plus a
-// pending terminal (no result), rendered as a flat two-row list.
+// pending terminal (no result). Two visible tools → ToolGroupSlot groups them
+// behind a collapsed "Tool actions · 2 steps" header.
 function groupedPendingMessage(): ThreadMessage {
   return {
     id: 'assistant-group-1',
@@ -130,28 +132,32 @@ afterEach(() => {
   $activeSessionId.set(null)
 })
 
-describe('flat tool list approval surfacing', () => {
-  it('renders no inline approval bar when there is no live approval', async () => {
+describe('ToolGroupSlot approval surfacing', () => {
+  it('hides the grouped pending tool body when there is no approval', async () => {
     const { container } = render(<GroupHarness message={groupedPendingMessage()} />)
 
-    // The pending terminal row mounts immediately, but its inline ApprovalBar
-    // returns null while $approvalRequest is empty.
+    // Group header renders collapsed; the inline approval strip lives in the
+    // hidden body, so with no live approval it must not render at all (the
+    // ApprovalBar returns null when $approvalRequest is empty).
     await waitFor(() => {
-      expect(container.querySelectorAll('[data-slot="tool-block"]').length).toBeGreaterThan(0)
+      expect(screen.getByText(/Tool actions/)).toBeTruthy()
     })
     expect(container.querySelector('[data-slot="tool-approval-inline"]')).toBeNull()
   })
 
-  it('surfaces the approval inline and never under a hidden ancestor', async () => {
+  it('force-opens the group body so the approval surfaces without expanding', async () => {
     setApprovalRequest({ command: 'rm -rf /tmp/x', description: 'dangerous command', sessionId: 'sess-1' })
 
     const { container } = render(<GroupHarness message={groupedPendingMessage()} />)
 
+    // Even though the group defaults collapsed, the live approval forces the
+    // body open so the inline controls are visible (and reachable, not in a
+    // hidden subtree) immediately.
     await waitFor(() => {
       const bar = container.querySelector('[data-slot="tool-approval-inline"]')
       expect(bar).not.toBeNull()
-      // Flat rows live directly in the flow — nothing should ever wrap the bar
-      // in a `hidden` subtree.
+      // The forced-open group body must not be hidden — assert no ancestor
+      // carries the `hidden` attribute that would keep the bar off-screen.
       expect(bar?.closest('[hidden]')).toBeNull()
     })
   })

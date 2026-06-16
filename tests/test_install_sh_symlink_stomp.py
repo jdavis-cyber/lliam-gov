@@ -20,7 +20,6 @@ import stat
 import subprocess
 from pathlib import Path
 
-import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -31,7 +30,7 @@ def _extract_setup_path_shim_block() -> str:
     """Return the install.sh shim-write block used by setup_path()."""
     text = INSTALL_SH.read_text()
     match = re.search(
-        r"(?P<block>mkdir -p \"\$command_link_dir\".*?chmod \+x \"\$command_link_dir/lliam-gov\")",
+        r"(?P<block>mkdir -p \"\$command_link_dir\".*?chmod \+x \"\$command_link_dir/hermes\")",
         text,
         re.DOTALL,
     )
@@ -44,8 +43,8 @@ def _extract_setup_path_shim_block() -> str:
 def test_setup_path_shim_block_removes_old_link_before_writing() -> None:
     """Static guard: the rm must precede the cat heredoc, not follow it."""
     block = _extract_setup_path_shim_block()
-    rm_idx = block.find('rm -f "$command_link_dir/lliam-gov"')
-    cat_idx = block.find('cat > "$command_link_dir/lliam-gov" <<EOF')
+    rm_idx = block.find('rm -f "$command_link_dir/hermes"')
+    cat_idx = block.find('cat > "$command_link_dir/hermes" <<EOF')
     assert rm_idx != -1, (
         "setup_path() must `rm -f` $command_link_dir/hermes before the "
         "`cat >` heredoc, otherwise an existing symlink (left by older "
@@ -76,14 +75,14 @@ def test_re_running_setup_path_block_preserves_pip_entry_point(tmp_path: Path) -
     """
     venv_bin = tmp_path / "venv" / "bin"
     venv_bin.mkdir(parents=True)
-    pip_entry = venv_bin / "lliam-gov"
+    pip_entry = venv_bin / "hermes"
     pip_marker = "#!/usr/bin/env python\n# pip-generated entry point — must not be overwritten\n"
     pip_entry.write_text(pip_marker)
     pip_entry.chmod(pip_entry.stat().st_mode | stat.S_IXUSR)
 
     command_link_dir = tmp_path / "local_bin"
     command_link_dir.mkdir()
-    shim_path = command_link_dir / "lliam-gov"
+    shim_path = command_link_dir / "hermes"
     # Reproduce the prior-install state: shim path is a symlink to the
     # pip-generated entry point.
     shim_path.symlink_to(pip_entry)

@@ -122,32 +122,6 @@ def _validate_explicit_toolsets(toolsets: object = None) -> tuple[list[str] | No
     return valid, None
 
 
-def _default_model_for_provider(provider: Optional[str]) -> Optional[str]:
-    """Best-effort default model for a provider given without an explicit model.
-
-    Only the supported CLI-backed providers (Claude Code, Codex, Gemini) get a
-    default — each maps to a single well-known model family, so switching to one
-    of them without ``--model`` is unambiguous. For every other provider we
-    return None and keep the explicit-model requirement (carrying an arbitrary
-    model across providers is usually wrong).
-    """
-    if not provider:
-        return None
-    try:
-        from hermes_cli.auth import resolve_provider
-        rid = resolve_provider(provider)
-    except Exception:
-        rid = provider.strip().lower()
-    # Use the provider's OWN catalogue default (never a model carried over from
-    # a different provider). Returns "" for unknown/custom providers, in which
-    # case we keep the explicit-model requirement.
-    try:
-        from hermes_cli.models import get_default_model_for_provider
-        return (get_default_model_for_provider(rid) or "").strip() or None
-    except Exception:
-        return None
-
-
 def run_oneshot(
     prompt: str,
     model: Optional[str] = None,
@@ -180,17 +154,11 @@ def run_oneshot(
     # stderr redirect so the message actually reaches the terminal.
     env_model_early = os.getenv("HERMES_INFERENCE_MODEL", "").strip()
     if provider and not ((model or "").strip() or env_model_early):
-        # For the supported CLI-backed providers (Claude Code / Codex / Gemini)
-        # the default model is unambiguous, so switch cleanly instead of erroring.
-        fallback_model = _default_model_for_provider(provider)
-        if fallback_model:
-            model = fallback_model
-        else:
-            sys.stderr.write(
-                "hermes -z: --provider requires --model (or HERMES_INFERENCE_MODEL). "
-                "Pass both explicitly, or neither to use your configured defaults.\n"
-            )
-            return 2
+        sys.stderr.write(
+            "hermes -z: --provider requires --model (or HERMES_INFERENCE_MODEL). "
+            "Pass both explicitly, or neither to use your configured defaults.\n"
+        )
+        return 2
 
     explicit_toolsets, toolsets_error = _validate_explicit_toolsets(toolsets)
     if toolsets_error:
@@ -206,28 +174,55 @@ def run_oneshot(
     # Redirect stderr AND stdout to devnull for the entire call tree.
     # We'll print the final response to the real stdout at the end.
     real_stdout = sys.stdout
+    real_stderr = sys.stderr
     devnull = open(os.devnull, "w", encoding="utf-8")
 
+    response: Optional[str] = None
+    failure: BaseException | None = None
     try:
         with redirect_stdout(devnull), redirect_stderr(devnull):
-            response = _run_agent(
-                prompt,
-                model=model,
-                provider=provider,
-                toolsets=explicit_toolsets,
-                use_config_toolsets=use_config_toolsets,
-            )
+            try:
+                response = _run_agent(
+                    prompt,
+                    model=model,
+                    provider=provider,
+                    toolsets=explicit_toolsets,
+                    use_config_toolsets=use_config_toolsets,
+                )
+            except BaseException as exc:  # noqa: BLE001
+                # Capture anything that escapes the agent (including OSError
+                # from prompt_toolkit/Vt100 when stdout is a non-TTY pipe,
+                # KeyboardInterrupt, SystemExit, etc.) so we can surface it on
+                # the real stderr instead of crashing past the redirect with a
+                # traceback that the caller never sees. A silent exit in a
+                # cron / SSH / subprocess context is the worst failure mode.
+                # See #30623.
+                failure = exc
     finally:
         try:
             devnull.close()
         except Exception:
             pass
 
-    if response:
-        real_stdout.write(response)
-        if not response.endswith("\n"):
-            real_stdout.write("\n")
-        real_stdout.flush()
+    if failure is not None:
+        # Re-raise control-flow exceptions so the parent handles them as usual
+        # (Ctrl-C / explicit sys.exit() inside the agent).
+        if isinstance(failure, (KeyboardInterrupt, SystemExit)):
+            raise failure
+        real_stderr.write(f"hermes -z: agent failed: {failure}\n")
+        real_stderr.flush()
+        return 1
+
+    if not (response or "").strip():
+        real_stderr.write("hermes -z: no final response was produced; treating the run as failed.\n")
+        real_stderr.flush()
+        return 1
+
+    assert response is not None  # narrowed by the empty-response guard above
+    real_stdout.write(response)
+    if not response.endswith("\n"):
+        real_stdout.write("\n")
+    real_stdout.flush()
     return 0
 
 

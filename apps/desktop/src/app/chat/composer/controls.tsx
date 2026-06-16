@@ -3,8 +3,7 @@ import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { AudioLines, Layers3, Loader2, Square, SteeringWheel } from '@/lib/icons'
-import { formatCombo } from '@/lib/keybinds/combo'
+import { AudioLines, Layers3, Loader2, Square } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
 import type { ConversationStatus } from './hooks/use-voice-conversation'
@@ -39,19 +38,16 @@ interface ConversationProps {
 export function ComposerControls({
   busy,
   busyAction,
-  canSteer,
   canSubmit,
   conversation,
   disabled,
   hasComposerPayload,
   state,
   voiceStatus,
-  onDictate,
-  onSteer
+  onDictate
 }: {
   busy: boolean
   busyAction: 'queue' | 'stop'
-  canSteer: boolean
   canSubmit: boolean
   conversation: ConversationProps
   disabled: boolean
@@ -59,11 +55,9 @@ export function ComposerControls({
   state: ChatBarState
   voiceStatus: VoiceStatus
   onDictate: () => void
-  onSteer: () => void
 }) {
   const { t } = useI18n()
   const c = t.composer
-  const steerLabel = `${c.steer} (${formatCombo('mod+enter')})`
 
   if (conversation.active) {
     return <ConversationPill {...conversation} disabled={disabled} />
@@ -74,21 +68,6 @@ export function ComposerControls({
   return (
     <div className="ml-auto flex shrink-0 items-center gap-(--composer-control-gap)">
       <DictationButton disabled={disabled} onToggle={onDictate} state={state.voice} status={voiceStatus} />
-      {canSteer && (
-        <Tip label={steerLabel}>
-          <Button
-            aria-label={steerLabel}
-            className={GHOST_ICON_BTN}
-            disabled={disabled}
-            onClick={onSteer}
-            size="icon"
-            type="button"
-            variant="ghost"
-          >
-            <SteeringWheel size={16} />
-          </Button>
-        </Tip>
-      )}
       {showVoicePrimary ? (
         <Tip label={c.startVoice}>
           <Button

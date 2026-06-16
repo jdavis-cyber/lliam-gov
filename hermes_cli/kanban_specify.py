@@ -48,7 +48,7 @@ HERMES_KANBAN_SPECIFY_MAX_TOKENS = max(
 logger = logging.getLogger(__name__)
 
 
-_SYSTEM_PROMPT = """You are the Kanban triage specifier for the Lliam-GOV board.
+_SYSTEM_PROMPT = """You are the Kanban triage specifier for the Hermes Agent board.
 A user dropped a rough idea into the Triage column. Your job is to turn it
 into a concrete, actionable task spec that an autonomous worker can pick up
 and execute without further clarification.
@@ -150,7 +150,7 @@ def specify_task(
     error, malformed response) — those surface via ``ok=False`` so the
     ``--all`` sweep can continue past individual failures.
     """
-    with kb.connect() as conn:
+    with kb.connect_closing() as conn:
         task = kb.get_task(conn, task_id)
     if task is None:
         return SpecifyOutcome(task_id, False, "unknown task id")
@@ -239,7 +239,7 @@ def specify_task(
                 task_id, False, "LLM response missing title and body"
             )
 
-    with kb.connect() as conn:
+    with kb.connect_closing() as conn:
         ok = kb.specify_triage_task(
             conn,
             task_id,
@@ -261,7 +261,7 @@ def list_triage_ids(*, tenant: Optional[str] = None) -> list[str]:
 
     ``tenant`` narrows the sweep; ``None`` returns every triage task.
     """
-    with kb.connect() as conn:
+    with kb.connect_closing() as conn:
         tasks = kb.list_tasks(
             conn,
             status="triage",

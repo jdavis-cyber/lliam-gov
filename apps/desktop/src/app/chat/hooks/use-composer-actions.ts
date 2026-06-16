@@ -2,7 +2,6 @@ import { useCallback } from 'react'
 
 import { requestComposerFocus, requestComposerInsert } from '@/app/chat/composer/focus'
 import { formatRefValue } from '@/components/assistant-ui/directive-text'
-import { useI18n } from '@/i18n'
 import { attachmentId, contextPath, pathLabel } from '@/lib/chat-runtime'
 import {
   addComposerAttachment,
@@ -33,7 +32,7 @@ function blobExtension(blob: Blob): string {
   return (mime && BLOB_MIME_EXTENSION[mime]) || '.png'
 }
 
-export function isImagePath(filePath: string): boolean {
+function isImagePath(filePath: string): boolean {
   return IMAGE_EXTENSION_PATTERN.test(filePath)
 }
 
@@ -181,35 +180,6 @@ export function extractDroppedFiles(transfer: DataTransfer): DroppedFile[] {
   return result
 }
 
-/**
- * Split dropped entries by origin. OS/Finder drops carry a native `File`
- * handle; in-app drags (project tree, gutter line refs) are path-only.
- *
- * The distinction is load-bearing: an in-app path is workspace-relative and
- * resolves on the gateway as-is, so it stays an inline `@file:`/`@line:` ref.
- * An OS drop is an absolute path on *this* machine — the gateway can't read it
- * in remote mode, and an image needs its bytes uploaded to get vision either
- * way. So OS drops must go through the attachment/upload pipeline rather than
- * leaking a local path into the prompt text.
- */
-export function partitionDroppedFiles(candidates: DroppedFile[]): {
-  osDrops: DroppedFile[]
-  inAppRefs: DroppedFile[]
-} {
-  const osDrops: DroppedFile[] = []
-  const inAppRefs: DroppedFile[] = []
-
-  for (const candidate of candidates) {
-    if (candidate.file) {
-      osDrops.push(candidate)
-    } else {
-      inAppRefs.push(candidate)
-    }
-  }
-
-  return { osDrops, inAppRefs }
-}
-
 interface ComposerActionsOptions {
   activeSessionId: string | null
   currentCwd: string
@@ -223,11 +193,9 @@ const attachToMain = (attachment: ComposerAttachment) => {
 }
 
 export function useComposerActions({ activeSessionId, currentCwd, requestGateway }: ComposerActionsOptions) {
-  const { t } = useI18n()
-  const copy = t.desktop
   const addTextToDraft = useCallback((text: string) => {
     requestComposerInsert(text, { mode: 'block' })
-  }, [copy.imagePreviewFailed])
+  }, [])
 
   const addTerminalSelectionAttachment = useCallback((text: string, label = 'selection') => {
     const trimmed = text.trim()
@@ -332,7 +300,7 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
 
       return true
     } catch (err) {
-      notifyError(err, copy.imagePreviewFailed)
+      notifyError(err, 'Image preview failed')
 
       return true
     }
@@ -354,28 +322,28 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
         const savedPath = await window.hermesDesktop?.saveImageBuffer(data, blobExtension(blob))
 
         if (!savedPath) {
-          notify({ kind: 'error', title: copy.imageAttach, message: copy.imageWriteFailed })
+          notify({ kind: 'error', title: 'Image attach', message: 'Failed to write image to disk.' })
 
           return false
         }
 
         return attachImagePath(savedPath)
       } catch (err) {
-        notifyError(err, copy.imageAttachFailed)
+        notifyError(err, 'Image attach failed')
 
         return false
       }
     },
-    [attachImagePath, copy.imageAttach, copy.imageAttachFailed, copy.imageWriteFailed]
+    [attachImagePath]
   )
 
   const pickImages = useCallback(async () => {
     const paths = await window.hermesDesktop?.selectPaths({
-      title: copy.attachImages,
+      title: 'Attach images',
       defaultPath: currentCwd || undefined,
       filters: [
         {
-          name: t.composer.images,
+          name: 'Images',
           extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff']
         }
       ]
@@ -388,7 +356,7 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
     for (const path of paths) {
       await attachImagePath(path)
     }
-  }, [attachImagePath, copy.attachImages, currentCwd, t.composer.images])
+  }, [attachImagePath, currentCwd])
 
   const pasteClipboardImage = useCallback(async () => {
     try {
@@ -397,8 +365,8 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
       if (!path) {
         notify({
           kind: 'warning',
-          title: copy.clipboard,
-          message: copy.noClipboardImage
+          title: 'Clipboard',
+          message: 'No image found in clipboard'
         })
 
         return
@@ -406,9 +374,9 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
 
       await attachImagePath(path)
     } catch (err) {
-      notifyError(err, copy.clipboardPasteFailed)
+      notifyError(err, 'Clipboard paste failed')
     }
-  }, [attachImagePath, copy.clipboard, copy.clipboardPasteFailed, copy.noClipboardImage])
+  }, [attachImagePath])
 
   const attachContextFolderPath = useCallback(
     (folderPath: string) => {
@@ -509,12 +477,12 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
       }
 
       if (!attached && lastFailure) {
-        notify({ kind: 'warning', title: copy.dropFiles, message: lastFailure })
+        notify({ kind: 'warning', title: 'Drop files', message: lastFailure })
       }
 
       return attached
     },
-    [attachContextFilePath, attachContextFolderPath, attachImageBlob, attachImagePath, copy.dropFiles]
+    [attachContextFilePath, attachContextFolderPath, attachImageBlob, attachImagePath]
   )
 
   const removeAttachment = useCallback(

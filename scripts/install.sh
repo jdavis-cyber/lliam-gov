@@ -1,12 +1,12 @@
 #!/bin/bash
 # ============================================================================
-# Lliam-GOV Installer
+# Hermes Agent Installer
 # ============================================================================
 # Installation script for Linux, macOS, and Android/Termux.
 # Uses uv for desktop/server installs and Python's stdlib venv + pip on Termux.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/jdavis-cyber/lliam-gov/main/scripts/install.sh | bash
+#   curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 #
 # Or with options:
 #   curl -fsSL ... | bash -s -- --no-venv --skip-setup
@@ -16,7 +16,7 @@
 set -e
 
 # Guard against environment leakage when the installer is launched from another
-# Python-driven tool session (e.g. Lliam-GOV terminal tool). A pre-set PYTHONPATH
+# Python-driven tool session (e.g. Hermes terminal tool). A pre-set PYTHONPATH
 # can force pip/entrypoints to import a different checkout than the one being
 # installed, which makes fresh installs appear broken or stale.
 if [ -n "${PYTHONPATH:-}" ]; then
@@ -43,9 +43,9 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # Configuration
-REPO_URL_SSH="git@github.com:jdavis-cyber/lliam-gov.git"
-REPO_URL_HTTPS="https://github.com/jdavis-cyber/lliam-gov.git"
-HERMES_HOME="${HERMES_HOME:-$HOME/.lliam-gov}"
+REPO_URL_SSH="git@github.com:NousResearch/hermes-agent.git"
+REPO_URL_HTTPS="https://github.com/NousResearch/hermes-agent.git"
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 # INSTALL_DIR is resolved AFTER arg parsing and OS detection so we can pick an
 # FHS-style layout for root installs.  Track whether the user gave us an
 # explicit directory — if so we never override it.
@@ -60,8 +60,8 @@ PYTHON_VERSION="3.11"
 NODE_VERSION="22"
 
 # FHS-style root install layout (set by resolve_install_layout when applicable):
-#   code at /usr/local/lib/lliam-gov, command at /usr/local/bin/lliam-gov,
-#   data still at /root/.lliam-gov (HERMES_HOME).  Matches Claude Code / Codex CLI
+#   code at /usr/local/lib/hermes-agent, command at /usr/local/bin/hermes,
+#   data still at /root/.hermes (HERMES_HOME).  Matches Claude Code / Codex CLI
 #   and keeps Docker bind-mounted /root/ volumes lean.
 ROOT_FHS_LAYOUT=false
 DETECTED_BROWSER_EXECUTABLE=""
@@ -70,9 +70,16 @@ DETECTED_BROWSER_EXECUTABLE=""
 USE_VENV=true
 RUN_SETUP=true
 SKIP_BROWSER=false
+NO_SKILLS=false
 BRANCH="main"
+INSTALL_COMMIT=""
 ENSURE_DEPS=""
 POSTINSTALL_MODE=false
+MANIFEST_MODE=false
+STAGE_NAME=""
+JSON_OUTPUT=false
+NON_INTERACTIVE=false
+INCLUDE_DESKTOP=false
 
 # Detect non-interactive mode (e.g. curl | bash)
 # When stdin is not a terminal, read -p will fail with EOF,
@@ -98,9 +105,37 @@ while [[ $# -gt 0 ]]; do
             SKIP_BROWSER=true
             shift
             ;;
-        --branch)
+        --no-skills)
+            NO_SKILLS=true
+            shift
+            ;;
+        --branch|-Branch)
             BRANCH="$2"
             shift 2
+            ;;
+        --commit|-Commit)
+            INSTALL_COMMIT="$2"
+            shift 2
+            ;;
+        --manifest|-Manifest)
+            MANIFEST_MODE=true
+            shift
+            ;;
+        --stage|-Stage)
+            STAGE_NAME="$2"
+            shift 2
+            ;;
+        --json|-Json)
+            JSON_OUTPUT=true
+            shift
+            ;;
+        --non-interactive|-NonInteractive)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        --include-desktop|-IncludeDesktop)
+            INCLUDE_DESKTOP=true
+            shift
             ;;
         --dir)
             INSTALL_DIR="$2"
@@ -120,7 +155,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            echo "Lliam-GOV Installer"
+            echo "Hermes Agent Installer"
             echo ""
             echo "Usage: install.sh [OPTIONS]"
             echo ""
@@ -128,26 +163,35 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-venv      Don't create virtual environment"
             echo "  --skip-setup   Skip interactive setup wizard"
             echo "  --skip-browser Skip Playwright/Chromium install (browser tools won't work)"
+            echo "  --no-skills    Start with a blank slate — seed no bundled skills, and"
+            echo "                   write \$HERMES_HOME/.no-bundled-skills so future"
+            echo "                   'hermes update' runs never inject bundled skills either"
             echo "  --branch NAME  Git branch to install (default: main)"
+            echo "  --commit SHA   Pin checkout to a specific commit after clone/update"
+            echo "  --manifest     Print desktop bootstrap stage manifest as JSON"
+            echo "  --stage NAME   Run one desktop bootstrap stage"
+            echo "  --json         Print a JSON result frame for --stage"
+            echo "  --non-interactive  Skip stages that require user input"
+            echo "  --include-desktop  Also build the desktop app (apps/desktop -> Hermes.app)"
             echo "  --dir PATH     Installation directory"
-            echo "                   default (non-root):  ~/.lliam-gov/lliam-gov"
-            echo "                   default (root, Linux): /usr/local/lib/lliam-gov"
-            echo "  --hermes-home PATH  Data directory (default: ~/.lliam-gov, or \$HERMES_HOME)"
+            echo "                   default (non-root):  ~/.hermes/hermes-agent"
+            echo "                   default (root, Linux): /usr/local/lib/hermes-agent"
+            echo "  --hermes-home PATH  Data directory (default: ~/.hermes, or \$HERMES_HOME)"
             echo "  -h, --help     Show this help"
             echo ""
             echo "Notes:"
-            echo "  When running as root on Linux, Lliam-GOV installs the code under"
-            echo "  /usr/local/lib/lliam-gov and links the command into"
-            echo "  /usr/local/bin/lliam-gov (FHS layout — matches Claude Code / Codex CLI)."
+            echo "  When running as root on Linux, Hermes installs the code under"
+            echo "  /usr/local/lib/hermes-agent and links the command into"
+            echo "  /usr/local/bin/hermes (FHS layout — matches Claude Code / Codex CLI)."
             echo "  Data, config, sessions, and logs still live in \$HERMES_HOME"
-            echo "  (default /root/.lliam-gov).  This keeps Docker bind-mounted volumes"
+            echo "  (default /root/.hermes).  This keeps Docker bind-mounted volumes"
             echo "  small and ensures the command is on PATH for all shells."
-            echo "  Existing installs at \$HERMES_HOME/lliam-gov are preserved in-place."
+            echo "  Existing installs at \$HERMES_HOME/hermes-agent are preserved in-place."
             echo "  --ensure DEPS  Install only specified deps (comma-separated)"
             echo "                   Supported: node, browser, ripgrep, ffmpeg"
             echo "                   Does NOT clone repo or create venv"
             echo "  --postinstall  Run post-install setup only (for pip users)"
-            echo "                   Installs optional deps + runs lliam-gov setup"
+            echo "                   Installs optional deps + runs hermes setup"
             echo "                   Does NOT clone repo or create venv"
             exit 0
             ;;
@@ -166,9 +210,9 @@ print_banner() {
     echo ""
     echo -e "${MAGENTA}${BOLD}"
     echo "┌─────────────────────────────────────────────────────────┐"
-    echo "│              Lliam-GOV Installer                        │"
+    echo "│             ⚕ Hermes Agent Installer                    │"
     echo "├─────────────────────────────────────────────────────────┤"
-    echo "│  Governed AI runtime with CMMC / ISO 42001 controls.    │"
+    echo "│  An open source AI agent by Nous Research.              │"
     echo "└─────────────────────────────────────────────────────────┘"
     echo -e "${NC}"
 }
@@ -189,6 +233,66 @@ log_error() {
     echo -e "${RED}✗${NC} $1"
 }
 
+json_escape() {
+    # Enough for short installer status strings; avoids requiring jq during
+    # pre-install bootstrap.
+    printf '%s' "$1" | tr '\n' ' ' | sed \
+        -e 's/\\/\\\\/g' \
+        -e 's/"/\\"/g'
+}
+
+# npm rewrites tracked package-lock.json files non-deterministically during
+# `npm install` / `npm run pack`. On a managed install those diffs are never
+# intentional, but they leave the checkout dirty — which forces `hermes update`
+# to autostash on every run and makes branch switches fragile. Restore them so
+# a fresh install ends with a clean tree. Best-effort; only touches lockfiles.
+restore_dirty_lockfiles() {
+    local repo="${1:-$INSTALL_DIR}"
+    [ -n "$repo" ] && [ -d "$repo/.git" ] || return 0
+    command -v git >/dev/null 2>&1 || return 0
+    local dirty
+    dirty=$(git -C "$repo" diff --name-only 2>/dev/null | grep 'package-lock\.json$' || true)
+    [ -z "$dirty" ] && return 0
+    echo "$dirty" | while IFS= read -r f; do
+        [ -n "$f" ] && git -C "$repo" checkout -- "$f" 2>/dev/null || true
+    done
+}
+
+emit_manifest() {
+    # Stage-Desktop is included only with --include-desktop, mirroring
+    # install.ps1: the signed bootstrap installer (Hermes-Setup) passes it so
+    # a GUI install ends up with a launchable app; the Electron app's own
+    # first-launch bootstrap and the CLI one-liner omit it (building the
+    # desktop from inside the already-running app would clobber it).
+    local desktop_stage=""
+    if [ "$INCLUDE_DESKTOP" = true ]; then
+        desktop_stage='{"name":"desktop","title":"Build desktop app","category":"runtime","needs_user_input":false},'
+    fi
+    printf '%s' '{"protocol_version":1,"stages":[{"name":"prerequisites","title":"System prerequisites","category":"runtime","needs_user_input":false},{"name":"repository","title":"Download Hermes Agent","category":"runtime","needs_user_input":false},{"name":"venv","title":"Create Python virtual environment","category":"runtime","needs_user_input":false},{"name":"python-deps","title":"Install Python dependencies","category":"runtime","needs_user_input":false},{"name":"node-deps","title":"Install browser-tool dependencies","category":"runtime","needs_user_input":false},{"name":"path","title":"Install hermes command","category":"runtime","needs_user_input":false},{"name":"config","title":"Prepare config and skills","category":"configuration","needs_user_input":false},{"name":"setup","title":"Configure API keys and settings","category":"configuration","needs_user_input":true},{"name":"gateway","title":"Configure gateway service","category":"configuration","needs_user_input":true},'"$desktop_stage"'{"name":"complete","title":"Finish install","category":"runtime","needs_user_input":false}]}'
+    printf '\n'
+}
+
+stage_needs_user_input() {
+    case "$1" in
+        setup|gateway) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+emit_stage_json() {
+    local stage="$1"
+    local ok="$2"
+    local skipped="${3:-false}"
+    local reason="${4:-}"
+    local escaped_reason
+    escaped_reason="$(json_escape "$reason")"
+    if [ -n "$escaped_reason" ]; then
+        printf '{"ok":%s,"stage":"%s","skipped":%s,"reason":"%s"}\n' "$ok" "$stage" "$skipped" "$escaped_reason"
+    else
+        printf '{"ok":%s,"stage":"%s","skipped":%s}\n' "$ok" "$stage" "$skipped"
+    fi
+}
+
 prompt_yes_no() {
     local question="$1"
     local default="${2:-yes}"
@@ -201,7 +305,9 @@ prompt_yes_no() {
         *) prompt_suffix="[y/N]" ;;
     esac
 
-    if [ "$IS_INTERACTIVE" = true ]; then
+    if [ "$NON_INTERACTIVE" = true ]; then
+        answer=""
+    elif [ "$IS_INTERACTIVE" = true ]; then
         read -r -p "$question $prompt_suffix " answer || answer=""
     elif [ -r /dev/tty ] && [ -w /dev/tty ]; then
         printf "%s %s " "$question" "$prompt_suffix" > /dev/tty
@@ -234,14 +340,14 @@ is_termux() {
 # symlink goes.  Called after detect_os so $OS/$DISTRO are known.
 #
 # Defaults:
-#   - Non-root, any OS:       INSTALL_DIR = $HERMES_HOME/lliam-gov
+#   - Non-root, any OS:       INSTALL_DIR = $HERMES_HOME/hermes-agent
 #                             command link in $HOME/.local/bin
-#   - Termux (any uid):       INSTALL_DIR = $HERMES_HOME/lliam-gov
+#   - Termux (any uid):       INSTALL_DIR = $HERMES_HOME/hermes-agent
 #                             command link in $PREFIX/bin (already on PATH)
-#   - Root on Linux (new):    INSTALL_DIR = /usr/local/lib/lliam-gov
+#   - Root on Linux (new):    INSTALL_DIR = /usr/local/lib/hermes-agent
 #                             command link in /usr/local/bin
 #                             (unless a legacy install already exists at
-#                              $HERMES_HOME/lliam-gov — then preserve it)
+#                              $HERMES_HOME/hermes-agent — then preserve it)
 #
 # Always no-op when the user set --dir or $HERMES_INSTALL_DIR.
 resolve_install_layout() {
@@ -252,7 +358,7 @@ resolve_install_layout() {
 
     # Termux: package manager manages /data/data/..., keep code in HERMES_HOME.
     if is_termux; then
-        INSTALL_DIR="$HERMES_HOME/lliam-gov"
+        INSTALL_DIR="$HERMES_HOME/hermes-agent"
         return 0
     fi
 
@@ -260,23 +366,31 @@ resolve_install_layout() {
     # macOS root installs keep the legacy layout because /usr/local/ on macOS
     # is Homebrew territory and we don't want to fight that.
     if [ "$OS" = "linux" ] && [ "$(id -u)" -eq 0 ]; then
-        if [ -d "$HERMES_HOME/lliam-gov/.git" ]; then
-            INSTALL_DIR="$HERMES_HOME/lliam-gov"
+        if [ -d "$HERMES_HOME/hermes-agent/.git" ]; then
+            INSTALL_DIR="$HERMES_HOME/hermes-agent"
             log_info "Existing install detected at $INSTALL_DIR — keeping legacy layout"
-            log_info "  (new root installs use /usr/local/lib/lliam-gov)"
+            log_info "  (new root installs use /usr/local/lib/hermes-agent)"
             return 0
         fi
-        INSTALL_DIR="/usr/local/lib/lliam-gov"
+        INSTALL_DIR="/usr/local/lib/hermes-agent"
         ROOT_FHS_LAYOUT=true
+        # Place uv-managed Python under /usr/local/share so the venv interpreter
+        # is world-readable.  Default uv paths land in /root/.local/share/uv,
+        # which non-root users can't traverse — leaving the shared
+        # /usr/local/bin/hermes wrapper unable to exec the bad-interpreter venv
+        # python.  See #21457.
+        export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-/usr/local/share/uv/python}"
+        export UV_PYTHON_BIN_DIR="${UV_PYTHON_BIN_DIR:-/usr/local/share/uv/bin}"
         log_info "Root install on Linux — using FHS layout"
         log_info "  Code:    $INSTALL_DIR"
-        log_info "  Command: /usr/local/bin/lliam-gov"
+        log_info "  Command: /usr/local/bin/hermes"
         log_info "  Data:    $HERMES_HOME (unchanged)"
+        log_info "  uv Python: $UV_PYTHON_INSTALL_DIR (world-readable)"
         return 0
     fi
 
     # Default: non-root, non-Termux → legacy user-scoped layout.
-    INSTALL_DIR="$HERMES_HOME/lliam-gov"
+    INSTALL_DIR="$HERMES_HOME/hermes-agent"
 }
 
 get_command_link_dir() {
@@ -302,10 +416,10 @@ get_command_link_display_dir() {
 get_hermes_command_path() {
     local link_dir
     link_dir="$(get_command_link_dir)"
-    if [ -x "$link_dir/lliam-gov" ]; then
-        echo "$link_dir/lliam-gov"
+    if [ -x "$link_dir/hermes" ]; then
+        echo "$link_dir/hermes"
     else
-        echo "lliam-gov"
+        echo "hermes"
     fi
 }
 
@@ -337,7 +451,7 @@ detect_os() {
             OS="windows"
             DISTRO="windows"
             log_error "Windows detected. Please use the PowerShell installer:"
-            log_info "  iex (irm https://raw.githubusercontent.com/jdavis-cyber/lliam-gov/main/scripts/install.ps1)"
+            log_info "  iex (irm https://hermes-agent.nousresearch.com/install.ps1)"
             exit 1
             ;;
         *)
@@ -361,39 +475,22 @@ install_uv() {
         return 0
     fi
 
-    log_info "Checking for uv package manager..."
+    # Hermes owns its own uv at $HERMES_HOME/bin/uv.  Always install there —
+    # no PATH probing, no conda guards, no multi-location resolution chains.
+    # The runtime update path (hermes_cli/managed_uv.py) looks in the same
+    # place, so install.sh and `hermes update` stay in sync.
+    local _managed_uv="$HERMES_HOME/bin/uv"
 
-    # Check common locations for uv
-    if command -v uv &> /dev/null; then
-        UV_CMD="uv"
+    if [ -x "$_managed_uv" ]; then
+        UV_CMD="$_managed_uv"
         UV_VERSION=$($UV_CMD --version 2>/dev/null)
-        log_success "uv found ($UV_VERSION)"
+        log_success "Managed uv found ($UV_VERSION)"
         return 0
     fi
 
-    # Check ~/.local/bin (default uv install location) even if not on PATH yet
-    if [ -x "$HOME/.local/bin/uv" ]; then
-        UV_CMD="$HOME/.local/bin/uv"
-        UV_VERSION=$($UV_CMD --version 2>/dev/null)
-        log_success "uv found at ~/.local/bin ($UV_VERSION)"
-        return 0
-    fi
+    log_info "Installing managed uv into $HERMES_HOME/bin ..."
+    mkdir -p "$HERMES_HOME/bin"
 
-    # Check ~/.cargo/bin (alternative uv install location)
-    if [ -x "$HOME/.cargo/bin/uv" ]; then
-        UV_CMD="$HOME/.cargo/bin/uv"
-        UV_VERSION=$($UV_CMD --version 2>/dev/null)
-        log_success "uv found at ~/.cargo/bin ($UV_VERSION)"
-        return 0
-    fi
-
-    # Install uv
-    log_info "Installing uv (fast Python package manager)..."
-    # Capture installer output so a failure shows the user WHY (network,
-    # glibc mismatch on old distros, missing curl, ~/.local/bin not
-    # writable, disk full, corp proxy / TLS interception, etc.) instead
-    # of the previous "✗ Failed to install uv" with zero diagnostic.
-    #
     # Two-stage: download the installer, then run it.  Piping
     # `curl | sh` masks curl failures (sh exits 0 on empty stdin)
     # and conflates network errors with installer errors.
@@ -408,26 +505,22 @@ install_uv() {
         rm -f "$_uv_install_log" "$_uv_installer"
         exit 1
     fi
-    if sh "$_uv_installer" >>"$_uv_install_log" 2>&1; then
+    # UV_UNMANAGED_INSTALL tells the astral installer to place the binary
+    # directly into $HERMES_HOME/bin instead of ~/.local/bin.
+    if UV_UNMANAGED_INSTALL="$HERMES_HOME/bin" sh "$_uv_installer" >>"$_uv_install_log" 2>&1; then
         rm -f "$_uv_installer"
-        # uv installs to ~/.local/bin by default
-        if [ -x "$HOME/.local/bin/uv" ]; then
-            UV_CMD="$HOME/.local/bin/uv"
-        elif [ -x "$HOME/.cargo/bin/uv" ]; then
-            UV_CMD="$HOME/.cargo/bin/uv"
-        elif command -v uv &> /dev/null; then
-            UV_CMD="uv"
+        if [ -x "$_managed_uv" ]; then
+            UV_CMD="$_managed_uv"
         else
-            log_error "uv installer reported success but binary not found on PATH"
+            log_error "uv installer reported success but binary not found at $_managed_uv"
             log_info "Installer output:"
             sed 's/^/    /' "$_uv_install_log" >&2
-            log_info "Try adding ~/.local/bin to your PATH and re-running"
             rm -f "$_uv_install_log"
             exit 1
         fi
         rm -f "$_uv_install_log"
         UV_VERSION=$($UV_CMD --version 2>/dev/null)
-        log_success "uv installed ($UV_VERSION)"
+        log_success "Managed uv installed ($UV_VERSION)"
     else
         log_error "Failed to install uv"
         log_info "Installer output:"
@@ -481,10 +574,78 @@ check_python() {
     fi
 }
 
+# Best-effort automatic git provisioning, mirroring install.ps1's Install-Git
+# (which downloads PortableGit on Windows). git is required to clone the repo,
+# and a fresh "normie" machine with no developer tools won't have it. Returns 0
+# if git is available afterwards, non-zero otherwise (caller prints manual
+# instructions and aborts).
+attempt_install_git() {
+    case "$OS" in
+        macos)
+            # Prefer Homebrew — fully headless when present.
+            if command -v brew >/dev/null 2>&1; then
+                log_info "Installing Git via Homebrew..."
+                brew install git >/dev/null 2>&1 || true
+                command -v git >/dev/null 2>&1 && return 0
+            fi
+            # Fall back to Apple Command Line Tools, which provide git AND the
+            # compiler some Python wheels need. `xcode-select --install` pops a
+            # system dialog (Apple gates CLT behind it — it cannot be fully
+            # silent without MDM), so we trigger it and poll for git to appear.
+            if command -v xcode-select >/dev/null 2>&1; then
+                log_info "Requesting Apple Command Line Tools (provides git + compiler)..."
+                log_info "If a macOS dialog appears, click \"Install\" and accept the license."
+                xcode-select --install >/dev/null 2>&1 || true
+                local waited=0
+                local timeout=900
+                while [ "$waited" -lt "$timeout" ]; do
+                    if command -v git >/dev/null 2>&1 && git --version >/dev/null 2>&1; then
+                        return 0
+                    fi
+                    sleep 5
+                    waited=$((waited + 5))
+                    if [ $((waited % 60)) -eq 0 ]; then
+                        log_info "Still waiting for Command Line Tools install ($((waited / 60))m)..."
+                    fi
+                done
+            fi
+            return 1
+            ;;
+        linux)
+            local sudo_cmd=""
+            if [ "$(id -u 2>/dev/null || echo 1000)" -ne 0 ]; then
+                command -v sudo >/dev/null 2>&1 && sudo_cmd="sudo"
+            fi
+            case "$DISTRO" in
+                ubuntu|debian)
+                    log_info "Installing Git via apt..."
+                    $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true
+                    $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git >/dev/null 2>&1 || true
+                    ;;
+                fedora)
+                    log_info "Installing Git via dnf..."
+                    $sudo_cmd dnf install -y git >/dev/null 2>&1 || true
+                    ;;
+                arch)
+                    log_info "Installing Git via pacman..."
+                    $sudo_cmd pacman -S --noconfirm git >/dev/null 2>&1 || true
+                    ;;
+                *)
+                    return 1
+                    ;;
+            esac
+            command -v git >/dev/null 2>&1 && return 0
+            return 1
+            ;;
+    esac
+    return 1
+}
+
 check_git() {
     log_info "Checking Git..."
 
-    if command -v git &> /dev/null; then
+    # On fresh macOS /usr/bin/git is a stub that exits non-zero until CLT is installed.
+    if command -v git &> /dev/null && git --version &> /dev/null; then
         GIT_VERSION=$(git --version | awk '{print $3}')
         log_success "Git $GIT_VERSION found"
         return 0
@@ -502,7 +663,15 @@ check_git() {
         fi
     fi
 
-    log_info "Please install Git:"
+    # Try to install it automatically before giving up (parity with install.ps1).
+    log_info "Attempting to install Git automatically..."
+    if attempt_install_git; then
+        GIT_VERSION=$(git --version | awk '{print $3}')
+        log_success "Git $GIT_VERSION installed"
+        return 0
+    fi
+
+    log_warn "Could not install Git automatically. Please install it manually:"
 
     case "$OS" in
         linux)
@@ -533,26 +702,43 @@ check_git() {
     exit 1
 }
 
+# The desktop build runs Vite ^8, which refuses to start on Node outside
+# `^20.19 || >=22.12` — older Node lacks `node:util.styleText`, so `vite build`
+# crashes with a SyntaxError that surfaces only as the opaque "Build desktop
+# app … exit code 1" install failure. Returns 0 when the given `node --version`
+# string clears that floor; anything below it is replaced with the Hermes-
+# managed Node $NODE_VERSION LTS.
+node_satisfies_build() {
+    local ver="${1#v}"
+    local major="${ver%%.*}"
+    local minor="${ver#*.}"; minor="${minor%%.*}"
+    case "$major" in ''|*[!0-9]*) return 1 ;; esac
+    case "$minor" in ''|*[!0-9]*) minor=0 ;; esac
+    if [ "$major" -eq 20 ] && [ "$minor" -ge 19 ]; then return 0; fi
+    if [ "$major" -ge 22 ] && { [ "$major" -gt 22 ] || [ "$minor" -ge 12 ]; }; then return 0; fi
+    return 1
+}
+
 check_node() {
     log_info "Checking Node.js (for browser tools)..."
 
-    if command -v node &> /dev/null; then
-        local found_ver=$(node --version)
-        log_success "Node.js $found_ver found"
+    if command -v node &> /dev/null && node_satisfies_build "$(node --version)"; then
+        log_success "Node.js $(node --version) found"
         HAS_NODE=true
         return 0
     fi
 
-    # Check our own managed install from a previous run
-    if [ -x "$HERMES_HOME/node/bin/node" ]; then
+    # Prefer a Hermes-managed Node from a previous run over a too-old system one.
+    if [ -x "$HERMES_HOME/node/bin/node" ] && node_satisfies_build "$("$HERMES_HOME/node/bin/node" --version)"; then
         export PATH="$HERMES_HOME/node/bin:$PATH"
-        local found_ver=$("$HERMES_HOME/node/bin/node" --version)
-        log_success "Node.js $found_ver found (Lliam-GOV-managed)"
+        log_success "Node.js $("$HERMES_HOME/node/bin/node" --version) found (Hermes-managed)"
         HAS_NODE=true
         return 0
     fi
 
-    if [ "$DISTRO" = "termux" ]; then
+    if command -v node &> /dev/null; then
+        log_warn "Node.js $(node --version) is too old for the desktop build (need ^20.19 or >=22.12) — installing Hermes-managed Node $NODE_VERSION LTS..."
+    elif [ "$DISTRO" = "termux" ]; then
         log_info "Node.js not found — installing Node.js via pkg..."
     else
         log_info "Node.js not found — installing Node.js $NODE_VERSION LTS..."
@@ -633,7 +819,7 @@ install_node() {
         return 0
     fi
 
-    log_info "Extracting to $HERMES_HOME/node/..."
+    log_info "Extracting to ~/.hermes/node/..."
     if [[ "$tarball_name" == *.tar.xz ]]; then
         tar xf "$tmp_dir/$tarball_name" -C "$tmp_dir"
     else
@@ -650,22 +836,26 @@ install_node() {
         return 0
     fi
 
-    # Place into $HERMES_HOME/node/ and symlink binaries to ~/.local/bin/
+    # Place into ~/.hermes/node/ and symlink binaries into the same bin dir
+    # the hermes command uses (get_command_link_dir): /usr/local/bin for root
+    # FHS installs, $PREFIX/bin on Termux, ~/.local/bin otherwise.
     rm -rf "$HERMES_HOME/node"
     mkdir -p "$HERMES_HOME"
     mv "$extracted_dir" "$HERMES_HOME/node"
     rm -rf "$tmp_dir"
 
-    mkdir -p "$HOME/.local/bin"
-    ln -sf "$HERMES_HOME/node/bin/node" "$HOME/.local/bin/node"
-    ln -sf "$HERMES_HOME/node/bin/npm"  "$HOME/.local/bin/npm"
-    ln -sf "$HERMES_HOME/node/bin/npx"  "$HOME/.local/bin/npx"
+    local node_link_dir
+    node_link_dir="$(get_command_link_dir)"
+    mkdir -p "$node_link_dir"
+    ln -sf "$HERMES_HOME/node/bin/node" "$node_link_dir/node"
+    ln -sf "$HERMES_HOME/node/bin/npm"  "$node_link_dir/npm"
+    ln -sf "$HERMES_HOME/node/bin/npx"  "$node_link_dir/npx"
 
     export PATH="$HERMES_HOME/node/bin:$PATH"
 
     local installed_ver
     installed_ver=$("$HERMES_HOME/node/bin/node" --version 2>/dev/null)
-    log_success "Node.js $installed_ver installed to $HERMES_HOME/node/"
+    log_success "Node.js $installed_ver installed to ~/.hermes/node/"
     HAS_NODE=true
 }
 
@@ -699,7 +889,7 @@ check_network_prerequisites() {
         log_info "If mirrors are stale: termux-change-repo"
         log_info "Then test: curl -I https://pypi.org/simple/ && curl -I https://duckduckgo.com/"
     else
-        log_warn "Network checks failed. Lliam-GOV install may complete, but web search and dependency downloads can fail."
+        log_warn "Network checks failed. Hermes install may complete, but web search and dependency downloads can fail."
         log_info "Verify internet/DNS and retry if pip install fails."
     fi
 }
@@ -823,7 +1013,7 @@ install_system_packages() {
             if [ "$IS_INTERACTIVE" = true ]; then
                 echo ""
                 log_info "sudo is needed ONLY to install optional system packages (${pkgs[*]}) via your package manager."
-                log_info "Lliam-GOV itself does not require or retain root access."
+                log_info "Hermes Agent itself does not require or retain root access."
                 if prompt_yes_no "Install ${description}? (requires sudo)" "no"; then
                     if sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a $install_cmd; then
                         [ "$need_ripgrep" = true ] && HAS_RIPGREP=true && log_success "ripgrep installed"
@@ -839,7 +1029,7 @@ install_system_packages() {
                 # but opening fails with ENXIO. See #16746.
                 echo ""
                 log_info "sudo is needed ONLY to install optional system packages (${pkgs[*]}) via your package manager."
-                log_info "Lliam-GOV itself does not require or retain root access."
+                log_info "Hermes Agent itself does not require or retain root access."
                 if prompt_yes_no "Install ${description}?" "yes"; then
                     if sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a $install_cmd < /dev/tty; then
                         [ "$need_ripgrep" = true ] && HAS_RIPGREP=true && log_success "ripgrep installed"
@@ -939,7 +1129,7 @@ clone_repo() {
                     if git stash apply "$autostash_ref"; then
                         git stash drop "$autostash_ref" >/dev/null
                         log_warn "Local changes were restored on top of the updated codebase."
-                        log_warn "Review git diff / git status if Lliam-GOV behaves unexpectedly."
+                        log_warn "Review git diff / git status if Hermes behaves unexpectedly."
                     else
                         log_error "Update succeeded, but restoring local changes failed. Your changes are still preserved in git stash."
                         log_info "Resolve manually with: git stash apply $autostash_ref"
@@ -962,12 +1152,12 @@ clone_repo() {
         # so SSH fails fast instead of hanging when no key is configured.
         log_info "Trying SSH clone..."
         if GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=5" \
-           git clone --branch "$BRANCH" "$REPO_URL_SSH" "$INSTALL_DIR" 2>/dev/null; then
+           git clone --depth 1 --branch "$BRANCH" "$REPO_URL_SSH" "$INSTALL_DIR" 2>/dev/null; then
             log_success "Cloned via SSH"
         else
             rm -rf "$INSTALL_DIR" 2>/dev/null  # Clean up partial SSH clone
             log_info "SSH failed, trying HTTPS..."
-            if git clone --branch "$BRANCH" "$REPO_URL_HTTPS" "$INSTALL_DIR"; then
+            if git clone --depth 1 --branch "$BRANCH" "$REPO_URL_HTTPS" "$INSTALL_DIR"; then
                 log_success "Cloned via HTTPS"
             else
                 log_error "Failed to clone repository"
@@ -977,6 +1167,14 @@ clone_repo() {
     fi
 
     cd "$INSTALL_DIR"
+
+    if [ -n "$INSTALL_COMMIT" ]; then
+        log_info "Pinning checkout to commit $INSTALL_COMMIT..."
+        if ! git cat-file -e "$INSTALL_COMMIT^{commit}" 2>/dev/null; then
+            git fetch origin "$INSTALL_COMMIT" || true
+        fi
+        git checkout --detach "$INSTALL_COMMIT"
+    fi
 
     log_success "Repository ready"
 }
@@ -1010,11 +1208,32 @@ setup_venv() {
     # uv creates the venv and pins the Python version in one step
     $UV_CMD venv venv --python "$PYTHON_VERSION"
 
+    # Neutralize any inherited UV_PYTHON (e.g. UV_PYTHON=3.14 left in the
+    # user's shell env). uv honours UV_PYTHON over an existing venv for the
+    # later `uv sync` / `uv pip install` tiers, so without this it would
+    # silently delete this 3.11 venv and recreate it at the inherited
+    # version — building Rust transitives that have no wheel for that
+    # version from source via maturin, which fails. Pinning UV_PYTHON to the
+    # interpreter we just created forces every subsequent uv command onto it.
+    if [ -x "$INSTALL_DIR/venv/bin/python" ]; then
+        export UV_PYTHON="$INSTALL_DIR/venv/bin/python"
+    fi
+
     log_success "Virtual environment ready (Python $PYTHON_VERSION)"
 }
 
 install_deps() {
     log_info "Installing dependencies..."
+
+    # Re-pin UV_PYTHON to the venv interpreter. setup_venv already does this,
+    # but the bootstrap runs install stages (`venv`, `python-deps`) as separate
+    # processes, so an export from setup_venv does NOT survive into a separate
+    # python-deps invocation. Re-deriving it here covers that path. Without it,
+    # an inherited UV_PYTHON=3.14 makes the uv sync/pip tiers below recreate the
+    # venv at 3.14 and fail the maturin source build (no cp314 wheels yet).
+    if [ "$DISTRO" != "termux" ] && [ -x "$INSTALL_DIR/venv/bin/python" ]; then
+        export UV_PYTHON="$INSTALL_DIR/venv/bin/python"
+    fi
 
     if [ "$DISTRO" = "termux" ]; then
         if [ "$USE_VENV" = true ]; then
@@ -1094,7 +1313,7 @@ install_deps() {
                     log_success "Build tools installed"
                 else
                     log_info "sudo is needed ONLY to install build tools (build-essential, python3-dev, libffi-dev) via apt."
-                    log_info "Lliam-GOV itself does not require or retain root access."
+                    log_info "Hermes Agent itself does not require or retain root access."
                     if prompt_yes_no "Install build tools?" "yes"; then
                         sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq build-essential python3-dev libffi-dev >/dev/null 2>&1 || true
                         log_success "Build tools installed"
@@ -1103,42 +1322,6 @@ install_deps() {
             fi
         fi
     fi
-
-    verify_web_extra() {
-        # The Electron desktop app launches `lliam-gov dashboard` as its local
-        # backend, so fastapi/uvicorn are not optional for desktop installs.
-        # Fallback dependency tiers can leave the venv core-only; repair that
-        # explicitly so users don't get a confusing first-launch backend crash.
-        local python_exe="$INSTALL_DIR/venv/bin/python"
-        if [ ! -x "$python_exe" ]; then
-            return 0
-        fi
-
-        if "$python_exe" -c 'import fastapi, uvicorn' >/dev/null 2>&1; then
-            log_success "Dashboard server deps verified in venv"
-            return 0
-        fi
-
-        log_warn "fastapi/uvicorn not importable -- lliam-gov dashboard will not work."
-        log_info "Attempting targeted install of [web] extra as last resort..."
-
-        if [ "$DISTRO" = "termux" ]; then
-            if "$python_exe" -m pip install -e '.[web]' -c constraints-termux.txt; then
-                log_success "[web] extra installed; lliam-gov dashboard should now work."
-            else
-                log_warn "Could not install [web] extra. Run manually:"
-                log_info "  cd $INSTALL_DIR && python -m pip install -e '.[web]' -c constraints-termux.txt"
-            fi
-            return 0
-        fi
-
-        if UV_PROJECT_ENVIRONMENT="$INSTALL_DIR/venv" "$UV_CMD" pip install -e '.[web]'; then
-            log_success "[web] extra installed; lliam-gov dashboard should now work."
-        else
-            log_warn "Could not install [web] extra. Run manually:"
-            log_info "  cd $INSTALL_DIR && UV_PROJECT_ENVIRONMENT=\"$INSTALL_DIR/venv\" $UV_CMD pip install -e '.[web]'"
-        fi
-    }
 
     # Install the main package in editable mode with all extras.
     #
@@ -1179,7 +1362,6 @@ install_deps() {
         # gracefully when stdout/stderr aren't terminals.
         if UV_PROJECT_ENVIRONMENT="$INSTALL_DIR/venv" $UV_CMD sync --extra all --locked; then
             log_success "Main package installed (hash-verified via uv.lock)"
-            verify_web_extra
             log_success "All dependencies installed"
             return 0
         fi
@@ -1222,7 +1404,7 @@ try:
     specs = data["project"]["optional-dependencies"]["all"]
     extras = []
     for s in specs:
-        m = re.search(r"lliam-gov\[([\w-]+)\]", s)
+        m = re.search(r"hermes-agent\[([\w-]+)\]", s)
         if m:
             extras.append(m.group(1))
     print(",".join(extras))
@@ -1291,27 +1473,25 @@ PY
 
     log_success "Main package installed"
 
-    verify_web_extra
-
     log_success "All dependencies installed"
 }
 
 setup_path() {
-    log_info "Setting up lliam-gov command..."
+    log_info "Setting up hermes command..."
 
     if [ "$USE_VENV" = true ]; then
-        HERMES_BIN="$INSTALL_DIR/venv/bin/lliam-gov"
+        HERMES_BIN="$INSTALL_DIR/venv/bin/hermes"
     else
-        HERMES_BIN="$(which lliam-gov 2>/dev/null || echo "")"
+        HERMES_BIN="$(which hermes 2>/dev/null || echo "")"
         if [ -z "$HERMES_BIN" ]; then
-            log_warn "lliam-gov not found on PATH after install"
+            log_warn "hermes not found on PATH after install"
             return 0
         fi
     fi
 
     # Verify the entry point script was actually generated
     if [ ! -x "$HERMES_BIN" ]; then
-        log_warn "lliam-gov entry point not found at $HERMES_BIN"
+        log_warn "hermes entry point not found at $HERMES_BIN"
         log_info "This usually means the pip install didn't complete successfully."
         if [ "$DISTRO" = "termux" ]; then
             log_info "Try: cd $INSTALL_DIR && python -m pip install -e '.[termux-all]' -c constraints-termux.txt"
@@ -1326,27 +1506,27 @@ setup_path() {
     command_link_dir="$(get_command_link_dir)"
     command_link_display_dir="$(get_command_link_display_dir)"
 
-    # Create a user-facing shim for the lliam-gov command.
+    # Create a user-facing shim for the hermes command.
     # We intentionally clear PYTHONPATH/PYTHONHOME here so inherited env vars
     # can't make this launcher import modules from another checkout.
     mkdir -p "$command_link_dir"
     # Older installs created this path as a symlink to $HERMES_BIN. Without
     # the rm, `cat >` follows the symlink and overwrites the venv pip entry
     # point with this shim — making `exec "$HERMES_BIN"` self-recurse. (#21454)
-    rm -f "$command_link_dir/lliam-gov"
-    cat > "$command_link_dir/lliam-gov" <<EOF
+    rm -f "$command_link_dir/hermes"
+    cat > "$command_link_dir/hermes" <<EOF
 #!/usr/bin/env bash
 unset PYTHONPATH
 unset PYTHONHOME
 exec "$HERMES_BIN" "\$@"
 EOF
-    chmod +x "$command_link_dir/lliam-gov"
-    log_success "Installed lliam-gov launcher -> $command_link_display_dir/lliam-gov"
+    chmod +x "$command_link_dir/hermes"
+    log_success "Installed hermes launcher → $command_link_display_dir/hermes"
 
     if [ "$DISTRO" = "termux" ]; then
         export PATH="$command_link_dir:$PATH"
         log_info "$command_link_display_dir is the native Termux command path"
-        log_success "lliam-gov command ready"
+        log_success "hermes command ready"
         return 0
     fi
 
@@ -1361,16 +1541,16 @@ EOF
         # Probe a fresh non-login interactive bash the way the user will use it.
         # `bash -i -c` sources ~/.bashrc but NOT ~/.bash_profile or /etc/profile,
         # which is the exact scenario where RHEL root loses /usr/local/bin.
-        if env -i HOME="$HOME" TERM="${TERM:-dumb}" bash -i -c 'command -v lliam-gov' \
+        if env -i HOME="$HOME" TERM="${TERM:-dumb}" bash -i -c 'command -v hermes' \
                 >/dev/null 2>&1; then
             log_info "/usr/local/bin is already on PATH for all shells"
-            log_success "lliam-gov command ready"
+            log_success "hermes command ready"
             return 0
         fi
 
-        log_info "lliam-gov not on PATH in non-login shells (common on RHEL-family)"
+        log_info "hermes not on PATH in non-login shells (common on RHEL-family)"
         PATH_LINE='export PATH="/usr/local/bin:$PATH"'
-        PATH_COMMENT='# Lliam-GOV — ensure /usr/local/bin is on PATH (RHEL non-login shells)'
+        PATH_COMMENT='# Hermes Agent — ensure /usr/local/bin is on PATH (RHEL non-login shells)'
         for SHELL_CONFIG in "$HOME/.bashrc" "$HOME/.bash_profile"; do
             [ -f "$SHELL_CONFIG" ] || continue
             if ! grep -v '^[[:space:]]*#' "$SHELL_CONFIG" 2>/dev/null \
@@ -1381,7 +1561,7 @@ EOF
                 log_success "Added /usr/local/bin to PATH in $SHELL_CONFIG"
             fi
         done
-        log_success "lliam-gov command ready"
+        log_success "hermes command ready"
         return 0
     fi
 
@@ -1427,7 +1607,7 @@ EOF
         for SHELL_CONFIG in "${SHELL_CONFIGS[@]}"; do
             if ! grep -v '^[[:space:]]*#' "$SHELL_CONFIG" 2>/dev/null | grep -qE 'PATH=.*\.local/bin'; then
                 echo "" >> "$SHELL_CONFIG"
-                echo "# Lliam-GOV — ensure ~/.local/bin is on PATH" >> "$SHELL_CONFIG"
+                echo "# Hermes Agent — ensure ~/.local/bin is on PATH" >> "$SHELL_CONFIG"
                 echo "$PATH_LINE" >> "$SHELL_CONFIG"
                 log_success "Added ~/.local/bin to PATH in $SHELL_CONFIG"
             fi
@@ -1437,7 +1617,7 @@ EOF
         if [ "$IS_FISH" = "true" ]; then
             if ! grep -q 'fish_add_path.*\.local/bin' "$FISH_CONFIG" 2>/dev/null; then
                 echo "" >> "$FISH_CONFIG"
-                echo "# Lliam-GOV — ensure ~/.local/bin is on PATH" >> "$FISH_CONFIG"
+                echo "# Hermes Agent — ensure ~/.local/bin is on PATH" >> "$FISH_CONFIG"
                 echo 'fish_add_path "$HOME/.local/bin"' >> "$FISH_CONFIG"
                 log_success "Added ~/.local/bin to PATH in $FISH_CONFIG"
             fi
@@ -1451,29 +1631,29 @@ EOF
         log_info "~/.local/bin already on PATH"
     fi
 
-    # Export for current session so lliam-gov works immediately
+    # Export for current session so hermes works immediately
     export PATH="$command_link_dir:$PATH"
 
-    log_success "lliam-gov command ready"
+    log_success "hermes command ready"
 }
 
 copy_config_templates() {
     log_info "Setting up configuration files..."
 
-    # Create the governed data directory structure (config at top level, code in subdir)
+    # Create ~/.hermes directory structure (config at top level, code in subdir)
     mkdir -p "$HERMES_HOME"/{cron,sessions,logs,pairing,hooks,image_cache,audio_cache,memories,skills}
 
-    # Create .env at $HERMES_HOME/.env (top level, easy to find)
+    # Create .env at ~/.hermes/.env (top level, easy to find)
     if [ ! -f "$HERMES_HOME/.env" ]; then
         if [ -f "$INSTALL_DIR/.env.example" ]; then
             cp "$INSTALL_DIR/.env.example" "$HERMES_HOME/.env"
-            log_success "Created $HERMES_HOME/.env from template"
+            log_success "Created ~/.hermes/.env from template"
         else
             touch "$HERMES_HOME/.env"
-            log_success "Created $HERMES_HOME/.env"
+            log_success "Created ~/.hermes/.env"
         fi
     else
-        log_info "$HERMES_HOME/.env already exists, keeping it"
+        log_info "~/.hermes/.env already exists, keeping it"
     fi
     # Restrict .env permissions — this file holds API keys and tokens.
     # 0600 ensures only the file owner can read/write, matching standard
@@ -1481,25 +1661,25 @@ copy_config_templates() {
     chmod 600 "$HERMES_HOME/.env"
     configure_browser_env_from_system_browser
 
-    # Create config.yaml at $HERMES_HOME/config.yaml (top level, easy to find)
+    # Create config.yaml at ~/.hermes/config.yaml (top level, easy to find)
     if [ ! -f "$HERMES_HOME/config.yaml" ]; then
         if [ -f "$INSTALL_DIR/cli-config.yaml.example" ]; then
             cp "$INSTALL_DIR/cli-config.yaml.example" "$HERMES_HOME/config.yaml"
-            log_success "Created $HERMES_HOME/config.yaml from template"
+            log_success "Created ~/.hermes/config.yaml from template"
         fi
     else
-        log_info "$HERMES_HOME/config.yaml already exists, keeping it"
+        log_info "~/.hermes/config.yaml already exists, keeping it"
     fi
 
     # Create SOUL.md if it doesn't exist (global persona file)
     if [ ! -f "$HERMES_HOME/SOUL.md" ]; then
         cat > "$HERMES_HOME/SOUL.md" << 'SOUL_EOF'
-# Lliam-GOV Persona
+# Hermes Agent Persona
 
 <!--
 This file defines the agent's personality and tone.
 The agent will embody whatever you write here.
-Edit this to customize how Lliam-GOV communicates with you.
+Edit this to customize how Hermes communicates with you.
 
 Examples:
   - "You are a warm, playful assistant who uses kaomoji occasionally."
@@ -1510,20 +1690,32 @@ This file is loaded fresh each message -- no restart needed.
 Delete the contents (or this file) to use the default personality.
 -->
 SOUL_EOF
-        log_success "Created $HERMES_HOME/SOUL.md (edit to customize personality)"
+        log_success "Created ~/.hermes/SOUL.md (edit to customize personality)"
     fi
 
-    log_success "Configuration directory ready: $HERMES_HOME"
+    log_success "Configuration directory ready: ~/.hermes/"
 
-    # Seed bundled skills into $HERMES_HOME/skills/ (manifest-based, one-time per skill)
-    log_info "Syncing bundled skills to $HERMES_HOME/skills/ ..."
-    if "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/tools/skills_sync.py" 2>/dev/null; then
-        log_success "Skills synced to $HERMES_HOME/skills/"
+    # Seed bundled skills into ~/.hermes/skills/ (manifest-based, one-time per skill)
+    if [ "$NO_SKILLS" = true ]; then
+        # Blank-slate install: write the opt-out marker and skip seeding.
+        # skills_sync.py and `hermes update` both honor this marker, so the
+        # default profile stays empty across future updates too.
+        printf '%s\n' \
+            "This profile opted out of bundled-skill seeding (installed with --no-skills)." \
+            "Delete this file to re-enable sync on the next 'hermes update'." \
+            > "$HERMES_HOME/.no-bundled-skills" 2>/dev/null || true
+        log_info "Skipping bundled skills (--no-skills). Wrote $HERMES_HOME/.no-bundled-skills"
+        log_info "  Future 'hermes update' runs will not inject bundled skills. Delete the marker to opt back in."
     else
-        # Fallback: simple directory copy if Python sync fails
-        if [ -d "$INSTALL_DIR/skills" ] && [ ! "$(ls -A "$HERMES_HOME/skills/" 2>/dev/null | grep -v '.bundled_manifest')" ]; then
-            cp -r "$INSTALL_DIR/skills/"* "$HERMES_HOME/skills/" 2>/dev/null || true
-            log_success "Skills copied to $HERMES_HOME/skills/"
+        log_info "Syncing bundled skills to ~/.hermes/skills/ ..."
+        if "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/tools/skills_sync.py" 2>/dev/null; then
+            log_success "Skills synced to ~/.hermes/skills/"
+        else
+            # Fallback: simple directory copy if Python sync fails
+            if [ -d "$INSTALL_DIR/skills" ] && [ ! "$(ls -A "$HERMES_HOME/skills/" 2>/dev/null | grep -v '.bundled_manifest')" ]; then
+                cp -r "$INSTALL_DIR/skills/"* "$HERMES_HOME/skills/" 2>/dev/null || true
+                log_success "Skills copied to ~/.hermes/skills/"
+            fi
         fi
     fi
 }
@@ -1600,7 +1792,7 @@ configure_browser_env_from_system_browser() {
 
     {
         echo ""
-        echo "# Lliam-GOV browser tools — use the system Chrome/Chromium binary."
+        echo "# Hermes Agent browser tools — use the system Chrome/Chromium binary."
         echo "AGENT_BROWSER_EXECUTABLE_PATH=$browser_path"
     } >> "$env_file"
     log_success "Configured browser tools to use $browser_path"
@@ -1642,7 +1834,7 @@ install_node_deps() {
         DETECTED_BROWSER_EXECUTABLE="$(find_system_browser 2>/dev/null || true)"
         if [ -n "$DETECTED_BROWSER_EXECUTABLE" ]; then
             log_success "Found system Chrome/Chromium at $DETECTED_BROWSER_EXECUTABLE"
-            log_info "Skipping Playwright browser download; Lliam-GOV will use the system browser."
+            log_info "Skipping Playwright browser download; Hermes will use the system browser."
         else
             case "$DISTRO" in
                 ubuntu|debian|raspbian|pop|linuxmint|elementary|zorin|kali|parrot)
@@ -1728,7 +1920,8 @@ install_node_deps() {
         log_success "TUI dependencies installed"
     fi
 
-
+    # Keep the checkout clean so `hermes update` doesn't autostash every run.
+    restore_dirty_lockfiles "$INSTALL_DIR"
 }
 
 run_setup_wizard() {
@@ -1746,7 +1939,7 @@ run_setup_wizard() {
     # but opening fails with ENXIO, so the wizard would proceed and
     # then crash on `< /dev/tty` below.
     if ! (: </dev/tty) 2>/dev/null; then
-        log_info "Setup wizard skipped (no terminal available). Run 'lliam-gov setup' after install."
+        log_info "Setup wizard skipped (no terminal available). Run 'hermes setup' after install."
         return 0
     fi
 
@@ -1756,7 +1949,7 @@ run_setup_wizard() {
 
     cd "$INSTALL_DIR"
 
-    # Run setup using the venv Python directly (no activation needed).
+    # Run hermes setup using the venv Python directly (no activation needed).
     # Redirect stdin from /dev/tty so interactive prompts work when piped from curl.
     if [ "$USE_VENV" = true ]; then
         "$INSTALL_DIR/venv/bin/python" -m hermes_cli.main setup < /dev/tty
@@ -1787,7 +1980,7 @@ maybe_start_gateway() {
 
     echo ""
     log_info "Messaging platform token detected!"
-    log_info "The gateway needs to be running for Lliam-GOV to send/receive messages."
+    log_info "The gateway needs to be running for Hermes to send/receive messages."
 
     # If WhatsApp is enabled and no session exists yet, run foreground first for QR scan
     WHATSAPP_VAL=$(grep "^WHATSAPP_ENABLED=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2-)
@@ -1811,7 +2004,7 @@ maybe_start_gateway() {
     # in Docker builds where the device node is in the mount namespace
     # but opening fails with ENXIO. See #16746.
     if ! (: </dev/tty) 2>/dev/null; then
-        log_info "Gateway setup skipped (no terminal available). Run 'lliam-gov gateway install' later."
+        log_info "Gateway setup skipped (no terminal available). Run 'hermes gateway install' later."
         return 0
     fi
 
@@ -1837,10 +2030,10 @@ maybe_start_gateway() {
                 if $HERMES_CMD gateway start 2>/dev/null; then
                     log_success "Gateway started! Your bot is now online."
                 else
-                    log_warn "Service installed but failed to start. Try: lliam-gov gateway start"
+                    log_warn "Service installed but failed to start. Try: hermes gateway start"
                 fi
             else
-                log_warn "Systemd install failed. You can start manually: lliam-gov gateway"
+                log_warn "Systemd install failed. You can start manually: hermes gateway"
             fi
         else
             if [ "$DISTRO" = "termux" ]; then
@@ -1850,15 +2043,15 @@ maybe_start_gateway() {
             fi
             nohup $HERMES_CMD gateway > "$HERMES_HOME/logs/gateway.log" 2>&1 &
             GATEWAY_PID=$!
-            log_success "Gateway started (PID $GATEWAY_PID). Logs: $HERMES_HOME/logs/gateway.log"
+            log_success "Gateway started (PID $GATEWAY_PID). Logs: ~/.hermes/logs/gateway.log"
             log_info "To stop: kill $GATEWAY_PID"
-            log_info "To restart later: lliam-gov gateway"
+            log_info "To restart later: hermes gateway"
             if [ "$DISTRO" = "termux" ]; then
                 log_warn "Android may stop background processes when Termux is suspended or the system reclaims resources."
             fi
         fi
     else
-        log_info "Skipped. Start the gateway later with: lliam-gov gateway"
+        log_info "Skipped. Start the gateway later with: hermes gateway"
     fi
 }
 
@@ -1884,21 +2077,21 @@ print_success() {
     echo ""
     echo -e "${CYAN}${BOLD}🚀 Commands:${NC}"
     echo ""
-    echo -e "   ${GREEN}lliam-gov${NC}              Start chatting"
-    echo -e "   ${GREEN}lliam-gov setup${NC}        Configure API keys & settings"
-    echo -e "   ${GREEN}lliam-gov config${NC}       View/edit configuration"
-    echo -e "   ${GREEN}lliam-gov config edit${NC}  Open config in editor"
-    echo -e "   ${GREEN}lliam-gov gateway install${NC} Install gateway service (messaging + cron)"
-    echo -e "   ${GREEN}lliam-gov update${NC}       Update to latest version"
+    echo -e "   ${GREEN}hermes${NC}              Start chatting"
+    echo -e "   ${GREEN}hermes setup${NC}        Configure API keys & settings"
+    echo -e "   ${GREEN}hermes config${NC}       View/edit configuration"
+    echo -e "   ${GREEN}hermes config edit${NC}  Open config in editor"
+    echo -e "   ${GREEN}hermes gateway install${NC} Install gateway service (messaging + cron)"
+    echo -e "   ${GREEN}hermes update${NC}       Update to latest version"
     echo ""
 
     echo -e "${CYAN}─────────────────────────────────────────────────────────${NC}"
     echo ""
     if [ "$DISTRO" = "termux" ]; then
-        echo -e "${YELLOW}⚡ 'lliam-gov' was linked into $(get_command_link_display_dir), which is already on PATH in Termux.${NC}"
+        echo -e "${YELLOW}⚡ 'hermes' was linked into $(get_command_link_display_dir), which is already on PATH in Termux.${NC}"
         echo ""
     elif [ "$ROOT_FHS_LAYOUT" = true ]; then
-        echo -e "${YELLOW}⚡ 'lliam-gov' was linked into /usr/local/bin and is ready to use — no shell reload needed.${NC}"
+        echo -e "${YELLOW}⚡ 'hermes' was linked into /usr/local/bin and is ready to use — no shell reload needed.${NC}"
         echo ""
     else
         echo -e "${YELLOW}⚡ Reload your shell to use 'hermes' command:${NC}"
@@ -2051,7 +2244,7 @@ postinstall_mode() {
     print_banner
     detect_os
 
-    log_info "Post-install mode: setting up Lliam-GOV for pip install"
+    log_info "Post-install mode: setting up Hermes for pip install"
 
     check_node
     check_network_prerequisites
@@ -2061,14 +2254,285 @@ postinstall_mode() {
         ensure_browser
     fi
 
-    HERMES_CMD="$(command -v lliam-gov 2>/dev/null || echo "")"
+    HERMES_CMD="$(command -v hermes 2>/dev/null || echo "")"
     if [ -n "$HERMES_CMD" ]; then
-        log_info "Running lliam-gov setup..."
+        log_info "Running hermes setup..."
         "$HERMES_CMD" setup
     else
-        log_warn "lliam-gov command not found on PATH"
+        log_warn "hermes command not found on PATH"
         log_info "Try: python -m hermes_cli.main setup"
     fi
+}
+
+# Build apps/desktop into a launchable native app. Mirrors install.ps1's
+# Install-Desktop: a root-level npm install so the apps/* workspace resolves
+# the desktop's own deps (Electron ~150MB), then `npm run pack`
+# (electron-builder --dir) which emits an unpacked app for the current OS. Only invoked
+# via the 'desktop' stage / --include-desktop, which the Electron app's own
+# first-launch bootstrap never requests (it must not rebuild itself).
+install_desktop() {
+    local desktop_dir="$INSTALL_DIR/apps/desktop"
+
+    # The desktop stage only runs when a build is explicitly requested
+    # (--include-desktop / 'desktop' stage), so a missing toolchain is a hard
+    # failure, not a silent skip — a silent skip yields a "complete" install
+    # with no app and a confusing "couldn't find a built desktop" at launch.
+    # Always re-resolve Node here. Stages run in separate processes, so we can't
+    # trust an earlier check; more importantly check_node now enforces the build
+    # floor (^20.19 || >=22.12) and prepends the Hermes-managed Node to PATH, so
+    # the build never runs on a too-old system Node — the cause of the opaque
+    # "Build desktop app … exit code 1" failure (Vite crashes on old Node).
+    check_node
+    if ! command -v npm >/dev/null 2>&1; then
+        log_error "Cannot build desktop app: Node.js / npm unavailable"
+        log_info "Install Node.js and retry: cd $desktop_dir && npm run pack"
+        return 1
+    fi
+    if [ ! -f "$desktop_dir/package.json" ]; then
+        log_warn "Skipping desktop build (apps/desktop not present in checkout)"
+        return 0
+    fi
+
+    # 1. Root workspace install so apps/desktop's deps (Electron, Vite,
+    #    node-pty prebuilds) resolve. The browser-tools install runs in the
+    #    repo-root package workspace, which does not pull apps/* deps.
+    #
+    #    Prefer `npm ci`: it deletes node_modules and reinstalls from the
+    #    lockfile, so it always produces a complete tree. Bare `npm install`
+    #    can report "up to date" against a stale node_modules/.package-lock.json
+    #    marker while node_modules is actually empty (Windows workspace-hoisting
+    #    flake) — leaving tsc/typescript unresolved and `npm run pack`'s
+    #    `tsc -b` failing with no obvious cause. Fall back to `npm install`
+    #    only if `npm ci` is unavailable or the lockfile is out of sync.
+    log_info "Installing desktop workspace dependencies (includes Electron ~150MB, 1-3min)..."
+    ( cd "$INSTALL_DIR" && npm ci ) || ( cd "$INSTALL_DIR" && npm install ) || {
+        log_error "Desktop workspace npm install failed"
+        return 1
+    }
+    log_success "Desktop workspace dependencies installed"
+
+    # 2. Build. `npm run pack` = tsc + vite build + electron-builder --dir,
+    #    producing an unpacked app for the current OS. We disable signing
+    #    auto-discovery so electron-builder falls back to an ad-hoc signature
+    #    instead of grabbing an unrelated Developer ID from the keychain; a
+    #    real signed/notarized .dmg needs Apple credentials and is a separate
+    #    release concern.
+    log_info "Building desktop app (this takes 1-3 minutes)..."
+    ( cd "$desktop_dir" && CSC_IDENTITY_AUTO_DISCOVERY=false npm run pack ) || {
+        log_error "Desktop app build failed"
+        log_info "Run manually: cd $desktop_dir && npm run pack"
+        return 1
+    }
+
+    local app=""
+    if [ "$OS" = "linux" ]; then
+        if [ -x "$desktop_dir/release/linux-unpacked/Hermes" ]; then
+            app="$desktop_dir/release/linux-unpacked/Hermes"
+        elif [ -x "$desktop_dir/release/linux-unpacked/hermes" ]; then
+            app="$desktop_dir/release/linux-unpacked/hermes"
+        fi
+    else
+        local cand
+        for cand in \
+            "$desktop_dir/release/mac-arm64/Hermes.app" \
+            "$desktop_dir/release/mac/Hermes.app"; do
+            if [ -d "$cand" ]; then
+                app="$cand"
+                break
+            fi
+        done
+    fi
+    if [ -z "$app" ]; then
+        log_error "Desktop build completed but no app was found under $desktop_dir/release/"
+        return 1
+    fi
+    log_success "Desktop app built: $app"
+
+    # Linux: Electron's chrome-sandbox helper needs root:root 4755 or the
+    # sandboxed renderer will abort on startup.  Check the file is a regular
+    # file (not a symlink) before chown/chmod so we don't follow an
+    # attacker-controlled link to an arbitrary path.
+    if [ "$OS" = "linux" ]; then
+        local sandbox="$desktop_dir/release/linux-unpacked/chrome-sandbox"
+        if [ -f "$sandbox" ] && [ ! -L "$sandbox" ]; then
+            if [ "$(id -u)" -eq 0 ]; then
+                chown root:root "$sandbox" && chmod 4755 "$sandbox" || {
+                    log_error "Cannot configure Electron sandbox helper: $sandbox"
+                    return 1
+                }
+            elif command -v sudo >/dev/null 2>&1; then
+                sudo chown root:root "$sandbox" && sudo chmod 4755 "$sandbox" || {
+                    log_error "Cannot configure Electron sandbox helper (sudo failed): $sandbox"
+                    return 1
+                }
+            else
+                log_error "Cannot configure Electron sandbox helper without sudo: $sandbox"
+                return 1
+            fi
+        fi
+    fi
+
+    # macOS: make the locally-built (ad-hoc) app relaunchable after an in-place
+    # self-update. An ad-hoc bundle has no stable Designated Requirement, so a
+    # later in-place rebuild (new cdhash) plus the inherited quarantine flag
+    # trips Gatekeeper's tamper check ("Hermes is damaged and can't be opened").
+    # Strip quarantine + re-apply a clean deep ad-hoc signature (no
+    # hardened-runtime flag, which an ad-hoc build can't satisfy). Skipped when a
+    # real signing identity is configured so a signed build isn't clobbered.
+    if [ "$OS" = "macos" ] && [ -z "${CSC_LINK:-}" ] && [ -z "${APPLE_SIGNING_IDENTITY:-}" ] && command -v codesign >/dev/null 2>&1; then
+        xattr -cr "$app" 2>/dev/null || true
+        codesign --force --deep --sign - "$app" >/dev/null 2>&1 || true
+    fi
+
+    # `npm install` + `npm run pack` rewrite lockfiles; restore them so the
+    # checkout stays clean for the next `hermes update`.
+    restore_dirty_lockfiles "$INSTALL_DIR"
+}
+
+# Each --stage runs in its own process, so (unlike the monolithic main() where
+# clone_repo cd's once and later steps inherit it) a stage that operates on the
+# checkout must cd into it explicitly. Without this, install_deps/setup_path run
+# from the desktop app's cwd and resolve `.` / the venv against the wrong tree.
+require_install_dir() {
+    if [ -z "$INSTALL_DIR" ] || [ ! -d "$INSTALL_DIR" ]; then
+        log_error "Install directory not found: ${INSTALL_DIR:-<unset>}"
+        log_info "The 'repository' stage must run before this one."
+        return 1
+    fi
+    cd "$INSTALL_DIR"
+}
+
+# Desktop bootstrap stage protocol. Mirrors the Windows install.ps1 surface
+# closely enough for the Electron bootstrap runner to show structured progress.
+run_stage_body() {
+    local stage="$1"
+
+    case "$stage" in
+        prerequisites)
+            print_banner
+            detect_os
+            resolve_install_layout
+            install_uv
+            check_python
+            check_git
+            check_node
+            check_network_prerequisites
+            install_system_packages
+            ;;
+        repository)
+            detect_os
+            resolve_install_layout
+            check_git
+            clone_repo
+            ;;
+        venv)
+            detect_os
+            resolve_install_layout
+            require_install_dir
+            install_uv
+            check_python
+            setup_venv
+            ;;
+        python-deps)
+            detect_os
+            resolve_install_layout
+            require_install_dir
+            install_uv
+            check_python
+            install_deps
+            ;;
+        node-deps)
+            detect_os
+            resolve_install_layout
+            require_install_dir
+            check_node
+            install_node_deps
+            ;;
+        path)
+            detect_os
+            resolve_install_layout
+            require_install_dir
+            setup_path
+            ;;
+        config)
+            detect_os
+            resolve_install_layout
+            require_install_dir
+            copy_config_templates
+            ;;
+        setup)
+            detect_os
+            resolve_install_layout
+            require_install_dir
+            run_setup_wizard
+            ;;
+        gateway)
+            detect_os
+            resolve_install_layout
+            require_install_dir
+            maybe_start_gateway
+            ;;
+        desktop)
+            detect_os
+            resolve_install_layout
+            require_install_dir
+            # Each stage runs in its own process, so the Hermes-managed Node
+            # provisioned during prerequisites/node-deps (at $HERMES_HOME/node/bin)
+            # isn't on PATH here. check_node re-adds it (or installs if missing)
+            # so install_desktop can find npm instead of silently skipping.
+            check_node
+            install_desktop
+            ;;
+        complete)
+            detect_os
+            resolve_install_layout
+            print_success
+            echo "git" > "$HERMES_HOME/.install_method"
+            ;;
+        *)
+            log_error "Unknown stage: $stage"
+            return 2
+            ;;
+    esac
+}
+
+run_stage_protocol() {
+    local stage="$1"
+    if [ -z "$stage" ]; then
+        log_error "--stage requires a stage name"
+        if [ "$JSON_OUTPUT" = true ]; then
+            emit_stage_json "" false false "missing stage name"
+        fi
+        return 2
+    fi
+
+    if [ "$NON_INTERACTIVE" = true ] && stage_needs_user_input "$stage"; then
+        log_info "Skipping $stage (non-interactive bootstrap)"
+        if [ "$JSON_OUTPUT" = true ]; then
+            emit_stage_json "$stage" true true
+        fi
+        return 0
+    fi
+
+    # Run the stage body in a subshell so a stage helper that calls `exit 1`
+    # on failure (clone_repo, install_deps, etc. were written for the monolithic
+    # flow) only exits the subshell — the parent still reaches the JSON result
+    # frame below. Without this, a failed --stage would terminate the process
+    # before emitting the frame and the Rust/Electron parser would see "no
+    # result frame" instead of a clean {ok:false} contract response.
+    set +e
+    ( run_stage_body "$stage" )
+    local code=$?
+    set -e
+
+    if [ "$JSON_OUTPUT" = true ]; then
+        if [ "$code" -eq 0 ]; then
+            emit_stage_json "$stage" true false
+        else
+            emit_stage_json "$stage" false false "exit code $code"
+        fi
+    fi
+    return "$code"
 }
 
 # ============================================================================
@@ -2096,12 +2560,20 @@ main() {
     run_setup_wizard
     maybe_start_gateway
 
+    if [ "$INCLUDE_DESKTOP" = true ]; then
+        install_desktop
+    fi
+
     print_success
 
     echo "git" > "$HERMES_HOME/.install_method"
 }
 
-if [ -n "$ENSURE_DEPS" ]; then
+if [ "$MANIFEST_MODE" = true ]; then
+    emit_manifest
+elif [ -n "$STAGE_NAME" ]; then
+    run_stage_protocol "$STAGE_NAME"
+elif [ -n "$ENSURE_DEPS" ]; then
     ensure_mode
 elif [ "$POSTINSTALL_MODE" = true ]; then
     postinstall_mode

@@ -12,7 +12,6 @@ behaviour is only observable at runtime under load.
 
 from __future__ import annotations
 
-import os
 
 import pytest
 
@@ -75,14 +74,40 @@ def test_env_override_rejects_garbage(monkeypatch):
 def test_helper_is_importable_from_every_platform_that_uses_it():
     """Every persistent-httpx-client platform adapter imports this helper.
     If any of those modules fails to import, this test surfaces it before
-    the regression shows up as a runtime adapter-startup crash.
-
-    Lliam-GOV (plan §6.5): qqbot, wecom, dingtalk, signal, bluebubbles,
-    and wecom_callback adapters were deleted.  This test now exercises
-    only the retained adapters that use this helper — Telegram and
-    Slack.  Email uses a different transport (IMAP/SMTP), not httpx.
-    """
+    the regression shows up as a runtime adapter-startup crash."""
     # Just importing exercises the helper's import path for each adapter.
-    import gateway.platforms.telegram  # noqa: F401
-    import gateway.platforms.slack  # noqa: F401
+    import gateway.platforms.qqbot.adapter  # noqa: F401
+    import gateway.platforms.wecom  # noqa: F401
+    import gateway.platforms.dingtalk  # noqa: F401
+    import gateway.platforms.signal  # noqa: F401
+    import gateway.platforms.bluebubbles  # noqa: F401
+    import gateway.platforms.wecom_callback  # noqa: F401
 
+
+class TestWhatsappTypingLeakFix:
+    """#18451 — whatsapp.send_typing previously used a bare
+    `await self._http_session.post(...)` which leaked the aiohttp
+    response object until GC, holding its TCP socket in CLOSE_WAIT.
+    Must now wrap the call in `async with` so the response is
+    released immediately when the call returns.
+
+    We verify by inspecting the source text rather than exercising
+    the coroutine — the test suite would otherwise need a live
+    aiohttp server, and the contract we care about is structural.
+    """
+
+    def test_bare_await_removed(self):
+        import inspect
+        import gateway.platforms.whatsapp as mod
+
+        src = inspect.getsource(mod.WhatsAppAdapter.send_typing)
+        # The fix must be structural: the post() call is inside an
+        # `async with`, not a bare `await`.
+        assert "async with self._http_session.post(" in src, (
+            "send_typing must wrap self._http_session.post(...) in "
+            "`async with` to release the aiohttp response socket "
+            "(#18451). Otherwise the response sits in CLOSE_WAIT "
+            "until GC."
+        )
+        # The old bare-await form must be gone.
+        assert "await self._http_session.post(" not in src

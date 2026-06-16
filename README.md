@@ -1,150 +1,216 @@
 <p align="center">
-  <img src="docs/assets/lliam-gov-banner.png" alt="Lliam-GOV — Powerful. Personal. Governed." width="100%">
+  <img src="assets/banner.png" alt="Hermes Agent" width="100%">
 </p>
 
-<p align="center"><strong>Powerful. Personal. Governed.</strong></p>
+# Hermes Agent ☤
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-111111?style=flat-square" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/build-passing-111111?style=flat-square" alt="Build">
-  <img src="https://img.shields.io/badge/version-0.1.0-111111?style=flat-square" alt="Version">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-111111?style=flat-square" alt="Platform">
-  <img src="https://img.shields.io/badge/ISO%2FIEC%2042001-aligned-111111?style=flat-square" alt="ISO/IEC 42001 aligned">
-  <img src="https://img.shields.io/badge/audit-hash--chained-111111?style=flat-square" alt="Hash-chained audit log">
+  <a href="https://hermes-agent.nousresearch.com/docs/"><img src="https://img.shields.io/badge/Docs-hermes--agent.nousresearch.com-FFD700?style=for-the-badge" alt="Documentation"></a>
+  <a href="https://discord.gg/NousResearch"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://github.com/NousResearch/hermes-agent/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
+  <a href="https://nousresearch.com"><img src="https://img.shields.io/badge/Built%20by-Nous%20Research-blueviolet?style=for-the-badge" alt="Built by Nous Research"></a>
+  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/Lang-中文-red?style=for-the-badge" alt="中文"></a>
 </p>
 
----
+**The self-improving AI agent built by [Nous Research](https://nousresearch.com).** It's the only agent with a built-in learning loop — it creates skills from experience, improves them during use, nudges itself to persist knowledge, searches its own past conversations, and builds a deepening model of who you are across sessions. Run it on a $5 VPS, a GPU cluster, or serverless infrastructure that costs nearly nothing when idle. It's not tied to your laptop — talk to it from Telegram while it works on a cloud VM.
 
-## What is Lliam-GOV?
+Use any model you want — [Nous Portal](https://portal.nousresearch.com), [OpenRouter](https://openrouter.ai) (200+ models), [NovitaAI](https://novita.ai) (AI-native cloud for Model API, Agent Sandbox, and GPU Cloud), [NVIDIA NIM](https://build.nvidia.com) (Nemotron), [Xiaomi MiMo](https://platform.xiaomimimo.com), [z.ai/GLM](https://z.ai), [Kimi/Moonshot](https://platform.moonshot.ai), [MiniMax](https://www.minimax.io), [Hugging Face](https://huggingface.co), OpenAI, or your own endpoint. Switch with `hermes model` — no code changes, no lock-in.
 
-**Lliam-GOV is a personal AI agent with enterprise-grade governance built into its core.** It runs on your own machine, talks to the model providers you already pay for through their local CLIs, and does real work for you — while producing the kind of evidence trail, access controls, and security posture normally reserved for regulated enterprise software.
-
-Most personal AI agents ask you to trust them. Lliam-GOV is designed to **prove** it behaved: every action it takes is recorded in an append-only, hash-chained audit log; its data is encrypted at rest; its network egress is restricted to an explicit allow-list; and any attempt to expand its own capabilities or modify itself passes through a human-approval gate. It is aligned to **ISO/IEC 42001** (AI management systems) and hardened toward **CMMC Level 2 / ISO 27001** controls, so the same agent that drafts your email can stand as audit evidence in a formal AI governance program.
-
-That governance layer is the point. It is what makes this **Lliam-GOV** and not just another agent runtime.
-
-> **Why "GOV"?** Governance — not government-only. Lliam-GOV is built for anyone who wants a powerful personal agent that is accountable by design: professionals handling sensitive data, regulated teams, and individuals who simply want their AI to keep receipts.
-
----
-
-## Why it matters
-
-| Most AI agents | Lliam-GOV |
-|---|---|
-| Trust-me security | **Provable** security — append-only, hash-chained audit log |
-| Data in the clear | **Encryption at rest** for the agent workspace |
-| Open network access | **Egress allow-list**, deny-all by default, TLS enforced |
-| Self-modifies silently | **Human-approval gate** on capability + self-modification |
-| API-key lock-in | **Multi-provider local CLI** — bring the model you already use |
-| No paper trail | **ISO/IEC 42001-aligned** evidence, ready for audit |
+<table>
+<tr><td><b>A real terminal interface</b></td><td>Full TUI with multiline editing, slash-command autocomplete, conversation history, interrupt-and-redirect, and streaming tool output.</td></tr>
+<tr><td><b>Lives where you do</b></td><td>Telegram, Discord, Slack, WhatsApp, Signal, and CLI — all from a single gateway process. Voice memo transcription, cross-platform conversation continuity.</td></tr>
+<tr><td><b>A closed learning loop</b></td><td>Agent-curated memory with periodic nudges. Autonomous skill creation after complex tasks. Skills self-improve during use. FTS5 session search with LLM summarization for cross-session recall. <a href="https://github.com/plastic-labs/honcho">Honcho</a> dialectic user modeling. Compatible with the <a href="https://agentskills.io">agentskills.io</a> open standard.</td></tr>
+<tr><td><b>Scheduled automations</b></td><td>Built-in cron scheduler with delivery to any platform. Daily reports, nightly backups, weekly audits — all in natural language, running unattended.</td></tr>
+<tr><td><b>Delegates and parallelizes</b></td><td>Spawn isolated subagents for parallel workstreams. Write Python scripts that call tools via RPC, collapsing multi-step pipelines into zero-context-cost turns.</td></tr>
+<tr><td><b>Runs anywhere, not just your laptop</b></td><td>Six terminal backends — local, Docker, SSH, Singularity, Modal, and Daytona. Daytona and Modal offer serverless persistence — your agent's environment hibernates when idle and wakes on demand, costing nearly nothing between sessions. Run it on a $5 VPS or a GPU cluster.</td></tr>
+<tr><td><b>Research-ready</b></td><td>Batch trajectory generation, trajectory compression for training the next generation of tool-calling models.</td></tr>
+</table>
 
 ---
 
-## Features
+## Quick Install
 
-- **Governance-first core** — encryption at rest, append-only hash-chained audit logging, egress allow-list with TLS enforcement, capability gates, and a human-approval gate over dynamic self-modification.
-- **Multi-provider, local-CLI inference** — choose your model through the provider CLI you already use: **Claude Code CLI** (Anthropic), **Codex CLI** (OpenAI), and **Gemini / Antigravity CLI** (Google). No API-key gating, no vendor lock-in.
-- **Desktop app + terminal** — a packaged cross-platform desktop application plus a full terminal interface with streaming tool output.
-- **CUI-aware handling** — controlled-information marking and audit instrumentation for sensitive workflows.
-- **Skills & automation** — an extensible skill system and a built-in scheduler for unattended, recurring work.
-- **Runs where you do** — designed for your own machine first; messaging surface deliberately narrowed to vetted channels.
-- **Supply-chain hygiene** — SBOMs, dependency review, and signed/checksummed release artifacts on the roadmap to stable.
-
----
-
-## Quickstart
-
-> **Status:** packaging, signing, and public releases are in progress. Until signed installers ship, the proven path is a governed clone-and-run on macOS.
-
-### Option A — Governed install (macOS, demo/eval)
+### Linux, macOS, WSL2, Termux
 
 ```bash
-# one-time on a fresh Mac: install + auth GitHub CLI (the repo is private)
-brew install gh && gh auth login
-
-# clone and provision the governed profile
-gh repo clone jdavis-cyber/lliam-gov && cd lliam-gov
-bash scripts/install-governed-macbook.sh
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 ```
 
-This provisions a private `~/.lliam-gov` workspace (`0700`), enables encryption-at-rest, the egress allow-list (deny-all default), and the capability + self-modification gates, writes a double-clickable launcher, and runs a fail-closed posture check. Then connect a model through your provider CLI:
+### Windows (native, PowerShell)
+
+> **Heads up:** Native Windows runs Hermes without WSL — CLI, gateway, TUI, and tools all work natively. If you'd rather use WSL2, the Linux/macOS one-liner above works there too. Found a bug? Please [file issues](https://github.com/NousResearch/hermes-agent/issues).
+
+Run this in PowerShell:
+
+```powershell
+iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+```
+
+The installer handles everything: uv, Python 3.11, Node.js, ripgrep, ffmpeg, **and a portable Git Bash** (MinGit, unpacked to `%LOCALAPPDATA%\hermes\git` — no admin required, completely isolated from any system Git install). Hermes uses this bundled Git Bash to run shell commands.
+
+If you already have Git installed, the installer detects it and uses that instead. Otherwise a ~45MB MinGit download is all you need — it won't touch or interfere with any system Git.
+
+> **Android / Termux:** The tested manual path is documented in the [Termux guide](https://hermes-agent.nousresearch.com/docs/getting-started/termux). On Termux, Hermes installs a curated `.[termux]` extra because the full `.[all]` extra currently pulls Android-incompatible voice dependencies.
+>
+> **Windows:** Native Windows is fully supported — the PowerShell one-liner above installs everything. If you'd rather use WSL2, the Linux command works there too. Native Windows install lives under `%LOCALAPPDATA%\hermes`; WSL2 installs under `~/.hermes` as on Linux. The only Hermes feature that currently needs WSL2 specifically is the browser-based dashboard chat pane (it uses a POSIX PTY — classic CLI and gateway both run natively).
+
+After installation:
 
 ```bash
-source ~/.lliam-gov/governed-demo.env
-uv run lliam-gov setup     # detects Claude Code / Codex / Gemini CLIs and guides provider login
+source ~/.bashrc    # reload shell (or: source ~/.zshrc)
+hermes              # start chatting!
 ```
-
-> **Demo/eval only.** The eval profile waives the FIPS hard-gate because **no CUI is in scope**. Do **not** use the eval profile on a managed or CUI-in-scope device — that is a separate, controlled production decision. See [`docs/operate/`](docs/operate/) for the production profile.
-
-### Option B — Signed desktop installers
-
-_Coming soon — signed macOS `.dmg`, Windows `.msi`, and Linux `AppImage` artifacts are tracked in the deployment milestone and will be linked here once published._
 
 ---
 
-## Architecture
+## Getting Started
 
-Lliam-GOV is a desktop application shell over a managed local backend that brokers inference to external provider CLIs:
-
-```
-┌─────────────────────────────────────────────┐
-│  Lliam-GOV Desktop App (Electron)            │
-│  • first-run provider setup & model picker   │
-│  • update / rollback / release channels      │
-└───────────────┬─────────────────────────────┘
-                │ local IPC
-┌───────────────▼─────────────────────────────┐
-│  Managed Backend (location-independent)      │
-│  • governance core: audit log, encryption,   │
-│    egress allow-list, capability gates       │
-│  • provider adapters + health checks         │
-└───────────────┬─────────────────────────────┘
-                │ subprocess (allow-listed, sandboxed)
-┌───────────────▼─────────────────────────────┐
-│  Provider CLIs (you authenticate these)      │
-│  Claude Code · Codex · Gemini / Antigravity  │
-└─────────────────────────────────────────────┘
+```bash
+hermes              # Interactive CLI — start a conversation
+hermes model        # Choose your LLM provider and model
+hermes tools        # Configure which tools are enabled
+hermes config set   # Set individual config values
+hermes gateway      # Start the messaging gateway (Telegram, Discord, etc.)
+hermes setup        # Run the full setup wizard (configures everything at once)
+hermes claw migrate # Migrate from OpenClaw (if coming from OpenClaw)
+hermes update       # Update to the latest version
+hermes doctor       # Diagnose any issues
 ```
 
-The agent runtime, conversation loop, terminal UI, plugin framework, and skill system are upstream Hermes work (see attribution). Lliam-GOV adds the governance core, the CLI-provider runtime contract, the desktop deploy layer, and the compliance evidence set.
+📖 **[Full documentation →](https://hermes-agent.nousresearch.com/docs/)**
 
 ---
 
-## Security & Compliance
+## Skip the API-key collection — Nous Portal
 
-Governance is the headline feature, not an afterthought. Lliam-GOV implements:
+Hermes works with whatever provider you want — that's not changing. But if you'd rather not collect five separate API keys for the model, web search, image generation, TTS, and a cloud browser, **[Nous Portal](https://portal.nousresearch.com)** covers all of them under one subscription:
 
-- **Encryption at rest** for the agent workspace (FIPS-validated path available for production).
-- **Append-only, hash-chained audit log** — tamper-evident record of agent actions.
-- **Egress allow-list** — deny-all by default, TLS enforced; the agent can only reach explicitly approved destinations.
-- **Capability & self-modification gates** — dynamic capability expansion and agent self-modification require human approval.
-- **Narrowed messaging surface** — integration channels deliberately restricted to a vetted set.
-- **CUI marking & audit instrumentation** — controlled-information handling for sensitive workflows.
-- **Supply-chain hygiene** — dependency review, SBOMs (CycloneDX), and signed/checksummed artifacts (in progress to stable).
-- **ISO/IEC 42001 alignment** — the agent is instrumented to serve as evidence inside a formal AI Management System, with hardening toward CMMC L2 / ISO 27001 controls.
+- **300+ models** — pick any of them with `/model <name>`
+- **Tool Gateway** — web search (Firecrawl), image generation (FAL), text-to-speech (OpenAI), cloud browser (Browser Use), all routed through your sub. No extra accounts.
 
-Security disclosures: see [`SECURITY.md`](SECURITY.md). Release evidence (threat model, architecture, data-flow/provider boundaries, SBOMs, QA matrix) is maintained under [`evidence/`](evidence/).
+One command from a fresh install:
+
+```bash
+hermes setup --portal
+```
+
+That logs you in via OAuth, sets Nous as your provider, and turns on the Tool Gateway. Check what's wired up any time with `hermes portal info`. Full details on the [Tool Gateway docs page](https://hermes-agent.nousresearch.com/docs/user-guide/features/tool-gateway).
+
+You can still bring your own keys per-tool whenever you want — the gateway is per-backend, not all-or-nothing.
 
 ---
 
-## Built on Hermes Agent
+## CLI vs Messaging Quick Reference
 
-Lliam-GOV is a governance-hardened fork of **[Hermes Agent](https://github.com/NousResearch/hermes-agent)** by **[Nous Research](https://nousresearch.com)**, used under the **MIT License**.
+Hermes has two entry points: start the terminal UI with `hermes`, or run the gateway and talk to it from Telegram, Discord, Slack, WhatsApp, Signal, or Email. Once you're in a conversation, many slash commands are shared across both interfaces.
 
-The upstream agent runtime, conversation loop, provider adapters, terminal backends, plugin framework, skill system, dashboard UI, and gateway scaffolding are Hermes work. Lliam-GOV's contribution is the documented governance overlay, the multi-provider local-CLI runtime, the desktop deployment layer, and the ISO 42001 evidence set described above. **No original authorship of the upstream Hermes codebase is claimed.**
+| Action                         | CLI                                           | Messaging platforms                                                              |
+| ------------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------- |
+| Start chatting                 | `hermes`                                      | Run `hermes gateway setup` + `hermes gateway start`, then send the bot a message |
+| Start fresh conversation       | `/new` or `/reset`                            | `/new` or `/reset`                                                               |
+| Change model                   | `/model [provider:model]`                     | `/model [provider:model]`                                                        |
+| Set a personality              | `/personality [name]`                         | `/personality [name]`                                                            |
+| Retry or undo the last turn    | `/retry`, `/undo`                             | `/retry`, `/undo`                                                                |
+| Compress context / check usage | `/compress`, `/usage`, `/insights [--days N]` | `/compress`, `/usage`, `/insights [days]`                                        |
+| Browse skills                  | `/skills` or `/<skill-name>`                  | `/<skill-name>`                                                                  |
+| Interrupt current work         | `Ctrl+C` or send a new message                | `/stop` or send a new message                                                    |
+| Platform-specific status       | `/platforms`                                  | `/status`, `/sethome`                                                            |
 
-Full attribution and scope are in [`NOTICE`](NOTICE); the upstream MIT license is preserved in [`LICENSE`](LICENSE). With gratitude to the Nous Research team and the Hermes community.
+For the full command lists, see the [CLI guide](https://hermes-agent.nousresearch.com/docs/user-guide/cli) and the [Messaging Gateway guide](https://hermes-agent.nousresearch.com/docs/user-guide/messaging).
+
+---
+
+## Documentation
+
+All documentation lives at **[hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)**:
+
+| Section                                                                                             | What's Covered                                             |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [Quickstart](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart)                 | Install → setup → first conversation in 2 minutes          |
+| [CLI Usage](https://hermes-agent.nousresearch.com/docs/user-guide/cli)                              | Commands, keybindings, personalities, sessions             |
+| [Configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)                | Config file, providers, models, all options                |
+| [Messaging Gateway](https://hermes-agent.nousresearch.com/docs/user-guide/messaging)                | Telegram, Discord, Slack, WhatsApp, Signal, Home Assistant |
+| [Security](https://hermes-agent.nousresearch.com/docs/user-guide/security)                          | Command approval, DM pairing, container isolation          |
+| [Tools & Toolsets](https://hermes-agent.nousresearch.com/docs/user-guide/features/tools)            | 40+ tools, toolset system, terminal backends               |
+| [Skills System](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)              | Procedural memory, Skills Hub, creating skills             |
+| [Memory](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)                     | Persistent memory, user profiles, best practices           |
+| [MCP Integration](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)               | Connect any MCP server for extended capabilities           |
+| [Cron Scheduling](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)              | Scheduled tasks with platform delivery                     |
+| [Context Files](https://hermes-agent.nousresearch.com/docs/user-guide/features/context-files)       | Project context that shapes every conversation             |
+| [Architecture](https://hermes-agent.nousresearch.com/docs/developer-guide/architecture)             | Project structure, agent loop, key classes                 |
+| [Contributing](https://hermes-agent.nousresearch.com/docs/developer-guide/contributing)             | Development setup, PR process, code style                  |
+| [CLI Reference](https://hermes-agent.nousresearch.com/docs/reference/cli-commands)                  | All commands and flags                                     |
+| [Environment Variables](https://hermes-agent.nousresearch.com/docs/reference/environment-variables) | Complete env var reference                                 |
+
+---
+
+## Migrating from OpenClaw
+
+If you're coming from OpenClaw, Hermes can automatically import your settings, memories, skills, and API keys.
+
+**During first-time setup:** The setup wizard (`hermes setup`) automatically detects `~/.openclaw` and offers to migrate before configuration begins.
+
+**Anytime after install:**
+
+```bash
+hermes claw migrate              # Interactive migration (full preset)
+hermes claw migrate --dry-run    # Preview what would be migrated
+hermes claw migrate --preset user-data   # Migrate without secrets
+hermes claw migrate --overwrite  # Overwrite existing conflicts
+```
+
+What gets imported:
+
+- **SOUL.md** — persona file
+- **Memories** — MEMORY.md and USER.md entries
+- **Skills** — user-created skills → `~/.hermes/skills/openclaw-imports/`
+- **Command allowlist** — approval patterns
+- **Messaging settings** — platform configs, allowed users, working directory
+- **API keys** — allowlisted secrets (Telegram, OpenRouter, OpenAI, Anthropic, ElevenLabs)
+- **TTS assets** — workspace audio files
+- **Workspace instructions** — AGENTS.md (with `--workspace-target`)
+
+See `hermes claw migrate --help` for all options, or use the `openclaw-migration` skill for an interactive agent-guided migration with dry-run previews.
 
 ---
 
 ## Contributing
 
-Contributions are welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup, code style, and the PR process, and open an issue before large changes. Security-sensitive reports should follow [`SECURITY.md`](SECURITY.md) rather than a public issue.
+We welcome contributions! See the [Contributing Guide](https://hermes-agent.nousresearch.com/docs/developer-guide/contributing) for development setup, code style, and PR process.
+
+Quick start for contributors — clone and go with `setup-hermes.sh`:
+
+```bash
+git clone https://github.com/NousResearch/hermes-agent.git
+cd hermes-agent
+./setup-hermes.sh     # installs uv, creates venv, installs .[all], symlinks ~/.local/bin/hermes
+./hermes              # auto-detects the venv, no need to `source` first
+```
+
+Manual path (equivalent to the above):
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv venv .venv --python 3.11
+source .venv/bin/activate
+uv pip install -e ".[all,dev]"
+scripts/run_tests.sh
+```
+
+---
+
+## Community
+
+- 💬 [Discord](https://discord.gg/NousResearch)
+- 📚 [Skills Hub](https://agentskills.io)
+- 🐛 [Issues](https://github.com/NousResearch/hermes-agent/issues)
+- 🔌 [computer-use-linux](https://github.com/avifenesh/computer-use-linux) — Linux desktop-control MCP server for Hermes and other MCP hosts, with AT-SPI accessibility trees, Wayland/X11 input, screenshots, and compositor window targeting.
+- 🔌 [HermesClaw](https://github.com/AaronWong1999/hermesclaw) — Community WeChat bridge: Run Hermes Agent and OpenClaw on the same WeChat account.
 
 ---
 
 ## License
 
-Lliam-GOV is released under the **MIT License** — see [`LICENSE`](LICENSE).
+MIT — see [LICENSE](LICENSE).
 
-Upstream © Nous Research (Hermes Agent, MIT). Lliam-GOV governance overlay and deployment layer © Jerome Davis. See [`NOTICE`](NOTICE) for the full attribution.
+Built by [Nous Research](https://nousresearch.com).

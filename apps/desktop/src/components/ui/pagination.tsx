@@ -1,15 +1,12 @@
 import * as React from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
-import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 function Pagination({ className, ...props }: React.ComponentProps<'nav'>) {
-  const { t } = useI18n()
-
   return (
     <nav
-      aria-label={t.ui.pagination.label}
+      aria-label="pagination"
       className={cn('mx-auto flex w-full justify-center', className)}
       data-slot="pagination"
       {...props}
@@ -51,11 +48,9 @@ function PaginationButton({ className, isActive, ...props }: PaginationButtonPro
 }
 
 function PaginationPrevious({ className, ...props }: React.ComponentProps<'button'>) {
-  const { t } = useI18n()
-
   return (
     <button
-      aria-label={t.ui.pagination.previousAria}
+      aria-label="Go to previous page"
       className={cn(
         'inline-flex h-5 items-center justify-center gap-0.5 rounded border border-transparent px-1 text-[0.6875rem] leading-none text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-45',
         className
@@ -65,17 +60,15 @@ function PaginationPrevious({ className, ...props }: React.ComponentProps<'butto
       {...props}
     >
       <Codicon name="chevron-left" size="0.75rem" />
-      <span>{t.ui.pagination.previous}</span>
+      <span>Prev</span>
     </button>
   )
 }
 
 function PaginationNext({ className, ...props }: React.ComponentProps<'button'>) {
-  const { t } = useI18n()
-
   return (
     <button
-      aria-label={t.ui.pagination.nextAria}
+      aria-label="Go to next page"
       className={cn(
         'inline-flex h-5 items-center justify-center gap-0.5 rounded border border-transparent px-1 text-[0.6875rem] leading-none text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-45',
         className
@@ -84,7 +77,7 @@ function PaginationNext({ className, ...props }: React.ComponentProps<'button'>)
       type="button"
       {...props}
     >
-      <span>{t.ui.pagination.next}</span>
+      <span>Next</span>
       <Codicon name="chevron-right" size="0.75rem" />
     </button>
   )

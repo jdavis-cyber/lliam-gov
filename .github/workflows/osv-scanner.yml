@@ -15,11 +15,9 @@ name: OSV-Scanner
 # "currently-pinned dep became known-vulnerable" case.
 #
 # Uses Google's officially-recommended reusable workflow, pinned by SHA.
+# Findings land in the repo's Security tab (Code Scanning > OSV-Scanner).
 # fail-on-vuln is disabled so the job does not block merges on pre-existing
 # vulnerabilities in pinned deps that we may need to patch deliberately.
-# SARIF upload is disabled because this private repo does not currently have
-# code scanning enabled; the workflow log remains the review artifact until
-# code scanning is turned on in repository settings.
 
 on:
   pull_request:
@@ -30,7 +28,6 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'ui-tui/package.json'
-      - 'ui-tui/package-lock.json'
       - 'website/package.json'
       - 'website/package-lock.json'
       - '.github/workflows/osv-scanner.yml'
@@ -41,7 +38,6 @@ on:
       - 'pyproject.toml'
       - 'package.json'
       - 'package-lock.json'
-      - 'ui-tui/package-lock.json'
       - 'website/package-lock.json'
   schedule:
     # Weekly scan against main — catches CVEs published after merge for
@@ -64,7 +60,6 @@ jobs:
       # the three sources of truth and skip vendored / test / worktree dirs.
       scan-args: |-
         --lockfile=uv.lock
-        --lockfile=ui-tui/package-lock.json
+        --lockfile=package-lock.json
         --lockfile=website/package-lock.json
       fail-on-vuln: false
-      upload-sarif: false

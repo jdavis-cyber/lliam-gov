@@ -1,0 +1,12 @@
+# Operator full-suite verification — clean Hermes v2026.6.5 rebuild + overlay
+# Generated: 2026-06-16  Host: rebuild container, run as non-root operator (uid 1000)
+# Base pin: NousResearch/hermes-agent v2026.6.5 (3c231eb)
+# Profile: default (non-production); principal = OS euid, root refused under production.
+
+## tests/lliam_gov (overlay unit + integration), run as operator:
+...................                                                      [100%]
+163 passed in 4.52s
+
+## Adversarial harnesses (run as operator):
+  phase5 chaos (fail-closed): all scenarios PASS, exit 0
+  phase5 pentest (bypass-refused): all probes REFUSED, exit 0

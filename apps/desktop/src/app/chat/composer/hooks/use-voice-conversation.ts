@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { useI18n } from '@/i18n'
 import { playSpeechText, stopVoicePlayback } from '@/lib/voice-playback'
 import { notify, notifyError } from '@/store/notifications'
 
@@ -33,9 +32,7 @@ export function useVoiceConversation({
   pendingResponse,
   consumePendingResponse
 }: VoiceConversationOptions) {
-  const { t } = useI18n()
-  const voiceCopy = t.notifications.voice
-  const { handle, level } = useMicRecorder(voiceCopy)
+  const { handle, level } = useMicRecorder()
   const [status, setStatus] = useState<ConversationStatus>('idle')
   const [muted, setMuted] = useState(false)
   const turnTimeoutRef = useRef<number | null>(null)
@@ -171,7 +168,7 @@ export function useVoiceConversation({
           await onSubmit(transcript)
           setStatus('thinking')
         } catch (error) {
-          notifyError(error, voiceCopy.transcriptionFailed)
+          notifyError(error, 'Voice transcription failed')
 
           if (enabledRef.current && !mutedRef.current && !busyRef.current) {
             pendingStartRef.current = true
@@ -183,7 +180,7 @@ export function useVoiceConversation({
         turnClosingRef.current = false
       }
     },
-    [handle, onSubmit, onTranscribeAudio, voiceCopy.transcriptionFailed]
+    [handle, onSubmit, onTranscribeAudio]
   )
 
   const startListening = useCallback(async () => {
@@ -204,7 +201,7 @@ export function useVoiceConversation({
         silenceMs: 1_250,
         idleSilenceMs: 12_000,
         onError: error => {
-          notifyError(error, voiceCopy.microphoneFailed)
+          notifyError(error, 'Microphone failed')
           pendingStartRef.current = false
           onFatalError?.()
         },
@@ -213,12 +210,12 @@ export function useVoiceConversation({
       setStatus('listening')
       turnTimeoutRef.current = window.setTimeout(() => void handleTurn(), 60_000)
     } catch (error) {
-      notifyError(error, voiceCopy.couldNotStartSession)
+      notifyError(error, 'Could not start voice session')
       pendingStartRef.current = false
       setStatus('idle')
       onFatalError?.()
     }
-  }, [handle, handleTurn, onFatalError, voiceCopy.couldNotStartSession, voiceCopy.microphoneFailed])
+  }, [handle, handleTurn, onFatalError])
 
   const speak = useCallback(async (text: string) => {
     setStatus('speaking')
@@ -226,7 +223,7 @@ export function useVoiceConversation({
     try {
       await playSpeechText(text, { source: 'voice-conversation' })
     } catch (error) {
-      notifyError(error, voiceCopy.playbackFailed)
+      notifyError(error, 'Voice playback failed')
     } finally {
       if (enabledRef.current) {
         pendingStartRef.current = true
@@ -235,14 +232,14 @@ export function useVoiceConversation({
         setStatus('idle')
       }
     }
-  }, [voiceCopy.playbackFailed])
+  }, [])
 
   const start = useCallback(async () => {
     if (!onTranscribeAudio) {
       notify({
         kind: 'warning',
-        title: voiceCopy.unavailable,
-        message: voiceCopy.configureSpeechToText
+        title: 'Voice unavailable',
+        message: 'Configure speech-to-text to use voice mode.'
       })
       onFatalError?.()
 
@@ -255,7 +252,7 @@ export function useVoiceConversation({
     consumePendingResponse()
     pendingStartRef.current = true
     await startListening()
-  }, [consumePendingResponse, onFatalError, onTranscribeAudio, startListening, voiceCopy.configureSpeechToText, voiceCopy.unavailable])
+  }, [consumePendingResponse, onFatalError, onTranscribeAudio, startListening])
 
   const end = useCallback(async () => {
     pendingStartRef.current = false

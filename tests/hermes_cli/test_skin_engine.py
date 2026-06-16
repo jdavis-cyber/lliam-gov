@@ -1,10 +1,6 @@
 """Tests for hermes_cli.skin_engine — the data-driven skin/theme system."""
 
-import json
-import os
 import pytest
-from pathlib import Path
-from unittest.mock import patch
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +33,7 @@ class TestSkinConfig:
     def test_get_branding_with_fallback(self):
         from hermes_cli.skin_engine import load_skin
         skin = load_skin("default")
-        assert skin.get_branding("agent_name") == "Lliam-GOV"
+        assert skin.get_branding("agent_name") == "Hermes Agent"
         assert skin.get_branding("nonexistent", "fallback") == "fallback"
 
     def test_get_spinner_wings_empty_for_default(self):
@@ -185,7 +181,7 @@ class TestSkinManagement:
 
 class TestUserSkins:
     def test_load_user_skin_from_yaml(self, tmp_path, monkeypatch):
-        from hermes_cli.skin_engine import load_skin, _skins_dir
+        from hermes_cli.skin_engine import load_skin
         # Create a user skin YAML
         skins_dir = tmp_path / "skins"
         skins_dir.mkdir()
@@ -237,7 +233,7 @@ class TestUserSkins:
 
         assert skin.name == "broken"
         assert skin.get_color("banner_title") == "#FFD700"
-        assert skin.get_branding("agent_name") == "Lliam-GOV"
+        assert skin.get_branding("agent_name") == "Hermes Agent"
         assert skin.spinner.get("waiting_faces", []) == []
         assert skin.tool_emojis == {}
         assert skin.tool_prefix == "!"

@@ -1,7 +1,6 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useRef, useState } from 'react'
 
-import { useI18n } from '@/i18n'
 import { MonitorPlay } from '@/lib/icons'
 import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
 import { previewName } from '@/lib/preview-targets'
@@ -15,7 +14,6 @@ import {
 import { $currentCwd } from '@/store/session'
 
 export function PreviewAttachment({ source = 'manual', target }: { source?: PreviewRecordSource; target: string }) {
-  const { t } = useI18n()
   const cwd = useStore($currentCwd)
   const activePreview = useStore($previewTarget)
   const [opening, setOpening] = useState(false)
@@ -95,7 +93,7 @@ export function PreviewAttachment({ source = 'manual', target }: { source?: Prev
         return
       }
 
-      notifyError(error, t.preview.unavailable)
+      notifyError(error, 'Preview unavailable')
     } finally {
       if (mountedRef.current && requestTokenRef.current === requestToken) {
         setOpening(false)
@@ -118,7 +116,7 @@ export function PreviewAttachment({ source = 'manual', target }: { source?: Prev
         onClick={() => void togglePreview()}
         type="button"
       >
-        {opening ? t.preview.opening : isActive ? t.preview.hide : t.preview.openPreview}
+        {opening ? 'Opening…' : isActive ? 'Hide' : 'Open preview'}
       </button>
     </div>
   )

@@ -29,12 +29,12 @@
 services:
   gateway:
     build: .
-    image: lliam-gov
-    container_name: lliam-gov
+    image: hermes-agent
+    container_name: hermes
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ~/.lliam-gov:/opt/data
+      - ~/.hermes:/opt/data
     environment:
       - HERMES_UID=${HERMES_UID:-10000}
       - HERMES_GID=${HERMES_GID:-10000}
@@ -61,14 +61,14 @@ services:
     command: ["gateway", "run"]
 
   dashboard:
-    image: lliam-gov
-    container_name: lliam-gov-dashboard
+    image: hermes-agent
+    container_name: hermes-dashboard
     restart: unless-stopped
     network_mode: host
     depends_on:
       - gateway
     volumes:
-      - ~/.lliam-gov:/opt/data
+      - ~/.hermes:/opt/data
     environment:
       - HERMES_UID=${HERMES_UID:-10000}
       - HERMES_GID=${HERMES_GID:-10000}

@@ -13,7 +13,6 @@ extracted functions reach back through the ``run_agent`` module via
 from __future__ import annotations
 
 import concurrent.futures
-import contextvars
 import json
 import logging
 import os
@@ -38,12 +37,9 @@ from agent.tool_dispatch_helpers import (
     make_tool_result_message,
 )
 from tools.terminal_tool import (
-    _get_approval_callback,
-    _get_sudo_password_callback,
-    set_approval_callback as _set_approval_callback,
-    set_sudo_password_callback as _set_sudo_password_callback,
     get_active_env,
 )
+from tools.thread_context import propagate_context_to_thread
 from tools.tool_result_storage import (
     maybe_persist_tool_result,
     enforce_turn_budget,
@@ -62,68 +58,123 @@ def _ra():
     return run_agent
 
 
-def _audit_tool_event(**kwargs) -> str | None:
-    """Append a Lliam-GOV tool audit event through the shared dispatcher."""
-    from model_tools import _audit_tool_event as audit_tool_event
-
-    return audit_tool_event(**kwargs)
-
-
-def _inline_agent_tool_names(agent) -> set[str]:
-    names = {"todo", "memory", "session_search", "delegate_task", "clarify"}
-    names.update(getattr(agent, "_context_engine_tool_names", set()) or set())
-    return names
-
-
-def _is_inline_agent_tool(agent, function_name: str) -> bool:
-    if function_name in _inline_agent_tool_names(agent):
-        return True
-    memory_manager = getattr(agent, "_memory_manager", None)
-    return bool(memory_manager and memory_manager.has_tool(function_name))
-
-
-def _audit_blocked_tool(
+def _emit_terminal_post_tool_call(
     agent,
+    *,
     function_name: str,
     function_args: dict,
-    *,
-    tool_call_id: str = "",
-    block_reason: str,
-) -> str | None:
-    return _audit_tool_event(
-        event_type="tool_call_blocked",
-        session_id=agent.session_id or "",
-        tool_name=function_name,
-        tool_call_id=tool_call_id or "",
-        params=function_args,
-        duration_ms=0,
-        blocked=True,
-        block_reason=block_reason,
-        error=block_reason,
-    )
-
-
-def _audit_inline_tool_exception(
-    agent,
-    function_name: str,
-    function_args: dict,
-    *,
-    tool_call_id: str = "",
-    duration_ms: int,
-    error: Exception,
+    result: Any,
+    effective_task_id: str,
+    tool_call_id: str,
+    duration_ms: int = 0,
+    status: str | None = None,
+    error_type: str | None = None,
+    error_message: str | None = None,
 ) -> None:
-    audit_error = _audit_tool_event(
-        event_type="tool_call_error",
-        session_id=agent.session_id or "",
-        tool_name=function_name,
-        tool_call_id=tool_call_id or "",
-        params=function_args,
-        duration_ms=duration_ms,
-        blocked=False,
-        error=f"Error executing {function_name}: {error}",
+    try:
+        from model_tools import _emit_post_tool_call_hook
+        _emit_post_tool_call_hook(
+            function_name=function_name,
+            function_args=function_args,
+            result=result,
+            task_id=effective_task_id or "",
+            session_id=getattr(agent, "session_id", "") or "",
+            tool_call_id=tool_call_id or "",
+            turn_id=getattr(agent, "_current_turn_id", "") or "",
+            api_request_id=getattr(agent, "_current_api_request_id", "") or "",
+            duration_ms=duration_ms,
+            status=status,
+            error_type=error_type,
+            error_message=error_message,
+        )
+    except Exception:
+        pass
+
+
+def _cancelled_tool_result(reason: str = "user interrupt") -> str:
+    return json.dumps(
+        {
+            "error": f"Tool execution cancelled by {reason}",
+            "status": "cancelled",
+        },
+        ensure_ascii=False,
     )
-    if audit_error is not None:
-        logger.error("inline tool error audit failed closed: %s", audit_error)
+
+
+def _emit_cancelled_terminal_post_tool_call(
+    agent,
+    *,
+    function_name: str,
+    function_args: dict,
+    effective_task_id: str,
+    tool_call_id: str,
+    start_time: float,
+    reason: str = "user interrupt",
+    error_type: str = "keyboard_interrupt",
+) -> str:
+    result = _cancelled_tool_result(reason)
+    _emit_terminal_post_tool_call(
+        agent,
+        function_name=function_name,
+        function_args=function_args,
+        result=result,
+        effective_task_id=effective_task_id,
+        tool_call_id=tool_call_id,
+        duration_ms=int((time.time() - start_time) * 1000),
+        status="cancelled",
+        error_type=error_type,
+        error_message=f"Tool execution cancelled by {reason}",
+    )
+    return result
+
+
+def _tool_search_scoped_names(agent) -> frozenset:
+    """Return the deferrable tool names the session may invoke via tool_call.
+
+    The Tool Search unwrap dispatches the underlying tool directly, bypassing
+    the bridge branch (and its scope check) in
+    ``model_tools.handle_function_call``. To keep a restricted-toolset session
+    (subagent, kanban worker, curated gateway session) from reaching tools it
+    was never granted, the unwrap validates the underlying name against this
+    set: the deferrable subset of the session's own enabled/disabled toolset
+    scope.
+
+    Result is cached on the agent and refreshed when the tool registry's
+    generation changes (e.g. an MCP server reconnects), so the common case is
+    a dict lookup, not a full tool-defs rebuild on every tool call.
+    """
+    try:
+        import model_tools
+        from tools import tool_search as _ts
+        from tools.registry import registry as _registry
+    except Exception:
+        return frozenset()
+
+    enabled = getattr(agent, "enabled_toolsets", None)
+    disabled = getattr(agent, "disabled_toolsets", None)
+    cache_key = (
+        getattr(_registry, "_generation", 0),
+        frozenset(enabled) if enabled is not None else None,
+        frozenset(disabled) if disabled is not None else None,
+    )
+    cached = getattr(agent, "_tool_search_scope_cache", None)
+    if cached is not None and cached[0] == cache_key:
+        return cached[1]
+    try:
+        scoped_defs = model_tools.get_tool_definitions(
+            enabled_toolsets=enabled,
+            disabled_toolsets=disabled,
+            quiet_mode=True,
+            skip_tool_search_assembly=True,
+        ) or []
+        names = _ts.scoped_deferrable_names(scoped_defs)
+    except Exception:
+        names = frozenset()
+    try:
+        agent._tool_search_scope_cache = (cache_key, names)
+    except Exception:
+        pass
+    return names
 
 
 def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effective_task_id: str, api_call_count: int = 0) -> None:
@@ -164,41 +215,108 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
         if not isinstance(function_args, dict):
             function_args = {}
 
+        # ── Tool Search unwrap ────────────────────────────────────────
+        # When the model invokes the tool_call bridge, peel it open so
+        # every downstream check (checkpointing, guardrails, plugin
+        # pre-tool-call hooks, the display/activity feed, the post-call
+        # callback) sees the underlying tool — not the bridge. This is
+        # the OpenClaw lesson: hooks must observe the real tool name.
+        #
+        # The original tool_call entry on ``tool_call.function`` is left
+        # untouched so the conversation transcript and the matching
+        # tool_call_id are preserved exactly as the model emitted them.
+        #
+        # Scope gate: the unwrap dispatches the underlying tool directly
+        # (bypassing the bridge branch in handle_function_call and its
+        # scope check), so we enforce session toolset scope HERE. A tool
+        # the session was not granted is rejected before any checkpoint,
+        # hook, or dispatch fires.
+        _ts_scope_block = None
+        try:
+            from tools import tool_search as _ts
+            if function_name == _ts.TOOL_CALL_NAME:
+                _underlying, _underlying_args, _err = _ts.resolve_underlying_call(function_args)
+                if not _err and _underlying:
+                    if _underlying in _tool_search_scoped_names(agent):
+                        function_name = _underlying
+                        function_args = _underlying_args
+                    else:
+                        _ts_scope_block = json.dumps({
+                            "error": (
+                                f"'{_underlying}' is not available in this session. "
+                                "Use tool_search to find tools you can call."
+                            ),
+                        }, ensure_ascii=False)
+        except Exception:
+            pass
+
+        # ── Block evaluation (BEFORE checkpoint preflight) ───────────
+        # We must know whether the tool will execute before touching
+        # checkpoint state (dedup slot, real snapshots).
         block_result = None
         blocked_by_guardrail = False
-        try:
-            from hermes_cli.plugins import get_pre_tool_call_block_message
-            block_message = get_pre_tool_call_block_message(
-                function_name, function_args, task_id=effective_task_id or "",
-            )
-        except Exception:
-            block_message = None
-
-        if block_message is not None:
-            block_result = json.dumps({"error": block_message}, ensure_ascii=False)
-        else:
-            guardrail_decision = agent._tool_guardrails.before_call(function_name, function_args)
-            if not guardrail_decision.allows_execution:
-                block_result = agent._guardrail_block_result(guardrail_decision)
-                blocked_by_guardrail = True
-
-        if block_result is not None:
-            block_reason = block_message
-            if block_reason is None and blocked_by_guardrail:
-                block_reason = guardrail_decision.message or guardrail_decision.code
-            audit_error = _audit_blocked_tool(
+        if _ts_scope_block is not None:
+            # Out-of-scope tool_call: reject before hooks/guardrails/dispatch.
+            block_result = _ts_scope_block
+            _emit_terminal_post_tool_call(
                 agent,
-                function_name,
-                function_args,
-                tool_call_id=tool_call.id,
-                block_reason=block_reason or "Tool blocked",
+                function_name=function_name,
+                function_args=function_args,
+                result=block_result,
+                effective_task_id=effective_task_id,
+                tool_call_id=getattr(tool_call, "id", "") or "",
+                status="blocked",
+                error_type="tool_scope_block",
+                error_message=_ts_scope_block,
             )
-            if audit_error is not None:
-                block_result = audit_error
+        else:
+            try:
+                from hermes_cli.plugins import get_pre_tool_call_block_message
+                block_message = get_pre_tool_call_block_message(
+                    function_name,
+                    function_args,
+                    task_id=effective_task_id or "",
+                    session_id=getattr(agent, "session_id", "") or "",
+                    tool_call_id=getattr(tool_call, "id", "") or "",
+                    turn_id=getattr(agent, "_current_turn_id", "") or "",
+                    api_request_id=getattr(agent, "_current_api_request_id", "") or "",
+                )
+            except Exception:
+                block_message = None
 
+            if block_message is not None:
+                block_result = json.dumps({"error": block_message}, ensure_ascii=False)
+                _emit_terminal_post_tool_call(
+                    agent,
+                    function_name=function_name,
+                    function_args=function_args,
+                    result=block_result,
+                    effective_task_id=effective_task_id,
+                    tool_call_id=getattr(tool_call, "id", "") or "",
+                    status="blocked",
+                    error_type="plugin_block",
+                    error_message=block_message,
+                )
+            else:
+                guardrail_decision = agent._tool_guardrails.before_call(function_name, function_args)
+                if not guardrail_decision.allows_execution:
+                    block_result = agent._guardrail_block_result(guardrail_decision)
+                    blocked_by_guardrail = True
+                    _emit_terminal_post_tool_call(
+                        agent,
+                        function_name=function_name,
+                        function_args=function_args,
+                        result=block_result,
+                        effective_task_id=effective_task_id,
+                        tool_call_id=getattr(tool_call, "id", "") or "",
+                        status="blocked",
+                        error_type="guardrail_block",
+                        error_message=getattr(guardrail_decision, "message", None) or "Tool blocked by guardrail policy",
+                    )
+
+        # ── Checkpoint preflight (only for tools that will execute) ──
         if block_result is None:
-            # Checkpoint for file-mutating tools only after block/audit
-            # preflight has succeeded, preserving fail-closed ordering.
+            # Checkpoint for file-mutating tools
             if function_name in {"write_file", "patch"} and agent._checkpoint_mgr.enabled:
                 try:
                     file_path = function_args.get("path", "")
@@ -266,14 +384,6 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
     agent._current_tool = tool_names_str
     agent._touch_activity(f"executing {num_tools} tools concurrently: {tool_names_str}")
 
-    # Capture CLI callbacks from the agent thread so worker threads can
-    # register them locally.  Without this, _get_approval_callback() in
-    # terminal_tool returns None in ThreadPoolExecutor workers, causing
-    # the dangerous-command prompt to fall back to input() — which
-    # deadlocks against prompt_toolkit's raw terminal mode (#13617).
-    _parent_approval_cb = _get_approval_callback()
-    _parent_sudo_cb = _get_sudo_password_callback()
-
     def _run_tool(index, tool_call, function_name, function_args):
         """Worker function executed in a thread."""
         # Register this worker tid so the agent can fan out an interrupt
@@ -300,54 +410,60 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
             set_activity_callback(agent._touch_activity)
         except Exception:
             pass
-        # Propagate approval/sudo callbacks to this worker thread.
-        # Mirrors cli.py run_agent() pattern (GHSA-qg5c-hvr5-hjgr).
-        if _parent_approval_cb is not None:
-            try:
-                _set_approval_callback(_parent_approval_cb)
-            except Exception:
-                pass
-        if _parent_sudo_cb is not None:
-            try:
-                _set_sudo_password_callback(_parent_sudo_cb)
-            except Exception:
-                pass
+        # Approval/sudo callbacks (thread-local) and the agent turn's
+        # ContextVars are propagated by propagate_context_to_thread() at the
+        # submit site below (GHSA-qg5c-hvr5-hjgr, #13617).
         start = time.time()
         try:
-            result = agent._invoke_tool(
-                function_name,
-                function_args,
-                effective_task_id,
-                tool_call.id,
-                messages=messages,
-                pre_tool_block_checked=True,
-            )
-        except Exception as tool_error:
-            result = f"Error executing tool '{function_name}': {tool_error}"
-            logger.error("_invoke_tool raised for %s: %s", function_name, tool_error, exc_info=True)
-        duration = time.time() - start
-        is_error, _ = _detect_tool_failure(function_name, result)
-        if is_error:
-            logger.info("tool %s failed (%.2fs): %s", function_name, duration, result[:200])
-        else:
-            logger.info("tool %s completed (%.2fs, %d chars)", function_name, duration, len(result))
-        results[index] = (function_name, function_args, result, duration, is_error, False)
-        # Tear down worker-tid tracking.  Clear any interrupt bit we may
-        # have set so the next task scheduled onto this recycled tid
-        # starts with a clean slate.
-        with agent._tool_worker_threads_lock:
-            agent._tool_worker_threads.discard(_worker_tid)
-        try:
-            _ra()._set_interrupt(False, _worker_tid)
-        except Exception:
-            pass
-        # Clear thread-local callbacks so a recycled worker thread
-        # doesn't hold stale references to a disposed CLI instance.
-        try:
-            _set_approval_callback(None)
-            _set_sudo_password_callback(None)
-        except Exception:
-            pass
+            try:
+                result = agent._invoke_tool(
+                    function_name,
+                    function_args,
+                    effective_task_id,
+                    tool_call.id,
+                    messages=messages,
+                    pre_tool_block_checked=True,
+                )
+            except KeyboardInterrupt:
+                try:
+                    agent.interrupt("keyboard interrupt")
+                except Exception:
+                    pass
+                result = _emit_cancelled_terminal_post_tool_call(
+                    agent,
+                    function_name=function_name,
+                    function_args=function_args,
+                    effective_task_id=effective_task_id,
+                    tool_call_id=getattr(tool_call, "id", "") or "",
+                    start_time=start,
+                )
+                duration = time.time() - start
+                logger.info("tool %s cancelled (%.2fs)", function_name, duration)
+                results[index] = (function_name, function_args, result, duration, True, False)
+                return
+            except Exception as tool_error:
+                result = f"Error executing tool '{function_name}': {tool_error}"
+                logger.error("_invoke_tool raised for %s: %s", function_name, tool_error, exc_info=True)
+            duration = time.time() - start
+            is_error, _ = _detect_tool_failure(function_name, result)
+            if is_error:
+                logger.info("tool %s failed (%.2fs): %s", function_name, duration, result[:200])
+            else:
+                logger.info("tool %s completed (%.2fs, %d chars)", function_name, duration, len(result))
+            results[index] = (function_name, function_args, result, duration, is_error, False)
+        finally:
+            # Tear down worker-tid tracking.  Clear any interrupt bit we may
+            # have set so the next task scheduled onto this recycled tid
+            # starts with a clean slate.  This MUST be in a finally block
+            # because BaseException subclasses (CancelledError, KeyboardInterrupt)
+            # bypass ``except Exception`` and would otherwise leak the tid
+            # into _interrupted_threads, poisoning the recycled thread.
+            with agent._tool_worker_threads_lock:
+                agent._tool_worker_threads.discard(_worker_tid)
+            try:
+                _ra()._set_interrupt(False, _worker_tid)
+            except Exception:
+                pass
 
     # Start spinner for CLI mode (skip when TUI handles tool progress)
     spinner = None
@@ -367,9 +483,12 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
             max_workers = min(len(runnable_calls), _MAX_TOOL_WORKERS)
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 for i, tc, name, args in runnable_calls:
-                    # Propagate ContextVars (e.g. _approval_session_key); mirrors asyncio.to_thread.
-                    ctx = contextvars.copy_context()
-                    f = executor.submit(ctx.run, _run_tool, i, tc, name, args)
+                    # Propagate the agent turn's ContextVars (e.g.
+                    # _approval_session_key) AND thread-local approval/sudo
+                    # callbacks into the worker thread; clears callbacks on exit.
+                    f = executor.submit(
+                        propagate_context_to_thread(_run_tool), i, tc, name, args
+                    )
                     futures.append(f)
 
                 # Wait for all to complete with periodic heartbeats so the
@@ -433,8 +552,30 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
             # Tool was cancelled (interrupt) or thread didn't return
             if agent._interrupt_requested:
                 function_result = f"[Tool execution cancelled — {name} was skipped due to user interrupt]"
+                _emit_terminal_post_tool_call(
+                    agent,
+                    function_name=name,
+                    function_args=args,
+                    result=function_result,
+                    effective_task_id=effective_task_id,
+                    tool_call_id=getattr(tc, "id", "") or "",
+                    status="cancelled",
+                    error_type="keyboard_interrupt",
+                    error_message="Tool execution cancelled by user interrupt",
+                )
             else:
                 function_result = f"Error executing tool '{name}': thread did not return a result"
+                _emit_terminal_post_tool_call(
+                    agent,
+                    function_name=name,
+                    function_args=args,
+                    result=function_result,
+                    effective_task_id=effective_task_id,
+                    tool_call_id=getattr(tc, "id", "") or "",
+                    status="error",
+                    error_type="thread_missing_result",
+                    error_message=function_result,
+                )
             tool_duration = 0.0
         else:
             function_name, function_args, function_result, tool_duration, is_error, blocked = r
@@ -577,15 +718,46 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
         if not isinstance(function_args, dict):
             function_args = {}
 
-        # Check plugin hooks for a block directive before executing.
-        _block_msg: Optional[str] = None
+        # Tool Search unwrap — see execute_tool_calls_concurrent for full
+        # rationale, including the scope gate (the unwrap dispatches the
+        # underlying tool directly, so session toolset scope is enforced here).
+        _ts_scope_block: Optional[str] = None
         try:
-            from hermes_cli.plugins import get_pre_tool_call_block_message
-            _block_msg = get_pre_tool_call_block_message(
-                function_name, function_args, task_id=effective_task_id or "",
-            )
+            from tools import tool_search as _ts
+            if function_name == _ts.TOOL_CALL_NAME:
+                _underlying, _underlying_args, _err = _ts.resolve_underlying_call(function_args)
+                if not _err and _underlying:
+                    if _underlying in _tool_search_scoped_names(agent):
+                        function_name = _underlying
+                        function_args = _underlying_args
+                    else:
+                        _ts_scope_block = (
+                            f"'{_underlying}' is not available in this session. "
+                            "Use tool_search to find tools you can call."
+                        )
         except Exception:
             pass
+
+        # Check plugin hooks for a block directive before executing.
+        _block_msg: Optional[str] = None
+        _block_error_type = "plugin_block"
+        if _ts_scope_block is not None:
+            _block_msg = _ts_scope_block
+            _block_error_type = "tool_scope_block"
+        else:
+            try:
+                from hermes_cli.plugins import get_pre_tool_call_block_message
+                _block_msg = get_pre_tool_call_block_message(
+                    function_name,
+                    function_args,
+                    task_id=effective_task_id or "",
+                    session_id=getattr(agent, "session_id", "") or "",
+                    tool_call_id=getattr(tool_call, "id", "") or "",
+                    turn_id=getattr(agent, "_current_turn_id", "") or "",
+                    api_request_id=getattr(agent, "_current_api_request_id", "") or "",
+                )
+            except Exception:
+                pass
 
         _guardrail_block_decision: ToolGuardrailDecision | None = None
         if _block_msg is None:
@@ -594,40 +766,6 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                 _guardrail_block_decision = guardrail_decision
 
         _execution_blocked = _block_msg is not None or _guardrail_block_decision is not None
-        _audit_failure_result = None
-        if _execution_blocked:
-            if _block_msg is not None:
-                _block_reason = _block_msg
-            elif _guardrail_block_decision is not None:
-                _block_reason = (
-                    _guardrail_block_decision.message
-                    or _guardrail_block_decision.code
-                    or "Tool blocked"
-                )
-            else:
-                _block_reason = "Tool blocked"
-            _audit_failure_result = _audit_blocked_tool(
-                agent,
-                function_name,
-                function_args,
-                tool_call_id=tool_call.id,
-                block_reason=_block_reason,
-            )
-        _inline_audit = (
-            not _execution_blocked
-            and _is_inline_agent_tool(agent, function_name)
-        )
-        if _inline_audit:
-            _audit_failure_result = _audit_tool_event(
-                event_type="tool_call_start",
-                session_id=agent.session_id or "",
-                tool_name=function_name,
-                tool_call_id=tool_call.id or "",
-                params=function_args,
-                blocked=False,
-            )
-            if _audit_failure_result is not None:
-                _execution_blocked = True
 
         if _execution_blocked:
             # Tool blocked by plugin or guardrail policy — skip counters,
@@ -701,149 +839,116 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
 
         tool_start_time = time.time()
 
-        if _audit_failure_result is not None:
-            function_result = _audit_failure_result
-            tool_duration = 0.0
-        elif _block_msg is not None:
+        if _block_msg is not None:
             # Tool blocked by plugin policy — return error without executing.
             function_result = json.dumps({"error": _block_msg}, ensure_ascii=False)
             tool_duration = 0.0
+            _emit_terminal_post_tool_call(
+                agent,
+                function_name=function_name,
+                function_args=function_args,
+                result=function_result,
+                effective_task_id=effective_task_id,
+                tool_call_id=getattr(tool_call, "id", "") or "",
+                status="blocked",
+                error_type=_block_error_type,
+                error_message=_block_msg,
+            )
         elif _guardrail_block_decision is not None:
             # Tool blocked by tool-loop guardrail — synthesize exactly one
             # tool result for the original tool_call_id without executing.
             function_result = agent._guardrail_block_result(_guardrail_block_decision)
             tool_duration = 0.0
+            _emit_terminal_post_tool_call(
+                agent,
+                function_name=function_name,
+                function_args=function_args,
+                result=function_result,
+                effective_task_id=effective_task_id,
+                tool_call_id=getattr(tool_call, "id", "") or "",
+                status="blocked",
+                error_type="guardrail_block",
+                error_message=getattr(_guardrail_block_decision, "message", None) or "Tool blocked by guardrail policy",
+            )
         elif function_name == "todo":
             from tools.todo_tool import todo_tool as _todo_tool
-            try:
-                function_result = _todo_tool(
-                    todos=function_args.get("todos"),
-                    merge=function_args.get("merge", False),
-                    store=agent._todo_store,
-                )
-            except Exception as tool_error:
-                tool_duration = time.time() - tool_start_time
-                if _inline_audit and _audit_failure_result is None:
-                    _audit_inline_tool_exception(
-                        agent,
-                        function_name,
-                        function_args,
-                        tool_call_id=tool_call.id,
-                        duration_ms=int(tool_duration * 1000),
-                        error=tool_error,
-                    )
-                raise
-            else:
-                tool_duration = time.time() - tool_start_time
+            function_result = _todo_tool(
+                todos=function_args.get("todos"),
+                merge=function_args.get("merge", False),
+                store=agent._todo_store,
+            )
+            tool_duration = time.time() - tool_start_time
             if agent._should_emit_quiet_tool_messages():
                 agent._vprint(f"  {_get_cute_tool_message_impl('todo', function_args, tool_duration, result=function_result)}")
         elif function_name == "session_search":
-            try:
-                session_db = agent._get_session_db_for_recall()
-                if not session_db:
-                    from hermes_state import format_session_db_unavailable
-                    function_result = json.dumps({"success": False, "error": format_session_db_unavailable()})
-                else:
-                    from tools.session_search_tool import session_search as _session_search
-                    function_result = _session_search(
-                        query=function_args.get("query", ""),
-                        role_filter=function_args.get("role_filter"),
-                        limit=function_args.get("limit", 3),
-                        session_id=function_args.get("session_id"),
-                        around_message_id=function_args.get("around_message_id"),
-                        window=function_args.get("window", 5),
-                        sort=function_args.get("sort"),
-                        db=session_db,
-                        current_session_id=agent.session_id,
-                    )
-            except Exception as tool_error:
-                tool_duration = time.time() - tool_start_time
-                if _inline_audit and _audit_failure_result is None:
-                    _audit_inline_tool_exception(
-                        agent,
-                        function_name,
-                        function_args,
-                        tool_call_id=tool_call.id,
-                        duration_ms=int(tool_duration * 1000),
-                        error=tool_error,
-                    )
-                raise
+            session_db = agent._get_session_db_for_recall()
+            if not session_db:
+                from hermes_state import format_session_db_unavailable
+                function_result = json.dumps({"success": False, "error": format_session_db_unavailable()})
             else:
-                tool_duration = time.time() - tool_start_time
+                from tools.session_search_tool import session_search as _session_search
+                function_result = _session_search(
+                    query=function_args.get("query", ""),
+                    role_filter=function_args.get("role_filter"),
+                    limit=function_args.get("limit", 3),
+                    session_id=function_args.get("session_id"),
+                    around_message_id=function_args.get("around_message_id"),
+                    window=function_args.get("window", 5),
+                    sort=function_args.get("sort"),
+                    db=session_db,
+                    current_session_id=agent.session_id,
+                )
+            tool_duration = time.time() - tool_start_time
             if agent._should_emit_quiet_tool_messages():
                 agent._vprint(f"  {_get_cute_tool_message_impl('session_search', function_args, tool_duration, result=function_result)}")
         elif function_name == "memory":
             target = function_args.get("target", "memory")
             from tools.memory_tool import memory_tool as _memory_tool
-            try:
-                function_result = _memory_tool(
-                    action=function_args.get("action"),
-                    target=target,
-                    content=function_args.get("content"),
-                    old_text=function_args.get("old_text"),
-                    store=agent._memory_store,
-                )
-                # Bridge: notify external memory provider of built-in memory writes
-                if agent._memory_manager and function_args.get("action") in {"add", "replace"}:
-                    try:
-                        agent._memory_manager.on_memory_write(
-                            function_args.get("action", ""),
-                            target,
-                            function_args.get("content", ""),
-                            metadata=agent._build_memory_write_metadata(
-                                task_id=effective_task_id,
-                                tool_call_id=getattr(tool_call, "id", None),
-                            ),
-                        )
-                    except Exception:
-                        pass
-            except Exception as tool_error:
-                tool_duration = time.time() - tool_start_time
-                if _inline_audit and _audit_failure_result is None:
-                    _audit_inline_tool_exception(
-                        agent,
-                        function_name,
-                        function_args,
-                        tool_call_id=tool_call.id,
-                        duration_ms=int(tool_duration * 1000),
-                        error=tool_error,
+            function_result = _memory_tool(
+                action=function_args.get("action"),
+                target=target,
+                content=function_args.get("content"),
+                old_text=function_args.get("old_text"),
+                store=agent._memory_store,
+            )
+            # Bridge: notify external memory provider of built-in memory writes
+            if agent._memory_manager and function_args.get("action") in {"add", "replace"}:
+                try:
+                    agent._memory_manager.on_memory_write(
+                        function_args.get("action", ""),
+                        target,
+                        function_args.get("content", ""),
+                        metadata=agent._build_memory_write_metadata(
+                            task_id=effective_task_id,
+                            tool_call_id=getattr(tool_call, "id", None),
+                        ),
                     )
-                raise
-            else:
-                tool_duration = time.time() - tool_start_time
+                except Exception:
+                    pass
+            tool_duration = time.time() - tool_start_time
             if agent._should_emit_quiet_tool_messages():
                 agent._vprint(f"  {_get_cute_tool_message_impl('memory', function_args, tool_duration, result=function_result)}")
         elif function_name == "clarify":
             from tools.clarify_tool import clarify_tool as _clarify_tool
-            try:
-                function_result = _clarify_tool(
-                    question=function_args.get("question", ""),
-                    choices=function_args.get("choices"),
-                    callback=agent.clarify_callback,
-                )
-            except Exception as tool_error:
-                tool_duration = time.time() - tool_start_time
-                if _inline_audit and _audit_failure_result is None:
-                    _audit_inline_tool_exception(
-                        agent,
-                        function_name,
-                        function_args,
-                        tool_call_id=tool_call.id,
-                        duration_ms=int(tool_duration * 1000),
-                        error=tool_error,
-                    )
-                raise
-            else:
-                tool_duration = time.time() - tool_start_time
+            function_result = _clarify_tool(
+                question=function_args.get("question", ""),
+                choices=function_args.get("choices"),
+                callback=agent.clarify_callback,
+            )
+            tool_duration = time.time() - tool_start_time
             if agent._should_emit_quiet_tool_messages():
                 agent._vprint(f"  {_get_cute_tool_message_impl('clarify', function_args, tool_duration, result=function_result)}")
         elif function_name == "delegate_task":
             tasks_arg = function_args.get("tasks")
             if tasks_arg and isinstance(tasks_arg, list):
-                spinner_label = f"🔀 delegating {len(tasks_arg)} tasks"
+                spinner_label = f"🔀 delegating {len(tasks_arg)} tasks · (/agents to monitor)"
             else:
                 goal_preview = (function_args.get("goal") or "")[:30]
-                spinner_label = f"🔀 {goal_preview}" if goal_preview else "🔀 delegating"
+                spinner_label = (
+                    f"🔀 {goal_preview} · (/agents to monitor)"
+                    if goal_preview
+                    else "🔀 delegating · (/agents to monitor)"
+                )
             spinner = None
             if agent._should_emit_quiet_tool_messages() and agent._should_start_quiet_spinner():
                 face = random.choice(KawaiiSpinner.get_waiting_faces())
@@ -854,17 +959,6 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
             try:
                 function_result = agent._dispatch_delegate_task(function_args)
                 _delegate_result = function_result
-            except Exception as tool_error:
-                if _inline_audit and _audit_failure_result is None:
-                    _audit_inline_tool_exception(
-                        agent,
-                        function_name,
-                        function_args,
-                        tool_call_id=tool_call.id,
-                        duration_ms=int((time.time() - tool_start_time) * 1000),
-                        error=tool_error,
-                    )
-                raise
             finally:
                 agent._delegate_spinner = None
                 tool_duration = time.time() - tool_start_time
@@ -934,10 +1028,29 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     function_name, function_args, effective_task_id,
                     tool_call_id=tool_call.id,
                     session_id=agent.session_id or "",
+                    turn_id=getattr(agent, "_current_turn_id", "") or "",
+                    api_request_id=getattr(agent, "_current_api_request_id", "") or "",
                     enabled_tools=list(agent.valid_tool_names) if agent.valid_tool_names else None,
                     skip_pre_tool_call_hook=True,
+                    enabled_toolsets=getattr(agent, "enabled_toolsets", None),
+                    disabled_toolsets=getattr(agent, "disabled_toolsets", None),
                 )
                 _spinner_result = function_result
+            except KeyboardInterrupt:
+                function_result = _emit_cancelled_terminal_post_tool_call(
+                    agent,
+                    function_name=function_name,
+                    function_args=function_args,
+                    effective_task_id=effective_task_id,
+                    tool_call_id=getattr(tool_call, "id", "") or "",
+                    start_time=tool_start_time,
+                )
+                _spinner_result = function_result
+                try:
+                    agent.interrupt("keyboard interrupt")
+                except Exception:
+                    pass
+                raise
             except Exception as tool_error:
                 function_result = f"Error executing tool '{function_name}': {tool_error}"
                 logger.error("handle_function_call raised for %s: %s", function_name, tool_error, exc_info=True)
@@ -954,9 +1067,27 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     function_name, function_args, effective_task_id,
                     tool_call_id=tool_call.id,
                     session_id=agent.session_id or "",
+                    turn_id=getattr(agent, "_current_turn_id", "") or "",
+                    api_request_id=getattr(agent, "_current_api_request_id", "") or "",
                     enabled_tools=list(agent.valid_tool_names) if agent.valid_tool_names else None,
                     skip_pre_tool_call_hook=True,
+                    enabled_toolsets=getattr(agent, "enabled_toolsets", None),
+                    disabled_toolsets=getattr(agent, "disabled_toolsets", None),
                 )
+            except KeyboardInterrupt:
+                _emit_cancelled_terminal_post_tool_call(
+                    agent,
+                    function_name=function_name,
+                    function_args=function_args,
+                    effective_task_id=effective_task_id,
+                    tool_call_id=getattr(tool_call, "id", "") or "",
+                    start_time=tool_start_time,
+                )
+                try:
+                    agent.interrupt("keyboard interrupt")
+                except Exception:
+                    pass
+                raise
             except Exception as tool_error:
                 function_result = f"Error executing tool '{function_name}': {tool_error}"
                 logger.error("handle_function_call raised for %s: %s", function_name, tool_error, exc_info=True)
@@ -975,20 +1106,27 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
         # Log tool errors to the persistent error log so [error] tags
         # in the UI always have a corresponding detailed entry on disk.
         _is_error_result, _ = _detect_tool_failure(function_name, function_result)
-        if _inline_audit and _audit_failure_result is None:
-            audit_error = _audit_tool_event(
-                event_type="tool_call_end",
-                session_id=agent.session_id or "",
-                tool_name=function_name,
-                tool_call_id=tool_call.id or "",
-                params=function_args,
+        # The agent-runtime tools above (todo, session_search, memory,
+        # context-engine, memory-manager, clarify, delegate_task) are
+        # dispatched inline — they never reach handle_function_call, so the
+        # executor is the one that has to fire post_tool_call. For
+        # registry-dispatched tools the else-branch above invoked
+        # handle_function_call, which already fires the hook.
+        from agent.agent_runtime_helpers import agent_runtime_owns_post_tool_hook
+        _executor_must_emit_post_hook = (
+            not _execution_blocked
+            and agent_runtime_owns_post_tool_hook(agent, function_name)
+        )
+        if _executor_must_emit_post_hook:
+            _emit_terminal_post_tool_call(
+                agent,
+                function_name=function_name,
+                function_args=function_args,
+                result=function_result,
+                effective_task_id=effective_task_id,
+                tool_call_id=getattr(tool_call, "id", "") or "",
                 duration_ms=int(tool_duration * 1000),
-                blocked=False,
-                error=None,
             )
-            if audit_error is not None:
-                function_result = audit_error
-                _is_error_result, _ = _detect_tool_failure(function_name, function_result)
         if not _execution_blocked:
             function_result = agent._append_guardrail_observation(
                 function_name,
