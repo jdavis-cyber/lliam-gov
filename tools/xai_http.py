@@ -31,11 +31,13 @@ def has_xai_credentials() -> bool:
         return True
     try:
         from hermes_constants import get_hermes_home
+        from lliam_gov.security.state_codec import decode_state_bytes
 
         auth_path = get_hermes_home() / "auth.json"
         if not auth_path.exists():
             return False
-        store = json.loads(auth_path.read_text())
+        decoded = decode_state_bytes(auth_path.read_bytes())
+        store = json.loads(decoded.decode("utf-8"))
         providers = store.get("providers") if isinstance(store, dict) else None
         xai_state = providers.get("xai-oauth") if isinstance(providers, dict) else None
         tokens = xai_state.get("tokens") if isinstance(xai_state, dict) else None

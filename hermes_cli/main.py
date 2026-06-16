@@ -700,7 +700,11 @@ def _has_any_provider_configured() -> bool:
         try:
             import json
 
-            auth = json.loads(auth_file.read_text())
+            # LG-3.7 / AI-215: decrypt-on-read so an encrypted auth.json still
+            # resolves the active provider (plaintext passes through unchanged).
+            from lliam_gov.security.state_codec import decode_state_bytes
+
+            auth = json.loads(decode_state_bytes(auth_file.read_bytes()))
             active = auth.get("active_provider")
             if active:
                 status = get_auth_status(active)
