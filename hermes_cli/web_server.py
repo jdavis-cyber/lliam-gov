@@ -1275,6 +1275,233 @@ def _denormalize_config_from_web(config: Dict[str, Any]) -> Dict[str, Any]:
     return config
 
 
+# ---------------------------------------------------------------------------
+# Audio (voice STT/TTS) — desktop microphone + spoken replies.
+#
+# The desktop renderer (apps/desktop/src/hermes.ts) records audio and POSTs it
+# to /api/audio/transcribe, and requests spoken replies via /api/audio/speak.
+# These routes bridge to the existing, proven engines:
+#   - tools.transcription_tools.transcribe_audio()  (dispatches on stt.provider;
+#     local faster-whisper in the governed install)
+#   - tools.tts_tool.text_to_speech_tool()          (dispatches on tts.provider;
+#     Edge TTS in the governed install)
+# They are sync ``def`` on purpose so FastAPI runs them in a worker thread:
+# whisper decode is blocking, and Edge TTS spins its own asyncio loop
+# internally — calling it from an ``async`` route would raise "event loop is
+# already running".
+# ---------------------------------------------------------------------------
+
+_AUDIO_MIME_TO_EXT = {
+    "audio/webm": ".webm",
+    "audio/ogg": ".ogg",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/wave": ".wav",
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/x-m4a": ".m4a",
+    "audio/aac": ".aac",
+    "audio/flac": ".flac",
+}
+
+_AUDIO_EXT_TO_MIME = {
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".oga": "audio/ogg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".flac": "audio/flac",
+    ".webm": "audio/webm",
+}
+
+
+def _decode_audio_data_url(data_url: str, mime_hint: Optional[str]) -> Tuple[bytes, str]:
+    """Decode a ``data:`` URL (or bare base64) into (raw_bytes, file_extension)."""
+    import base64
+
+    mime = (mime_hint or "").split(";")[0].strip().lower()
+    payload = data_url or ""
+    if payload.startswith("data:"):
+        header, _, b64 = payload.partition(",")
+        if not mime:
+            mime = header[len("data:"):].split(";")[0].strip().lower()
+        payload = b64
+    raw = base64.b64decode(payload, validate=False)
+    return raw, _AUDIO_MIME_TO_EXT.get(mime, ".webm")
+
+
+class AudioTranscribeBody(BaseModel):
+    data_url: str
+    mime_type: Optional[str] = None
+
+
+class AudioSpeakBody(BaseModel):
+    text: str
+
+
+@app.post("/api/audio/transcribe")
+def transcribe_audio_route(body: AudioTranscribeBody):
+    """Transcribe desktop-recorded audio via the configured STT provider."""
+    import tempfile
+
+    if not (body.data_url or "").strip():
+        return {"ok": False, "transcript": "", "error": "No audio data received."}
+
+    try:
+        raw, ext = _decode_audio_data_url(body.data_url, body.mime_type)
+    except Exception as exc:  # malformed data URL / base64
+        _log.warning("POST /api/audio/transcribe: could not decode data URL: %s", exc)
+        return {"ok": False, "transcript": "", "error": "Could not decode audio data."}
+
+    if not raw:
+        return {"ok": False, "transcript": "", "error": "Empty audio data."}
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(raw)
+            tmp_path = tmp.name
+        from tools.transcription_tools import transcribe_audio
+
+        result = transcribe_audio(tmp_path)
+        if isinstance(result, dict) and result.get("success"):
+            return {
+                "ok": True,
+                "provider": result.get("provider"),
+                "transcript": (result.get("transcript") or ""),
+            }
+        err = ""
+        provider = None
+        if isinstance(result, dict):
+            err = str(result.get("error") or result.get("message") or "")
+            provider = result.get("provider")
+        _log.warning("POST /api/audio/transcribe: provider returned failure: %s", err)
+        return {
+            "ok": False,
+            "transcript": "",
+            "provider": provider,
+            "error": err or "Transcription failed.",
+        }
+    except Exception:
+        _log.exception("POST /api/audio/transcribe failed")
+        return {"ok": False, "transcript": "", "error": "Internal transcription error."}
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+@app.post("/api/audio/speak")
+def speak_text_route(body: AudioSpeakBody):
+    """Synthesize speech for *text* via the configured TTS provider (Edge by default).
+
+    ``text_to_speech_tool`` writes an audio file; we read it back and base64-encode
+    it into a ``data:`` URL the renderer can play directly.
+    """
+    import base64
+    import tempfile
+
+    text = (body.text or "").strip()
+    if not text:
+        return {"ok": False, "data_url": "", "mime_type": "", "error": "No text to speak."}
+
+    try:
+        provider = str(((load_config().get("tts") or {}).get("provider")) or "edge")
+    except Exception:
+        provider = "edge"
+
+    out_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            out_path = tmp.name
+        from tools.tts_tool import text_to_speech_tool
+
+        raw_result = text_to_speech_tool(text, output_path=out_path)
+        try:
+            parsed = json.loads(raw_result) if isinstance(raw_result, str) else (raw_result or {})
+        except (ValueError, TypeError):
+            parsed = {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+
+        file_path = parsed.get("file_path") or out_path
+        if not parsed.get("success") or not file_path or not os.path.exists(file_path):
+            err = str(parsed.get("error") or "Speech synthesis failed.")
+            _log.warning("POST /api/audio/speak: synthesis failed: %s", err)
+            return {"ok": False, "data_url": "", "mime_type": "", "provider": provider, "error": err}
+
+        ext = Path(file_path).suffix.lower()
+        mime = _AUDIO_EXT_TO_MIME.get(ext, "audio/mpeg")
+        with open(file_path, "rb") as fh:
+            audio_b64 = base64.b64encode(fh.read()).decode("ascii")
+        if file_path != out_path:
+            try:
+                os.unlink(file_path)
+            except OSError:
+                pass
+        return {
+            "ok": True,
+            "data_url": f"data:{mime};base64,{audio_b64}",
+            "mime_type": mime,
+            "provider": provider,
+        }
+    except Exception:
+        _log.exception("POST /api/audio/speak failed")
+        return {"ok": False, "data_url": "", "mime_type": "", "provider": provider, "error": "Internal speech error."}
+    finally:
+        if out_path:
+            try:
+                os.unlink(out_path)
+            except OSError:
+                pass
+
+
+@app.get("/api/audio/elevenlabs/voices")
+def elevenlabs_voices_route():
+    """List ElevenLabs voices when an API key is configured; else report unavailable.
+
+    The governed install uses Edge TTS (no key), so this returns
+    ``{available: false, voices: []}`` and the desktop hides the ElevenLabs
+    voice picker accordingly.
+    """
+    try:
+        cfg = load_config()
+    except Exception:
+        cfg = {}
+    tts_cfg = cfg.get("tts") if isinstance(cfg, dict) else {}
+    tts_cfg = tts_cfg if isinstance(tts_cfg, dict) else {}
+    el_cfg = tts_cfg.get("elevenlabs") if isinstance(tts_cfg.get("elevenlabs"), dict) else {}
+    api_key = (
+        el_cfg.get("api_key")
+        or os.getenv("ELEVENLABS_API_KEY")
+        or os.getenv("ELEVEN_API_KEY")
+        or ""
+    )
+    if not api_key:
+        return {"available": False, "voices": []}
+
+    try:
+        from elevenlabs.client import ElevenLabs
+
+        client = ElevenLabs(api_key=api_key)
+        resp = client.voices.get_all()
+        voices = []
+        for v in (getattr(resp, "voices", None) or []):
+            vid = getattr(v, "voice_id", None)
+            name = getattr(v, "name", None) or ""
+            if not vid:
+                continue
+            voices.append({"label": name or vid, "name": name, "voice_id": vid})
+        return {"available": True, "voices": voices}
+    except Exception:
+        _log.warning("GET /api/audio/elevenlabs/voices: lookup failed", exc_info=True)
+        return {"available": False, "voices": []}
+
+
 @app.put("/api/config")
 async def update_config(body: ConfigUpdate):
     try:
