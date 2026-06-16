@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 
 import { deleteEnvVar, getEnvVars, revealEnvVar, setEnvVar } from '@/hermes'
-import { useI18n } from '@/i18n'
 import { type IconComponent } from '@/lib/icons'
 import { notify, notifyError } from '@/store/notifications'
 import type { EnvVarInfo } from '@/types/hermes'
@@ -42,9 +41,6 @@ export function SettingsCategoryHeading({ count, icon: Icon, title }: CategoryHe
 // credential pages (Providers, Keys) share one source of truth and one set of
 // mutation handlers instead of duplicating the plumbing.
 export function useEnvCredentials(): UseEnvCredentials {
-  const { t } = useI18n()
-  const credentials = t.settings.credentials
-  const toolsets = t.settings.toolsets
   const [vars, setVars] = useState<Record<string, EnvVarInfo> | null>(null)
   const [edits, setEdits] = useState<Record<string, string>>({})
   const [revealed, setRevealed] = useState<Record<string, string>>({})
@@ -71,7 +67,7 @@ export function useEnvCredentials(): UseEnvCredentials {
           setVars(next)
         }
       } catch (err) {
-        notifyError(err, t.settings.keys.failedLoad)
+        notifyError(err, 'API keys failed to load')
       }
     })()
 
@@ -100,9 +96,9 @@ export function useEnvCredentials(): UseEnvCredentials {
       await setEnvVar(key, value)
       patchVar(key, { is_set: true, redacted_value: redactedValue(value) })
       clearLocalState(key)
-      notify({ kind: 'success', title: toolsets.savedTitle, message: toolsets.savedMessage(key) })
+      notify({ kind: 'success', title: 'Credential saved', message: `${key} updated.` })
     } catch (err) {
-      notifyError(err, toolsets.failedSave(key))
+      notifyError(err, `Failed to save ${key}`)
     } finally {
       setSaving(null)
     }
@@ -115,7 +111,7 @@ export function useEnvCredentials(): UseEnvCredentials {
     const trimmed = value.trim()
 
     if (!trimmed) {
-      return { message: credentials.enterValueFirst, ok: false }
+      return { message: 'Enter a value first.', ok: false }
     }
 
     setSaving(key)
@@ -124,20 +120,20 @@ export function useEnvCredentials(): UseEnvCredentials {
       await setEnvVar(key, trimmed)
       patchVar(key, { is_set: true, redacted_value: redactedValue(trimmed) })
       clearLocalState(key)
-      notify({ kind: 'success', message: toolsets.savedMessage(key), title: toolsets.savedTitle })
+      notify({ kind: 'success', message: `${key} updated.`, title: 'Credential saved' })
 
       return { ok: true }
     } catch (err) {
-      notifyError(err, toolsets.failedSave(key))
+      notifyError(err, `Failed to save ${key}`)
 
-      return { message: err instanceof Error ? err.message : credentials.couldNotSave, ok: false }
+      return { message: err instanceof Error ? err.message : 'Could not save credential.', ok: false }
     } finally {
       setSaving(null)
     }
   }
 
   async function handleClear(key: string) {
-    if (!window.confirm(toolsets.removeConfirm(key))) {
+    if (!window.confirm(`Remove ${key} from .env?`)) {
       return
     }
 
@@ -147,9 +143,9 @@ export function useEnvCredentials(): UseEnvCredentials {
       await deleteEnvVar(key)
       patchVar(key, { is_set: false, redacted_value: null })
       clearLocalState(key)
-      notify({ kind: 'success', title: toolsets.removedTitle, message: toolsets.removedMessage(key) })
+      notify({ kind: 'success', title: 'Credential removed', message: `${key} removed.` })
     } catch (err) {
-      notifyError(err, toolsets.failedRemove(key))
+      notifyError(err, `Failed to remove ${key}`)
     } finally {
       setSaving(null)
     }
@@ -166,7 +162,7 @@ export function useEnvCredentials(): UseEnvCredentials {
       const result = await revealEnvVar(key)
       setRevealed(c => ({ ...c, [key]: result.value }))
     } catch (err) {
-      notifyError(err, toolsets.failedReveal(key))
+      notifyError(err, `Failed to reveal ${key}`)
     }
   }
 

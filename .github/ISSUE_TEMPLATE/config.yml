@@ -1,5 +1,11 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
 contact_links:
-  - name: Report a security vulnerability
-    url: https://github.com/jdavis-cyber/lliam-gov/security/advisories/new
-    about: Please report security issues privately — never in a public issue. See SECURITY.md.
+  - name: 💬 Nous Research Discord
+    url: https://discord.gg/NousResearch
+    about: For quick questions, showcasing projects, sharing skills, and community chat.
+  - name: 📖 Documentation
+    url: https://github.com/NousResearch/hermes-agent/blob/main/README.md
+    about: Check the README and docs before opening an issue.
+  - name: 🤝 Contributing Guide
+    url: https://github.com/NousResearch/hermes-agent/blob/main/CONTRIBUTING.md
+    about: Read this before submitting a PR.

@@ -22,37 +22,12 @@ const http = require('node:http')
 const https = require('node:https')
 const net = require('node:net')
 const path = require('node:path')
-const { pathToFileURL } = require('node:url')
+const { fileURLToPath, pathToFileURL } = require('node:url')
 const { execFileSync, spawn } = require('node:child_process')
 const { detectRemoteDisplay, isWindowsBinaryPathInWsl, isWslEnvironment } = require('./bootstrap-platform.cjs')
 const { runBootstrap } = require('./bootstrap-runner.cjs')
-const { buildSessionWindowUrl, createSessionWindowRegistry } = require('./session-windows.cjs')
 const { canImportHermesCli, verifyHermesCli } = require('./backend-probes.cjs')
 const { probeGatewayWebSocket } = require('./gateway-ws-probe.cjs')
-const { serializeJsonBody, setJsonRequestHeaders } = require('./oauth-net-request.cjs')
-const { fetchMarketplaceThemes, searchMarketplaceThemes } = require('./vscode-marketplace.cjs')
-const { readDirForIpc } = require('./fs-read-dir.cjs')
-const { gitRootForIpc } = require('./git-root.cjs')
-const {
-  OFFICIAL_REPO_HTTPS_URL,
-  isOfficialSshRemote
-} = require('./update-remote.cjs')
-const {
-  buildPosixCleanupScript,
-  buildWindowsCleanupScript,
-  modeRemovesAgent,
-  modeRemovesUserData,
-  resolveRemovableAppPath,
-  shouldRemoveAppBundle,
-  uninstallArgsForMode
-} = require('./desktop-uninstall.cjs')
-const { isPackagedInstallPath: isPackagedInstallPathUnderRoots } = require('./workspace-cwd.cjs')
-const {
-  resolveManagedBackendRoot,
-  validateMarker: validateBootstrapMarker,
-  buildMarkerPayload: buildBootstrapMarkerPayload,
-  isMarkerStale: isBootstrapMarkerStale
-} = require('./bootstrap-marker.cjs')
 const {
   authModeFromStatus,
   buildGatewayWsUrl,
@@ -73,16 +48,13 @@ const {
   TEXT_PREVIEW_SOURCE_MAX_BYTES,
   encryptDesktopSecret: encryptDesktopSecretStrict,
   resolveReadableFileForIpc,
-  resolveRequestedPathForIpc,
   resolveTimeoutMs
 } = require('./hardening.cjs')
 
 let nodePty = null
-let nodePtyDir = null
 
 try {
   nodePty = require('node-pty')
-  nodePtyDir = path.dirname(require.resolve('node-pty/package.json'))
 } catch {
   // Packaged builds set `files:` in package.json, which excludes node_modules
   // from the asar.  Workspace dedup also hoists this native dep to the repo
@@ -95,12 +67,10 @@ try {
     const path = require('node:path')
     const resourcesPath = process.resourcesPath
     if (resourcesPath) {
-      nodePtyDir = path.join(resourcesPath, 'native-deps', 'node-pty')
-      nodePty = require(nodePtyDir)
+      nodePty = require(path.join(resourcesPath, 'native-deps', 'node-pty'))
     }
   } catch {
     nodePty = null
-    nodePtyDir = null
   }
 }
 
@@ -119,13 +89,6 @@ const IS_MAC = process.platform === 'darwin'
 const IS_WINDOWS = process.platform === 'win32'
 const IS_WSL = isWslEnvironment()
 const APP_ROOT = app.getAppPath()
-
-function hiddenWindowsChildOptions(options = {}) {
-  if (!IS_WINDOWS || Object.prototype.hasOwnProperty.call(options, 'windowsHide')) {
-    return options
-  }
-  return { ...options, windowsHide: true }
-}
 
 // Remote displays (SSH X11 forwarding, VNC, RDP) make Chromium's GPU
 // compositor flicker — accelerated layers can't be presented cleanly over the
@@ -146,20 +109,6 @@ if (REMOTE_DISPLAY_REASON) {
     `[hermes] remote display detected (${REMOTE_DISPLAY_REASON}); disabling GPU hardware acceleration to prevent flicker`
   )
 }
-
-// Keep the renderer running at full speed while the window is in the background
-// or occluded. The chat transcript streams to screen through a
-// requestAnimationFrame-gated flush; Chromium pauses rAF (and clamps timers)
-// for backgrounded/occluded renderers, so without these the live answer stalls
-// whenever the window loses focus (switching to your editor mid-turn, detached
-// devtools, another window covering it) and only paints on refocus or refresh.
-// `backgroundThrottling: false` on the BrowserWindow covers the blurred case;
-// these process-level switches additionally stop Chromium from backgrounding or
-// occlusion-throttling the renderer. Must run before app `ready`.
-app.commandLine.appendSwitch('disable-renderer-backgrounding')
-app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
-app.commandLine.appendSwitch('disable-background-timer-throttling')
-
 const SOURCE_REPO_ROOT = path.resolve(APP_ROOT, '../..')
 
 // Build-time install stamp -- the git ref this .exe was built against.
@@ -225,42 +174,40 @@ if (INSTALL_STAMP) {
   )
 }
 
-// HERMES_HOME — the user-facing root for Lliam-GOV data. Mirrors
+// HERMES_HOME — the user-facing root for everything Hermes-related. Mirrors
 // scripts/install.ps1's $HermesHome and scripts/install.sh's $HERMES_HOME.
 //
 // Defaults:
-//   Windows: %LOCALAPPDATA%\lliam-gov
-//   macOS / Linux: ~/.lliam-gov (matches install.sh)
+//   Windows: %LOCALAPPDATA%\hermes (matches install.ps1)
+//   macOS / Linux: ~/.hermes (matches install.sh)
 //
-// Special case for Windows: if the user has a legacy ~/.lliam-gov directory
+// Special case for Windows: if the user has a legacy ~/.hermes directory
 // (e.g., from a prior pip install or a manual setup) AND no
-// %LOCALAPPDATA%\lliam-gov yet, prefer the legacy path so we don't orphan their
+// %LOCALAPPDATA%\hermes yet, prefer the legacy path so we don't orphan their
 // existing config / sessions / .env. New installs go to %LOCALAPPDATA%.
 //
 // HERMES_DESKTOP_USER_DATA_DIR (used by test:desktop:fresh) puts the sandbox
 // HERMES_HOME beneath the throwaway userData dir so a fresh-install run never
-// touches the user's real ~/.lliam-gov / %LOCALAPPDATA%\lliam-gov.
+// touches the user's real ~/.hermes / %LOCALAPPDATA%\hermes.
 function resolveHermesHome() {
   if (process.env.HERMES_HOME) return path.resolve(process.env.HERMES_HOME)
   if (USER_DATA_OVERRIDE) return path.join(path.resolve(USER_DATA_OVERRIDE), 'hermes-home')
   if (IS_WINDOWS && process.env.LOCALAPPDATA) {
-    const localappdata = path.join(process.env.LOCALAPPDATA, 'lliam-gov')
-    const legacy = path.join(app.getPath('home'), '.lliam-gov')
+    const localappdata = path.join(process.env.LOCALAPPDATA, 'hermes')
+    const legacy = path.join(app.getPath('home'), '.hermes')
     // Migrate transparently to LOCALAPPDATA, but honour an existing legacy
-    // ~/.lliam-gov setup (no LOCALAPPDATA install yet) so users don't lose state.
+    // ~/.hermes setup (no LOCALAPPDATA install yet) so users don't lose state.
     if (!directoryExists(localappdata) && directoryExists(legacy)) return legacy
     return localappdata
   }
-  return path.join(app.getPath('home'), '.lliam-gov')
+  return path.join(app.getPath('home'), '.hermes')
 }
 
 const HERMES_HOME = resolveHermesHome()
-// ACTIVE_HERMES_ROOT — the canonical mutable Lliam-GOV install. Same path
+// ACTIVE_HERMES_ROOT — the canonical mutable Hermes install. Same path
 // install.ps1 / install.sh use, so a desktop-only user and a CLI-only user end
 // up with identical layouts and can share one install.
-// AI-330: managed backend root derived ONLY from HERMES_HOME (never the app
-// bundle path) — this is what makes a packaged app safe to move to /Applications.
-const ACTIVE_HERMES_ROOT = resolveManagedBackendRoot(HERMES_HOME)
+const ACTIVE_HERMES_ROOT = path.join(HERMES_HOME, 'hermes-agent')
 // VENV_ROOT — venv lives inside the repo, exactly like install.ps1 does it.
 const VENV_ROOT = path.join(ACTIVE_HERMES_ROOT, 'venv')
 // BOOTSTRAP_COMPLETE_MARKER — written by the first-launch bootstrap runner
@@ -274,16 +221,16 @@ const VENV_ROOT = path.join(ACTIVE_HERMES_ROOT, 'venv')
 // We deliberately put the marker INSIDE ACTIVE_HERMES_ROOT (not alongside)
 // so that deleting the checkout to start fresh also deletes the marker --
 // avoids the confusing "marker exists but checkout is gone" state.
-const BOOTSTRAP_COMPLETE_MARKER = path.join(ACTIVE_HERMES_ROOT, '.lliam-gov-bootstrap-complete')
+const BOOTSTRAP_COMPLETE_MARKER = path.join(ACTIVE_HERMES_ROOT, '.hermes-bootstrap-complete')
 const BOOTSTRAP_MARKER_SCHEMA_VERSION = 1
 
 const DESKTOP_CONNECTION_CONFIG_PATH = path.join(app.getPath('userData'), 'connection.json')
 const DESKTOP_UPDATE_CONFIG_PATH = path.join(app.getPath('userData'), 'updates.json')
-// active-profile.json records which Lliam-GOV profile the desktop launches its
-// local backend as. When set, startHermes() passes `lliam-gov --profile <name>
+// active-profile.json records which Hermes profile the desktop launches its
+// local backend as. When set, startHermes() passes `hermes --profile <name>
 // dashboard …`, which deterministically pins HERMES_HOME (see
 // _apply_profile_override in hermes_cli/main.py) and bypasses the sticky
-// ~/.lliam-gov/active_profile file. Unset (null) preserves the legacy behavior:
+// ~/.hermes/active_profile file. Unset (null) preserves the legacy behavior:
 // no --profile flag, so the backend honors active_profile / default.
 const DESKTOP_PROFILE_CONFIG_PATH = path.join(app.getPath('userData'), 'active-profile.json')
 // Mirrors hermes_cli.profiles._PROFILE_ID_RE so we never hand the backend a
@@ -299,34 +246,13 @@ const DEFAULT_UPDATE_BRANCH = 'main'
 const DESKTOP_LOG_PATH = path.join(HERMES_HOME, 'logs', 'desktop.log')
 const DESKTOP_LOG_FLUSH_MS = 120
 const DESKTOP_LOG_BUFFER_MAX_CHARS = 64 * 1024
-// Bound desktop.log on disk. It is an append-only forensic log, so a boot loop
-// (version-skew crash -> backend exits instantly -> renderer keeps hitting
-// Retry) appends the full bootstrap transcript every attempt and grows without
-// bound — we have seen it reach ~326 GB and exhaust the disk, which then breaks
-// update/install (no room for git/venv/npm temp files).
-//
-// Mirror the Python logs (hermes_logging.py RotatingFileHandler, maxBytes x
-// backupCount): cascade live -> .1 -> .2 -> .3, drop the oldest. Steady-state
-// stays bounded at ~(backupCount + 1) x cap however hard the app loops.
-//
-// Bounding alone never RECLAIMS an already-huge file: a plain rotation just
-// renames the monster to .1 and strands it for a cycle a healthy app may never
-// reach. A multi-GB boot-loop transcript has no diagnostic value, so anything
-// past the discard ceiling is deleted outright — the updated app self-heals a
-// disk a stale build filled, on the next launch.
-const DESKTOP_LOG_MAX_BYTES = 10 * 1024 * 1024
-const DESKTOP_LOG_BACKUP_COUNT = 3
-const DESKTOP_LOG_DISCARD_BYTES = DESKTOP_LOG_MAX_BYTES * 4
-const desktopLogBackupPath = n => `${DESKTOP_LOG_PATH}.${n}`
 const BOOT_FAKE_MODE = process.env.HERMES_DESKTOP_BOOT_FAKE === '1'
 const BOOT_FAKE_STEP_MS = (() => {
   const raw = Number.parseInt(String(process.env.HERMES_DESKTOP_BOOT_FAKE_STEP_MS || ''), 10)
   if (!Number.isFinite(raw) || raw <= 0) return 650
   return Math.max(120, raw)
 })()
-const APP_NAME = 'Lliam-GOV'
-const CLI_COMMAND_NAME = 'lliam-gov'
-const LEGACY_CLI_COMMAND_NAME = 'hermes'
+const APP_NAME = 'Hermes'
 const TITLEBAR_HEIGHT = 34
 const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
 const WINDOW_BUTTON_POSITION = {
@@ -481,14 +407,9 @@ function previewFileMetadata(filePath, mimeType) {
 }
 
 app.setName(APP_NAME)
-// Seed the native About panel with the live Lliam-GOV version. This is refreshed
-// on every open via the explicit "About" menu handler (refreshAboutPanel), so
-// an in-place `lliam-gov update` mid-session is reflected without an app restart;
-// the seed here just covers the first open and any non-menu invocation path.
 app.setAboutPanelOptions({
   applicationName: APP_NAME,
-  applicationVersion: resolveHermesVersion(),
-  copyright: 'Copyright © 2026 Jerome Davis'
+  copyright: 'Copyright © 2026 Nous Research'
 })
 
 // Custom scheme for streaming local media (video/audio) into the renderer.
@@ -600,64 +521,11 @@ let nativeThemeListenerInstalled = false
 let bootProgressState = {
   error: null,
   fakeMode: BOOT_FAKE_MODE,
-  message: 'Waiting to start Lliam-GOV backend',
+  message: 'Waiting to start Hermes backend',
   phase: 'idle',
   progress: 0,
   running: false,
   timestamp: Date.now()
-}
-
-// Pure planner: ordered fs ops to bound a live log of `size`. [] = nothing.
-// Each step is ['rm', path] or ['mv', src, dst]; executed best-effort so a
-// missing chain link never aborts the rest.
-function planDesktopLogRotation(size) {
-  if (size < DESKTOP_LOG_MAX_BYTES) return []
-  const backups = n => Array.from({ length: n }, (_, i) => desktopLogBackupPath(i + 1))
-  // Pathological boot-loop log: reclaim live + every backup outright.
-  if (size > DESKTOP_LOG_DISCARD_BYTES) {
-    return [DESKTOP_LOG_PATH, ...backups(DESKTOP_LOG_BACKUP_COUNT)].map(p => ['rm', p])
-  }
-  // Cascade: drop oldest, shift each up, live -> .1.
-  const ops = [['rm', desktopLogBackupPath(DESKTOP_LOG_BACKUP_COUNT)]]
-  for (let i = DESKTOP_LOG_BACKUP_COUNT - 1; i >= 1; i--) {
-    ops.push(['mv', desktopLogBackupPath(i), desktopLogBackupPath(i + 1)])
-  }
-  ops.push(['mv', DESKTOP_LOG_PATH, desktopLogBackupPath(1)])
-  return ops
-}
-
-function rotateDesktopLogIfNeededSync() {
-  let size
-  try {
-    size = fs.statSync(DESKTOP_LOG_PATH).size
-  } catch {
-    return // No live file yet — the append (re)creates it.
-  }
-  for (const [op, src, dst] of planDesktopLogRotation(size)) {
-    try {
-      if (op === 'rm') fs.rmSync(src, { force: true })
-      else fs.renameSync(src, dst)
-    } catch {
-      // Best-effort — logging must never block startup/shutdown.
-    }
-  }
-}
-
-async function rotateDesktopLogIfNeededAsync() {
-  let size
-  try {
-    size = (await fs.promises.stat(DESKTOP_LOG_PATH)).size
-  } catch {
-    return // No live file yet — the append (re)creates it.
-  }
-  for (const [op, src, dst] of planDesktopLogRotation(size)) {
-    try {
-      if (op === 'rm') await fs.promises.rm(src, { force: true })
-      else await fs.promises.rename(src, dst)
-    } catch {
-      // Best-effort — logging must never crash the shell.
-    }
-  }
 }
 
 function flushDesktopLogBufferSync() {
@@ -667,7 +535,6 @@ function flushDesktopLogBufferSync() {
 
   try {
     fs.mkdirSync(path.dirname(DESKTOP_LOG_PATH), { recursive: true })
-    rotateDesktopLogIfNeededSync()
     fs.appendFileSync(DESKTOP_LOG_PATH, chunk)
   } catch {
     // Logging must never block app startup/shutdown.
@@ -682,7 +549,6 @@ function flushDesktopLogBufferAsync() {
   desktopLogFlushPromise = desktopLogFlushPromise
     .then(async () => {
       await fs.promises.mkdir(path.dirname(DESKTOP_LOG_PATH), { recursive: true })
-      await rotateDesktopLogIfNeededAsync()
       await fs.promises.appendFile(DESKTOP_LOG_PATH, chunk)
     })
     .catch(() => {
@@ -743,7 +609,7 @@ function openExternalUrl(rawUrl) {
   if (parsed.protocol === 'file:') {
     let localPath
     try {
-      localPath = resolveRequestedPathForIpc(parsed.toString(), { purpose: 'Open external file' })
+      localPath = fileURLToPath(parsed.toString())
     } catch {
       return false
     }
@@ -1054,43 +920,6 @@ function isHermesSourceRoot(root) {
   return directoryExists(root) && fileExists(path.join(root, 'hermes_cli', 'main.py'))
 }
 
-function findAncestorHermesSourceRoot(startPath) {
-  if (!startPath) return null
-
-  let current = path.resolve(String(startPath))
-  if (fileExists(current)) current = path.dirname(current)
-
-  const root = path.parse(current).root
-  for (let depth = 0; depth < 16; depth += 1) {
-    if (isHermesSourceRoot(current)) return current
-    if (current === root) break
-    current = path.dirname(current)
-  }
-
-  return null
-}
-
-function resolveLocalSourceRoot() {
-  const candidates = [
-    !IS_PACKAGED ? SOURCE_REPO_ROOT : null,
-    !IS_PACKAGED ? process.env.INIT_CWD : null,
-    !IS_PACKAGED ? process.cwd() : null,
-    process.env.HERMES_DESKTOP_LOCAL_SOURCE_ROOT,
-    process.execPath,
-    APP_ROOT,
-    process.resourcesPath,
-  ].filter(Boolean)
-
-  for (const candidate of candidates) {
-    const direct = path.resolve(String(candidate))
-    if (isHermesSourceRoot(direct)) return direct
-    const ancestor = findAncestorHermesSourceRoot(direct)
-    if (ancestor) return ancestor
-  }
-
-  return null
-}
-
 function findPythonForRoot(root) {
   const override = process.env.HERMES_DESKTOP_PYTHON
   if (override && fileExists(override)) return override
@@ -1130,7 +959,7 @@ function findSystemPython() {
   //      miss real Python 3.13 installs (user-reported case).
   //
   // We also restrict ourselves to Python 3.11–3.13. 3.14 is the latest
-  // CPython but several Lliam-GOV deps (notably pywinpty's Rust-built
+  // CPython but several Hermes deps (notably pywinpty's Rust-built
   // windows_x86_64_msvc crate) don't yet publish 3.14 wheels, and
   // `pip install -e .` falls back to source-build, which fails without
   // a Rust toolchain. install.ps1 sidesteps this by pinning to 3.11
@@ -1167,7 +996,7 @@ function findSystemPython() {
         const out = execFileSync(
           'reg',
           ['query', `${hive}\\SOFTWARE\\Python\\PythonCore\\${version}\\InstallPath`, '/ve', '/reg:64'],
-          hiddenWindowsChildOptions({ encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
         )
         // Output format: "    (Default)    REG_SZ    C:\Path\To\Python\"
         const match = out.match(/REG_SZ\s+(.+?)\s*$/m)
@@ -1203,10 +1032,10 @@ function findSystemPython() {
   if (pyExe) {
     for (const version of SUPPORTED_VERSIONS) {
       try {
-        const out = execFileSync(pyExe, [`-${version}`, '-c', 'import sys; print(sys.executable)'], hiddenWindowsChildOptions({
+        const out = execFileSync(pyExe, [`-${version}`, '-c', 'import sys; print(sys.executable)'], {
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'ignore']
-        }))
+        })
         const candidate = out.trim()
         if (candidate && fileExists(candidate)) return candidate
       } catch {
@@ -1224,7 +1053,7 @@ function findSystemPython() {
   return null
 }
 
-// findGitBash — locate bash.exe on Windows. Lliam-GOV's terminal tool requires
+// findGitBash — locate bash.exe on Windows. Hermes' terminal tool requires
 // bash (POSIX shell), and on Windows that's almost always Git for Windows'
 // bundled Git Bash. We check the same set of locations tools/environments/
 // local.py:_find_bash() checks at runtime, so a positive result here means
@@ -1237,7 +1066,7 @@ function findGitBash() {
     return findOnPath('bash')
   }
 
-  // install.ps1 drops PortableGit at %LOCALAPPDATA%\lliam-gov\git\... — checked
+  // install.ps1 drops PortableGit at %LOCALAPPDATA%\hermes\git\... — checked
   // first so users who installed via install.ps1 are detected before we
   // start probing system-wide locations.
   const localAppData = process.env.LOCALAPPDATA || ''
@@ -1269,7 +1098,7 @@ function getVenvPython(venvRoot) {
 }
 
 // resolveGitBinary — locate git.exe on Windows. A fresh installer-driven
-// install only has PortableGit under %LOCALAPPDATA%\lliam-gov\git (never on
+// install only has PortableGit under %LOCALAPPDATA%\hermes\git (never on
 // PATH), so a bare spawn('git') ENOENTs and self-update checks fail with
 // "Couldn't check for updates". Mirror findGitBash: PortableGit first, then
 // standard Git-for-Windows locations, then PATH. Cached after first probe.
@@ -1341,11 +1170,11 @@ function resolveUpdateRoot() {
 
 function runGit(args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(resolveGitBinary(), IS_WINDOWS ? ['-c', 'windows.appendAtomically=false', ...args] : args, hiddenWindowsChildOptions({
+    const child = spawn(resolveGitBinary(), IS_WINDOWS ? ['-c', 'windows.appendAtomically=false', ...args] : args, {
       cwd: options.cwd,
       env: { ...process.env, ...(options.env || {}), GIT_TERMINAL_PROMPT: '0' },
       stdio: ['ignore', 'pipe', 'pipe']
-    }))
+    })
 
     let stdout = ''
     let stderr = ''
@@ -1366,11 +1195,6 @@ function runGit(args, options = {}) {
 
 const firstLine = text => (text || '').split('\n').find(Boolean) || ''
 
-async function getOriginUrl(updateRoot) {
-  const origin = await runGit(['remote', 'get-url', 'origin'], { cwd: updateRoot })
-  return origin.code === 0 ? origin.stdout.trim() : ''
-}
-
 function emitUpdateProgress(payload) {
   const merged = { stage: 'idle', message: '', percent: null, error: null, ...payload, at: Date.now() }
   rememberLog(`[updates] ${merged.stage}: ${merged.message || merged.error || ''}`)
@@ -1390,9 +1214,7 @@ async function resolveHealedBranch(updateRoot, branch) {
     return branch || 'main'
   }
 
-  const originUrl = await getOriginUrl(updateRoot)
-  const remote = isOfficialSshRemote(originUrl) ? OFFICIAL_REPO_HTTPS_URL : 'origin'
-  const probe = await runGit(['ls-remote', '--exit-code', '--heads', remote, branch], { cwd: updateRoot })
+  const probe = await runGit(['ls-remote', '--exit-code', '--heads', 'origin', branch], { cwd: updateRoot })
   if (probe.code !== 2) {
     return branch
   }
@@ -1420,40 +1242,6 @@ async function checkUpdates() {
   }
 
   branch = await resolveHealedBranch(updateRoot, branch)
-  const originUrl = await getOriginUrl(updateRoot)
-  if (isOfficialSshRemote(originUrl)) {
-    const git = args => runGit(args, { cwd: updateRoot }).then(r => r.stdout.trim())
-    const [currentSha, target, dirtyStr, currentBranch] = await Promise.all([
-      git(['rev-parse', 'HEAD']),
-      runGit(['ls-remote', OFFICIAL_REPO_HTTPS_URL, `refs/heads/${branch}`], { cwd: updateRoot }),
-      git(['status', '--porcelain']),
-      git(['rev-parse', '--abbrev-ref', 'HEAD'])
-    ])
-    const targetSha = firstLine(target.stdout).split(/\s+/)[0] || ''
-    if (target.code !== 0 || !targetSha) {
-      return {
-        supported: true,
-        branch,
-        error: 'fetch-failed',
-        message: firstLine(target.stderr) || 'git ls-remote failed.',
-        hermesRoot: updateRoot,
-        fetchedAt: Date.now()
-      }
-    }
-    return {
-      supported: true,
-      branch,
-      currentBranch,
-      behind: currentSha && currentSha === targetSha ? 0 : 1,
-      currentSha,
-      targetSha,
-      commits: [],
-      dirty: dirtyStr.length > 0,
-      hermesRoot: updateRoot,
-      fetchedAt: Date.now()
-    }
-  }
-
   const fetched = await runGit(['fetch', '--quiet', 'origin', branch], { cwd: updateRoot })
   if (fetched.code !== 0) {
     return {
@@ -1512,54 +1300,26 @@ async function readCommitLog(cwd, branch) {
 
 let updateInFlight = false
 
-// Resolve the staged updater binary. The installer copies itself to
-// HERMES_HOME/lliam-gov-setup.exe on a successful install (see
+// Resolve the staged updater binary. The Tauri installer copies itself to
+// HERMES_HOME/hermes-setup.exe on a successful install (see
 // apps/bootstrap-installer paths::copy_self_to_hermes_home). That binary owns
-// ALL repo mutation — running `lliam-gov update` + rebuilding the desktop — so
+// ALL repo mutation — running `hermes update` + rebuilding the desktop — so
 // the desktop never touches its own bits while running. Returns null when the
 // updater isn't staged (e.g. a dev/source run that never went through the
 // installer); callers degrade gracefully.
 function resolveUpdaterBinary() {
-  const names = IS_WINDOWS ? ['lliam-gov-setup.exe', 'hermes-setup.exe'] : ['lliam-gov-setup', 'hermes-setup']
-  for (const name of names) {
-    const candidate = path.join(HERMES_HOME, name)
-    if (fileExists(candidate)) return candidate
-  }
-  return null
+  const name = IS_WINDOWS ? 'hermes-setup.exe' : 'hermes-setup'
+  const candidate = path.join(HERMES_HOME, name)
+  return fileExists(candidate) ? candidate : null
 }
 
-function repairMacUpdaterHelper(updater) {
-  if (!IS_MAC || !updater) return
-
-  try {
-    execFileSync('/usr/bin/xattr', ['-cr', updater], { stdio: 'ignore' })
-  } catch (err) {
-    rememberLog(`[updates] macOS updater helper quarantine repair skipped: ${err.message}`)
-  }
-
-  try {
-    execFileSync('/usr/bin/codesign', ['--verify', updater], { stdio: 'ignore' })
-    return
-  } catch {
-    // Unsigned or invalid helper. Apply a local ad-hoc signature so Gatekeeper
-    // does not block the staged updater before it can run.
-  }
-
-  try {
-    execFileSync('/usr/bin/codesign', ['--force', '--sign', '-', updater], { stdio: 'ignore' })
-    rememberLog('[updates] repaired macOS updater helper signature')
-  } catch (err) {
-    rememberLog(`[updates] macOS updater helper signature repair skipped: ${err.message}`)
-  }
-}
-
-// Path to the venv shim whose lock decides whether `lliam-gov update` can write
+// Path to the venv shim whose lock decides whether `hermes update` can write
 // fresh entry points. On Windows this is the file the running backend
-// `lliam-gov.exe` holds open; on POSIX it's never mandatory-locked.
+// `hermes.exe` holds open; on POSIX it's never mandatory-locked.
 function venvHermesShimPath(updateRoot) {
   return IS_WINDOWS
-    ? path.join(updateRoot, 'venv', 'Scripts', `${CLI_COMMAND_NAME}.exe`)
-    : path.join(updateRoot, 'venv', 'bin', CLI_COMMAND_NAME)
+    ? path.join(updateRoot, 'venv', 'Scripts', 'hermes.exe')
+    : path.join(updateRoot, 'venv', 'bin', 'hermes')
 }
 
 // Best-effort lock probe mirroring the Rust updater's is_locked(): a running
@@ -1599,7 +1359,7 @@ function forceKillProcessTree(pid) {
   if (!IS_WINDOWS) return
   if (!Number.isInteger(pid) || pid <= 0) return
   try {
-    execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], hiddenWindowsChildOptions({ stdio: 'ignore' }))
+    execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' })
   } catch {
     // Already gone, or no permission — best effort; the unlock wait below is
     // the real gate.
@@ -1623,20 +1383,6 @@ function forceKillProcessTree(pid) {
 // aggressively SIGKILL-ing the backend here would be an untested behavior change
 // for no benefit. So we no-op off Windows and leave that path exactly as it was.
 async function releaseBackendLockForUpdate(updateRoot) {
-  return releaseBackendLock(updateRoot, 'updates')
-}
-
-// Shared backend teardown + venv-shim unlock wait. Used by BOTH the self-update
-// hand-off and the desktop uninstaller — they have the identical Windows
-// problem: the desktop's backend (and the grandchildren IT spawned — a hermes
-// REPL, a pty terminal, the gateway) keep `hermes.exe` and other files in the
-// venv mandatory-locked, so any in-place replace/delete of the install tree
-// races a live handle and half-fails (#37532). We tree-kill every backend PID
-// the desktop owns, then poll the shim until it's genuinely writable.
-//
-// `tag` only flavors the log lines. No-op off Windows (POSIX has no mandatory
-// locks — the before-quit SIGTERM + the cleanup script's own PID-wait suffice).
-async function releaseBackendLock(updateRoot, tag) {
   if (!IS_WINDOWS) return { unlocked: true }
 
   // Collect every backend PID the desktop owns: primary window backend + pool.
@@ -1661,12 +1407,14 @@ async function releaseBackendLock(updateRoot, tag) {
   const deadlineMs = Date.now() + 15000
   while (Date.now() < deadlineMs) {
     if (!isShimLocked(shim)) {
-      rememberLog(`[${tag}] venv shim unlocked; safe to proceed`)
+      rememberLog('[updates] venv shim unlocked; safe to hand off the update')
       return { unlocked: true }
     }
     await new Promise(r => setTimeout(r, 300))
   }
-  rememberLog(`[${tag}] venv shim still locked after 15s; proceeding anyway (force)`)
+  // Timed out: the updater's own wait_for_venv_free + force-kill is the second
+  // line of defense, and we pass --force so the guard won't dead-end. Log it.
+  rememberLog('[updates] venv shim still locked after 15s; handing off anyway (updater will force)')
   return { unlocked: false }
 }
 
@@ -1674,8 +1422,8 @@ async function releaseBackendLock(updateRoot, tag) {
 //
 // The desktop is a pure consumer: it does NOT git pull / pip install / rebuild
 // itself (the old open-coded git dance lived here and drifted from
-// `lliam-gov update`). Instead we spawn the staged Lliam-GOV setup binary with
-// --update and quit, so it can run `lliam-gov update` (which refuses while we
+// `hermes update`). Instead we spawn the staged Hermes-Setup binary with
+// --update and quit, so it can run `hermes update` (which refuses while we
 // hold the venv shim) and rebuild the desktop with our exe already gone.
 //
 // Detection (checkUpdates / commit changelog / "N behind") stays in the UI;
@@ -1692,40 +1440,39 @@ async function applyUpdates(opts = {}) {
       // macOS/Linux drag-install: no staged Tauri hermes-setup. Unlike Windows
       // (where a venv-shim file lock forces the quit→hand-off→rebuild dance),
       // there's no mandatory file locking here, so the desktop can drive the
-      // whole update itself: `lliam-gov update` (backend) + `lliam-gov desktop
+      // whole update itself: `hermes update` (backend) + `hermes desktop
       // --build-only` (OS-aware GUI rebuild), then swap the running .app bundle
       // with the freshly built one and relaunch.
       return await applyUpdatesPosixInApp(opts)
     }
     if (!updater) {
       // No staged updater binary — this is a CLI-installed user (they ran
-      // `lliam-gov desktop`, never the Tauri installer that self-copies
+      // `hermes desktop`, never the Tauri installer that self-copies
       // hermes-setup.exe into HERMES_HOME). They DO have a working `hermes`
       // on PATH / in the venv, so the correct path is the one-liner in their
       // native medium. We show the EXACT command, branch-pinned to the
-      // checkout they're on — bare `lliam-gov update` defaults to main and would
+      // checkout they're on — bare `hermes update` defaults to main and would
       // silently switch a bb/gui (or any non-main) install off-branch. Mirror
       // the GUI button's contract: append --branch <current> for non-main
       // checkouts, keep it bare for main so the card stays clean.
       const updateRoot = resolveUpdateRoot()
-      let command = `${CLI_COMMAND_NAME} update`
+      let command = 'hermes update'
       try {
         const head = await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: updateRoot })
         const current = (head.stdout || '').trim()
         if (head.code === 0 && current && current !== 'HEAD') {
           const branch = await resolveHealedBranch(updateRoot, current)
-          if (branch !== 'main') command = `${CLI_COMMAND_NAME} update --branch ${branch}`
+          if (branch !== 'main') command = `hermes update --branch ${branch}`
         }
       } catch {
-        // Best-effort: fall back to bare `lliam-gov update` if branch detection fails.
+        // Best-effort: fall back to bare `hermes update` if branch detection fails.
       }
       rememberLog(`[updates] no staged updater; surfacing manual \`${command}\` for CLI install at ${updateRoot}`)
       emitUpdateProgress({ stage: 'manual', message: command, percent: null })
       return { ok: true, manual: true, command, hermesRoot: updateRoot }
     }
 
-    emitUpdateProgress({ stage: 'restart', message: 'Handing off to the Lliam-GOV updater…', percent: 100 })
-    repairMacUpdaterHelper(updater)
+    emitUpdateProgress({ stage: 'restart', message: 'Handing off to the Hermes updater…', percent: 100 })
 
     const updateRoot = resolveUpdateRoot()
     const { branch: configuredBranch } = readDesktopUpdateConfig()
@@ -1744,7 +1491,7 @@ async function applyUpdates(opts = {}) {
     await releaseBackendLockForUpdate(updateRoot)
 
     // Detached so the updater outlives this process — it needs us GONE before
-    // `lliam-gov update` will run (the venv shim is locked while we live).
+    // `hermes update` will run (the venv shim is locked while we live).
     const child = spawn(updater, updaterArgs, {
       cwd: HERMES_HOME,
       env: {
@@ -1772,15 +1519,12 @@ async function applyUpdates(opts = {}) {
   }
 }
 
-// Resolve the Lliam-GOV CLI to drive an in-app update: prefer the venv shim in
-// the install we're updating, then fall back to PATH.
+// Resolve the hermes CLI to drive an in-app update: prefer the venv shim in
+// the install we're updating, fall back to `hermes` on PATH.
 function resolveHermesCliBinary(updateRoot) {
-  const venvBin = path.join(updateRoot, 'venv', IS_WINDOWS ? 'Scripts' : 'bin')
-  const primary = path.join(venvBin, IS_WINDOWS ? `${CLI_COMMAND_NAME}.exe` : CLI_COMMAND_NAME)
-  if (fileExists(primary)) return primary
-  const legacy = path.join(venvBin, IS_WINDOWS ? `${LEGACY_CLI_COMMAND_NAME}.exe` : LEGACY_CLI_COMMAND_NAME)
-  if (fileExists(legacy)) return legacy
-  return findOnPath(CLI_COMMAND_NAME) || findOnPath(LEGACY_CLI_COMMAND_NAME) || null
+  const venvHermes = path.join(updateRoot, 'venv', 'bin', 'hermes')
+  if (fileExists(venvHermes)) return venvHermes
+  return findOnPath('hermes') || null
 }
 
 // Spawn a command and stream each output line to the update progress channel.
@@ -1788,11 +1532,11 @@ function runStreamedUpdate(command, args, { cwd, env, stage } = {}) {
   return new Promise(resolve => {
     let child
     try {
-      child = spawn(command, args, hiddenWindowsChildOptions({
+      child = spawn(command, args, {
         cwd,
         env: { ...process.env, ...(env || {}) },
         stdio: ['ignore', 'pipe', 'pipe']
-      }))
+      })
     } catch (err) {
       resolve({ code: 1, error: err.message })
       return
@@ -1823,20 +1567,19 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`
 }
 
-// macOS/Linux in-app update: backend (`lliam-gov update`) + OS-aware GUI rebuild
-// (`lliam-gov desktop --build-only`), then atomically swap the running .app bundle
+// macOS/Linux in-app update: backend (`hermes update`) + OS-aware GUI rebuild
+// (`hermes desktop --build-only`), then atomically swap the running .app bundle
 // with the freshly built one and relaunch. Degrades to "backend updated,
 // restart to load the new GUI" if the swap can't be performed.
 async function applyUpdatesPosixInApp() {
   const updateRoot = resolveUpdateRoot()
   const hermes = resolveHermesCliBinary(updateRoot)
   if (!hermes) {
-    const command = `${CLI_COMMAND_NAME} update`
-    emitUpdateProgress({ stage: 'manual', message: command, percent: null })
-    return { ok: true, manual: true, command, hermesRoot: updateRoot }
+    emitUpdateProgress({ stage: 'manual', message: 'hermes update', percent: null })
+    return { ok: true, manual: true, command: 'hermes update', hermesRoot: updateRoot }
   }
 
-  // Put the Lliam-GOV-managed Node and the venv on PATH so `lliam-gov desktop`'s
+  // Put the Hermes-managed Node and the venv on PATH so `hermes desktop`'s
   // npm build can find them on a machine with no system Node.
   const extraPath = [path.join(HERMES_HOME, 'node', 'bin'), path.join(updateRoot, 'venv', 'bin')]
     .filter(Boolean)
@@ -1846,7 +1589,7 @@ async function applyUpdatesPosixInApp() {
     PATH: [extraPath, process.env.PATH].filter(Boolean).join(path.delimiter)
   }
 
-  // `lliam-gov update` reaps stale `lliam-gov dashboard` backends (a code update
+  // `hermes update` reaps stale `hermes dashboard` backends (a code update
   // leaves the running process serving old Python against the freshly-updated
   // JS bundle). But OUR backend is one of those processes, and killing it
   // mid-update produces the boot→kill→crash loop in #37532 — the desktop
@@ -1883,15 +1626,15 @@ async function applyUpdatesPosixInApp() {
     // best effort
   }
 
-  emitUpdateProgress({ stage: 'update', message: 'Updating Lliam-GOV (git + dependencies)…', percent: 10 })
+  emitUpdateProgress({ stage: 'update', message: 'Updating Hermes (git + dependencies)…', percent: 10 })
   const updated = await runStreamedUpdate(hermes, ['update', '--yes', ...branchArgs], {
     cwd: updateRoot,
     env,
     stage: 'update'
   })
   if (updated.code !== 0) {
-    emitUpdateProgress({ stage: 'error', message: 'lliam-gov update failed.', error: updated.error || 'update-failed' })
-    return { ok: false, error: 'lliam-gov update failed' }
+    emitUpdateProgress({ stage: 'error', message: 'hermes update failed.', error: updated.error || 'update-failed' })
+    return { ok: false, error: 'hermes update failed' }
   }
 
   emitUpdateProgress({ stage: 'rebuild', message: 'Rebuilding the desktop app…', percent: 60 })
@@ -1903,15 +1646,15 @@ async function applyUpdatesPosixInApp() {
   if (rebuilt.code !== 0) {
     emitUpdateProgress({
       stage: 'error',
-      message: 'Backend updated, but the desktop rebuild failed. Restart Lliam-GOV to retry.',
+      message: 'Backend updated, but the desktop rebuild failed. Restart Hermes to retry.',
       error: rebuilt.error || 'rebuild-failed'
     })
     return { ok: false, backendUpdated: true, error: 'desktop rebuild failed' }
   }
 
   const rebuiltApp = [
-    path.join(updateRoot, 'apps', 'desktop', 'release', 'mac-arm64', 'Lliam-GOV.app'),
-    path.join(updateRoot, 'apps', 'desktop', 'release', 'mac', 'Lliam-GOV.app')
+    path.join(updateRoot, 'apps', 'desktop', 'release', 'mac-arm64', 'Hermes.app'),
+    path.join(updateRoot, 'apps', 'desktop', 'release', 'mac', 'Hermes.app')
   ].find(directoryExists)
   const targetApp = runningAppBundle()
 
@@ -1920,7 +1663,7 @@ async function applyUpdatesPosixInApp() {
   if (!rebuiltApp || !targetApp) {
     emitUpdateProgress({
       stage: 'done',
-      message: 'Backend updated. Restart Lliam-GOV to load the new version.',
+      message: 'Backend updated. Restart Hermes to load the new version.',
       percent: 100
     })
     return { ok: true, backendUpdated: true, rebuiltApp: rebuiltApp || null }
@@ -1940,23 +1683,23 @@ for _ in $(seq 1 240); do
   sleep 0.5
 done
 if [ "$SRC" != "$DST" ]; then
-  if /usr/bin/ditto "$SRC" "$DST.lliam-gov-update-new"; then
-    rm -rf "$DST.lliam-gov-update-old" 2>/dev/null || true
-    mv "$DST" "$DST.lliam-gov-update-old" 2>/dev/null || rm -rf "$DST"
-    mv "$DST.lliam-gov-update-new" "$DST"
-    rm -rf "$DST.lliam-gov-update-old" "$DST.hermes-update-old" 2>/dev/null || true
+  if /usr/bin/ditto "$SRC" "$DST.hermes-update-new"; then
+    rm -rf "$DST.hermes-update-old" 2>/dev/null || true
+    mv "$DST" "$DST.hermes-update-old" 2>/dev/null || rm -rf "$DST"
+    mv "$DST.hermes-update-new" "$DST"
+    rm -rf "$DST.hermes-update-old" 2>/dev/null || true
   fi
 fi
 /usr/bin/xattr -dr com.apple.quarantine "$DST" 2>/dev/null || true
 /usr/bin/open "$DST"
 `
-  const scriptPath = path.join(app.getPath('temp'), `lliam-gov-desktop-update-${Date.now()}.sh`)
+  const scriptPath = path.join(app.getPath('temp'), `hermes-desktop-update-${Date.now()}.sh`)
   try {
     fs.writeFileSync(scriptPath, swapScript, { mode: 0o755 })
   } catch (err) {
     emitUpdateProgress({
       stage: 'done',
-      message: 'Backend + app updated. Restart Lliam-GOV to load the new version.',
+      message: 'Backend + app updated. Restart Hermes to load the new version.',
       percent: 100
     })
     rememberLog(`[updates] could not write swap script: ${err.message}; rebuilt app at ${rebuiltApp}`)
@@ -1999,18 +1742,9 @@ function readBootstrapMarker() {
 
 function isBootstrapComplete() {
   const marker = readBootstrapMarker()
-  // AI-330: marker schema/commit validation is delegated to the pure,
-  // unit-tested bootstrap-marker helper (single source of truth).
-  if (!validateBootstrapMarker(marker, BOOTSTRAP_MARKER_SCHEMA_VERSION)) return false
-  // Informational only: a valid-but-stale marker (pinned commit != this build's
-  // install stamp) still runs — users update via the in-app path / `lliam-gov
-  // update` which legitimately moves HEAD. We just note it for diagnostics.
-  if (INSTALL_STAMP && isBootstrapMarkerStale(marker, INSTALL_STAMP)) {
-    rememberLog(
-      `[hermes] managed backend marker is stale (pinned ${String(marker.pinnedCommit).slice(0, 12)} ` +
-        `vs build stamp ${INSTALL_STAMP.commit.slice(0, 12)}); running existing install, update available.`
-    )
-  }
+  if (!marker || typeof marker !== 'object') return false
+  if (marker.schemaVersion !== BOOTSTRAP_MARKER_SCHEMA_VERSION) return false
+  if (typeof marker.pinnedCommit !== 'string' || marker.pinnedCommit.length < 7) return false
   // We DELIBERATELY do NOT verify that the checkout is currently at the
   // pinned commit -- users update via the in-app update path or `hermes
   // update`, which moves HEAD legitimately. The marker just attests "we
@@ -2023,12 +1757,13 @@ function isBootstrapComplete() {
 
 function writeBootstrapMarker(payload) {
   fs.mkdirSync(path.dirname(BOOTSTRAP_COMPLETE_MARKER), { recursive: true })
-  // AI-330: payload shape built by the pure, unit-tested helper.
-  const merged = buildBootstrapMarkerPayload({
+  const merged = {
+    schemaVersion: BOOTSTRAP_MARKER_SCHEMA_VERSION,
     pinnedCommit: payload.pinnedCommit || null,
     pinnedBranch: payload.pinnedBranch || null,
+    completedAt: new Date().toISOString(),
     desktopVersion: app.getVersion()
-  })
+  }
   writeFileAtomic(BOOTSTRAP_COMPLETE_MARKER, JSON.stringify(merged, null, 2) + '\n', 'utf8')
   return merged
 }
@@ -2040,56 +1775,17 @@ function resolveWebDist() {
   const unpackedDist = path.join(unpackedPathFor(APP_ROOT), 'dist')
   if (directoryExists(unpackedDist)) return unpackedDist
 
-  // Final fallback: APP_ROOT/dist. When packaged with asar:true this lives
-  // INSIDE app.asar — not a servable filesystem directory — so the embedded
-  // dashboard backend 404s on static routes (see #41327, #39472). The durable
-  // fix is unpacking dist/ (PR #41411 adds dist/** to asarUnpack so the tier-2
-  // unpackedDist above resolves). If we still land here while packaged, log it
-  // so the cause isn't silent.
-  const fallback = path.join(APP_ROOT, 'dist')
-  if (IS_PACKAGED && /app\.asar(?=$|[\\/])/.test(fallback) && !directoryExists(fallback)) {
-    rememberLog(
-      `[web-dist] dashboard frontend dir resolved to an asar-internal path that ` +
-        `is not a real directory: ${fallback}. Static routes will 404. ` +
-        `Ensure dist/** is unpacked (asarUnpack) or set HERMES_DESKTOP_WEB_DIST.`
-    )
-  }
-  return fallback
+  return path.join(APP_ROOT, 'dist')
 }
 
 function resolveRendererIndex() {
   const candidates = [path.join(APP_ROOT, 'dist', 'index.html'), path.join(resolveWebDist(), 'index.html')]
-  const found = candidates.find(fileExists)
-  if (found) return found
-  // Nothing on disk. A packaged build with no renderer bundle blank-pages with
-  // a bare ERR_FILE_NOT_FOUND and no clue why (see #39484). Surface the cause
-  // and the fix before Electron loads the missing file.
-  rememberLog(
-    `[renderer] index.html not found — the desktop app was packaged without a ` +
-      `renderer bundle. Tried: ${candidates.join(', ')}. ` +
-      `Rebuild with: ${CLI_COMMAND_NAME} desktop --force-build`
-  )
-  return candidates[0]
-}
-
-// True when `dir` lives inside the packaged app bundle / install tree.
-// Packaged Electron's process.cwd() (and npm's INIT_CWD when dev tooling
-// leaked into a release build) often resolve here — e.g. win-unpacked on
-// Windows — which is exactly where PR #37536 item 16 said we must NOT run.
-function isPackagedInstallPath(dir) {
-  return isPackagedInstallPathUnderRoots(dir, {
-    isPackaged: IS_PACKAGED,
-    installRoots: [
-      APP_ROOT,
-      path.dirname(process.execPath),
-      resolveRemovableAppPath(process.execPath, process.platform, process.env)
-    ]
-  })
+  return candidates.find(fileExists) || candidates[0]
 }
 
 function resolveHermesCwd() {
   // In a packaged build, `process.cwd()` resolves to the install root (e.g.
-  // `…/win-unpacked` on Windows or `/Applications/Lliam-GOV.app/Contents/...`
+  // `…/win-unpacked` on Windows or `/Applications/Hermes.app/Contents/...`
   // on macOS). Sessions spawned there leave files inside the app bundle
   // and bewilder users when "where did my files go?" is the install dir.
   // The user-configurable default project directory wins over everything,
@@ -2098,7 +1794,7 @@ function resolveHermesCwd() {
   const candidates = [
     readDefaultProjectDir(),
     process.env.HERMES_DESKTOP_CWD,
-    IS_PACKAGED ? null : process.env.INIT_CWD,
+    process.env.INIT_CWD,
     IS_PACKAGED ? null : process.cwd(),
     !IS_PACKAGED ? SOURCE_REPO_ROOT : null,
     app.getPath('home')
@@ -2107,35 +1803,10 @@ function resolveHermesCwd() {
   for (const candidate of candidates) {
     if (!candidate) continue
     const resolved = path.resolve(String(candidate))
-
-    if (isPackagedInstallPath(resolved)) {
-      continue
-    }
-
     if (directoryExists(resolved)) return resolved
   }
 
   return app.getPath('home')
-}
-
-function sanitizeWorkspaceCwd(cwd) {
-  const trimmed = typeof cwd === 'string' ? cwd.trim() : ''
-
-  if (!trimmed || isPackagedInstallPath(trimmed)) {
-    return { cwd: resolveHermesCwd(), sanitized: Boolean(trimmed) }
-  }
-
-  try {
-    const resolved = path.resolve(trimmed)
-
-    if (directoryExists(resolved)) {
-      return { cwd: resolved, sanitized: false }
-    }
-  } catch {
-    // Fall through to the resolved default.
-  }
-
-  return { cwd: resolveHermesCwd(), sanitized: Boolean(trimmed) }
 }
 
 // Persisted "Default project directory" — surfaced as a setting in the
@@ -2207,7 +1878,7 @@ function createActiveBackend(dashboardArgs) {
 
   return {
     kind: 'python',
-    label: `Lliam-GOV at ${ACTIVE_HERMES_ROOT}`,
+    label: `Hermes at ${ACTIVE_HERMES_ROOT}`,
     command: fileExists(venvPython) ? venvPython : findSystemPython(),
     args: ['-m', 'hermes_cli.main', ...dashboardArgs],
     env: {
@@ -2224,32 +1895,30 @@ function resolveHermesBackend(dashboardArgs) {
   //    checkout. Honour it as-is (no bootstrap; the user is driving).
   const overrideRoot = process.env.HERMES_DESKTOP_HERMES_ROOT && path.resolve(process.env.HERMES_DESKTOP_HERMES_ROOT)
   if (overrideRoot && isHermesSourceRoot(overrideRoot)) {
-    const backend = createPythonBackend(overrideRoot, `Lliam-GOV source at ${overrideRoot}`, dashboardArgs)
+    const backend = createPythonBackend(overrideRoot, `Hermes source at ${overrideRoot}`, dashboardArgs)
     if (backend) return backend
   }
 
-  // 2. Local source -- when running from a checkout (dev server, or a packaged
-  //    app under apps/desktop/release during local testing), source takes
-  //    precedence so Python edits are exercised. A packaged app copied to
-  //    /Applications will not have this ancestor and falls through to the
-  //    managed install/bootstrap path.
-  const localSourceRoot = resolveLocalSourceRoot()
-  if (localSourceRoot) {
-    const backend = createPythonBackend(localSourceRoot, `Lliam-GOV source at ${localSourceRoot}`, dashboardArgs)
+  // 2. Development source -- when running `npm run dev` from a checkout, the
+  //    cloned repo at SOURCE_REPO_ROOT takes precedence over ACTIVE and any
+  //    installed `hermes` on PATH so local Python edits are actually exercised.
+  //    (In dev with no checkout, SOURCE_REPO_ROOT won't pass isHermesSourceRoot.)
+  if (!IS_PACKAGED && isHermesSourceRoot(SOURCE_REPO_ROOT)) {
+    const backend = createPythonBackend(SOURCE_REPO_ROOT, `Hermes source at ${SOURCE_REPO_ROOT}`, dashboardArgs)
     if (backend) return backend
   }
 
   // 3. Bootstrap-complete ACTIVE_HERMES_ROOT -- the canonical install at
-  //    %LOCALAPPDATA%\lliam-gov\lliam-gov (Windows) or ~/.lliam-gov/lliam-gov.
+  //    %LOCALAPPDATA%\hermes\hermes-agent (Windows) or ~/.hermes/hermes-agent.
   //    The bootstrap marker means install.ps1 stages finished and the user
   //    completed initial configuration; we trust the install and go straight
-  //    to spawning Lliam-GOV. Updates flow through the in-app update path
-  //    (applyUpdates -> git pull) or `lliam-gov update` from the CLI.
+  //    to spawning hermes. Updates flow through the in-app update path
+  //    (applyUpdates -> git pull) or `hermes update` from the CLI.
   if (isBootstrapComplete()) {
     return createActiveBackend(dashboardArgs)
   }
 
-  // 4. Existing CLI on PATH -- installed via install.ps1 / install.sh from
+  // 4. Existing `hermes` on PATH -- installed via install.ps1 / install.sh from
   //    a previous tool-only setup, or pip-installed system-wide. Use it but
   //    do NOT write a bootstrap marker; the user did this themselves and we
   //    don't want to take ownership of an install we didn't perform.
@@ -2265,21 +1934,21 @@ function resolveHermesBackend(dashboardArgs) {
       } else if (!isWindowsBinaryPathInWsl(hermesOverride, { isWsl: IS_WSL })) {
         hermesCommand = hermesOverride
       } else {
-        rememberLog(`Ignoring Windows Lliam-GOV override under WSL: ${hermesOverride}`)
+        rememberLog(`Ignoring Windows Hermes override under WSL: ${hermesOverride}`)
       }
     } else {
-      hermesCommand = findOnPath(CLI_COMMAND_NAME)
+      hermesCommand = findOnPath('hermes')
     }
 
     if (hermesCommand) {
       if (looksLikeDesktopAppBinary(hermesCommand)) {
-        rememberLog(`Ignoring desktop app executable on PATH while resolving Lliam-GOV CLI: ${hermesCommand}`)
+        rememberLog(`Ignoring desktop app executable on PATH while resolving Hermes CLI: ${hermesCommand}`)
         hermesCommand = null
       }
     }
 
     if (hermesCommand) {
-      // Smoke-test the candidate before trusting it. A CLI shim
+      // Smoke-test the candidate before trusting it. A `hermes` shim
       // left behind by a half-uninstalled pip install (or a venv
       // entry-point pointing at a deleted interpreter) still resolves
       // via findOnPath but explodes on spawn -- the user then sees a
@@ -2289,7 +1958,7 @@ function resolveHermesBackend(dashboardArgs) {
       const shellForProbe = isCommandScript(hermesCommand)
       if (verifyHermesCli(hermesCommand, { shell: shellForProbe })) {
         return {
-          label: `existing Lliam-GOV CLI at ${hermesCommand}`,
+          label: `existing Hermes CLI at ${hermesCommand}`,
           command: hermesCommand,
           args: dashboardArgs,
           bootstrap: false,
@@ -2299,7 +1968,7 @@ function resolveHermesBackend(dashboardArgs) {
         }
       }
       rememberLog(
-        `Ignoring existing Lliam-GOV CLI at ${hermesCommand}: --version probe failed; falling through to bootstrap.`
+        `Ignoring existing Hermes CLI at ${hermesCommand}: --version probe failed; falling through to bootstrap.`
       )
     }
   }
@@ -2316,7 +1985,7 @@ function resolveHermesBackend(dashboardArgs) {
     // backend hands the spawn step a guaranteed ModuleNotFoundError.
     // Verify the import works before trusting the candidate; on
     // failure, fall through to step 6 so the bootstrap runner pulls
-    // a uv-managed 3.11 into %LOCALAPPDATA%\lliam-gov\lliam-gov\venv.
+    // a uv-managed 3.11 into %LOCALAPPDATA%\hermes\hermes-agent\venv.
     if (canImportHermesCli(python)) {
       return {
         kind: 'python',
@@ -2343,7 +2012,7 @@ function resolveHermesBackend(dashboardArgs) {
   //    is a recoverable state the GUI can drive through.
   return {
     kind: 'bootstrap-needed',
-    label: 'Lliam-GOV not installed yet; bootstrap required',
+    label: 'Hermes Agent not installed yet; bootstrap required',
     command: null,
     args: dashboardArgs,
     bootstrap: true,
@@ -2373,7 +2042,7 @@ async function ensureRuntime(backend) {
   // will rewire startup to spawn the window first and route bootstrap events
   // to a renderer-side install overlay.
   if (backend.kind === 'bootstrap-needed') {
-    rememberLog('[bootstrap] no Lliam-GOV install found; starting first-launch bootstrap')
+    rememberLog('[bootstrap] no Hermes install found; starting first-launch bootstrap')
 
     // Eagerly flip the bootstrap UI state to 'active' so the renderer
     // shows the install overlay BEFORE the runner finishes fetching the
@@ -2422,7 +2091,7 @@ async function ensureRuntime(backend) {
     bootstrapAbortController = null
 
     if (bootstrapResult.cancelled) {
-      const cancelledError = new Error('Lliam-GOV install was cancelled.')
+      const cancelledError = new Error('Hermes install was cancelled.')
       cancelledError.isBootstrapFailure = true
       cancelledError.bootstrapCancelled = true
       bootstrapFailure = cancelledError
@@ -2431,7 +2100,7 @@ async function ensureRuntime(backend) {
 
     if (!bootstrapResult.ok) {
       const bootstrapError = new Error(
-        `Lliam-GOV bootstrap failed${bootstrapResult.failedStage ? ` at stage '${bootstrapResult.failedStage}'` : ''}: ` +
+        `Hermes bootstrap failed${bootstrapResult.failedStage ? ` at stage '${bootstrapResult.failedStage}'` : ''}: ` +
           `${bootstrapResult.error || 'unknown error'}. ` +
           `Check ${path.join(HERMES_HOME, 'logs', 'desktop.log')} for the full transcript.`
       )
@@ -2458,23 +2127,23 @@ async function ensureRuntime(backend) {
   // attests they ran successfully).
   if (!isHermesSourceRoot(ACTIVE_HERMES_ROOT)) {
     throw new Error(
-      `Lliam-GOV install at ${ACTIVE_HERMES_ROOT} is missing or incomplete. ` +
+      `Hermes install at ${ACTIVE_HERMES_ROOT} is missing or incomplete. ` +
         'Reinstall via the desktop installer or scripts/install.ps1.'
     )
   }
 
-  // On Windows, preflight Git Bash. Lliam-GOV's terminal tool calls bash.exe
+  // On Windows, preflight Git Bash. Hermes' terminal tool calls bash.exe
   // directly (tools/environments/local.py); without it the agent can't run
   // terminal commands. install.ps1's Stage-Git puts PortableGit at
-  // %LOCALAPPDATA%\lliam-gov\git\, which findGitBash() picks up, so for any
+  // %LOCALAPPDATA%\hermes\git\, which findGitBash() picks up, so for any
   // user who completed the bootstrap this is a no-op. For users who got
-  // here via an external CLI on PATH, this check still helps.
+  // here via an external `hermes` on PATH, this check still helps.
   if (IS_WINDOWS && !findGitBash()) {
     throw new Error(
-      'Git for Windows is required for Lliam-GOV on Windows (provides Git Bash, ' +
+      'Git for Windows is required for Hermes on Windows (provides Git Bash, ' +
         "which the agent's terminal tool uses). Install it from " +
         'https://git-scm.com/download/win or run `winget install -e --id Git.Git`, ' +
-        'then relaunch Lliam-GOV.'
+        'then relaunch Hermes.'
     )
   }
 
@@ -2488,15 +2157,15 @@ async function ensureRuntime(backend) {
     // install.ps1 succeeds. If we hit this, the user (or a deleted venv)
     // broke the invariant; tell them to re-run the install.
     throw new Error(
-      `Lliam-GOV venv missing at ${VENV_ROOT}. Re-run the desktop installer or ` + '`scripts/install.ps1` to rebuild it.'
+      `Hermes venv missing at ${VENV_ROOT}. Re-run the desktop installer or ` + '`scripts/install.ps1` to rebuild it.'
     )
   }
 
   backend.command = venvPython
-  backend.label = `Lliam-GOV at ${ACTIVE_HERMES_ROOT} (venv: ${VENV_ROOT})`
+  backend.label = `Hermes at ${ACTIVE_HERMES_ROOT} (venv: ${VENV_ROOT})`
   updateBootProgress({
     phase: 'runtime.ready',
-    message: 'Lliam-GOV runtime is ready',
+    message: 'Hermes runtime is ready',
     progress: 82,
     running: true,
     error: null
@@ -2530,7 +2199,7 @@ function fetchJson(url, token, options = {}) {
     const timeoutMs = resolveTimeoutMs(options.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
 
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      reject(new Error(`Unsupported Lliam-GOV backend URL protocol: ${parsed.protocol}`))
+      reject(new Error(`Unsupported Hermes backend URL protocol: ${parsed.protocol}`))
       return
     }
 
@@ -2568,7 +2237,7 @@ function fetchJson(url, token, options = {}) {
             reject(
               new Error(
                 `Expected JSON from ${url} but got HTML (status ${res.statusCode}). ` +
-                  'The endpoint is likely missing on the Lliam-GOV backend.'
+                  'The endpoint is likely missing on the Hermes backend.'
               )
             )
             return
@@ -2584,7 +2253,7 @@ function fetchJson(url, token, options = {}) {
 
     req.on('error', reject)
     req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error(`Timed out connecting to Lliam-GOV backend after ${timeoutMs}ms`))
+      req.destroy(new Error(`Timed out connecting to Hermes backend after ${timeoutMs}ms`))
     })
     if (body) req.write(body)
     req.end()
@@ -2610,7 +2279,7 @@ function fetchPublicJson(url, options = {}) {
     const timeoutMs = resolveTimeoutMs(options.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
 
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      reject(new Error(`Unsupported Lliam-GOV backend URL protocol: ${parsed.protocol}`))
+      reject(new Error(`Unsupported Hermes backend URL protocol: ${parsed.protocol}`))
       return
     }
 
@@ -2642,7 +2311,7 @@ function fetchPublicJson(url, options = {}) {
             reject(
               new Error(
                 `Expected JSON from ${url} but got HTML (status ${res.statusCode}). ` +
-                  'The endpoint is likely missing on the Lliam-GOV backend.'
+                  'The endpoint is likely missing on the Hermes backend.'
               )
             )
             return
@@ -2658,7 +2327,7 @@ function fetchPublicJson(url, options = {}) {
 
     req.on('error', reject)
     req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error(`Timed out connecting to Lliam-GOV backend after ${timeoutMs}ms`))
+      req.destroy(new Error(`Timed out connecting to Hermes backend after ${timeoutMs}ms`))
     })
     if (body) req.write(body)
     req.end()
@@ -2790,7 +2459,7 @@ function fetchHtmlTitleWithCurl(rawUrl) {
       '--raw',
       url
     ]
-    const child = spawn('curl', args, hiddenWindowsChildOptions({ stdio: ['ignore', 'pipe', 'ignore'] }))
+    const child = spawn('curl', args, { stdio: ['ignore', 'pipe', 'ignore'] })
     const chunks = []
     let bytes = 0
 
@@ -2945,10 +2614,10 @@ async function resourceBufferFromUrl(rawUrl) {
     const buffer = match[2] ? Buffer.from(encoded, 'base64') : Buffer.from(decodeURIComponent(encoded), 'utf8')
     return { buffer, mimeType }
   }
-  if (/^file:/i.test(rawUrl)) {
-    const { resolvedPath } = await resolveReadableFileForIpc(rawUrl, { purpose: 'Image file' })
-    const buffer = await fs.promises.readFile(resolvedPath)
-    return { buffer, mimeType: mimeTypeForPath(resolvedPath) }
+  if (rawUrl.startsWith('file:')) {
+    const filePath = fileURLToPath(rawUrl)
+    const buffer = await fs.promises.readFile(filePath)
+    return { buffer, mimeType: mimeTypeForPath(filePath) }
   }
 
   const parsed = new URL(rawUrl)
@@ -3026,13 +2695,11 @@ function expandUserPath(filePath) {
   return value
 }
 
-async function previewFileTarget(rawTarget, baseDir) {
+function previewFileTarget(rawTarget, baseDir) {
   const raw = String(rawTarget || '').trim()
   const base = baseDir ? path.resolve(expandUserPath(baseDir)) : resolveHermesCwd()
-  let resolved = resolveRequestedPathForIpc(/^file:/i.test(raw) ? raw : expandUserPath(raw), {
-    baseDir: base,
-    purpose: 'Preview target'
-  })
+  const filePath = raw.startsWith('file:') ? fileURLToPath(raw) : path.resolve(base, expandUserPath(raw))
+  let resolved = filePath
 
   if (directoryExists(resolved)) {
     resolved = path.join(resolved, 'index.html')
@@ -3042,8 +2709,6 @@ async function previewFileTarget(rawTarget, baseDir) {
   if (!fileExists(resolved)) {
     return null
   }
-
-  ;({ resolvedPath: resolved } = await resolveReadableFileForIpc(resolved, { purpose: 'Preview target' }))
 
   const mimeType = mimeTypeForPath(resolved)
   const metadata = previewFileMetadata(resolved, mimeType)
@@ -3090,7 +2755,7 @@ function previewUrlTarget(rawTarget) {
   }
 }
 
-async function normalizePreviewTarget(rawTarget, baseDir) {
+function normalizePreviewTarget(rawTarget, baseDir) {
   const raw = String(rawTarget || '').trim()
 
   if (!raw) {
@@ -3102,15 +2767,20 @@ async function normalizePreviewTarget(rawTarget, baseDir) {
       return previewUrlTarget(raw)
     }
 
-    return await previewFileTarget(raw, baseDir)
+    return previewFileTarget(raw, baseDir)
   } catch {
     return null
   }
 }
 
-async function filePathFromPreviewUrl(rawUrl) {
-  const { resolvedPath } = await resolveReadableFileForIpc(String(rawUrl || ''), { purpose: 'Preview file' })
-  return resolvedPath
+function filePathFromPreviewUrl(rawUrl) {
+  const filePath = fileURLToPath(String(rawUrl || ''))
+
+  if (!fileExists(filePath)) {
+    throw new Error('Preview file is not readable')
+  }
+
+  return filePath
 }
 
 function sendPreviewFileChanged(payload) {
@@ -3120,8 +2790,8 @@ function sendPreviewFileChanged(payload) {
   webContents.send('hermes:preview-file-changed', payload)
 }
 
-async function watchPreviewFile(rawUrl) {
-  const filePath = await filePathFromPreviewUrl(rawUrl)
+function watchPreviewFile(rawUrl) {
+  const filePath = filePathFromPreviewUrl(rawUrl)
   const watchDir = path.dirname(filePath)
   const targetName = path.basename(filePath)
   const id = crypto.randomBytes(12).toString('base64url')
@@ -3184,7 +2854,7 @@ async function waitForHermes(baseUrl, token) {
     }
   }
 
-  throw new Error(`Lliam-GOV backend did not become ready: ${lastError?.message || 'timeout'}`)
+  throw new Error(`Hermes backend did not become ready: ${lastError?.message || 'timeout'}`)
 }
 
 function getWindowButtonPosition() {
@@ -3284,7 +2954,7 @@ function buildApplicationMenu() {
     template.push({
       label: APP_NAME,
       submenu: [
-        { label: `About ${APP_NAME}`, click: () => showAboutPanelFresh() },
+        { role: 'about', label: `About ${APP_NAME}` },
         checkForUpdatesItem,
         { type: 'separator' },
         { role: 'services' },
@@ -3340,7 +3010,7 @@ function buildApplicationMenu() {
         label: 'Actual Size',
         accelerator: 'CommandOrControl+0',
         click: () => {
-          setAndPersistZoomLevel(mainWindow, 0)
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.setZoomLevel(0)
         }
       },
       {
@@ -3348,7 +3018,8 @@ function buildApplicationMenu() {
         accelerator: 'CommandOrControl+Plus',
         click: () => {
           if (mainWindow && !mainWindow.isDestroyed()) {
-            setAndPersistZoomLevel(mainWindow, mainWindow.webContents.getZoomLevel() + 0.1)
+            const next = Math.min(mainWindow.webContents.getZoomLevel() + 0.1, 9)
+            mainWindow.webContents.setZoomLevel(next)
           }
         }
       },
@@ -3357,7 +3028,8 @@ function buildApplicationMenu() {
         accelerator: 'CommandOrControl+-',
         click: () => {
           if (mainWindow && !mainWindow.isDestroyed()) {
-            setAndPersistZoomLevel(mainWindow, mainWindow.webContents.getZoomLevel() - 0.1)
+            const next = Math.max(mainWindow.webContents.getZoomLevel() - 0.1, -9)
+            mainWindow.webContents.setZoomLevel(next)
           }
         }
       },
@@ -3419,42 +3091,6 @@ function installPreviewShortcut(window) {
   })
 }
 
-// Zoom level is persisted in the renderer's own localStorage (per-origin,
-// survives reloads/restarts) rather than a main-process JSON file. The main
-// process owns setZoomLevel, so we mirror each change into localStorage and
-// read it back on did-finish-load to re-apply after reloads or crash recovery.
-const ZOOM_STORAGE_KEY = 'hermes:desktop:zoomLevel'
-
-function clampZoomLevel(value) {
-  if (!Number.isFinite(value)) return 0
-  return Math.min(Math.max(value, -9), 9)
-}
-
-function setAndPersistZoomLevel(window, zoomLevel) {
-  if (!window || window.isDestroyed()) return
-  const next = clampZoomLevel(zoomLevel)
-  window.webContents.setZoomLevel(next)
-  window.webContents
-    .executeJavaScript(
-      `try { localStorage.setItem(${JSON.stringify(ZOOM_STORAGE_KEY)}, ${JSON.stringify(String(next))}) } catch {}`
-    )
-    .catch(error => rememberLog(`[zoom] persist failed: ${error?.message || error}`))
-}
-
-function restorePersistedZoomLevel(window) {
-  if (!window || window.isDestroyed()) return
-  window.webContents
-    .executeJavaScript(
-      `(() => { try { return localStorage.getItem(${JSON.stringify(ZOOM_STORAGE_KEY)}) } catch { return null } })()`
-    )
-    .then(stored => {
-      if (stored == null || !window || window.isDestroyed()) return
-      const level = clampZoomLevel(Number(stored))
-      window.webContents.setZoomLevel(level)
-    })
-    .catch(error => rememberLog(`[zoom] restore failed: ${error?.message || error}`))
-}
-
 function installZoomShortcuts(window) {
   // Override Ctrl/Cmd + +/-/0 with half the default zoom step (0.1 vs 0.2).
   // The menu items handle this on macOS (where the menu is always present),
@@ -3468,13 +3104,15 @@ function installZoomShortcuts(window) {
     const key = input.key
     if (key === '0') {
       event.preventDefault()
-      setAndPersistZoomLevel(window, 0)
+      window.webContents.setZoomLevel(0)
     } else if (key === '=' || key === '+') {
       event.preventDefault()
-      setAndPersistZoomLevel(window, window.webContents.getZoomLevel() + ZOOM_STEP)
+      const next = Math.min(window.webContents.getZoomLevel() + ZOOM_STEP, 9)
+      window.webContents.setZoomLevel(next)
     } else if (key === '-') {
       event.preventDefault()
-      setAndPersistZoomLevel(window, window.webContents.getZoomLevel() - ZOOM_STEP)
+      const next = Math.max(window.webContents.getZoomLevel() - ZOOM_STEP, -9)
+      window.webContents.setZoomLevel(next)
     }
   })
 }
@@ -3771,7 +3409,7 @@ function openOauthLoginWindow(baseUrl) {
       win = new BrowserWindow({
         width: 520,
         height: 720,
-        title: 'Sign in to Lliam-GOV gateway',
+        title: 'Sign in to Hermes gateway',
         autoHideMenuBar: true,
         webPreferences: {
           contextIsolation: true,
@@ -3826,10 +3464,10 @@ function fetchJsonViaOauthSession(url, options = {}) {
       return
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      reject(new Error(`Unsupported Lliam-GOV backend URL protocol: ${parsed.protocol}`))
+      reject(new Error(`Unsupported Hermes backend URL protocol: ${parsed.protocol}`))
       return
     }
-    const body = serializeJsonBody(options.body)
+    const body = options.body === undefined ? undefined : Buffer.from(JSON.stringify(options.body))
     const timeoutMs = resolveTimeoutMs(options.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
 
     const request = electronNet.request({
@@ -3839,7 +3477,8 @@ function fetchJsonViaOauthSession(url, options = {}) {
       useSessionCookies: true,
       redirect: 'follow'
     })
-    setJsonRequestHeaders(request)
+    request.setHeader('Content-Type', 'application/json')
+    if (body) request.setHeader('Content-Length', String(body.length))
 
     let timedOut = false
     const timer = setTimeout(() => {
@@ -3849,7 +3488,7 @@ function fetchJsonViaOauthSession(url, options = {}) {
       } catch {
         // already finished
       }
-      reject(new Error(`Timed out connecting to Lliam-GOV backend after ${timeoutMs}ms`))
+      reject(new Error(`Timed out connecting to Hermes backend after ${timeoutMs}ms`))
     }, timeoutMs)
 
     request.on('response', res => {
@@ -4082,12 +3721,10 @@ async function sanitizeDesktopConnectionConfig(config = readDesktopConnectionCon
   const scoped = key ? config.profiles?.[key] || null : null
   const block = key ? scoped || {} : config.remote || {}
 
-  const envOverride = key ? false : Boolean(process.env.HERMES_DESKTOP_REMOTE_URL)
-
   const remoteToken = decryptDesktopSecret(block.token)
   const authMode = normAuthMode(block.authMode)
-  const remoteUrl = envOverride ? String(process.env.HERMES_DESKTOP_REMOTE_URL || '') : String(block.url || '')
-  const mode = envOverride || (key ? scoped?.mode : config.mode) === 'remote' ? 'remote' : 'local'
+  const remoteUrl = String(block.url || '')
+  const mode = (key ? scoped?.mode : config.mode) === 'remote' ? 'remote' : 'local'
 
   let remoteOauthConnected = false
   if (authMode === 'oauth' && remoteUrl) {
@@ -4113,7 +3750,7 @@ async function sanitizeDesktopConnectionConfig(config = readDesktopConnectionCon
     remoteTokenSet: Boolean(remoteToken),
     // The env override only forces the global/primary connection; a per-profile
     // scope is never overridden by HERMES_DESKTOP_REMOTE_URL.
-    envOverride
+    envOverride: key ? false : Boolean(process.env.HERMES_DESKTOP_REMOTE_URL)
   }
 }
 
@@ -4184,7 +3821,7 @@ async function buildRemoteConnection(rawUrl, authMode, token, source) {
     // the authoritative liveness check.
     if (!(await hasLiveOauthSession(baseUrl))) {
       const err = new Error(
-        'Remote Lliam-GOV gateway uses OAuth, but you are not signed in. ' +
+        'Remote Hermes gateway uses OAuth, but you are not signed in. ' +
           'Open Settings → Gateway and click "Sign in", or switch back to Local.'
       )
       err.needsOauthLogin = true
@@ -4216,7 +3853,7 @@ async function buildRemoteConnection(rawUrl, authMode, token, source) {
 
   if (!token) {
     throw new Error(
-      'Remote Lliam-GOV gateway is selected, but no session token is saved. ' +
+      'Remote Hermes gateway is selected, but no session token is saved. ' +
         'Open Settings → Gateway and save a token, or switch back to Local.'
     )
   }
@@ -4257,7 +3894,7 @@ async function resolveRemoteBackend(profile) {
     if (!rawEnvToken) {
       throw new Error(
         'HERMES_DESKTOP_REMOTE_URL is set but HERMES_DESKTOP_REMOTE_TOKEN is not. ' +
-          'Both must be provided to connect to a remote Lliam-GOV backend.'
+          'Both must be provided to connect to a remote Hermes backend.'
       )
     }
     return buildRemoteConnection(rawEnvUrl, 'token', rawEnvToken, 'env')
@@ -4305,7 +3942,9 @@ async function requestJsonForProfile(profile, path, method, body) {
   const conn = await ensureBackend(profile)
   const url = `${conn.baseUrl}${path}`
   const opts = { method, body, timeoutMs: DEFAULT_FETCH_TIMEOUT_MS }
-  return conn.authMode === 'oauth' ? fetchJsonViaOauthSession(url, opts) : fetchJson(url, conn.token, opts)
+  return conn.authMode === 'oauth'
+    ? fetchJsonViaOauthSession(url, opts)
+    : fetchJson(url, conn.token, opts)
 }
 
 async function probeRemoteAuthMode(rawUrl) {
@@ -4379,8 +4018,7 @@ async function testDesktopConnectionConfig(input = {}) {
   // The block under test: a per-profile entry or the global remote. Coerce has
   // already normalized the URL and resolved token inheritance for the scope.
   const block = key ? config.profiles?.[key] || null : config.remote
-  const wantRemote =
-    block?.mode === 'remote' || (!key && config.mode === 'remote') || (input.mode === 'remote' && block)
+  const wantRemote = block?.mode === 'remote' || (!key && config.mode === 'remote') || (input.mode === 'remote' && block)
   // ``/api/status`` is public on every gateway (no creds needed), so a
   // reachability test works for local, token, and oauth modes alike — we only
   // need a base URL. For a remote config we normalize the URL from the input;
@@ -4463,31 +4101,20 @@ async function teardownPrimaryBackendAndWait() {
   const dying = hermesProcess && !hermesProcess.killed ? hermesProcess : null
   resetHermesConnection()
 
-  await waitForBackendExit(dying)
-}
-
-async function waitForBackendExit(child, timeoutMs = 5000) {
-  if (!child) {
-    return
-  }
-  if (child.exitCode !== null || child.signalCode !== null) {
+  if (!dying) {
     return
   }
 
   await new Promise(resolve => {
     const timer = setTimeout(() => {
       try {
-        if (IS_WINDOWS && Number.isInteger(child.pid)) {
-          forceKillProcessTree(child.pid)
-        } else {
-          child.kill('SIGKILL')
-        }
+        dying.kill('SIGKILL')
       } catch {
         // Already gone.
       }
       resolve()
-    }, timeoutMs)
-    child.once('exit', () => {
+    }, 5000)
+    dying.once('exit', () => {
       clearTimeout(timer)
       resolve()
     })
@@ -4602,32 +4229,25 @@ async function spawnPoolBackend(profile, entry) {
   const token = crypto.randomBytes(32).toString('base64url')
   // --profile wins over the inherited HERMES_HOME env (see _apply_profile_override
   // step 3 in hermes_cli/main.py), so the child re-homes to this profile.
-  const dashboardArgs = ['--profile', profile, 'dashboard', '--no-open', '--tui', '--port', String(port)]
+  const dashboardArgs = ['--profile', profile, 'dashboard', '--no-open', '--host', '127.0.0.1', '--port', String(port)]
   const backend = await ensureRuntime(resolveHermesBackend(dashboardArgs))
   const hermesCwd = resolveHermesCwd()
   const webDist = resolveWebDist()
 
-  rememberLog(`Starting Lliam-GOV backend for profile "${profile}" via ${backend.label}`)
+  rememberLog(`Starting Hermes backend for profile "${profile}" via ${backend.label}`)
 
-  const child = spawn(backend.command, backend.args, hiddenWindowsChildOptions({
+  const child = spawn(backend.command, backend.args, {
     cwd: hermesCwd,
     env: {
       ...process.env,
       HERMES_HOME,
       ...backend.env,
-      // Pin the gateway's tool/terminal cwd to the same directory we chose for
-      // the child process. Inherited TERMINAL_CWD (or a stale config bridge)
-      // can still point at the install dir even when spawn cwd is home.
-      TERMINAL_CWD: hermesCwd,
       HERMES_DASHBOARD_SESSION_TOKEN: token,
-      // Marks this dashboard backend as desktop-spawned so it runs the cron
-      // scheduler tick loop (the gateway isn't running under the app).
-      HERMES_DESKTOP: '1',
       HERMES_WEB_DIST: webDist
     },
     shell: backend.shell,
     stdio: ['ignore', 'pipe', 'pipe']
-  }))
+  })
   entry.process = child
   entry.port = port
   entry.token = token
@@ -4641,17 +4261,15 @@ async function spawnPoolBackend(profile, entry) {
     rejectStart = reject
   })
   child.once('error', error => {
-    rememberLog(`Lliam-GOV backend for profile "${profile}" failed to start: ${error.message}`)
+    rememberLog(`Hermes backend for profile "${profile}" failed to start: ${error.message}`)
     backendPool.delete(profile)
     rejectStart?.(error)
   })
   child.once('exit', (code, signal) => {
-    rememberLog(`Lliam-GOV backend for profile "${profile}" exited (${signal || code})`)
+    rememberLog(`Hermes backend for profile "${profile}" exited (${signal || code})`)
     backendPool.delete(profile)
     if (!ready) {
-      rejectStart?.(
-        new Error(`Lliam-GOV backend for profile "${profile}" exited before it became ready (${signal || code}).`)
-      )
+      rejectStart?.(new Error(`Hermes backend for profile "${profile}" exited before it became ready (${signal || code}).`))
     }
   })
 
@@ -4685,68 +4303,10 @@ function stopPoolBackend(profile) {
   }
 }
 
-async function teardownPoolBackendAndWait(profile) {
-  const entry = backendPool.get(profile)
-  if (!entry) return
-  backendPool.delete(profile)
-
-  if (entry.process && !entry.process.killed) {
-    try {
-      entry.process.kill('SIGTERM')
-    } catch {
-      // Already gone.
-    }
-  }
-
-  await waitForBackendExit(entry.process)
-}
-
 function stopAllPoolBackends() {
   for (const profile of [...backendPool.keys()]) {
     stopPoolBackend(profile)
   }
-}
-
-function profileNameFromDeleteRequest(request) {
-  if (!request || String(request.method || 'GET').toUpperCase() !== 'DELETE') {
-    return null
-  }
-
-  const match = String(request.path || '').match(/^\/api\/profiles\/([^/?#]+)(?:[?#].*)?$/)
-  if (!match) {
-    return null
-  }
-
-  let raw = ''
-  try {
-    raw = decodeURIComponent(match[1])
-  } catch {
-    return null
-  }
-
-  const name = raw.trim()
-  if (!name) {
-    return null
-  }
-  if (name.toLowerCase() === 'default') {
-    return 'default'
-  }
-  return name.toLowerCase()
-}
-
-async function prepareProfileDeleteRequest(request) {
-  const profile = profileNameFromDeleteRequest(request)
-  if (!profile || profile === 'default' || !PROFILE_NAME_RE.test(profile)) {
-    return
-  }
-
-  if (profile === primaryProfileKey()) {
-    writeActiveDesktopProfile('default')
-    await teardownPrimaryBackendAndWait()
-    return
-  }
-
-  await teardownPoolBackendAndWait(profile)
 }
 
 async function startHermes() {
@@ -4762,16 +4322,16 @@ async function startHermes() {
   if (connectionPromise) return connectionPromise
 
   connectionPromise = (async () => {
-    await advanceBootProgress('backend.resolve', 'Resolving Lliam-GOV backend', 8)
+    await advanceBootProgress('backend.resolve', 'Resolving Hermes backend', 8)
     // Resolve for the desktop's primary profile so a per-profile remote
     // override on the active profile is honored (falls back to env / global).
     const remote = await resolveRemoteBackend(primaryProfileKey())
     if (remote) {
-      await advanceBootProgress('backend.remote', `Connecting to remote Lliam-GOV backend at ${remote.baseUrl}`, 24)
+      await advanceBootProgress('backend.remote', `Connecting to remote Hermes backend at ${remote.baseUrl}`, 24)
       await waitForHermes(remote.baseUrl, remote.token)
       updateBootProgress({
         phase: 'backend.ready',
-        message: 'Remote Lliam-GOV backend is ready',
+        message: 'Remote Hermes backend is ready',
         progress: 94,
         running: true,
         error: null
@@ -4791,9 +4351,9 @@ async function startHermes() {
     await advanceBootProgress('backend.port', 'Finding an open local port', 16)
     const port = await pickPort()
     const token = crypto.randomBytes(32).toString('base64url')
-    const dashboardArgs = ['dashboard', '--no-open', '--tui', '--port', String(port)]
+    const dashboardArgs = ['dashboard', '--no-open', '--host', '127.0.0.1', '--port', String(port)]
     // Pin the desktop's chosen profile via the global --profile flag. This is
-    // deterministic (it wins over the sticky ~/.lliam-gov/active_profile file) and
+    // deterministic (it wins over the sticky ~/.hermes/active_profile file) and
     // resolves HERMES_HOME the same way `hermes -p <name>` does on the CLI. An
     // unset preference keeps the legacy launch so existing installs are
     // unaffected.
@@ -4801,38 +4361,34 @@ async function startHermes() {
     if (activeProfile) {
       dashboardArgs.unshift('--profile', activeProfile)
     }
-    await advanceBootProgress('backend.runtime', 'Resolving Lliam-GOV runtime', 28)
+    await advanceBootProgress('backend.runtime', 'Resolving Hermes runtime', 28)
     const backend = await ensureRuntime(resolveHermesBackend(dashboardArgs))
     const hermesCwd = resolveHermesCwd()
     const webDist = resolveWebDist()
 
-    await advanceBootProgress('backend.spawn', `Starting Lliam-GOV backend via ${backend.label}`, 84)
-    rememberLog(`Starting Lliam-GOV backend via ${backend.label}`)
+    await advanceBootProgress('backend.spawn', `Starting Hermes backend via ${backend.label}`, 84)
+    rememberLog(`Starting Hermes backend via ${backend.label}`)
 
-    hermesProcess = spawn(backend.command, backend.args, hiddenWindowsChildOptions({
+    hermesProcess = spawn(backend.command, backend.args, {
       cwd: hermesCwd,
       env: {
         ...process.env,
         // Explicitly pin HERMES_HOME for the child so Python's get_hermes_home()
         // resolves to the SAME location our resolveHermesHome() picked. Without
-        // this pin, Python falls back to ~/.lliam-gov on every platform — fine on
+        // this pin, Python falls back to ~/.hermes on every platform — fine on
         // mac/linux (where our default matches), but on Windows our default is
-        // %LOCALAPPDATA%\lliam-gov, which differs from C:\Users\<u>\.lliam-gov.
+        // %LOCALAPPDATA%\hermes, which differs from C:\Users\<u>\.hermes.
         // Mismatch would split config / sessions / .env / logs across two
         // directories. install.ps1 sets HERMES_HOME via setx; the desktop
         // can't reliably do that, so we set it inline for every spawn.
         HERMES_HOME,
         ...backend.env,
-        TERMINAL_CWD: hermesCwd,
         HERMES_DASHBOARD_SESSION_TOKEN: token,
-        // Marks this dashboard backend as desktop-spawned so it runs the cron
-        // scheduler tick loop (the gateway isn't running under the app).
-        HERMES_DESKTOP: '1',
         HERMES_WEB_DIST: webDist
       },
       shell: backend.shell,
       stdio: ['ignore', 'pipe', 'pipe']
-    }))
+    })
 
     hermesProcess.stdout.on('data', rememberLog)
     hermesProcess.stderr.on('data', rememberLog)
@@ -4842,11 +4398,11 @@ async function startHermes() {
       rejectBackendStart = reject
     })
     hermesProcess.once('error', error => {
-      rememberLog(`Lliam-GOV backend failed to start: ${error.message}`)
+      rememberLog(`Hermes backend failed to start: ${error.message}`)
       updateBootProgress(
         {
           error: error.message,
-          message: `Lliam-GOV backend failed to start: ${error.message}`,
+          message: `Hermes backend failed to start: ${error.message}`,
           phase: 'backend.error',
           running: false
         },
@@ -4858,12 +4414,12 @@ async function startHermes() {
       rejectBackendStart?.(error)
     })
     hermesProcess.once('exit', (code, signal) => {
-      rememberLog(`Lliam-GOV backend exited (${signal || code})`)
+      rememberLog(`Hermes backend exited (${signal || code})`)
       hermesProcess = null
       connectionPromise = null
       sendBackendExit({ code, signal })
       if (!backendReady) {
-        const message = `Lliam-GOV backend exited before it became ready (${signal || code}).`
+        const message = `Hermes backend exited before it became ready (${signal || code}).`
         updateBootProgress(
           {
             error: message,
@@ -4875,19 +4431,19 @@ async function startHermes() {
         )
         rejectBackendStart?.(
           new Error(
-            `Lliam-GOV backend exited before it became ready (${signal || code}). Log: ${DESKTOP_LOG_PATH}\n${recentHermesLog()}`
+            `Hermes backend exited before it became ready (${signal || code}). Log: ${DESKTOP_LOG_PATH}\n${recentHermesLog()}`
           )
         )
       }
     })
 
     const baseUrl = `http://127.0.0.1:${port}`
-    await advanceBootProgress('backend.wait', 'Waiting for Lliam-GOV backend to become ready', 90)
+    await advanceBootProgress('backend.wait', 'Waiting for Hermes backend to become ready', 90)
     await Promise.race([waitForHermes(baseUrl, token), backendStartFailed])
     backendReady = true
     updateBootProgress({
       phase: 'backend.ready',
-      message: 'Lliam-GOV backend is ready. Finalizing desktop startup',
+      message: 'Hermes backend is ready. Finalizing desktop startup',
       progress: 94,
       running: true,
       error: null
@@ -4921,102 +4477,14 @@ async function startHermes() {
   return connectionPromise
 }
 
-// Shared navigation guards + window chrome wiring applied to every window
-// (the primary plus any secondary session windows). Factored out of
-// createWindow() so secondary windows can't drift from the main window's
-// security posture: external links open in the OS browser, in-app navigation
-// stays confined to the dev server / packaged file URL, and the preview /
-// devtools / zoom / context-menu affordances behave identically everywhere.
-function wireCommonWindowHandlers(win) {
-  installPreviewShortcut(win)
-  installDevToolsShortcut(win)
-  installZoomShortcuts(win)
-  installContextMenu(win)
-  win.webContents.setWindowOpenHandler(details => {
-    openExternalUrl(details.url)
-
-    return { action: 'deny' }
-  })
-  win.webContents.on('will-navigate', (event, url) => {
-    if ((DEV_SERVER && url.startsWith(DEV_SERVER)) || (!DEV_SERVER && url.startsWith('file:'))) {
-      return
-    }
-
-    event.preventDefault()
-    openExternalUrl(url)
-  })
-}
-
-// Secondary "session windows" — one extra OS window per chat so a user can
-// work with multiple chats side by side. The registry guarantees one window
-// per sessionId (re-opening focuses the existing window) and self-cleans on
-// close. The primary mainWindow is never tracked here. Pure logic + the URL
-// builder live in session-windows.cjs so they stay unit-testable.
-const sessionWindows = createSessionWindowRegistry()
-
-function focusWindow(win) {
-  if (!win || win.isDestroyed()) return
-  if (win.isMinimized()) win.restore()
-  if (!win.isVisible()) win.show()
-  win.focus()
-}
-
-// Open (or focus) a standalone window for a single chat session.
-function createSessionWindow(sessionId) {
-  return sessionWindows.openOrFocus(sessionId, () => {
-    const icon = getAppIconPath()
-    const win = new BrowserWindow({
-      width: 480,
-      height: 800,
-      minWidth: 420,
-      minHeight: 620,
-      title: APP_NAME,
-      titleBarStyle: 'hidden',
-      titleBarOverlay: getTitleBarOverlayOptions(),
-      trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
-      vibrancy: IS_MAC ? 'sidebar' : undefined,
-      icon,
-      backgroundColor: '#f7f7f7',
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.cjs'),
-        contextIsolation: true,
-        webviewTag: true,
-        sandbox: true,
-        nodeIntegration: false,
-        devTools: true
-      }
-    })
-
-    if (IS_MAC) {
-      win.setWindowButtonPosition?.(WINDOW_BUTTON_POSITION)
-    }
-
-    win.on('will-enter-full-screen', () => sendWindowStateChanged(true))
-    win.on('enter-full-screen', () => sendWindowStateChanged(true))
-    win.on('will-leave-full-screen', () => sendWindowStateChanged(false))
-    win.on('leave-full-screen', () => sendWindowStateChanged(false))
-
-    wireCommonWindowHandlers(win)
-
-    win.loadURL(
-      buildSessionWindowUrl(sessionId, {
-        devServer: DEV_SERVER,
-        rendererIndexPath: DEV_SERVER ? undefined : resolveRendererIndex()
-      })
-    )
-
-    return win
-  })
-}
-
 function createWindow() {
   const icon = getAppIconPath()
   mainWindow = new BrowserWindow({
     width: 1220,
     height: 800,
-    minWidth: 400,
+    minWidth: 900,
     minHeight: 620,
-    title: APP_NAME,
+    title: 'Hermes',
     // Frameless title bar on every platform so the renderer can paint the
     // "hide sidebar" button (and other left-side titlebar tools) flush with
     // the top edge — matching the macOS layout where the traffic lights sit
@@ -5035,16 +4503,7 @@ function createWindow() {
       webviewTag: true,
       sandbox: true,
       nodeIntegration: false,
-      devTools: true,
-      // Keep timers + requestAnimationFrame running at full speed when the
-      // window is blurred/occluded. The chat transcript streams to the screen
-      // through a requestAnimationFrame-gated flush (useSessionStateCache),
-      // so with Chromium's default background throttling the live answer
-      // stalls whenever this window isn't focused (e.g. you switch to your
-      // editor mid-turn, or open detached devtools) and only appears once you
-      // refocus or refresh. A streaming chat app must render in the
-      // background, so opt out — matching the secondary windows above.
-      backgroundThrottling: false
+      devTools: true
     }
   })
 
@@ -5069,7 +4528,23 @@ function createWindow() {
   mainWindow.on('will-leave-full-screen', () => sendWindowStateChanged(false))
   mainWindow.on('leave-full-screen', () => sendWindowStateChanged(false))
 
-  wireCommonWindowHandlers(mainWindow)
+  installPreviewShortcut(mainWindow)
+  installDevToolsShortcut(mainWindow)
+  installZoomShortcuts(mainWindow)
+  installContextMenu(mainWindow)
+  mainWindow.webContents.setWindowOpenHandler(details => {
+    openExternalUrl(details.url)
+
+    return { action: 'deny' }
+  })
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if ((DEV_SERVER && url.startsWith(DEV_SERVER)) || (!DEV_SERVER && url.startsWith('file:'))) {
+      return
+    }
+
+    event.preventDefault()
+    openExternalUrl(url)
+  })
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     rememberLog(`[renderer] render-process-gone reason=${details?.reason} exitCode=${details?.exitCode}`)
@@ -5123,7 +4598,6 @@ function createWindow() {
   }
 
   mainWindow.webContents.once('did-finish-load', () => {
-    restorePersistedZoomLevel(mainWindow)
     broadcastBootProgress()
     sendWindowStateChanged()
     startHermes().catch(error => rememberLog(error.stack || error.message))
@@ -5131,59 +4605,11 @@ function createWindow() {
 }
 
 ipcMain.handle('hermes:connection', async (_event, profile) => ensureBackend(profile))
-// Reconnect-after-wake recovery. A REMOTE primary backend has no child process,
-// so the 'exit'/'error' handlers that would clear a dead connectionPromise never
-// fire — once the remote becomes unreachable across a sleep/wake the renderer
-// re-dials the same dead descriptor forever and the composer stays stuck on
-// "Starting Lliam-GOV…". Before the renderer's backoff loop reconnects, it asks us
-// to confirm the cached PRIMARY backend is still reachable; if a remote one is
-// not, we drop the cache so the next getConnection() rebuilds it. Local backends
-// self-heal via their child 'exit' handler, so we never touch them here.
-ipcMain.handle('hermes:connection:revalidate', async () => {
-  if (!connectionPromise) {
-    return { ok: true, rebuilt: false }
-  }
-
-  let conn = null
-  try {
-    conn = await connectionPromise
-  } catch {
-    // The cached boot already rejected (its own catch nulls connectionPromise);
-    // nothing to revalidate — the next getConnection() builds fresh.
-    return { ok: true, rebuilt: false }
-  }
-
-  if (!conn || conn.mode !== 'remote' || !conn.baseUrl) {
-    return { ok: true, rebuilt: false }
-  }
-
-  const base = conn.baseUrl.replace(/\/+$/, '')
-  try {
-    await fetchPublicJson(`${base}/api/status`, { timeoutMs: 2_500 })
-    return { ok: true, rebuilt: false }
-  } catch {
-    // Unreachable remote: drop the stale cache so the renderer's next reconnect
-    // tick rebuilds a fresh, reachable descriptor. resetHermesConnection only
-    // nulls connectionPromise for a remote (no child to SIGTERM).
-    rememberLog('Cached remote Lliam-GOV backend failed liveness probe; dropping stale connection.')
-    resetHermesConnection()
-    return { ok: true, rebuilt: true }
-  }
-})
 ipcMain.handle('hermes:backend:touch', async (_event, profile) => {
   touchPoolBackend(profile)
   return { ok: true }
 })
 ipcMain.handle('hermes:gateway:ws-url', async (_event, profile) => freshGatewayWsUrl(profile))
-ipcMain.handle('hermes:window:openSession', async (_event, sessionId) => {
-  if (typeof sessionId !== 'string' || !sessionId.trim()) {
-    return { ok: false, error: 'invalid-session-id' }
-  }
-
-  createSessionWindow(sessionId.trim())
-
-  return { ok: true }
-})
 ipcMain.handle('hermes:bootstrap:reset', async () => {
   // Renderer's "Reload and retry" path. Clear the latched failure and
   // reset connection state so the next startHermes() call restarts the
@@ -5422,19 +4848,17 @@ async function mergeRemoteProfileSessions(searchParams, remoteProfiles) {
   let total = (Number(base.total) || 0) - remoteProfiles.reduce((n, p) => n + (profileTotals[p] || 0), 0)
 
   // Swap each remote profile's stale local rows/total for the remote's real ones.
-  await Promise.all(
-    remoteProfiles.map(async name => {
-      const list = await remoteSessionList(name, remoteParams).catch(() => null)
-      if (!list) {
-        delete profileTotals[name] // dead remote → drop its stale local total too
-        return
-      }
-      const rows = rowsOf(list)
-      merged.push(...rows)
-      profileTotals[name] = Number(list.total) || rows.length
-      total += profileTotals[name]
-    })
-  )
+  await Promise.all(remoteProfiles.map(async name => {
+    const list = await remoteSessionList(name, remoteParams).catch(() => null)
+    if (!list) {
+      delete profileTotals[name] // dead remote → drop its stale local total too
+      return
+    }
+    const rows = rowsOf(list)
+    merged.push(...rows)
+    profileTotals[name] = Number(list.total) || rows.length
+    total += profileTotals[name]
+  }))
 
   const recency = s => s?.[order] ?? s?.started_at ?? 0
   merged.sort((a, b) => recency(b) - recency(a))
@@ -5450,8 +4874,6 @@ ipcMain.handle('hermes:api', async (_event, request) => {
   if (rerouted !== undefined) {
     return rerouted
   }
-
-  await prepareProfileDeleteRequest(request)
 
   const connection = await ensureBackend(request?.profile)
   const timeoutMs = resolveTimeoutMs(request?.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
@@ -5477,7 +4899,7 @@ ipcMain.handle('hermes:api', async (_event, request) => {
 ipcMain.handle('hermes:notify', (_event, payload) => {
   if (!Notification.isSupported()) return false
   new Notification({
-    title: payload?.title || APP_NAME,
+    title: payload?.title || 'Hermes',
     body: payload?.body || '',
     silent: Boolean(payload?.silent)
   }).show()
@@ -5600,11 +5022,8 @@ ipcMain.handle('hermes:openExternal', (_event, url) => {
 // session spawn (no app restart needed).
 ipcMain.handle('hermes:setting:defaultProjectDir:get', async () => ({
   dir: readDefaultProjectDir(),
-  defaultLabel: app.getPath('home'),
-  resolvedCwd: resolveHermesCwd()
+  defaultLabel: path.join(app.getPath('home'), 'hermes-projects')
 }))
-
-ipcMain.handle('hermes:workspace:sanitize', async (_event, cwd) => sanitizeWorkspaceCwd(cwd))
 
 ipcMain.handle('hermes:setting:defaultProjectDir:set', async (_event, dir) => {
   const next = typeof dir === 'string' && dir.trim() ? dir.trim() : null
@@ -5653,119 +5072,62 @@ ipcMain.handle('hermes:logs:reveal', async () => {
 
 ipcMain.handle('hermes:logs:recent', async () => ({ path: DESKTOP_LOG_PATH, lines: hermesLog.slice(-200) }))
 
-function isExecutableFile(filePath) {
-  if (!filePath || !path.isAbsolute(filePath)) {
-    return false
+// Always-hidden noise (covers non-git projects too — gitignore would catch
+// these anyway when present, but we want the same hygiene without one).
+const FS_READDIR_HIDDEN = new Set([
+  '.git',
+  '.hg',
+  '.svn',
+  '.cache',
+  '.next',
+  '.turbo',
+  '.venv',
+  '__pycache__',
+  'build',
+  'dist',
+  'node_modules',
+  'target',
+  'venv'
+])
+
+function findGitRoot(start) {
+  let dir = start
+
+  for (let i = 0; i < 50; i += 1) {
+    try {
+      if (fs.existsSync(path.join(dir, '.git'))) {
+        return dir
+      }
+    } catch {
+      return null
+    }
+
+    const parent = path.dirname(dir)
+
+    if (parent === dir) {
+      return null
+    }
+
+    dir = parent
   }
 
-  try {
-    fs.accessSync(filePath, fs.constants.X_OK)
-    return true
-  } catch {
-    return false
-  }
+  return null
 }
 
-function posixShellSpec(shellPath) {
+function terminalShellCommand() {
+  if (IS_WINDOWS) {
+    return { args: [], command: process.env.COMSPEC || 'cmd.exe' }
+  }
+
+  const configuredShell = process.env.SHELL || ''
+  const shellPath =
+    (path.isAbsolute(configuredShell) && fs.existsSync(configuredShell) && configuredShell) ||
+    ['/bin/zsh', '/bin/bash', '/bin/sh'].find(candidate => fs.existsSync(candidate)) ||
+    '/bin/sh'
   const shellName = path.basename(shellPath)
   const interactiveArgs = shellName.includes('zsh') || shellName.includes('bash') ? ['-il'] : ['-i']
 
   return { args: interactiveArgs, command: shellPath, name: shellName }
-}
-
-let spawnHelperChecked = false
-
-// node-pty execs a `spawn-helper` binary on macOS/Linux to launch the shell in a
-// fresh session. The prebuilt that ships in node-pty's `prebuilds/` (and the
-// staged copy under resources/native-deps) loses its execute bit through npm
-// pack / electron-builder file collection, so every nodePty.spawn() dies with
-// "posix_spawnp failed". Restore +x once, lazily, before the first spawn.
-function ensureSpawnHelperExecutable() {
-  if (spawnHelperChecked || IS_WINDOWS || !nodePtyDir) {
-    return
-  }
-
-  spawnHelperChecked = true
-
-  const arch = process.arch
-  const candidates = [
-    path.join(nodePtyDir, 'build', 'Release', 'spawn-helper'),
-    path.join(nodePtyDir, 'prebuilds', `${process.platform}-${arch}`, 'spawn-helper')
-  ]
-
-  for (const helper of candidates) {
-    try {
-      const mode = fs.statSync(helper).mode
-
-      if ((mode & 0o111) !== 0o111) {
-        fs.chmodSync(helper, mode | 0o755)
-      }
-    } catch {
-      // Not present in this layout (e.g. compiled build vs prebuild); skip.
-    }
-  }
-}
-
-// Windows PowerShell 5.1 ships at a fixed System32 path on every Windows box;
-// prefer it only after PowerShell 7+ (`pwsh`).
-function windowsPowerShellPath() {
-  const systemRoot = process.env.SystemRoot || process.env.windir || 'C:\\Windows'
-  const builtin = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-
-  return isExecutableFile(builtin) ? builtin : findOnPath('powershell.exe')
-}
-
-// Map a resolved shell path to its spawn spec, picking interactive flags by
-// family: PowerShell drops its logo banner (so the prompt sits flush like the
-// POSIX shells), cmd needs nothing, and everything else (zsh/bash/fish/sh…)
-// gets POSIX interactive-login flags.
-function shellSpecFor(shellPath) {
-  const name = path.basename(shellPath).toLowerCase()
-
-  if (name.startsWith('pwsh') || name.startsWith('powershell')) {
-    return { args: ['-NoLogo'], command: shellPath, name }
-  }
-
-  if (name.startsWith('cmd')) {
-    return { args: [], command: shellPath, name }
-  }
-
-  return posixShellSpec(shellPath)
-}
-
-// Best installed Windows shell: PowerShell 7+ (`pwsh`), then Windows PowerShell
-// 5.1, then comspec/cmd.exe as the universal fallback.
-function windowsShellSpec() {
-  const command =
-    findOnPath('pwsh.exe') || findOnPath('pwsh') || windowsPowerShellPath() || process.env.COMSPEC || 'cmd.exe'
-
-  return shellSpecFor(command)
-}
-
-// Resolve the interactive shell for the embedded terminal: an explicit user
-// override wins, otherwise auto-detect the best one installed for the platform.
-function terminalShellCommand() {
-  // HERMES_DESKTOP_SHELL is the cross-platform escape hatch (a path or a bare
-  // name on PATH); $SHELL is honored on POSIX, where it's the user's canonical
-  // choice, but ignored on Windows, where it's usually a stray MSYS/Git path
-  // node-pty can't spawn natively.
-  const override = (process.env.HERMES_DESKTOP_SHELL || (IS_WINDOWS ? '' : process.env.SHELL) || '').trim()
-
-  if (override) {
-    const resolved = isExecutableFile(override) ? override : findOnPath(override)
-
-    if (resolved) {
-      return shellSpecFor(resolved)
-    }
-  }
-
-  if (IS_WINDOWS) {
-    return windowsShellSpec()
-  }
-
-  const shellPath = ['/bin/zsh', '/bin/bash', '/bin/sh'].find(candidate => isExecutableFile(candidate))
-
-  return posixShellSpec(shellPath || '/bin/sh')
 }
 
 function safeTerminalCwd(cwd) {
@@ -5793,7 +5155,7 @@ function terminalShellEnv() {
 
   // Strip color/theme-detection vars that ride along when Electron is launched
   // from a non-tty agent shell (Cursor's runner sets NO_COLOR/FORCE_COLOR=0
-  // /TERM=dumb; some terminals set COLORFGBG which would flip Lliam-GOV's TUI into
+  // /TERM=dumb; some terminals set COLORFGBG which would flip Hermes' TUI into
   // light-mode). Our PTY is a real xterm-compat terminal — force truecolor.
   delete env.NO_COLOR
   delete env.FORCE_COLOR
@@ -5802,13 +5164,8 @@ function terminalShellEnv() {
   env.COLORTERM = 'truecolor'
   env.LC_CTYPE = env.LC_CTYPE || 'UTF-8'
   env.TERM = 'xterm-256color'
-  env.TERM_PROGRAM = APP_NAME
+  env.TERM_PROGRAM = 'Hermes'
   env.TERM_PROGRAM_VERSION = app.getVersion()
-
-  // Let a hermes/--tui launched in this pane know it's embedded in the desktop
-  // GUI (build_environment_hints surfaces this). Distinct from HERMES_DESKTOP,
-  // which marks the agent *backend* and gates cron/gateway behavior.
-  env.HERMES_DESKTOP_TERMINAL = '1'
 
   return env
 }
@@ -5835,16 +5192,51 @@ function disposeTerminalSession(id) {
   return true
 }
 
-ipcMain.handle('hermes:fs:readDir', async (_event, dirPath) => readDirForIpc(dirPath))
+ipcMain.handle('hermes:fs:readDir', async (_event, dirPath) => {
+  const resolved = path.resolve(String(dirPath || ''))
 
-ipcMain.handle('hermes:fs:gitRoot', async (_event, startPath) => gitRootForIpc(startPath))
+  if (!resolved) {
+    return { entries: [], error: 'invalid-path' }
+  }
+
+  try {
+    const dirents = await fs.promises.readdir(resolved, { withFileTypes: true })
+
+    const entries = dirents
+      .filter(d => {
+        if (FS_READDIR_HIDDEN.has(d.name)) {
+          return false
+        }
+
+        return true
+      })
+      .map(d => ({ name: d.name, path: path.join(resolved, d.name), isDirectory: d.isDirectory() }))
+      .sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name))
+
+    return { entries }
+  } catch (error) {
+    return { entries: [], error: error?.code || 'read-error' }
+  }
+})
+
+ipcMain.handle('hermes:fs:gitRoot', async (_event, startPath) => {
+  const input = String(startPath || '')
+  const resolved = input.startsWith('file:') ? fileURLToPath(input) : path.resolve(input)
+
+  try {
+    const stat = await fs.promises.stat(resolved)
+    const start = stat.isDirectory() ? resolved : path.dirname(resolved)
+
+    return findGitRoot(start)
+  } catch {
+    return findGitRoot(resolved)
+  }
+})
 
 ipcMain.handle('hermes:terminal:start', async (event, payload = {}) => {
   if (!nodePty) {
-    throw new Error('PTY support is unavailable. Reinstall desktop dependencies and restart Lliam-GOV.')
+    throw new Error('PTY support is unavailable. Reinstall desktop dependencies and restart Hermes.')
   }
-
-  ensureSpawnHelperExecutable()
 
   const id = crypto.randomUUID()
   const { args, command, name } = terminalShellCommand()
@@ -5933,9 +5325,9 @@ ipcMain.handle('hermes:updates:branch:set', async (_event, name) => {
   return { branch }
 })
 
-// Resolve the canonical Lliam-GOV version (the one `release.py` bumps in
+// Resolve the canonical Hermes version (the one `release.py` bumps in
 // hermes_cli/__init__.py + pyproject.toml) so the desktop About panel shows the
-// real Lliam-GOV version instead of the Electron app's own package.json version,
+// real Hermes version instead of the Electron app's own package.json version,
 // which historically drifted (stuck at 0.0.2). Falls back to app.getVersion()
 // when the source tree can't be read (e.g. a packaged build without the repo).
 function resolveHermesVersion() {
@@ -5955,19 +5347,6 @@ function resolveHermesVersion() {
   return app.getVersion()
 }
 
-// Re-resolve the live Lliam-GOV version and push it into the native About panel
-// just before showing it, so an in-place `lliam-gov update` is reflected without
-// an app restart. macOS only — `showAboutPanel()` is a no-op elsewhere, and the
-// other platforms don't use this menu item.
-function showAboutPanelFresh() {
-  app.setAboutPanelOptions({
-    applicationName: APP_NAME,
-    applicationVersion: resolveHermesVersion(),
-    copyright: 'Copyright © 2026 Jerome Davis'
-  })
-  app.showAboutPanel()
-}
-
 ipcMain.handle('hermes:version', async () => ({
   appVersion: resolveHermesVersion(),
   electronVersion: process.versions.electron,
@@ -5975,205 +5354,6 @@ ipcMain.handle('hermes:version', async () => ({
   platform: process.platform,
   hermesRoot: resolveUpdateRoot()
 }))
-
-// ===========================================================================
-// Uninstall — remove the Chat GUI (and optionally the agent / user data).
-// ===========================================================================
-//
-// The renderer's About → Danger Zone surfaces three options that mirror the
-// CLI exactly: GUI only, Lite (keep user data), Full. We ask the agent to do
-// the actual removal via `hermes uninstall …` so the cross-platform PATH /
-// registry / service / node-symlink cleanup all lives in one place
-// (hermes_cli/uninstall.py + hermes_cli/gui_uninstall.py).
-//
-// getUninstallSummary() shells out to `--gui-summary` (a fast, no-side-effect
-// JSON probe) so the UI can gate options on what's actually installed — and
-// detect a missing agent (a future "lite client" that ships without the
-// bundled agent), hiding the agent/full options when there's nothing to remove.
-
-function uninstallVenvPython() {
-  return getVenvPython(VENV_ROOT)
-}
-
-async function getUninstallSummary() {
-  const py = uninstallVenvPython()
-  const agentRoot = ACTIVE_HERMES_ROOT
-  // Fast JS-side fallback used when the agent venv is gone (lite client) or the
-  // probe fails — the renderer still needs *something* to render options from.
-  const fallback = () => ({
-    hermes_home: HERMES_HOME,
-    agent_installed: isHermesSourceRoot(agentRoot) && fileExists(py),
-    gui_installed: true,
-    source_built_artifacts: [],
-    packaged_app_paths: [],
-    userdata_dir: app.getPath('userData'),
-    userdata_exists: true,
-    platform: process.platform,
-    probe: 'fallback'
-  })
-
-  if (!fileExists(py)) {
-    return fallback()
-  }
-
-  return new Promise(resolve => {
-    let stdout = ''
-    let settled = false
-    const done = value => {
-      if (settled) return
-      settled = true
-      resolve(value)
-    }
-    try {
-      const child = spawn(py, ['-m', 'hermes_cli.main', 'uninstall', '--gui-summary'], hiddenWindowsChildOptions({
-        cwd: agentRoot,
-        env: { ...process.env, HERMES_HOME, NO_COLOR: '1' },
-        stdio: ['ignore', 'pipe', 'ignore']
-      }))
-      child.stdout.on('data', chunk => {
-        stdout += chunk.toString()
-      })
-      child.on('error', () => done(fallback()))
-      child.on('exit', code => {
-        if (code !== 0) return done(fallback())
-        try {
-          const line = stdout.trim().split('\n').filter(Boolean).pop() || '{}'
-          const parsed = JSON.parse(line)
-          // The app bundle the renderer would be removing on *this* machine,
-          // resolved from the running exe (the Python probe only knows the
-          // standard locations, not where THIS build actually runs from).
-          parsed.running_app_path = resolveRemovableAppPath(process.execPath, process.platform, process.env)
-          done(parsed)
-        } catch {
-          done(fallback())
-        }
-      })
-      setTimeout(() => done(fallback()), 8000)
-    } catch {
-      done(fallback())
-    }
-  })
-}
-
-async function runDesktopUninstall(mode) {
-  let uninstallArgs
-  try {
-    uninstallArgs = uninstallArgsForMode(mode)
-  } catch (error) {
-    return { ok: false, error: 'invalid-mode', message: error.message }
-  }
-
-  const venvPy = uninstallVenvPython()
-  if (!fileExists(venvPy)) {
-    return {
-      ok: false,
-      error: 'agent-missing',
-      message: `Can't run the uninstaller: no Lliam-GOV venv at ${VENV_ROOT}.`
-    }
-  }
-
-  // Interpreter choice (Finding 3): lite/full rmtree the venv that holds the
-  // running python.exe. On Windows a running .exe is mandatory-locked, so the
-  // rmtree must NOT be driven by the venv's own interpreter — use a system
-  // Python with PYTHONPATH=<agentRoot> so `import hermes_cli` resolves from
-  // source while the venv is torn down. gui-only doesn't touch the venv, so the
-  // venv python is fine there. If no system Python exists (the Windows edge
-  // case), fall back to the venv python — gui-only is unaffected; lite/full may
-  // leave venv remnants the user can delete, which we log.
-  let py = venvPy
-  let pythonPath = null
-  if (modeRemovesAgent(mode)) {
-    const sysPy = findSystemPython()
-    if (sysPy) {
-      py = sysPy
-      pythonPath = ACTIVE_HERMES_ROOT
-    } else if (IS_WINDOWS) {
-      rememberLog(
-        '[uninstall] no system Python found for lite/full on Windows; falling back ' +
-          'to the venv python — venv files locked by the running interpreter may ' +
-          'remain and need manual deletion.'
-      )
-    }
-  }
-
-  const appPath = resolveRemovableAppPath(process.execPath, process.platform, process.env)
-  const removeBundle = shouldRemoveAppBundle(IS_PACKAGED, appPath) ? appPath : null
-
-  // CRITICAL (Windows): tear down every backend the desktop owns and wait for
-  // the venv shim to unlock BEFORE the cleanup script runs. lite/full delete
-  // the venv, and even gui-only removes the install tree's GUI artifacts — a
-  // live backend grandchild (gateway / pty / REPL) holding a mandatory file
-  // lock would make the script's rmdir half-fail (#37532 for the update path).
-  // Reuses the incident-hardened update teardown; no-op on macOS/Linux.
-  try {
-    await releaseBackendLock(ACTIVE_HERMES_ROOT, 'uninstall')
-  } catch (error) {
-    rememberLog(`[uninstall] backend teardown errored (continuing): ${error.message}`)
-  }
-
-  const scriptArgs = {
-    desktopPid: process.pid,
-    pythonExe: py,
-    pythonPath,
-    agentRoot: ACTIVE_HERMES_ROOT,
-    uninstallArgs,
-    appPath: removeBundle,
-    hermesHome: HERMES_HOME
-  }
-
-  let scriptPath
-  let runner
-  let runnerArgs
-  try {
-    if (IS_WINDOWS) {
-      scriptPath = path.join(app.getPath('temp'), `hermes-uninstall-${Date.now()}.cmd`)
-      fs.writeFileSync(scriptPath, buildWindowsCleanupScript(scriptArgs))
-      runner = process.env.ComSpec || 'cmd.exe'
-      runnerArgs = ['/c', scriptPath]
-    } else {
-      scriptPath = path.join(app.getPath('temp'), `hermes-uninstall-${Date.now()}.sh`)
-      fs.writeFileSync(scriptPath, buildPosixCleanupScript(scriptArgs), { mode: 0o755 })
-      runner = '/bin/bash'
-      runnerArgs = [scriptPath]
-    }
-  } catch (error) {
-    return { ok: false, error: 'script-write-failed', message: error.message }
-  }
-
-  try {
-    const child = spawn(runner, runnerArgs, {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true
-    })
-    child.unref()
-  } catch (error) {
-    return { ok: false, error: 'spawn-failed', message: error.message }
-  }
-
-  rememberLog(
-    `[uninstall] launched detached cleanup (${mode}): ${scriptPath} ` +
-      `(removesAgent=${modeRemovesAgent(mode)} removesUserData=${modeRemovesUserData(mode)} bundle=${removeBundle || 'none'})`
-  )
-
-  // Give the renderer a beat to show its "uninstalling…" state, then quit so
-  // the venv python shim + app bundle unlock and the cleanup script can run.
-  setTimeout(() => app.quit(), 800)
-  return { ok: true, mode, willRemoveAppBundle: Boolean(removeBundle), scriptPath }
-}
-
-ipcMain.handle('hermes:uninstall:summary', async () => getUninstallSummary())
-ipcMain.handle('hermes:uninstall:run', async (_event, payload) => {
-  const mode = payload && typeof payload === 'object' ? payload.mode : payload
-  return runDesktopUninstall(String(mode || ''))
-})
-
-// Download a VS Code Marketplace extension and return the raw color-theme JSON
-// it contributes. No theme code is executed — we only read JSON from the .vsix.
-ipcMain.handle('hermes:vscode-theme:fetch', async (_event, id) => fetchMarketplaceThemes(String(id || '')))
-
-// Search the Marketplace for color-theme extensions (empty query = top installs).
-ipcMain.handle('hermes:vscode-theme:search', async (_event, query) => searchMarketplaceThemes(String(query || ''), 20))
 
 app.whenReady().then(() => {
   if (IS_MAC) {
@@ -6189,14 +5369,7 @@ app.whenReady().then(() => {
   createWindow()
 
   app.on('activate', () => {
-    // Recreate the primary window if it's gone. Guard on mainWindow directly
-    // (not just total window count) so a dock click still restores the main
-    // window when only secondary session windows remain open.
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      createWindow()
-    } else {
-      focusWindow(mainWindow)
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 

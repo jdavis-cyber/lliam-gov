@@ -1,4 +1,4 @@
-"""On-demand supply-chain audit for Lliam-GOV installs.
+"""On-demand supply-chain audit for Hermes Agent installs.
 
 Scans three surfaces a Hermes user actually controls and we can map to
 upstream advisories without auth or extra binaries:
@@ -28,7 +28,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Iterable, Optional
 
 from hermes_constants import get_hermes_home
 

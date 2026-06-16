@@ -4,7 +4,6 @@ import { type NodeApi, type NodeRendererProps, Tree, type TreeApi } from 'react-
 import { PageLoader } from '@/components/page-loader'
 import { Codicon } from '@/components/ui/codicon'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
-import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 import type { TreeNode } from './use-project-tree'
@@ -123,9 +122,7 @@ export function ProjectTree({
 }
 
 function TreeSizingState() {
-  const { t } = useI18n()
-
-  return <PageLoader aria-label={t.rightSidebar.loadingFiles} className="min-h-24 px-3" />
+  return <PageLoader aria-label="Loading files" className="min-h-24 px-3" />
 }
 
 function ProjectTreeRow({
@@ -145,8 +142,7 @@ function ProjectTreeRow({
   }
 
   const isFolder = node.data.isDirectory
-  const isPlaceholder = Boolean(node.data.placeholder)
-  const isErrorPlaceholder = node.data.placeholder === 'error'
+  const isPlaceholder = node.data.id.endsWith('::__loading__')
 
   return (
     <div
@@ -211,10 +207,8 @@ function ProjectTreeRow({
       )}
       {!isFolder && <span aria-hidden className="w-3 shrink-0" />}
       <span aria-hidden className="flex w-3.5 items-center justify-center text-(--ui-text-tertiary)">
-        {isPlaceholder && !isErrorPlaceholder ? (
+        {isPlaceholder ? (
           <Codicon name="loading" size="0.75rem" spinning />
-        ) : isErrorPlaceholder ? (
-          <Codicon name="warning" size="0.75rem" />
         ) : isFolder ? (
           <Codicon name={node.isOpen ? 'folder-opened' : 'folder'} size="0.875rem" />
         ) : (

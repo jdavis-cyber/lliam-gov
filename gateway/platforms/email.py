@@ -451,26 +451,6 @@ class EmailAdapter(BasePlatformAdapter):
             allowed = {addr.strip().lower() for addr in allowed_raw.split(",") if addr.strip()}
             if sender_addr.lower() not in allowed:
                 logger.debug("[Email] Dropping non-allowlisted sender at dispatch: %s", sender_addr)
-                # LG-3.6 / AI-214: this deny bypasses GatewayRunner._is_user_authorized
-                # so the chokepoint audit hook never fires. Record here so the §5.2
-                # auth trail stays complete for the retained email adapter.
-                try:
-                    from lliam_gov.security.audit_logger import AuditLoggerError
-                    from lliam_gov.security.gateway_audit import audit_adapter_auth_deny
-
-                    try:
-                        audit_adapter_auth_deny(
-                            platform=Platform.EMAIL.value,
-                            user_id=sender_addr,
-                            chat_id=sender_addr,
-                        )
-                    except AuditLoggerError as exc:
-                        logger.error(
-                            "[Email] Failed to record auth-deny audit for %s: %s",
-                            sender_addr, exc,
-                        )
-                except Exception:
-                    logger.exception("[Email] Unexpected audit-hook error for %s", sender_addr)
                 return
 
         subject = msg_data["subject"]

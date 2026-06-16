@@ -5,19 +5,10 @@
 
 import type { DesktopTheme, DesktopThemeTypography } from './types'
 
-// Color-emoji fonts to append to every stack as a last resort. None of the UI
-// text/mono fonts carry emoji glyphs, so without this emoji render as tofu
-// boxes on platforms whose default text font lacks them (e.g. Linux/#40364).
-// Covers macOS, Windows, Linux, plus the `emoji` generic for anything else.
-export const EMOJI_FALLBACK =
-  '"Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", emoji'
-
 const SYSTEM_SANS =
-  '"Segoe WPC", "Segoe UI", -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif, ' +
-  EMOJI_FALLBACK
+  '"Segoe WPC", "Segoe UI", -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif'
 
-const SYSTEM_MONO =
-  '"Cascadia Code", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace, ' + EMOJI_FALLBACK
+const SYSTEM_MONO = '"Cascadia Code", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace'
 
 export const DEFAULT_TYPOGRAPHY: DesktopThemeTypography = { fontSans: SYSTEM_SANS, fontMono: SYSTEM_MONO }
 
@@ -29,14 +20,14 @@ const nousTint = (pct: number) => `color-mix(in srgb, ${NOUS_BLUE} ${pct}%, #FFF
 const nousTintTransparent = (pct: number) => `color-mix(in srgb, ${NOUS_BLUE} ${pct}%, transparent)`
 
 /**
- * Lliam-GOV — canonical desktop identity. The palette keeps the current
- * glass geometry neutral, then uses secure blue and warm highlights as accent
- * seeds.
+ * Nous — canonical Hermes desktop identity. The palette keeps the current
+ * glass geometry neutral, then lets the old bb/gui blue and psyche cream
+ * return as accent seeds.
  */
 export const nousTheme: DesktopTheme = {
   name: 'nous',
-  label: 'Lliam-GOV',
-  description: 'Glass neutrals with secure blue accents',
+  label: 'Nous',
+  description: 'Glass neutrals with Nous blue accents',
   colors: {
     background: '#F8FAFF',
     foreground: '#17171A',
@@ -237,8 +228,8 @@ export const cyberpunkTheme: DesktopTheme = {
     userBubbleBorder: '#004800'
   },
   typography: {
-    fontMono: `"Courier New", Courier, monospace, ${EMOJI_FALLBACK}`,
-    fontSans: `"Courier New", Courier, monospace, ${EMOJI_FALLBACK}`
+    fontMono: `"Courier New", Courier, monospace`,
+    fontSans: `"Courier New", Courier, monospace`
   }
 }
 

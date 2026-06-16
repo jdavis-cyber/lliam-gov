@@ -3,7 +3,6 @@
 import json
 from unittest.mock import ANY, call, patch
 
-import pytest
 
 from model_tools import (
     handle_function_call,
@@ -13,7 +12,6 @@ from model_tools import (
     _LEGACY_TOOLSET_MAP,
     TOOL_TO_TOOLSET_MAP,
 )
-from lliam_gov.security.audit_logger import AuditLoggerOpenError
 
 
 # =========================================================================
@@ -44,6 +42,7 @@ class TestHandleFunctionCall:
     def test_tool_hooks_receive_session_and_tool_call_ids(self):
         with (
             patch("model_tools.registry.dispatch", return_value='{"ok":true}'),
+            patch("hermes_cli.plugins.has_hook", return_value=True),
             patch("hermes_cli.plugins.invoke_hook") as mock_invoke_hook,
         ):
             result = handle_function_call(
@@ -63,6 +62,8 @@ class TestHandleFunctionCall:
                 task_id="task-1",
                 session_id="session-1",
                 tool_call_id="call-1",
+                turn_id="",
+                api_request_id="",
             ),
             call(
                 "post_tool_call",
@@ -72,7 +73,12 @@ class TestHandleFunctionCall:
                 task_id="task-1",
                 session_id="session-1",
                 tool_call_id="call-1",
+                turn_id="",
+                api_request_id="",
                 duration_ms=ANY,
+                status="ok",
+                error_type=None,
+                error_message=None,
             ),
             call(
                 "transform_tool_result",
@@ -82,7 +88,12 @@ class TestHandleFunctionCall:
                 task_id="task-1",
                 session_id="session-1",
                 tool_call_id="call-1",
+                turn_id="",
+                api_request_id="",
                 duration_ms=ANY,
+                status="ok",
+                error_type=None,
+                error_message=None,
             ),
         ]
 
@@ -94,6 +105,7 @@ class TestHandleFunctionCall:
         """
         with (
             patch("model_tools.registry.dispatch", return_value='{"ok":true}'),
+            patch("hermes_cli.plugins.has_hook", return_value=True),
             patch("hermes_cli.plugins.invoke_hook") as mock_invoke_hook,
         ):
             handle_function_call("web_search", {"q": "test"}, task_id="t1")
@@ -113,100 +125,25 @@ class TestHandleFunctionCall:
         # pre_tool_call does NOT get duration_ms (nothing has run yet).
         assert "duration_ms" not in kwargs_by_hook["pre_tool_call"]
 
-    def test_successful_tool_call_writes_start_and_end_audit_events(self, monkeypatch):
-        audit_events = []
-
-        class FakeAuditLogger:
-            def log_event(self, **kwargs):
-                audit_events.append(kwargs)
-
-        monkeypatch.setattr("model_tools._get_tool_audit_logger", FakeAuditLogger)
-
+    def test_no_listener_skips_post_and_transform_emit(self):
+        """When no plugin is registered for post_tool_call /
+        transform_tool_result, the emit path must short-circuit on
+        ``has_hook`` and never build/dispatch a payload — so the
+        no-listener hot path stays cheap.  ``pre_tool_call`` is always
+        polled (block-check), so it may still fire; the observer/transform
+        emits must not.
+        """
         with (
             patch("model_tools.registry.dispatch", return_value='{"ok":true}'),
-            patch("hermes_cli.plugins.invoke_hook", return_value=[]),
+            patch("hermes_cli.plugins.has_hook", return_value=False),
+            patch("hermes_cli.plugins.invoke_hook") as mock_invoke_hook,
         ):
-            result = handle_function_call(
-                "web_search",
-                {"q": "test"},
-                task_id="task-1",
-                tool_call_id="call-1",
-                session_id="session-1",
-            )
+            result = handle_function_call("web_search", {"q": "test"}, task_id="t1")
 
         assert result == '{"ok":true}'
-        assert [event["event_type"] for event in audit_events] == [
-            "tool_call_start",
-            "tool_call_end",
-        ]
-        assert audit_events[0]["tool_name"] == "web_search"
-        assert audit_events[0]["tool_call_id"] == "call-1"
-        assert audit_events[0]["session_id"] == "session-1"
-        assert audit_events[0]["params"] == {"q": "test"}
-        assert audit_events[1]["duration_ms"] >= 0
-        assert audit_events[1]["blocked"] is False
-        assert audit_events[1]["error"] is None
-
-    def test_tool_dispatch_error_writes_error_audit_event(self, monkeypatch):
-        audit_events = []
-
-        class FakeAuditLogger:
-            def log_event(self, **kwargs):
-                audit_events.append(kwargs)
-
-        monkeypatch.setattr("model_tools._get_tool_audit_logger", FakeAuditLogger)
-
-        with (
-            patch("model_tools.registry.dispatch", side_effect=RuntimeError("boom")),
-            patch("hermes_cli.plugins.invoke_hook", return_value=[]),
-        ):
-            result = json.loads(
-                handle_function_call(
-                    "web_search",
-                    {"q": "test"},
-                    task_id="task-1",
-                    tool_call_id="call-1",
-                    session_id="session-1",
-                )
-            )
-
-        assert "error" in result
-        assert [event["event_type"] for event in audit_events] == [
-            "tool_call_start",
-            "tool_call_error",
-        ]
-        assert audit_events[1]["tool_name"] == "web_search"
-        assert audit_events[1]["duration_ms"] >= 0
-        assert "boom" in audit_events[1]["error"]
-
-    def test_audit_logger_failure_blocks_tool_dispatch(self, monkeypatch):
-        dispatch_called = False
-
-        class FailingAuditLogger:
-            def log_event(self, **kwargs):
-                raise AuditLoggerOpenError("audit unavailable")
-
-        def fake_dispatch(*args, **kwargs):
-            nonlocal dispatch_called
-            dispatch_called = True
-            return '{"ok":true}'
-
-        monkeypatch.setattr("model_tools._get_tool_audit_logger", FailingAuditLogger)
-        monkeypatch.setattr("model_tools.registry.dispatch", fake_dispatch)
-
-        with patch("hermes_cli.plugins.invoke_hook", return_value=[]):
-            result = json.loads(
-                handle_function_call(
-                    "web_search",
-                    {"q": "test"},
-                    task_id="task-1",
-                    tool_call_id="call-1",
-                    session_id="session-1",
-                )
-            )
-
-        assert dispatch_called is False
-        assert "audit unavailable" in result["error"]
+        fired = {c.args[0] for c in mock_invoke_hook.call_args_list}
+        assert "post_tool_call" not in fired
+        assert "transform_tool_result" not in fired
 
 
 # =========================================================================
@@ -233,13 +170,10 @@ class TestPreToolCallBlocking:
     """Verify that pre_tool_call hooks can block tool execution."""
 
     def test_blocked_tool_returns_error_and_skips_dispatch(self, monkeypatch):
-        audit_events = []
-
-        class FakeAuditLogger:
-            def log_event(self, **kwargs):
-                audit_events.append(kwargs)
+        hook_calls = []
 
         def fake_invoke_hook(hook_name, **kwargs):
+            hook_calls.append((hook_name, kwargs))
             if hook_name == "pre_tool_call":
                 return [{"action": "block", "message": "Blocked by policy"}]
             return []
@@ -252,26 +186,18 @@ class TestPreToolCallBlocking:
             dispatch_called = True
             raise AssertionError("dispatch should not run when blocked")
 
-        monkeypatch.setattr("model_tools._get_tool_audit_logger", FakeAuditLogger)
         monkeypatch.setattr("hermes_cli.plugins.invoke_hook", fake_invoke_hook)
+        monkeypatch.setattr("hermes_cli.plugins.has_hook", lambda name: True)
         monkeypatch.setattr("model_tools.registry.dispatch", fake_dispatch)
 
         result = json.loads(handle_function_call("read_file", {"path": "test.txt"}, task_id="t1"))
         assert result == {"error": "Blocked by policy"}
         assert not dispatch_called
-        assert audit_events == [
-            {
-                "event_type": "tool_call_blocked",
-                "session_id": "",
-                "tool_name": "read_file",
-                "tool_call_id": "",
-                "params": {"path": "test.txt"},
-                "duration_ms": 0,
-                "blocked": True,
-                "block_reason": "Blocked by policy",
-                "error": "Blocked by policy",
-            }
-        ]
+        post_call = next(call for call in hook_calls if call[0] == "post_tool_call")
+        assert post_call[1]["status"] == "blocked"
+        assert post_call[1]["error_type"] == "plugin_block"
+        assert post_call[1]["error_message"] == "Blocked by policy"
+        assert post_call[1]["duration_ms"] == 0
 
     def test_blocked_tool_skips_read_loop_notification(self, monkeypatch):
         notifications = []
@@ -325,6 +251,7 @@ class TestPreToolCallBlocking:
             return []
 
         monkeypatch.setattr("hermes_cli.plugins.invoke_hook", fake_invoke_hook)
+        monkeypatch.setattr("hermes_cli.plugins.has_hook", lambda name: True)
         monkeypatch.setattr("model_tools.registry.dispatch",
                             lambda *a, **kw: json.dumps({"ok": True}))
 

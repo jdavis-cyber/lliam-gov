@@ -21,12 +21,7 @@ def has_xai_credentials() -> bool:
 
     1. ``XAI_API_KEY`` env var (cheapest; covers explicit-key users).
     2. ``~/.hermes/auth.json`` has a non-empty ``providers.xai-oauth.tokens.access_token``
-       (single file read, no expiry check, no refresh). The read is routed
-       through :func:`lliam_gov.security.state_codec.decode_state_bytes` so an
-       encrypted auth store (``LLIAM_GOV_ENCRYPT_STATE=1``) decrypts transparently
-       — without this, the probe would silently report "no credentials" for
-       OAuth users on the encrypted profile (LG-3.7 / AI-215 P2). The codec is
-       a no-op on plaintext, so plaintext profiles never touch the Keychain.
+       (single file read, no expiry check, no refresh).
 
     Returns False on any exception so a corrupted auth store can't block
     other availability scans. Truthful refresh + expiry handling happens
@@ -36,13 +31,11 @@ def has_xai_credentials() -> bool:
         return True
     try:
         from hermes_constants import get_hermes_home
-        from lliam_gov.security.state_codec import decode_state_bytes
 
         auth_path = get_hermes_home() / "auth.json"
         if not auth_path.exists():
             return False
-        decoded = decode_state_bytes(auth_path.read_bytes())
-        store = json.loads(decoded.decode("utf-8"))
+        store = json.loads(auth_path.read_text())
         providers = store.get("providers") if isinstance(store, dict) else None
         xai_state = providers.get("xai-oauth") if isinstance(providers, dict) else None
         tokens = xai_state.get("tokens") if isinstance(xai_state, dict) else None

@@ -7,7 +7,6 @@ import { type FormEvent, type KeyboardEvent, useCallback, useMemo, useRef, useSt
 import { ToolFallback } from '@/components/assistant-ui/tool-fallback'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { Check, HelpCircle, Loader2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -64,8 +63,6 @@ export const ClarifyTool = (props: ToolCallMessagePartProps) => {
 }
 
 function ClarifyToolPending({ args }: ToolCallMessagePartProps) {
-  const { t } = useI18n()
-  const copy = t.assistant.clarify
   const request = useStore($clarifyRequest)
   const gateway = useStore($gateway)
   const fromArgs = useMemo(() => readClarifyArgs(args), [args])
@@ -105,13 +102,13 @@ function ClarifyToolPending({ args }: ToolCallMessagePartProps) {
   const respond = useCallback(
     async (answer: string) => {
       if (!ready || !matchingRequest) {
-        notifyError(new Error(copy.notReady), copy.sendFailed)
+        notifyError(new Error('Clarify request is not ready yet'), 'Could not send clarify response')
 
         return
       }
 
       if (!gateway) {
-        notifyError(new Error(copy.gatewayDisconnected), copy.sendFailed)
+        notifyError(new Error('Hermes gateway is not connected'), 'Could not send clarify response')
 
         return
       }
@@ -128,7 +125,7 @@ function ClarifyToolPending({ args }: ToolCallMessagePartProps) {
         // The matching tool.complete will land shortly after, swapping this
         // panel for the ToolFallback view above.
       } catch (error) {
-        notifyError(error, copy.sendFailed)
+        notifyError(error, 'Could not send clarify response')
         setSubmitting(false)
       }
     },
@@ -163,19 +160,19 @@ function ClarifyToolPending({ args }: ToolCallMessagePartProps) {
 
   return (
     <div
-      className="relative mb-3 mt-2 grid gap-6 rounded-[0.5rem] border border-border/70 bg-card/40 px-3 py-2.5 text-sm shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_3%,transparent)]"
+      className="relative mb-3 mt-2 grid gap-2 rounded-[0.5rem] border border-border/70 bg-card/40 px-3 py-2.5 text-sm shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_3%,transparent)]"
       data-slot="clarify-inline"
     >
       <span aria-hidden className="arc-border" />
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-center gap-2.5">
         <span
           aria-hidden
-          className="mt-px grid size-6 shrink-0 place-items-center rounded-md bg-[color-mix(in_srgb,var(--dt-primary)_14%,transparent)] text-primary ring-1 ring-inset ring-primary/15"
+          className="grid size-6 shrink-0 place-items-center rounded-md bg-[color-mix(in_srgb,var(--dt-primary)_14%,transparent)] text-primary ring-1 ring-inset ring-primary/15"
         >
           <HelpCircle className="size-3.5" />
         </span>
         <span className="flex-1 whitespace-pre-wrap font-medium leading-snug text-foreground">
-          {question || <em className="font-normal text-muted-foreground/70">{copy.loadingQuestion}</em>}
+          {question || <em className="font-normal text-muted-foreground/70">Loading question…</em>}
         </span>
       </div>
 
@@ -212,7 +209,7 @@ function ClarifyToolPending({ args }: ToolCallMessagePartProps) {
             type="button"
           >
             <RadioDot selected={false} />
-            <span className="flex-1">{copy.other}</span>
+            <span className="flex-1">Other (type your answer)</span>
           </button>
         </div>
       )}
@@ -224,12 +221,12 @@ function ClarifyToolPending({ args }: ToolCallMessagePartProps) {
             disabled={submitting}
             onChange={event => setDraft(event.target.value)}
             onKeyDown={handleTextareaKey}
-            placeholder={copy.placeholder}
+            placeholder="Type your answer…"
             ref={textareaRef}
             value={draft}
           />
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[0.6875rem] text-muted-foreground/85">{copy.shortcut}</span>
+            <span className="text-[0.6875rem] text-muted-foreground/85">⌘/Ctrl + Enter to send</span>
             <div className="flex items-center gap-1.5">
               {hasChoices && (
                 <Button
@@ -242,7 +239,7 @@ function ClarifyToolPending({ args }: ToolCallMessagePartProps) {
                   type="button"
                   variant="ghost"
                 >
-                  {copy.back}
+                  Back
                 </Button>
               )}
               <Button
@@ -252,10 +249,10 @@ function ClarifyToolPending({ args }: ToolCallMessagePartProps) {
                 type="button"
                 variant="ghost"
               >
-                {copy.skip}
+                Skip
               </Button>
               <Button disabled={!ready || submitting || !draft.trim()} size="sm" type="submit">
-                {submitting ? <Loader2 className="size-3.5 animate-spin" /> : copy.send}
+                {submitting ? <Loader2 className="size-3.5 animate-spin" /> : 'Send'}
               </Button>
             </div>
           </div>
@@ -264,16 +261,14 @@ function ClarifyToolPending({ args }: ToolCallMessagePartProps) {
 
       {!typing && hasChoices && (
         <div className="flex justify-end">
-          <Button
-            className="-mr-2"
+          <button
+            className="bg-transparent text-[0.6875rem] text-muted-foreground/70 underline-offset-4 hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!ready || submitting}
             onClick={() => void respond('')}
-            size="xs"
             type="button"
-            variant="text"
           >
-            {copy.skip}
-          </Button>
+            Skip
+          </button>
         </div>
       )}
     </div>

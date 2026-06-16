@@ -129,95 +129,6 @@ def _safe_copy_db(src: Path, dst: Path) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Backup encryption at rest (SP 800-171 3.8.9, AI-279)
-# ---------------------------------------------------------------------------
-
-# Suffix appended to the .zip when the archive is encrypted at rest.
-ENCRYPTED_BACKUP_SUFFIX = ".enc"
-
-
-def _backup_encryption_enabled() -> bool:
-    """Backups encrypt whenever persisted-state encryption is on.
-
-    Single gate (``LLIAM_GOV_ENCRYPT_STATE=1``) so the production profile can't
-    end up with encrypted live state but plaintext CUI in backup archives.
-    """
-    from lliam_gov.security.state_codec import state_encryption_enabled
-
-    return state_encryption_enabled()
-
-
-def _backup_key_manager(key_manager=None):
-    if key_manager is not None:
-        return key_manager
-    from lliam_gov.security.encrypted_file import get_shared_key_manager
-
-    return get_shared_key_manager()
-
-
-def encrypt_backup_archive(zip_path: Path, *, key_manager=None) -> Path:
-    """Encrypt a completed backup zip to ``<name>.zip.enc`` and remove plaintext.
-
-    Fail-closed: the plaintext zip is removed in BOTH outcomes — on success it
-    is replaced by the ciphertext file, on failure it is deleted before the
-    error propagates, so an unencryptable backup never leaves CUI at rest.
-
-    NOTE ``EncryptedFile`` is deliberately not used here: its atomic writer
-    chmods the destination directory to 0700, which is wrong for user-chosen
-    output locations (``--output /tmp`` would lock down /tmp). The archive is
-    written 0600 in the same KeyManager wire format, so ``hermes import``
-    recognizes it.
-
-    Restorability: the ciphertext is bound to the CURRENT Keychain key. After
-    ``lliam-gov rotate-key`` the old key is gone and prior encrypted backups
-    become unreadable — the rotate runbook requires taking a fresh backup
-    immediately after rotation.
-    """
-    enc_path = zip_path.with_name(zip_path.name + ENCRYPTED_BACKUP_SUFFIX)
-    try:
-        km = _backup_key_manager(key_manager)
-        ciphertext = km.encrypt(zip_path.read_bytes())
-        fd = os.open(enc_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        try:
-            os.write(fd, ciphertext)
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-    except BaseException:
-        enc_path.unlink(missing_ok=True)
-        zip_path.unlink(missing_ok=True)
-        raise
-    zip_path.unlink(missing_ok=True)
-    return enc_path
-
-
-def decrypt_backup_archive(enc_path: Path, *, key_manager=None) -> Path:
-    """Decrypt an encrypted backup to a 0600 temp zip; caller deletes it."""
-    km = _backup_key_manager(key_manager)
-    plaintext = km.decrypt(enc_path.read_bytes())
-    fd, tmp_name = tempfile.mkstemp(suffix=".zip", prefix="lliam-backup-")
-    try:
-        os.fchmod(fd, 0o600)
-        os.write(fd, plaintext)
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    return Path(tmp_name)
-
-
-def _looks_like_encrypted_backup(path: Path) -> bool:
-    """Static wire-format sniff that never touches the Keychain."""
-    from lliam_gov.security.state_codec import looks_encrypted
-
-    try:
-        with open(path, "rb") as fh:
-            head = fh.read(64)
-    except OSError:
-        return False
-    return looks_encrypted(head)
-
-
-# ---------------------------------------------------------------------------
 # Backup
 # ---------------------------------------------------------------------------
 
@@ -324,19 +235,6 @@ def run_backup(args) -> None:
     elapsed = time.monotonic() - t0
     zip_size = out_path.stat().st_size
 
-    # Encrypt at rest (SP 800-171 3.8.9). Fail-closed: if encryption is
-    # enabled but fails, the plaintext zip is deleted and the command exits
-    # non-zero — a backup containing CUI never persists unencrypted.
-    if _backup_encryption_enabled():
-        try:
-            out_path = encrypt_backup_archive(out_path)
-        except Exception as exc:
-            print(f"Error: backup encryption failed ({exc}).")
-            print("Fail-closed: the plaintext archive was deleted. "
-                  "No backup was produced.")
-            sys.exit(1)
-        print(f"Encrypted at rest: {out_path.name} (AES-256-GCM)")
-
     # Summary
     print()
     print(f"Backup complete: {out_path}")
@@ -416,35 +314,13 @@ def _detect_prefix(zf: zipfile.ZipFile) -> str:
 
 
 def run_import(args) -> None:
-    """Restore a Hermes backup from a zip file (plaintext or encrypted)."""
+    """Restore a Hermes backup from a zip file."""
     zip_path = Path(args.zipfile).expanduser().resolve()
 
     if not zip_path.is_file():
         print(f"Error: File not found: {zip_path}")
         sys.exit(1)
 
-    # Encrypted-at-rest backup (SP 800-171 3.8.9): decrypt to a 0600 temp zip
-    # for the duration of the import, then remove it.
-    decrypted_tmp: Optional[Path] = None
-    if not zipfile.is_zipfile(zip_path) and _looks_like_encrypted_backup(zip_path):
-        print("Encrypted backup detected; decrypting ...")
-        try:
-            zip_path = decrypted_tmp = decrypt_backup_archive(zip_path)
-        except Exception as exc:
-            print(f"Error: cannot decrypt backup archive: {exc}")
-            print("The archive is bound to the Keychain key that encrypted it; "
-                  "backups taken before a rotate-key cannot be restored.")
-            sys.exit(1)
-
-    try:
-        _run_import_zip(zip_path, args)
-    finally:
-        if decrypted_tmp is not None:
-            decrypted_tmp.unlink(missing_ok=True)
-
-
-def _run_import_zip(zip_path: Path, args) -> None:
-    """Import a plaintext backup zip onto the Hermes home root."""
     if not zipfile.is_zipfile(zip_path):
         print(f"Error: Not a valid zip file: {zip_path}")
         sys.exit(1)
@@ -636,6 +512,7 @@ def _quick_snapshot_root(hermes_home: Optional[Path] = None) -> Path:
 def create_quick_snapshot(
     label: Optional[str] = None,
     hermes_home: Optional[Path] = None,
+    keep: Optional[int] = None,
 ) -> Optional[str]:
     """Create a quick state snapshot of critical files.
 
@@ -709,8 +586,10 @@ def create_quick_snapshot(
     with open(snap_dir / "manifest.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 
-    # Auto-prune
-    _prune_quick_snapshots(root, keep=_QUICK_DEFAULT_KEEP)
+    # Auto-prune. Defaults preserve historical manual /snapshot behavior; callers
+    # with known high-churn safety snapshots (for example pre-update) can pass a
+    # smaller keep value so large state.db copies do not accumulate indefinitely.
+    _prune_quick_snapshots(root, keep=_QUICK_DEFAULT_KEEP if keep is None else keep)
 
     logger.info("State snapshot created: %s (%d files)", snap_id, len(manifest))
     return snap_id
@@ -789,6 +668,105 @@ def restore_quick_snapshot(
 
     logger.info("Restored %d files from snapshot %s", restored, snapshot_id)
     return restored > 0
+
+
+# Relative path of the cron job database inside HERMES_HOME. Kept in sync with
+# the entry in ``_QUICK_STATE_FILES`` and with ``cron/jobs.py``'s ``JOBS_FILE``.
+_CRON_JOBS_REL = "cron/jobs.json"
+
+
+def _count_cron_jobs(path: Path) -> Optional[int]:
+    """Return the number of cron jobs stored in ``path``.
+
+    The canonical on-disk shape is ``{"jobs": [...]}`` (see ``cron/jobs.py``).
+    A legacy bare-list shape (``[...]``) is also honoured.
+
+    Returns:
+        The job count for any *valid, readable* JSON document, or ``None`` if
+        the file is missing or cannot be parsed. ``None`` means "unknown" —
+        callers must not treat it as "zero jobs", because acting on an
+        unreadable file could mask a real corruption the user needs to see.
+    """
+    if not path.is_file():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if isinstance(data, dict):
+        jobs = data.get("jobs", [])
+        return len(jobs) if isinstance(jobs, list) else None
+    if isinstance(data, list):
+        return len(data)
+    return None
+
+
+def restore_cron_jobs_if_emptied(
+    snapshot_id: str,
+    hermes_home: Optional[Path] = None,
+) -> Optional[Dict[str, Any]]:
+    """Safety net for silent cron-job loss across ``hermes update``.
+
+    Config-version migrations have been observed to leave ``cron/jobs.json``
+    valid-but-empty after an update, silently dropping every scheduled job
+    (issue #34600). The existing malformed-shape guards in ``cron/jobs.py``
+    don't catch this case because ``{"jobs": []}`` is perfectly valid JSON.
+
+    This compares the *current* job count against the pre-update snapshot. If
+    the live file now has **zero** jobs while the snapshot captured **one or
+    more**, the snapshot copy of ``cron/jobs.json`` is restored in place.
+
+    The check is deliberately conservative — it only ever restores when there
+    is unambiguous evidence of loss (snapshot had jobs, live file has none),
+    so a user who genuinely deleted all their jobs during/after the update is
+    never second-guessed, and an unreadable live file (count ``None``) is left
+    untouched so real corruption still surfaces.
+
+    Args:
+        snapshot_id: The pre-update quick-snapshot id (from
+            :func:`create_quick_snapshot`).
+        hermes_home: Override for the Hermes home directory (tests).
+
+    Returns:
+        ``None`` when no action was taken (the common, healthy path). On a
+        successful restore, a dict ``{"restored": True, "job_count": N,
+        "snapshot_id": ...}`` so the caller can warn the user.
+    """
+    if not snapshot_id:
+        return None
+
+    home = hermes_home or get_hermes_home()
+    live_path = home / _CRON_JOBS_REL
+
+    live_count = _count_cron_jobs(live_path)
+    # Only act when the live file is readable AND empty. ``None`` (missing or
+    # unparseable) is intentionally left alone — that's a different failure
+    # mode the user should see rather than have papered over.
+    if live_count is None or live_count > 0:
+        return None
+
+    snap_path = _quick_snapshot_root(home) / snapshot_id / _CRON_JOBS_REL
+    snap_count = _count_cron_jobs(snap_path)
+    if not snap_count:  # None or 0 — nothing worth restoring
+        return None
+
+    try:
+        live_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(snap_path, live_path)
+    except (OSError, PermissionError) as exc:
+        logger.error(
+            "Cron jobs were emptied during update but auto-restore failed: %s", exc
+        )
+        return None
+
+    logger.warning(
+        "Restored %d cron job(s) from pre-update snapshot %s "
+        "(cron/jobs.json was emptied during migration)",
+        snap_count,
+        snapshot_id,
+    )
+    return {"restored": True, "job_count": snap_count, "snapshot_id": snapshot_id}
 
 
 def _prune_quick_snapshots(root: Path, keep: int = _QUICK_DEFAULT_KEEP) -> int:

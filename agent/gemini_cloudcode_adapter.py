@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 import uuid
 from types import SimpleNamespace
@@ -48,39 +47,6 @@ from agent.google_code_assist import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Short rate-limit (429) auto-recovery
-# =============================================================================
-# Google Code Assist enforces a per-minute request cap even on paid (AI Pro)
-# tiers; a brief burst returns HTTP 429 with a RetryInfo hint (e.g. "23s").
-# Rather than surface that short window as a hard failure, we wait it out and
-# retry in place. Bounded + env-tunable so a turn can never hang indefinitely,
-# and genuine daily-quota exhaustion (no/long retry hint) still fails fast.
-_RL_MAX_RETRIES = max(0, int(os.getenv("HERMES_GEMINI_429_RETRIES", "2") or 0))
-_RL_MAX_WAIT_S = max(0.0, float(os.getenv("HERMES_GEMINI_429_MAX_WAIT", "30") or 0.0))
-
-
-def _bounded_rate_limit_wait(err: "CodeAssistError") -> Optional[float]:
-    """Seconds to wait before retrying a 429, or None if we should NOT retry.
-
-    Returns a positive, bounded wait only for a rate-limit (429) carrying a
-    positive Retry-After/RetryInfo hint within the configured cap. A non-429,
-    a missing/unparseable hint, or a hint longer than the cap returns None,
-    preserving fail-fast behavior for genuine exhaustion.
-    """
-    if getattr(err, "status_code", None) != 429:
-        return None
-    raw = getattr(err, "retry_after", None)
-    try:
-        delay = float(raw)
-    except (TypeError, ValueError):
-        return None
-    if delay <= 0 or delay > _RL_MAX_WAIT_S:
-        return None
-    # Small cushion so we resume just after the window resets.
-    return min(delay + 1.0, _RL_MAX_WAIT_S)
 
 
 # =============================================================================
@@ -749,19 +715,9 @@ class GeminiCloudCodeClient:
             return self._stream_completion(model=model, wrapped=wrapped, headers=headers)
 
         url = f"{CODE_ASSIST_ENDPOINT}/v1internal:generateContent"
-        for _attempt in range(_RL_MAX_RETRIES + 1):
-            response = self._http.post(url, json=wrapped, headers=headers)
-            if response.status_code == 200:
-                break
-            err = _gemini_http_error(response)
-            wait = _bounded_rate_limit_wait(err) if _attempt < _RL_MAX_RETRIES else None
-            if wait is None:
-                raise err
-            logger.info(
-                "Gemini 429 — waiting %.1fs then retrying (attempt %d/%d).",
-                wait, _attempt + 1, _RL_MAX_RETRIES,
-            )
-            time.sleep(wait)
+        response = self._http.post(url, json=wrapped, headers=headers)
+        if response.status_code != 200:
+            raise _gemini_http_error(response)
         try:
             payload = response.json()
         except ValueError as exc:
@@ -785,33 +741,15 @@ class GeminiCloudCodeClient:
 
         def _generator() -> Iterator[_GeminiStreamChunk]:
             try:
-                for _attempt in range(_RL_MAX_RETRIES + 1):
-                    _retry_wait: Optional[float] = None
-                    with self._http.stream("POST", url, json=wrapped, headers=stream_headers) as response:
-                        if response.status_code != 200:
-                            # Materialize error body for better diagnostics
-                            response.read()
-                            err = _gemini_http_error(response)
-                            # A 429 happens at stream-open, before any chunk is
-                            # delivered, so a short-window retry is safe here.
-                            _retry_wait = (
-                                _bounded_rate_limit_wait(err)
-                                if _attempt < _RL_MAX_RETRIES else None
-                            )
-                            if _retry_wait is None:
-                                raise err
-                        else:
-                            tool_call_counter: List[int] = [0]
-                            for event in _iter_sse_events(response):
-                                for chunk in _translate_stream_event(event, model, tool_call_counter):
-                                    yield chunk
-                            return
-                    # Response is closed here; safe to wait then reopen.
-                    logger.info(
-                        "Gemini 429 (stream) — waiting %.1fs then retrying (attempt %d/%d).",
-                        _retry_wait, _attempt + 1, _RL_MAX_RETRIES,
-                    )
-                    time.sleep(_retry_wait)
+                with self._http.stream("POST", url, json=wrapped, headers=stream_headers) as response:
+                    if response.status_code != 200:
+                        # Materialize error body for better diagnostics
+                        response.read()
+                        raise _gemini_http_error(response)
+                    tool_call_counter: List[int] = [0]
+                    for event in _iter_sse_events(response):
+                        for chunk in _translate_stream_event(event, model, tool_call_counter):
+                            yield chunk
             except httpx.HTTPError as exc:
                 raise CodeAssistError(
                     f"Streaming request failed: {exc}",

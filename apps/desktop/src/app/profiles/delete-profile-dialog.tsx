@@ -1,6 +1,5 @@
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { deleteProfile } from '@/hermes'
-import { useI18n } from '@/i18n'
 import { $activeGatewayProfile, normalizeProfileKey, selectProfile, setActiveProfile } from '@/store/profile'
 
 // Thin wrapper over ConfirmDialog: owns the deleteProfile call, inherits
@@ -17,26 +16,20 @@ export function DeleteProfileDialog({
   onDeleted?: () => Promise<void> | void
   open: boolean
 }) {
-  const { t } = useI18n()
-  const p = t.profiles
-
   return (
     <ConfirmDialog
-      busyLabel={p.deleting}
-      confirmLabel={t.common.delete}
+      busyLabel="Deleting…"
+      confirmLabel="Delete"
       description={
         profile ? (
           <>
-            {p.deleteDescPrefix}
-            <span className="font-medium text-foreground">{profile.name}</span>
-            {p.deleteDescMid}
-            <span className="font-mono text-xs">{profile.path}</span>
-            {p.deleteDescSuffix}
+            This will delete <span className="font-medium text-foreground">{profile.name}</span> and remove its{' '}
+            <span className="font-mono text-xs">{profile.path}</span> directory. This cannot be undone.
           </>
         ) : null
       }
       destructive
-      doneLabel={p.deleted}
+      doneLabel="Deleted"
       onClose={onClose}
       onConfirm={async () => {
         if (!profile) {
@@ -59,7 +52,7 @@ export function DeleteProfileDialog({
         }
       }}
       open={open}
-      title={p.deleteTitle}
+      title="Delete profile?"
     />
   )
 }

@@ -262,9 +262,10 @@ def _clear_tool_defs_cache() -> None:
 
 
 def get_tool_definitions(
-    enabled_toolsets: List[str] = None,
-    disabled_toolsets: List[str] = None,
+    enabled_toolsets: Optional[List[str]] = None,
+    disabled_toolsets: Optional[List[str]] = None,
     quiet_mode: bool = False,
+    skip_tool_search_assembly: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Get tool definitions for model API calls with toolset-based filtering.
@@ -275,6 +276,11 @@ def get_tool_definitions(
         enabled_toolsets: Only include tools from these toolsets.
         disabled_toolsets: Exclude tools from these toolsets (if enabled_toolsets is None).
         quiet_mode: Suppress status prints.
+        skip_tool_search_assembly: When True, return the pre-assembly tool list
+            (raw schemas for every enabled tool). Used internally by the
+            tool_search / tool_describe bridge handlers so they can read the
+            real catalog, not the already-collapsed one. Public callers should
+            leave this False.
 
     Returns:
         Filtered list of OpenAI-format tool definitions.
@@ -301,6 +307,7 @@ def get_tool_definitions(
             registry._generation,
             cfg_fp,
             bool(os.environ.get("HERMES_KANBAN_TASK")),
+            bool(skip_tool_search_assembly),
         )
         cached = _tool_defs_cache.get(cache_key)
         if cached is not None:
@@ -312,7 +319,8 @@ def get_tool_definitions(
             # schemas are treated as read-only by all known callers.
             return list(cached)
 
-    result = _compute_tool_definitions(enabled_toolsets, disabled_toolsets, quiet_mode)
+    result = _compute_tool_definitions(enabled_toolsets, disabled_toolsets, quiet_mode,
+                                       skip_tool_search_assembly=skip_tool_search_assembly)
     if quiet_mode:
         # Cache the freshly-computed list, but hand callers a shallow copy so
         # downstream mutations (e.g. run_agent appending memory/LCM tool
@@ -327,9 +335,10 @@ def get_tool_definitions(
 
 
 def _compute_tool_definitions(
-    enabled_toolsets: List[str] = None,
-    disabled_toolsets: List[str] = None,
+    enabled_toolsets: Optional[List[str]] = None,
+    disabled_toolsets: Optional[List[str]] = None,
     quiet_mode: bool = False,
+    skip_tool_search_assembly: bool = False,
 ) -> List[Dict[str, Any]]:
     """Uncached implementation of :func:`get_tool_definitions`."""
     # Determine which tool names the caller wants
@@ -481,7 +490,59 @@ def _compute_tool_definitions(
     except Exception as e:  # pragma: no cover — defensive
         logger.warning("Schema sanitization skipped: %s", e)
 
+    # ── Tool Search (progressive disclosure) ────────────────────────────
+    # Conditionally replace MCP + plugin (non-core) tools with three bridge
+    # tools (tool_search / tool_describe / tool_call) when the deferrable
+    # surface exceeds the configured threshold (default 10% of context
+    # window). Core Hermes tools (toolsets._HERMES_CORE_TOOLS) are NEVER
+    # deferred. See tools/tool_search.py for full design notes.
+    #
+    # This is deliberately the last step before returning — sanitization
+    # has already normalized schemas, and the assembly is idempotent in
+    # case some caller invokes get_tool_definitions twice.
+    try:
+        from tools.tool_search import assemble_tool_defs, load_config as _load_ts_config
+        ts_cfg = _load_ts_config()
+        if not skip_tool_search_assembly and ts_cfg.enabled != "off":
+            context_length = _resolve_active_context_length()
+            assembly = assemble_tool_defs(
+                filtered_tools,
+                context_length=context_length,
+                config=ts_cfg,
+            )
+            if assembly.activated and not quiet_mode:
+                print(
+                    f"🔎 Tool Search: {assembly.deferred_count} MCP/plugin tools deferred "
+                    f"(~{assembly.deferred_tokens} tokens) behind tool_search/describe/call. "
+                    f"Threshold ~{assembly.threshold_tokens} tokens."
+                )
+            filtered_tools = assembly.tool_defs
+    except Exception as e:  # pragma: no cover — never break tool loading
+        logger.warning("Tool search assembly skipped: %s", e)
+
     return filtered_tools
+
+
+def _resolve_active_context_length() -> int:
+    """Look up the active model's context length for the tool-search gate.
+
+    Returns 0 when the model can't be resolved — ``should_activate`` falls
+    back to a fixed token cutoff in that case.
+    """
+    try:
+        from hermes_cli.config import load_config as _load
+        cfg = _load() or {}
+        model_cfg = cfg.get("model") if isinstance(cfg.get("model"), dict) else {}
+        if not isinstance(model_cfg, dict):
+            model_cfg = {}
+        model_id = (model_cfg.get("model") or model_cfg.get("default") or "").strip()
+        if not model_id:
+            return 0
+        from agent.model_metadata import get_model_context_length
+        return int(get_model_context_length(model_id) or 0)
+    except Exception as e:
+        logger.debug("Could not resolve active context length: %s", e)
+        return 0
 
 
 # =============================================================================
@@ -494,36 +555,6 @@ def _compute_tool_definitions(
 # so if something slips through, the LLM sees a sensible message.
 _AGENT_LOOP_TOOLS = {"todo", "memory", "session_search", "delegate_task"}
 _READ_SEARCH_TOOLS = {"read_file", "search_files"}
-
-
-def _get_tool_audit_logger():
-    """Return the process audit logger for tool dispatch events."""
-
-    from lliam_gov.security.audit_logger import get_shared_audit_logger
-
-    return get_shared_audit_logger()
-
-
-def _tool_audit_failure(exc: Exception) -> str:
-    return json.dumps(
-        {"error": f"Audit logging failed closed: {exc}"},
-        ensure_ascii=False,
-    )
-
-
-def _audit_tool_event(**kwargs) -> str | None:
-    """Append a tool audit event.
-
-    Returns a JSON error string when audit logging fails, because tool
-    dispatch must fail closed if audit evidence cannot be written.
-    """
-
-    try:
-        _get_tool_audit_logger().log_event(**kwargs)
-    except Exception as exc:
-        logger.error("tool audit logging failed closed: %s", exc, exc_info=True)
-        return _tool_audit_failure(exc)
-    return None
 
 
 # =========================================================================
@@ -768,15 +799,78 @@ def _coerce_boolean(value: str):
     return value
 
 
+def _tool_result_observer_fields(result: Any) -> tuple[str, Optional[str], Optional[str]]:
+    try:
+        parsed_result = json.loads(result) if isinstance(result, str) else result
+        if isinstance(parsed_result, dict) and parsed_result.get("error"):
+            return "error", "tool_error", str(parsed_result.get("error"))
+    except Exception:
+        pass
+    return "ok", None, None
+
+
+def _emit_post_tool_call_hook(
+    *,
+    function_name: str,
+    function_args: Dict[str, Any],
+    result: Any,
+    task_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    tool_call_id: Optional[str] = None,
+    turn_id: Optional[str] = None,
+    api_request_id: Optional[str] = None,
+    duration_ms: int = 0,
+    status: Optional[str] = None,
+    error_type: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> None:
+    """Emit the ``post_tool_call`` observer hook.
+
+    No-ops cheaply when no plugin has registered for ``post_tool_call`` —
+    the ``has_hook`` gate skips both the result-field derivation and the
+    payload dispatch so the no-listener path costs one dict lookup.  When
+    ``status`` is not supplied, the ok/error fields are derived from the
+    result *after* the gate (parsing the result is only worth it when a
+    listener will actually consume it).
+    """
+    try:
+        from hermes_cli.plugins import has_hook, invoke_hook
+        if not has_hook("post_tool_call"):
+            return
+        if status is None:
+            status, error_type, error_message = _tool_result_observer_fields(result)
+        invoke_hook(
+            "post_tool_call",
+            tool_name=function_name,
+            args=function_args,
+            result=result,
+            task_id=task_id or "",
+            session_id=session_id or "",
+            tool_call_id=tool_call_id or "",
+            turn_id=turn_id or "",
+            api_request_id=api_request_id or "",
+            duration_ms=duration_ms,
+            status=status,
+            error_type=error_type,
+            error_message=error_message,
+        )
+    except Exception as _hook_err:
+        logger.debug("post_tool_call hook error: %s", _hook_err)
+
+
 def handle_function_call(
     function_name: str,
     function_args: Dict[str, Any],
     task_id: Optional[str] = None,
     tool_call_id: Optional[str] = None,
     session_id: Optional[str] = None,
+    turn_id: Optional[str] = None,
+    api_request_id: Optional[str] = None,
     user_task: Optional[str] = None,
     enabled_tools: Optional[List[str]] = None,
     skip_pre_tool_call_hook: bool = False,
+    enabled_toolsets: Optional[List[str]] = None,
+    disabled_toolsets: Optional[List[str]] = None,
 ) -> str:
     """
     Main function call dispatcher that routes calls to the tool registry.
@@ -790,12 +884,95 @@ def handle_function_call(
                        execute_code uses this list to determine which sandbox
                        tools to generate.  Falls back to the process-global
                        ``_last_resolved_tool_names`` for backward compat.
+        enabled_toolsets: The session's enabled toolsets.  Used to scope the
+                       Tool Search bridge catalog so ``tool_search`` /
+                       ``tool_describe`` / ``tool_call`` only see and invoke
+                       tools the session was actually granted.  ``None`` means
+                       "no restriction" (the caller scopes to every toolset),
+                       matching ``get_tool_definitions`` semantics.
+        disabled_toolsets: The session's disabled toolsets, applied as a
+                       subtraction when scoping the bridge catalog.
 
     Returns:
         Function result as a JSON string.
     """
     # Coerce string arguments to their schema-declared types (e.g. "42"→42)
     function_args = coerce_tool_args(function_name, function_args)
+    if not isinstance(function_args, dict):
+        function_args = {}
+
+    # ── Tool Search bridge dispatch ──────────────────────────────────
+    # tool_search and tool_describe are pure catalog reads — handle them
+    # inline. tool_call is unwrapped to the underlying tool so that every
+    # downstream hook (pre/post, edit approval, guardrails) sees the real
+    # tool name, not the bridge.
+    _ts_mod = None
+    try:
+        from tools import tool_search as _ts_mod  # noqa: F401
+    except Exception:
+        _ts_mod = None
+
+    if _ts_mod is not None and _ts_mod.is_bridge_tool(function_name):
+        try:
+            # Use skip_tool_search_assembly=True so we see the real catalog,
+            # not the already-collapsed bridge-only list (the bridge would
+            # otherwise be searching only itself).
+            #
+            # Scope the catalog to the session's toolsets so the bridge can
+            # only surface and invoke tools the session was actually granted.
+            # Without this, a restricted-toolset session (subagent, kanban
+            # worker, curated gateway session) would see and be able to call
+            # the entire process registry via the bridge. Passing the same
+            # enabled/disabled toolsets the session was assembled with keeps
+            # the deferred catalog identical to the deferrable subset of the
+            # session's own tool list, and avoids polluting the process-global
+            # _last_resolved_tool_names with out-of-scope tools.
+            current_defs = get_tool_definitions(
+                enabled_toolsets=enabled_toolsets,
+                disabled_toolsets=disabled_toolsets,
+                quiet_mode=True, skip_tool_search_assembly=True,
+            ) or []
+        except Exception:
+            current_defs = []
+        if function_name == _ts_mod.TOOL_SEARCH_NAME:
+            return _ts_mod.dispatch_tool_search(function_args or {},
+                                                current_tool_defs=current_defs)
+        if function_name == _ts_mod.TOOL_DESCRIBE_NAME:
+            return _ts_mod.dispatch_tool_describe(function_args or {},
+                                                  current_tool_defs=current_defs)
+        if function_name == _ts_mod.TOOL_CALL_NAME:
+            underlying_name, underlying_args, err = _ts_mod.resolve_underlying_call(function_args or {})
+            if err or not underlying_name:
+                return json.dumps({"error": err or "tool_call could not be resolved"},
+                                  ensure_ascii=False)
+            # Defense in depth: the underlying tool MUST be in the session's
+            # scoped deferrable catalog. resolve_underlying_call() only checks
+            # that the name is deferrable in the global registry; this gate
+            # additionally rejects any tool the session was not granted, so a
+            # restricted session can never invoke an out-of-scope tool through
+            # the bridge even if the catalog scoping above regressed.
+            _scoped_deferrable = _ts_mod.scoped_deferrable_names(current_defs)
+            if underlying_name not in _scoped_deferrable:
+                return json.dumps({
+                    "error": (
+                        f"'{underlying_name}' is not available in this session. "
+                        "Use tool_search to find tools you can call."
+                    ),
+                }, ensure_ascii=False)
+            # Recurse with the underlying tool. All hooks fire against the
+            # real tool name. The bridge is invisible to hooks by design.
+            return handle_function_call(
+                function_name=underlying_name,
+                function_args=underlying_args,
+                task_id=task_id,
+                tool_call_id=tool_call_id,
+                session_id=session_id,
+                user_task=user_task,
+                enabled_tools=enabled_tools,
+                skip_pre_tool_call_hook=skip_pre_tool_call_hook,
+                enabled_toolsets=enabled_toolsets,
+                disabled_toolsets=disabled_toolsets,
+            )
 
     try:
         if function_name in _AGENT_LOOP_TOOLS:
@@ -821,94 +998,28 @@ def handle_function_call(
                     task_id=task_id or "",
                     session_id=session_id or "",
                     tool_call_id=tool_call_id or "",
+                    turn_id=turn_id or "",
+                    api_request_id=api_request_id or "",
                 )
             except Exception as _hook_err:
                 logger.debug("pre_tool_call hook error: %s", _hook_err)
 
             if block_message is not None:
-                audit_error = _audit_tool_event(
-                    event_type="tool_call_blocked",
-                    session_id=session_id or "",
-                    tool_name=function_name,
-                    tool_call_id=tool_call_id or "",
-                    params=function_args,
-                    duration_ms=0,
-                    blocked=True,
-                    block_reason=block_message,
-                    error=block_message,
+                result = json.dumps({"error": block_message}, ensure_ascii=False)
+                _emit_post_tool_call_hook(
+                    function_name=function_name,
+                    function_args=function_args,
+                    result=result,
+                    task_id=task_id,
+                    session_id=session_id,
+                    tool_call_id=tool_call_id,
+                    turn_id=turn_id,
+                    api_request_id=api_request_id,
+                    status="blocked",
+                    error_type="plugin_block",
+                    error_message=block_message,
                 )
-                if audit_error is not None:
-                    return audit_error
-                return json.dumps({"error": block_message}, ensure_ascii=False)
-
-        # Capability gate (LG-4.2): under the governed profile every
-        # dispatch must be covered by the session's authorized capability
-        # set. Denials are audited like plugin blocks and fail closed if
-        # the audit write fails.
-        from lliam_gov.security.capabilities import CapabilityDenied, check_dispatch
-
-        try:
-            check_dispatch(function_name)
-        except CapabilityDenied as cap_exc:
-            audit_error = _audit_tool_event(
-                event_type="tool_call_blocked",
-                session_id=session_id or "",
-                tool_name=function_name,
-                tool_call_id=tool_call_id or "",
-                params=function_args,
-                duration_ms=0,
-                blocked=True,
-                block_reason=f"capability_denied: {cap_exc}",
-                error=str(cap_exc),
-            )
-            if audit_error is not None:
-                return audit_error
-            return json.dumps({"error": str(cap_exc)}, ensure_ascii=False)
-
-        # Self-modification gate (LG-4.5): when enabled, selfmod- and
-        # memory-write-tagged dispatch is STAGED as a proposal for human
-        # approval instead of executing. The handler is never invoked, so
-        # a rejected proposal has nothing to leak into live state.
-        from lliam_gov.security.selfmod_gate import (
-            GATED_CAPABILITIES,
-            propose,
-            selfmod_gate_enabled,
-        )
-
-        if selfmod_gate_enabled():
-            from lliam_gov.security.capabilities import capability_for_tool
-            from tools.registry import registry as _tool_registry
-
-            _entry = _tool_registry.get_entry(function_name)
-            _cap = capability_for_tool(
-                function_name, _entry.toolset if _entry else None
-            )
-            if _cap in GATED_CAPABILITIES:
-                try:
-                    proposal_id = propose(
-                        kind=f"tool:{function_name}",
-                        summary=f"staged {function_name} dispatch ({_cap})",
-                        payload={"tool": function_name, "args": function_args},
-                    )
-                except Exception as stage_exc:
-                    return json.dumps(
-                        {"error": f"self-mod staging failed closed: {stage_exc}"},
-                        ensure_ascii=False,
-                    )
-                return json.dumps(
-                    {
-                        "staged": True,
-                        "proposal_id": proposal_id,
-                        "message": (
-                            f"{function_name} is self-modifying ({_cap}) and the "
-                            "Lliam-GOV approval gate is active. The request was "
-                            f"staged as proposal {proposal_id}; a privileged "
-                            "operator must run 'lliam-gov approve "
-                            f"{proposal_id} --note ...' before it can be applied."
-                        ),
-                    },
-                    ensure_ascii=False,
-                )
+                return result
 
         # ACP/Zed edit approval runs before any file mutation.  The requester
         # is bound via ContextVar only for ACP sessions, so CLI/gateway paths
@@ -940,75 +1051,57 @@ def handle_function_call(
         # dashboards, budget alerts, and regression canaries without having
         # to wrap every tool manually.  We use monotonic() so the value is
         # unaffected by wall-clock adjustments during the call.
-        audit_error = _audit_tool_event(
-            event_type="tool_call_start",
-            session_id=session_id or "",
-            tool_name=function_name,
-            tool_call_id=tool_call_id or "",
-            params=function_args,
-            blocked=False,
-        )
-        if audit_error is not None:
-            return audit_error
-
         _dispatch_start = time.monotonic()
-        if function_name == "execute_code":
-            # Prefer the caller-provided list so subagents can't overwrite
-            # the parent's tool set via the process-global.
-            sandbox_enabled = enabled_tools if enabled_tools is not None else _last_resolved_tool_names
-            result = registry.dispatch(
-                function_name, function_args,
-                task_id=task_id,
-                enabled_tools=sandbox_enabled,
-            )
-        else:
-            result = registry.dispatch(
-                function_name, function_args,
-                task_id=task_id,
-                user_task=user_task,
-            )
-        duration_ms = int((time.monotonic() - _dispatch_start) * 1000)
-        audit_error = _audit_tool_event(
-            event_type="tool_call_end",
-            session_id=session_id or "",
-            tool_name=function_name,
-            tool_call_id=tool_call_id or "",
-            params=function_args,
-            duration_ms=duration_ms,
-            blocked=False,
-            error=None,
-        )
-        if audit_error is not None:
-            return audit_error
-
-        # CUI chain of custody (LG-4.6): evidence marked-path access after a
-        # successful dispatch. Marking + audit only — never blocks. Custody
-        # evidence is the control, so a chain failure here fails closed like
-        # the other tool audit events.
+        _approval_tokens = None
         try:
-            from lliam_gov.security.cui import scan_args_for_cui
-
-            scan_args_for_cui(
-                function_name, function_args, session_id=session_id or ""
+            from tools.approval import (
+                reset_current_observability_context,
+                set_current_observability_context,
             )
-        except Exception as cui_exc:
-            logger.error("CUI custody audit failed closed: %s", cui_exc)
-            return _tool_audit_failure(cui_exc)
-
-        try:
-            from hermes_cli.plugins import invoke_hook
-            invoke_hook(
-                "post_tool_call",
-                tool_name=function_name,
-                args=function_args,
-                result=result,
-                task_id=task_id or "",
-                session_id=session_id or "",
+            _approval_tokens = set_current_observability_context(
+                turn_id=turn_id or "",
                 tool_call_id=tool_call_id or "",
-                duration_ms=duration_ms,
             )
-        except Exception as _hook_err:
-            logger.debug("post_tool_call hook error: %s", _hook_err)
+        except Exception:
+            reset_current_observability_context = None
+        try:
+            if function_name == "execute_code":
+                # Prefer the caller-provided list so subagents can't overwrite
+                # the parent's tool set via the process-global.
+                sandbox_enabled = enabled_tools if enabled_tools is not None else _last_resolved_tool_names
+                def _dispatch(next_args: Dict[str, Any]) -> Any:
+                    return registry.dispatch(
+                        function_name, next_args,
+                        task_id=task_id,
+                        enabled_tools=sandbox_enabled,
+                    )
+            else:
+                def _dispatch(next_args: Dict[str, Any]) -> Any:
+                    return registry.dispatch(
+                        function_name, next_args,
+                        task_id=task_id,
+                        user_task=user_task,
+                    )
+            result = _dispatch(function_args)
+        finally:
+            if _approval_tokens is not None and reset_current_observability_context is not None:
+                try:
+                    reset_current_observability_context(_approval_tokens)
+                except Exception:
+                    pass
+        duration_ms = int((time.monotonic() - _dispatch_start) * 1000)
+
+        _emit_post_tool_call_hook(
+            function_name=function_name,
+            function_args=function_args,
+            result=result,
+            task_id=task_id,
+            session_id=session_id,
+            tool_call_id=tool_call_id,
+            turn_id=turn_id,
+            api_request_id=api_request_id,
+            duration_ms=duration_ms,
+        )
 
         # Generic tool-result canonicalization seam: plugins receive the
         # final result string (JSON, usually) and may replace it by
@@ -1016,22 +1109,31 @@ def handle_function_call(
         # post_tool_call (which stays observational) and before the result
         # is appended back into conversation context. Fail-open; the first
         # valid string return wins; non-string returns are ignored.
+        # Gated on has_hook so the no-listener path skips both the result
+        # field derivation and the payload dispatch.
         try:
-            from hermes_cli.plugins import invoke_hook
-            hook_results = invoke_hook(
-                "transform_tool_result",
-                tool_name=function_name,
-                args=function_args,
-                result=result,
-                task_id=task_id or "",
-                session_id=session_id or "",
-                tool_call_id=tool_call_id or "",
-                duration_ms=duration_ms,
-            )
-            for hook_result in hook_results:
-                if isinstance(hook_result, str):
-                    result = hook_result
-                    break
+            from hermes_cli.plugins import has_hook, invoke_hook
+            if has_hook("transform_tool_result"):
+                status, error_type, error_message = _tool_result_observer_fields(result)
+                hook_results = invoke_hook(
+                    "transform_tool_result",
+                    tool_name=function_name,
+                    args=function_args,
+                    result=result,
+                    task_id=task_id or "",
+                    session_id=session_id or "",
+                    tool_call_id=tool_call_id or "",
+                    turn_id=turn_id or "",
+                    api_request_id=api_request_id or "",
+                    duration_ms=duration_ms,
+                    status=status,
+                    error_type=error_type,
+                    error_message=error_message,
+                )
+                for hook_result in hook_results:
+                    if isinstance(hook_result, str):
+                        result = hook_result
+                        break
         except Exception as _hook_err:
             logger.debug("transform_tool_result hook error: %s", _hook_err)
 
@@ -1040,21 +1142,6 @@ def handle_function_call(
     except Exception as e:
         error_msg = f"Error executing {function_name}: {str(e)}"
         logger.exception(error_msg)
-        duration_ms = 0
-        if "_dispatch_start" in locals():
-            duration_ms = int((time.monotonic() - _dispatch_start) * 1000)
-        audit_error = _audit_tool_event(
-            event_type="tool_call_error",
-            session_id=session_id or "",
-            tool_name=function_name,
-            tool_call_id=tool_call_id or "",
-            params=function_args,
-            duration_ms=duration_ms,
-            blocked=False,
-            error=error_msg,
-        )
-        if audit_error is not None:
-            return audit_error
         return json.dumps({"error": _sanitize_tool_error(error_msg)}, ensure_ascii=False)
 
 

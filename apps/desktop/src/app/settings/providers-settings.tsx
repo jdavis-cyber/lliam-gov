@@ -10,13 +10,10 @@ import {
 } from '@/components/desktop-onboarding-overlay'
 import { Button } from '@/components/ui/button'
 import { listOAuthProviders } from '@/hermes'
-import { useI18n } from '@/i18n'
 import { ChevronDown, KeyRound } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { $desktopOnboarding, startManualProviderOAuth } from '@/store/onboarding'
 import type { EnvVarInfo, OAuthProvider } from '@/types/hermes'
-
-import { FirstRunProviders } from '@/app/onboarding/first-run-providers'
 
 import { isKeyVar, ProviderKeyRows } from './credential-key-ui'
 import { SettingsCategoryHeading, useEnvCredentials } from './env-credentials'
@@ -88,8 +85,6 @@ function buildProviderKeyGroups(vars: Record<string, EnvVarInfo>): ProviderKeyGr
 // that provider's real sign-in flow; the key affordances open the API-key
 // catalog below.
 function OAuthPicker({ onWantApiKey, providers }: { onWantApiKey: () => void; providers: OAuthProvider[] }) {
-  const { t } = useI18n()
-  const p = t.settings.providers
   const [showAll, setShowAll] = useState(false)
   const ordered = useMemo(() => sortProviders(providers), [providers])
 
@@ -111,25 +106,25 @@ function OAuthPicker({ onWantApiKey, providers }: { onWantApiKey: () => void; pr
   return (
     <section className="mb-5 grid gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-        <SettingsCategoryHeading icon={KeyRound} title={p.connectAccount} />
+        <SettingsCategoryHeading icon={KeyRound} title="Connect an account" />
         <Button
-          className="text-[length:var(--conversation-caption-font-size)]"
+          className="h-auto px-0 py-0 text-[length:var(--conversation-caption-font-size)]"
           onClick={onWantApiKey}
-          size="inline"
           type="button"
           variant="textStrong"
         >
-          {p.haveApiKey}
+          Have an API key instead?
         </Button>
       </div>
       <p className="-mt-2 mb-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
-        {p.intro}
+        Sign in with a subscription — no API key to copy. Hermes runs the browser sign-in for you, right here in the
+        app.
       </p>
       {featured && <FeaturedProviderRow onSelect={select} provider={featured} />}
       {connected.length > 0 && (
         <>
           <p className="mt-1 px-0.5 text-[length:var(--conversation-caption-font-size)] font-medium text-(--ui-text-tertiary)">
-            {p.connected}
+            Connected
           </p>
           {connected.map(p => (
             <ProviderRow key={p.id} onSelect={select} provider={p} />
@@ -146,13 +141,12 @@ function OAuthPicker({ onWantApiKey, providers }: { onWantApiKey: () => void; pr
       )}
       {collapsible && (
         <Button
-          className="py-1 text-[length:var(--conversation-caption-font-size)]"
+          className="h-auto px-0 py-1 text-[length:var(--conversation-caption-font-size)]"
           onClick={() => setShowAll(v => !v)}
-          size="inline"
           type="button"
           variant="text"
         >
-          {showAll ? p.collapse : connected.length > 0 ? p.connectAnother : p.otherProviders}
+          {showAll ? 'Collapse' : connected.length > 0 ? 'Connect another provider' : 'Other providers'}
           <ChevronDown className={cn('size-3.5 transition', showAll && 'rotate-180')} />
         </Button>
       )}
@@ -161,17 +155,14 @@ function OAuthPicker({ onWantApiKey, providers }: { onWantApiKey: () => void; pr
 }
 
 function NoProviderKeys() {
-  const { t } = useI18n()
-
   return (
     <div className="grid min-h-32 place-items-center px-4 py-8 text-center text-[length:var(--conversation-caption-font-size)] text-muted-foreground">
-      {t.settings.providers.noProviderKeys}
+      No provider API keys available.
     </div>
   )
 }
 
 export function ProvidersSettings({ onViewChange, view }: ProvidersSettingsProps) {
-  const { t } = useI18n()
   const { rowProps, vars } = useEnvCredentials()
   const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([])
   const [openProvider, setOpenProvider] = useState<null | string>(null)
@@ -204,7 +195,7 @@ export function ProvidersSettings({ onViewChange, view }: ProvidersSettingsProps
   }, [onboardingActive])
 
   if (!vars) {
-    return <LoadingState label={t.settings.providers.loading} />
+    return <LoadingState label="Loading providers..." />
   }
 
   const hasOauth = oauthProviders.length > 0
@@ -217,7 +208,6 @@ export function ProvidersSettings({ onViewChange, view }: ProvidersSettingsProps
   if (showApiKeys) {
     return (
       <SettingsContent>
-        <FirstRunProviders />
         {keyGroups.length > 0 ? (
           <div className="grid gap-2">
             {keyGroups.map(group => (
@@ -240,7 +230,6 @@ export function ProvidersSettings({ onViewChange, view }: ProvidersSettingsProps
 
   return (
     <SettingsContent>
-      <FirstRunProviders />
       <OAuthPicker onWantApiKey={() => onViewChange('keys')} providers={oauthProviders} />
     </SettingsContent>
   )

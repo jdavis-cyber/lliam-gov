@@ -83,8 +83,7 @@ const CONFIGURED_CACHE_KEY = 'hermes-desktop-onboarded-v1'
 const SKIP_CACHE_KEY = 'hermes-onboarding-skipped-v1'
 const POLL_MS = 2000
 const COPY_FLASH_MS = 1500
-export const DEFAULT_ONBOARDING_REASON = 'No inference provider is configured.'
-export const DEFAULT_MANUAL_ONBOARDING_REASON = 'Add or switch inference provider.'
+const DEFAULT_ONBOARDING_REASON = 'No inference provider is configured.'
 
 function readCachedConfigured(): boolean | null {
   if (typeof window === 'undefined') {
@@ -183,7 +182,7 @@ async function checkRuntime(ctx: OnboardingContext): Promise<RuntimeReadinessRes
 }
 
 function notifyReady(provider: string) {
-  notify({ kind: 'success', title: 'Lliam-GOV is ready', message: `${provider} connected.` })
+  notify({ kind: 'success', title: 'Hermes is ready', message: `${provider} connected.` })
 }
 
 // Human-friendly labels for tools auto-routed through the Nous Tool Gateway,
@@ -354,8 +353,8 @@ function providerResolutionFailure(reason: null | string) {
   const detail = reason?.trim()
 
   return detail
-    ? `Connected, but Lliam-GOV still cannot resolve a usable provider. ${detail}`
-    : 'Connected, but Lliam-GOV still cannot resolve a usable provider.'
+    ? `Connected, but Hermes still cannot resolve a usable provider. ${detail}`
+    : 'Connected, but Hermes still cannot resolve a usable provider.'
 }
 
 async function refreshProviders() {
@@ -388,7 +387,7 @@ export function requestDesktopOnboarding(reason = DEFAULT_ONBOARDING_REASON) {
 // onboarding flow (OAuth rows, API-key form, model-confirm) instead of
 // duplicating provider UI. Sets manual=true so the overlay shows the picker
 // even though configured===true, and refreshes the provider list.
-export function startManualOnboarding(reason: null | string = DEFAULT_MANUAL_ONBOARDING_REASON) {
+export function startManualOnboarding(reason: null | string = 'Add or switch inference provider.') {
   patch({
     manual: true,
     requested: true,
@@ -696,7 +695,7 @@ export async function recheckExternalSignin(ctx: OnboardingContext) {
       provider,
       message:
         reason?.trim() ||
-        `Lliam-GOV still cannot reach ${provider.name}. Run \`${provider.cli_command}\` in a terminal first.`
+        `Hermes still cannot reach ${provider.name}. Run \`${provider.cli_command}\` in a terminal first.`
     })
   )
 }
@@ -798,7 +797,7 @@ export async function saveOnboardingLocalEndpoint(baseUrl: string, ctx: Onboardi
     if (!runtime.ready) {
       const detail = (runtime.reason ?? '').trim()
 
-      return { ok: false, message: detail || `Saved, but Lliam-GOV still cannot reach ${url}.` }
+      return { ok: false, message: detail || `Saved, but Hermes still cannot reach ${url}.` }
     }
 
     notifyReady('Local / custom endpoint')
@@ -858,9 +857,7 @@ export function confirmOnboardingModel(ctx: OnboardingContext) {
     return
   }
 
-  // No success toast here: the confirm-model screen already showed "<provider>
-  // connected." notifyReady is reserved for completion paths that SKIP this
-  // screen (no-default fallthrough, local endpoint) so feedback isn't lost.
+  notifyReady(flow.label)
   completeDesktopOnboarding()
   ctx.onCompleted?.()
 }

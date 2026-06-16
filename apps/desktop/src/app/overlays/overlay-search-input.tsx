@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 
 import { SearchField } from '@/components/ui/search-field'
+import { cn } from '@/lib/utils'
 
 interface OverlaySearchInputProps {
   containerClassName?: string
@@ -11,7 +12,6 @@ interface OverlaySearchInputProps {
   value: string
 }
 
-// Borderless underline search — matches the tools/skills page (PageSearchShell).
 export function OverlaySearchInput({
   containerClassName,
   inputRef,
@@ -22,7 +22,11 @@ export function OverlaySearchInput({
 }: OverlaySearchInputProps) {
   return (
     <SearchField
-      containerClassName={containerClassName}
+      containerClassName={cn(
+        'rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-2 shadow-sm focus-within:border-(--ui-stroke-secondary)',
+        containerClassName
+      )}
+      inputClassName="h-8 text-[0.8125rem]"
       inputRef={inputRef}
       loading={loading}
       onChange={onChange}

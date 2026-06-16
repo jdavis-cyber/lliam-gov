@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { SetTitlebarToolGroup, TitlebarTool } from '@/app/shell/titlebar-controls'
 import { Tip } from '@/components/ui/tooltip'
-import { type Translations, useI18n } from '@/i18n'
 import { Bug } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
@@ -47,18 +46,18 @@ interface PreviewLoadErrorState {
 const FILE_RELOAD_DEBOUNCE_MS = 200
 const SERVER_RESTART_TIMEOUT_MS = 45_000
 
-function loadErrorTitle(error: PreviewLoadErrorState, copy: Translations['preview']['web']): string {
+function loadErrorTitle(error: PreviewLoadErrorState): string {
   const description = error.description.toLowerCase()
 
   if (description.includes('module script') || description.includes('mime type')) {
-    return copy.appFailedToBoot
+    return 'Preview app failed to boot'
   }
 
   if (description.includes('connection') || description.includes('refused') || description.includes('not found')) {
-    return copy.serverNotFound
+    return 'Server not found'
   }
 
-  return copy.failedToLoad
+  return 'Preview failed to load'
 }
 
 function isModuleMimeError(message: string): boolean {
@@ -80,9 +79,6 @@ function PreviewLoadError({
   onRetry: () => void
   restarting?: boolean
 }) {
-  const { t } = useI18n()
-  const copy = t.preview.web
-
   return (
     <PreviewEmptyState
       body={
@@ -102,17 +98,17 @@ function PreviewLoadError({
         </>
       }
       consoleHeight={consoleHeight}
-      primaryAction={{ label: copy.tryAgain, onClick: onRetry }}
+      primaryAction={{ label: 'Try again', onClick: onRetry }}
       secondaryAction={
         onRestartServer
           ? {
               disabled: restarting,
-              label: restarting ? copy.restarting : copy.askRestart,
+              label: restarting ? 'Hermes is restarting...' : 'Ask Hermes to restart the server',
               onClick: onRestartServer
             }
           : undefined
       }
-      title={loadErrorTitle(error, copy)}
+      title={loadErrorTitle(error)}
     />
   )
 }
@@ -126,8 +122,6 @@ export function PreviewPane({
   setTitlebarToolGroup,
   target
 }: PreviewPaneProps) {
-  const { t } = useI18n()
-  const copy = t.preview.web
   const [consoleState] = useState(() => createPreviewConsoleState())
   const consoleBodyRef = useRef<HTMLDivElement | null>(null)
   const consoleShouldStickRef = useRef(true)
@@ -245,23 +239,23 @@ export function PreviewPane({
 
       appendConsoleEntry({
         level: 1,
-        message: copy.lookingRestart(taskId)
+        message: `Hermes is looking for a preview server to restart (${taskId})`
       })
 
       notify({
         kind: 'info',
-        title: copy.restartingTitle,
-        message: copy.restartingMessage,
+        title: 'Restarting preview server',
+        message: 'Hermes is working in the background. Watch the preview console for progress.',
         durationMs: 4000
       })
     } catch (error) {
       appendConsoleEntry({
         level: 2,
-        message: copy.startRestartFailed(error instanceof Error ? error.message : String(error))
+        message: `Could not start server restart: ${error instanceof Error ? error.message : String(error)}`
       })
-      notifyError(error, copy.restartFailed)
+      notifyError(error, 'Server restart failed')
     }
-  }, [appendConsoleEntry, consoleState, copy, currentUrl, onRestartServer])
+  }, [appendConsoleEntry, consoleState, currentUrl, onRestartServer])
 
   const toggleDevTools = useCallback(() => {
     const webview = webviewRef.current
@@ -293,14 +287,14 @@ export function PreviewPane({
               active: consoleOpen,
               icon: <PreviewConsoleTitlebarIcon consoleState={consoleState} />,
               id: `${TITLEBAR_GROUP_ID}-console`,
-              label: consoleOpen ? copy.hideConsole : copy.showConsole,
+              label: consoleOpen ? 'Hide preview console' : 'Show preview console',
               onSelect: () => consoleState.setOpen(open => !open)
             },
             {
               active: devtoolsOpen,
               icon: <Bug />,
               id: `${TITLEBAR_GROUP_ID}-devtools`,
-              label: devtoolsOpen ? copy.hideDevTools : copy.openDevTools,
+              label: devtoolsOpen ? 'Hide preview DevTools' : 'Open preview DevTools',
               onSelect: toggleDevTools
             }
           ]
@@ -310,7 +304,7 @@ export function PreviewPane({
     setTitlebarToolGroup(TITLEBAR_GROUP_ID, tools)
 
     return () => setTitlebarToolGroup(TITLEBAR_GROUP_ID, [])
-  }, [consoleOpen, consoleState, copy, devtoolsOpen, isWebPreview, setTitlebarToolGroup, toggleDevTools])
+  }, [consoleOpen, consoleState, devtoolsOpen, isWebPreview, setTitlebarToolGroup, toggleDevTools])
 
   useEffect(() => {
     if (!consoleOpen) {
@@ -349,27 +343,29 @@ export function PreviewPane({
         previewServerRestart.status === 'running'
           ? previewServerRestart.message
           : previewServerRestart.status === 'complete'
-            ? copy.finishedRestarting(previewServerRestart.message)
-            : copy.failedRestarting(previewServerRestart.message || copy.unknownError)
+            ? `Hermes finished restarting the preview server${
+                previewServerRestart.message ? `: ${previewServerRestart.message}` : ''
+              }`
+            : `Server restart failed: ${previewServerRestart.message || 'unknown error'}`
     })
 
     if (previewServerRestart.status === 'complete') {
       reloadPreview()
       notify({
         kind: 'success',
-        title: copy.restartedTitle,
-        message: previewServerRestart.message?.slice(0, 160) || copy.reloadingNow,
+        title: 'Preview server restarted',
+        message: previewServerRestart.message?.slice(0, 160) || 'Reloading the preview now.',
         durationMs: 3500
       })
     } else if (previewServerRestart.status === 'error') {
       notify({
         kind: 'warning',
-        title: copy.restartFailedTitle,
-        message: previewServerRestart.message?.slice(0, 200) || copy.restartFailedMessage,
+        title: 'Preview restart failed',
+        message: previewServerRestart.message?.slice(0, 200) || 'Hermes could not restart the server.',
         durationMs: 6000
       })
     }
-  }, [appendConsoleEntry, copy, currentUrl, previewServerRestart, reloadPreview, target.url])
+  }, [appendConsoleEntry, currentUrl, previewServerRestart, reloadPreview, target.url])
 
   useEffect(() => {
     if (!restartingServer || !previewServerRestart) {
@@ -379,11 +375,14 @@ export function PreviewPane({
     const taskId = previewServerRestart.taskId
 
     const timer = window.setTimeout(() => {
-      failPreviewServerRestart(taskId, copy.stillWorking)
+      failPreviewServerRestart(
+        taskId,
+        'Hermes is still working, but no restart result has arrived yet. The server command may be running in the foreground.'
+      )
     }, SERVER_RESTART_TIMEOUT_MS)
 
     return () => window.clearTimeout(timer)
-  }, [copy.stillWorking, previewServerRestart, restartingServer])
+  }, [previewServerRestart, restartingServer])
 
   useEffect(() => {
     if (reloadRequest === lastReloadRequestRef.current) {
@@ -398,10 +397,10 @@ export function PreviewPane({
 
     appendConsoleEntry({
       level: 1,
-      message: copy.workspaceReloading
+      message: 'Workspace changed, reloading preview'
     })
     reloadPreview()
-  }, [appendConsoleEntry, copy.workspaceReloading, reloadPreview, reloadRequest, target.kind])
+  }, [appendConsoleEntry, reloadPreview, reloadRequest, target.kind])
 
   useEffect(() => {
     if (
@@ -433,8 +432,8 @@ export function PreviewPane({
         level: 1,
         message:
           changedCount === 1
-            ? copy.fileChanged(compactUrl(changedUrl))
-            : copy.filesChanged(changedCount, compactUrl(changedUrl))
+            ? `File changed, reloading preview: ${compactUrl(changedUrl)}`
+            : `${changedCount} file changes, reloading preview: ${compactUrl(changedUrl)}`
       })
 
       reloadPreview()
@@ -472,7 +471,7 @@ export function PreviewPane({
       .catch(error => {
         appendConsoleEntry({
           level: 2,
-          message: copy.watchFailed(error instanceof Error ? error.message : String(error))
+          message: `Could not watch preview file: ${error instanceof Error ? error.message : String(error)}`
         })
       })
 
@@ -488,7 +487,7 @@ export function PreviewPane({
         void window.hermesDesktop?.stopPreviewFileWatch?.(watchId)
       }
     }
-  }, [appendConsoleEntry, copy, reloadPreview, target.kind, target.url])
+  }, [appendConsoleEntry, reloadPreview, target.kind, target.url])
 
   useEffect(() => {
     const host = hostRef.current
@@ -536,7 +535,8 @@ export function PreviewPane({
 
       if ((detail.level ?? 0) >= 3 && isModuleMimeError(message)) {
         setLoadError({
-          description: copy.moduleMimeDescription,
+          description:
+            'Module scripts are being served with the wrong MIME type. This usually means a static file server is serving a Vite/React app instead of the project dev server.',
           url: webview.getURL?.() || target.url
         })
         setLoading(false)
@@ -567,11 +567,13 @@ export function PreviewPane({
 
       appendConsoleEntry({
         level: 3,
-        message: copy.loadFailedConsole(errorCode, detail.errorDescription || detail.validatedURL || copy.unknownError)
+        message: `Load failed${errorCode ? ` (${errorCode})` : ''}: ${
+          detail.errorDescription || detail.validatedURL || 'unknown error'
+        }`
       })
       setLoadError({
         code: errorCode,
-        description: detail.errorDescription || copy.unreachableDescription,
+        description: detail.errorDescription || 'The preview page could not be reached.',
         url: detail.validatedURL || webview.getURL?.() || target.url
       })
       setLoading(false)
@@ -598,7 +600,7 @@ export function PreviewPane({
       webview.removeEventListener('did-stop-loading', onStop)
       webview.remove()
     }
-  }, [appendConsoleEntry, consoleState, copy, isWebPreview, target.url])
+  }, [appendConsoleEntry, consoleState, isWebPreview, target.url])
 
   return (
     <aside className="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-transparent text-muted-foreground">
@@ -606,14 +608,14 @@ export function PreviewPane({
         {!embedded && (
           <div className="pointer-events-none flex min-h-(--titlebar-height) items-center gap-1.5 border-b border-border/60 bg-background px-2 py-1">
             <div className="min-w-0 flex-1">
-              <Tip label={copy.openTarget(currentUrl)}>
+              <Tip label={`Open ${currentUrl}`}>
                 <a
                   className="pointer-events-auto inline max-w-full truncate text-left text-xs font-medium text-foreground underline-offset-4 decoration-current/20 transition-colors hover:text-primary hover:underline"
                   href={currentUrl}
                   rel="noreferrer"
                   target="_blank"
                 >
-                  {previewLabel || copy.fallbackTitle}
+                  {previewLabel || 'Preview'}
                 </a>
               </Tip>
             </div>

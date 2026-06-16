@@ -2,7 +2,6 @@ import { type ReactNode, useEffect } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { translateNow } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 
@@ -18,7 +17,7 @@ interface OverlayViewProps {
 export function OverlayView({
   children,
   onClose,
-  closeLabel = translateNow('common.close'),
+  closeLabel = 'Close',
   contentClassName,
   headerContent,
   rootClassName

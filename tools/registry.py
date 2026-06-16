@@ -81,7 +81,6 @@ class ToolEntry:
         "name", "toolset", "schema", "handler", "check_fn",
         "requires_env", "is_async", "description", "emoji",
         "max_result_size_chars", "dynamic_schema_overrides",
-        "capability",
     )
 
     def __init__(self, name, toolset, schema, handler, check_fn,
@@ -105,11 +104,6 @@ class ToolEntry:
         # on every get_definitions() call; results are merged shallow on top
         # of the base schema before the {"type": "function", ...} wrap.
         self.dynamic_schema_overrides = dynamic_schema_overrides
-        # Capability tag for governed dispatch (LG-4.2 / AI-219). Resolved
-        # from the central classification so registration sites stay clean;
-        # unclassified tools are denied under LLIAM_GOV_CAPABILITY_ENFORCE=1.
-        from lliam_gov.security.capabilities import capability_for_tool
-        self.capability = capability_for_tool(name, toolset)
 
 
 # ---------------------------------------------------------------------------
