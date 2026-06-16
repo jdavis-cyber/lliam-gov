@@ -1031,6 +1031,15 @@ def init_agent(
     agent._parent_session_id = parent_session_id
     agent._last_flushed_db_idx = 0  # tracks DB-write cursor to prevent duplicate writes
     agent._session_db_created = False  # DB row deferred to run_conversation()
+    agent._lliam_audit_logger = None
+    agent._lliam_audit_session_open_logged = False
+    agent._lliam_audit_session_close_logged = False
+    # Egress guard (LG-4.3, SP 800-171 3.13.1/3.13.8, ISO 27001 A.8.20-23):
+    # no-op unless LLIAM_GOV_EGRESS_ENFORCE=1; the install is idempotent and
+    # free when enforcement is off.
+    from lliam_gov.security.egress import install_egress_guard
+
+    install_egress_guard()
     agent._session_init_model_config = {
         "max_iterations": agent.max_iterations,
         "reasoning_config": reasoning_config,
