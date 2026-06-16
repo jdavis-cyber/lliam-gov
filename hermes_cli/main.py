@@ -12461,7 +12461,8 @@ def cmd_logs(args):
 # to parse.
 _BUILTIN_SUBCOMMANDS = frozenset(
     {
-        "acp", "auth", "backup", "bundles", "checkpoints", "claw", "completion",
+        "acp", "audit", "approve", "auth", "backup", "bundles", "checkpoints", "claw", "completion",
+        "rotate-key", "proposals", "reject",
         "computer-use",
         "config", "cron", "curator", "dashboard", "debug", "doctor",
         "dump", "fallback", "gateway", "hooks", "import", "insights",
@@ -13909,6 +13910,20 @@ def main():
     )
     audit_parser.set_defaults(func=cmd_security)
     security_parser.set_defaults(func=cmd_security)
+
+    # =========================================================================
+    # Lliam-GOV governance commands: audit evidence export/verify, encryption-
+    # key rotation (LG-3.8 / AI-216), and self-modification approval surface
+    # (LG-4.5 / AI-222). Each module registers its own subparser(s) + dispatch
+    # (privileged-user ACL is enforced inside the handlers — SP 800-171 3.3.9).
+    # =========================================================================
+    from hermes_cli.audit_cli import register_audit_parser
+    from hermes_cli.key_cli import register_rotate_key_parser
+    from hermes_cli.selfmod_cli import register_selfmod_parsers
+
+    register_audit_parser(subparsers)
+    register_rotate_key_parser(subparsers)
+    register_selfmod_parsers(subparsers)
 
     # =========================================================================
     # dump command
@@ -16029,7 +16044,13 @@ Examples:
 
     # Execute the command
     if hasattr(args, "func"):
-        args.func(args)
+        _rc = args.func(args)
+        # Governance commands (audit / rotate-key / self-mod) return an int
+        # exit code; propagate a non-zero result so tamper/verify failures
+        # surface to the shell and CI (SP 800-171 3.3.x evidence integrity).
+        # Upstream commands return None and are unaffected.
+        if isinstance(_rc, int) and _rc != 0:
+            sys.exit(_rc)
     else:
         parser.print_help()
 
