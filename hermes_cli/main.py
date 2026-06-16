@@ -12396,11 +12396,15 @@ def cmd_dashboard(args):
     # The in-browser Chat tab (the embedded TUI over PTY/WebSocket) is always
     # available — the desktop app and the dashboard's own Chat tab both rely on
     # the `/api/ws` + `/api/pty` sockets, so there is no reason to gate them.
+    # ISO 27001 A.8.22 (LG-1.4 / AI-204): the dashboard / desktop backend is
+    # loopback-only. The upstream --host / --insecure break-glass overrides are
+    # ignored — start_server always binds 127.0.0.1 with the auth gate engaged,
+    # which is exactly what the Electron desktop app's local gateway expects.
     start_server(
-        host=args.host,
+        host="127.0.0.1",
         port=args.port,
         open_browser=not args.no_open,
-        allow_public=getattr(args, "insecure", False),
+        allow_public=False,
     )
 
 

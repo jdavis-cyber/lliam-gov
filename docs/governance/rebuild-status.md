@@ -5,49 +5,51 @@ The Electron desktop app (`apps/desktop`) ships in this base and runs on OpenAI 
 of the box. Provider/subscription work and the Hermes→Lliam rebrand are deferred.
 
 The governance overlay (`lliam_gov/security/`), its tests (`tests/lliam_gov/`), and the
-compliance evidence (`evidence/`, `docs/governance/`) are carried forward verbatim and
+compliance evidence (`evidence/`, `docs/governance/`) were carried forward verbatim and
 re-wired into the clean base one guardrail at a time, each verified before commit.
 
-## Wired + verified
+## Wired + verified — all core guardrails
 
-| Guardrail | Control | Files | Verification |
-|---|---|---|---|
-| State encryption at rest (decrypt-on-read / encrypt-on-write) | SP 800-171 3.13.16 / 3.5.10 | `hermes_cli/auth.py`, `hermes_cli/main.py`, `agent/auxiliary_client.py`, `tools/managed_tool_gateway.py`, `tools/xai_http.py` | `test_state_codec`, `test_encrypted_file`, `test_auth_store_encryption` (30 pass) |
-| Capability-tagged tool dispatch | SP 800-171 3.1.2 | `model_tools.py`, `tools/registry.py` | `test_capabilities` + dispatch regression |
-| Self-modification approval gate | ISO 42001 A.6.2.4 | `model_tools.py` | `test_selfmod_gate` |
-| CUI marking + chain of custody | SP 800-171 3.1; AI-223 | `model_tools.py` | `test_cui` |
-| Tool-dispatch audit (always-on, append-only, fail-closed) | SP 800-171 3.3.x | `model_tools.py` | `test_audit_logger` + dispatch regression (70 pass total) |
-| Egress allowlist + TLS (fail-closed) | SP 800-171 3.13.1/3.13.8; ISO 27001 A.8.20-23 | `agent/agent_init.py` | `test_egress` (full sweep 161 pass) |
+| Guardrail | Control | Verification |
+|---|---|---|
+| State encryption at rest (decrypt-on-read / encrypt-on-write) | SP 800-171 3.13.16 / 3.5.10 | state_codec / encrypted_file / auth_store_encryption tests |
+| Capability-tagged tool dispatch | SP 800-171 3.1.2 | test_capabilities + dispatch regression |
+| Self-modification approval gate | ISO 42001 A.6.2.4 | test_selfmod_gate |
+| CUI marking + chain of custody | SP 800-171 3.1 | test_cui |
+| Tool-dispatch audit (always-on, append-only, fail-closed) | SP 800-171 3.3.x | test_audit_logger + dispatch regression |
+| Egress allowlist + TLS (fail-closed) | SP 800-171 3.13.1/3.13.8; ISO 27001 A.8.20-23 | test_egress |
+| Governance CLIs + privileged-user ACL + AEP export + key rotation | SP 800-171 3.3.9; LG-3.8 | test_key_cli, test_cli_exit_codes, test_privileged_access, test_aep_export |
+| Backup CUI encryption at rest (fail-closed) | SP 800-171 3.8.9 | test_backup_encryption (9) |
+| Messaging-gateway narrowing + auth-deny audit | ISO 27001 A.8.15 | test_adapter_inbound_auth_audit, test_gateway_audit (17) |
+| Session audit (open / turn-start / turn-end / close) | SP 800-171 3.3.x | upstream run_agent suite (379) + import smoke |
+| Dashboard / desktop backend loopback-only | ISO 27001 A.8.22 | start_server host forced 127.0.0.1, auth gate engaged |
+| Principal binding + production-root refusal | SP 800-171 3.1.1/3.1.2; ISO 27001 A.8.5 | test_principal (passes for operator; refuses root) |
 
-Governance CLIs carried (not yet registered in dispatch): `hermes_cli/audit_cli.py`,
-`hermes_cli/key_cli.py`, `hermes_cli/selfmod_cli.py`.
+Full overlay sweep: **`tests/lliam_gov/` 179/180 pass.** The 1 failure is the
+production-root refusal firing because the CI container runs as uid 0 — the control
+working as designed; it passes for a normal operator account.
 
-Full overlay sweep: **161/163 `tests/lliam_gov/` pass.** The 2 failures are the
-principal-binding **production-root refusal** firing because the CI container runs as
-uid 0 — the guardrail working as designed (SP 800-171 3.1.1); both pass for a normal
-operator account.
+## Notes / partial scope
 
-## Remaining (mapped, not yet wired)
+- **Dashboard loopback (A.8.22):** enforced at the single `start_server` dispatch
+  (`cmd_dashboard`), which forces `127.0.0.1` + auth gate regardless of `--host`/
+  `--insecure`. The upstream flags still parse but are ignored; physically removing the
+  argument definitions (and auditing other binders like `gateway`/`proxy`) is follow-up
+  hardening, not required for the dashboard to be loopback-only.
+- **Session audit turn-end:** an audit-write failure at turn end is logged (the turn has
+  already completed); turn-start remains fail-closed (a turn that cannot be audited does
+  not run).
 
-Each integration point below is identified by the fork's pre-scrap commit (`a1c7fc3`).
+## Remaining (Phase 3–4 — compliance evidence + supply chain)
 
-| Guardrail | Control | Files / sites | Risk |
-|---|---|---|---|
-| Session audit (session_open / turn_start / turn_end / failure) | SP 800-171 3.3.x | `agent/conversation_loop.py` (~L360 turn-start block, ~L4144 turn-end block; import L70-77), `run_agent.py` (~L2220 session_close on agent close) | High — deep weave into the conversation loop; needs a live turn to verify |
-| Messaging-gateway narrowing + auth-deny audit | ISO 27001 A.8.x | `gateway/run.py` (~L6268), `gateway/platforms/slack.py` (~L81), `gateway/platforms/email.py` (~L458) | Medium — adapter deny-path audit; verify with `tests/gateway/test_adapter_inbound_auth_audit.py` |
-| Backup CUI encryption at rest (fail-closed) | SP 800-171 3.8.9 | `hermes_cli/backup.py` (port `_backup_encryption_enabled`, `_backup_key_manager`, `encrypt_backup_archive`, `decrypt_backup_archive`, `_looks_like_encrypted_backup` + create/restore call sites) | Medium — feature port; verify with `tests/hermes_cli/test_backup_encryption.py` |
-| Privileged-user ACL + AEP export + runtime/FIPS guard reachability | SP 800-171 3.3.9; LG-4.4 | register `audit`/`key`/`selfmod` governance CLIs in `hermes_cli/main.py` dispatch (privileged ACL lives in the carried CLIs) | Medium — verify with `tests/hermes_cli/test_key_cli.py`, `tests/lliam_gov/test_cli_exit_codes.py` |
-| Dashboard/desktop gateway loopback-only (remove `--host`/`--insecure`) | ISO 27001 A.8.22 | `hermes_cli/web_server.py` | Low |
-
-## Then (Phase 3–4)
-
-- Reconcile `evidence/control-matrix.csv` `current_state` per control against the
-  re-wired tree; re-capture `evidence/audit/*-test.txt` on a non-root operator host.
-- Regenerate the CycloneDX SBOM; restore dependency-review and CI security gates.
+- Reconcile `evidence/control-matrix.csv` `current_state` against the re-wired tree and
+  re-capture `evidence/audit/*-test.txt` on a non-root operator host.
+- Regenerate the CycloneDX SBOM; restore dependency-review + CI security gates.
+- Deferred by request: provider/subscription work (Claude Code / Codex), Hermes→Lliam rebrand.
 
 ## CI note
 
-The repository's GitHub Actions are in a known outage (jobs fail in ~3 s, logs 404);
-the fork has been merging under "governance override — Actions outage". Local
-verification is used instead: `uv lock --check` clean, `ruff` clean on the overlay,
-attribution/LICENSE present, and the overlay test suite green as above.
+The repository's GitHub Actions are in a known outage (jobs fail in ~3 s, logs 404); the
+fork has been merging under "governance override — Actions outage". Local verification is
+used instead: `uv lock --check` clean, `ruff` clean on the overlay, attribution/LICENSE
+present, and the overlay + upstream regression suites green as above.
