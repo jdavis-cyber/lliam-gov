@@ -40,12 +40,42 @@ working as designed; it passes for a normal operator account.
   already completed); turn-start remains fail-closed (a turn that cannot be audited does
   not run).
 
-## Remaining (Phase 3–4 — compliance evidence + supply chain)
+## Phase 3 — compliance evidence (done, 2026-06-16)
 
-- Reconcile `evidence/control-matrix.csv` `current_state` against the re-wired tree and
-  re-capture `evidence/audit/*-test.txt` on a non-root operator host.
-- Regenerate the CycloneDX SBOM; restore dependency-review + CI security gates.
-- Deferred by request: provider/subscription work (Claude Code / Codex), Hermes→Lliam rebrand.
+- Re-ran the full overlay suite **as a non-root operator** (uid 1000): `tests/lliam_gov/`
+  green, including the principal / production-root-refusal checks that fail under root.
+  Captured in `evidence/audit/operator-suite-2026-06-16.txt`.
+- Re-ran the adversarial harnesses as operator: **chaos** (audit/keyring/egress/self-mod
+  all fail closed) and **pentest** (self-mod / path-traversal / audit-tamper / TLS-downgrade
+  all refused). Fresh artifacts in `evidence/phase5/{chaos,pentest}/` (dated 2026-06-16).
+- Reconciled `evidence/control-matrix.csv`: **42/55 controls** now carry implementation or
+  evidence (34 `evidence_captured`, 5 `implemented`, 3 `tested`). The 13 remaining
+  `not_implemented` are organization-owned AIMS clauses, operating-cadence controls, and
+  FIPS-validated crypto (completes on a FIPS-OpenSSL host) — not overclaimed.
+- Authored the ISO 42001 AIMS documented-information set
+  (`docs/governance/aims/aims-documented-information.md`): objectives (A.6.1.2), RACI
+  (A.3.2), impact assessment (A.5.2), data resources (A.7.4), documented-information index
+  (Clause 7.5).
+
+## Phase 4 — supply chain + CI gates (done, 2026-06-16)
+
+- Regenerated the CycloneDX 1.6 SBOM from the rebuilt environment
+  (`evidence/sbom/cyclonedx-2026-06-16.json`, 76 components).
+- Ran `pip-audit` (`evidence/sbom/pip-audit-2026-06-16.json`): 17 advisories in 5 upstream-
+  pinned packages, triaged with a remediation path in
+  `evidence/sbom/dependency-review-2026-06-16.md` (not auto-bumped — `starlette` crosses
+  minor versions touching the web server and needs live-dashboard validation).
+- Added `.github/workflows/lliam-gov-governance.yml`: runs the overlay suite + chaos +
+  pentest harnesses + attribution check on every PR/push (the CI control artifact;
+  upstream osv-scanner / supply-chain-audit / lint gates are retained).
+- Regenerated the release-evidence manifest (`evidence/release/manifest.json`): 8 present,
+  5 PENDING (signing / checksums / QA — decision-gated, reported truthfully, never fabricated).
+
+## Deferred by request
+
+Provider/subscription work (Claude Code / Codex), Hermes→Lliam rebrand, and the
+upstream dependency-bump (tracked in the dependency review). Organization-owned AIMS
+management-system clauses (4/6/8/9/10) accrue operating evidence over the AIMS cycle.
 
 ## CI note
 

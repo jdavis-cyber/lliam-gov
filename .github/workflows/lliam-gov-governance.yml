@@ -1,0 +1,58 @@
+# Lliam-GOV governance gate
+#
+# Continuously verifies the governance overlay on every PR/push: the guardrail
+# test suite plus the adversarial fail-closed (chaos) and bypass-refused
+# (pentest) harnesses, which exit non-zero if ANY control degrades open. Also
+# confirms the upstream MIT attribution is retained. This is the CI control
+# artifact for the CMMC L2 / ISO 27001 / ISO 42001 overlay (SP 800-171 3.3.x /
+# 3.14.x; ISO 27001 A.8.8/A.8.28).
+name: lliam-gov governance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+
+      - name: Install Python 3.11
+        run: uv python install 3.11
+
+      - name: Sync environment
+        run: |
+          uv venv .venv --python 3.11
+          . .venv/bin/activate
+          uv pip install -e ".[all,dev]"
+
+      - name: Attribution retained (upstream MIT)
+        run: |
+          grep -q "NousResearch/hermes-agent" NOTICE
+          grep -qi "MIT" LICENSE
+
+      # GitHub runners execute as a non-root user, so principal binding /
+      # production-root refusal evaluate as a normal operator.
+      - name: Guardrail overlay test suite
+        run: |
+          . .venv/bin/activate
+          python -m pytest tests/lliam_gov/ -p no:cacheprovider -q
+
+      - name: Fail-closed (chaos) harness
+        run: |
+          . .venv/bin/activate
+          python scripts/phase5_chaos_evidence.py --out "$RUNNER_TEMP/chaos"
+
+      - name: Bypass-refused (pentest) harness
+        run: |
+          . .venv/bin/activate
+          python scripts/phase5_pentest_probes.py --out "$RUNNER_TEMP/pentest"

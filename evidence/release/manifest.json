@@ -1,11 +1,11 @@
 {
   "schema": "lliam-gov.release.evidence",
   "schemaVersion": 1,
-  "generatedAt": "2026-06-15T12:32:54.211297+00:00",
+  "generatedAt": "2026-06-16T09:16:01.691154+00:00",
   "desktopVersion": "0.15.1",
   "summary": {
-    "present": 10,
-    "pending": 3,
+    "present": 8,
+    "pending": 5,
     "total": 13
   },
   "items": [
@@ -20,8 +20,8 @@
       "id": "data-flow",
       "description": "Architecture / data-flow / provider-boundary notes",
       "path": "docs/operate/managed-backend-bootstrap.md",
-      "status": "present",
-      "sha256": "7975a533776c830539c19c68ee329c9ccce6a65b4ac6020557e5e0fe22c52eab"
+      "status": "pending",
+      "gating": "artifact not yet produced"
     },
     {
       "id": "sbom-python-node",
@@ -48,8 +48,8 @@
       "id": "readiness-gate",
       "description": "Release-readiness gate script",
       "path": "scripts/release-readiness.py",
-      "status": "present",
-      "sha256": "ddf8b8c66693024c6eea819539486cd4061ccc7c6a4880c3ef88374b2b2f43c2"
+      "status": "pending",
+      "gating": "artifact not yet produced"
     },
     {
       "id": "deployment-tiers",

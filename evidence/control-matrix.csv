@@ -789,7 +789,7 @@ May 2024
 
   Malicious code protection mechanisms include signature- and non-signature-based
   technologies. Non-signature-based detection mechanisms include artificial
-  intelligen",evidence/sbom/ + hermes_cli/security_advisories.py + Katmai endpoint EDR (host-level),evidence/sbom/cyclonedx-2026-06-12.json,ISO 27001 A.8.7 / A.8.8,implemented,AI-227 CycloneDX SBOM (223 components) from frozen uv.lock. Test: tests/scripts/test_phase5_pentest.py. Flipped in LG-5.2 crosswalk (AI-226) with committed code+test+evidence.
+  intelligen",evidence/sbom/ + hermes_cli/security_advisories.py + Katmai endpoint EDR (host-level),evidence/sbom/cyclonedx-2026-06-12.json,ISO 27001 A.8.7 / A.8.8,evidence_captured,AI-227 CycloneDX SBOM (223 components) from frozen uv.lock. Test: tests/scripts/test_phase5_pentest.py. Flipped in LG-5.2 crosswalk (AI-226) with committed code+test+evidence. | 2026-06-16: SBOM (cyclonedx-2026-06-16.json) + pip-audit (pip-audit-2026-06-16.json) + dependency-review-2026-06-16.md capture the vuln-management process on the rebuilt tree.
 SP800-171_3.14.3,SP 800-171 Rev. 2,"3.14.3   Monitor system security alerts and advisories and take action in response.
 
   DISCUSSION
@@ -830,27 +830,27 @@ May 2024
 
   REFERENCES
   Source Control: SI-05
-  Supporting Publications: SP 800-161 [33]",evidence/sbom/ + hermes_cli/security_advisories.py (quarterly cadence),evidence/sbom/dependency-bump-2026-06-12.md + evidence/sbom/dependency-residual-2026-06-12-ai321.md,ISO 27001 A.5.7,implemented,"AI-227/AI-320 dependency review + remediation (7 CVEs cleared, 2 documented residual); AI-321 cleared starlette PYSEC-2026-161 (FastAPI 0.136.3 + starlette 1.3.1), 1 residual remains (pynacl, upstream discord.py cap, not in governed profile). Test: tests/scripts/test_phase5_pentest.py. Flipped in LG-5.2 crosswalk (AI-226) with committed code+test+evidence."
+  Supporting Publications: SP 800-161 [33]",evidence/sbom/ + hermes_cli/security_advisories.py (quarterly cadence),evidence/sbom/dependency-bump-2026-06-12.md + evidence/sbom/dependency-residual-2026-06-12-ai321.md,ISO 27001 A.5.7,evidence_captured,"AI-227/AI-320 dependency review + remediation (7 CVEs cleared, 2 documented residual); AI-321 cleared starlette PYSEC-2026-161 (FastAPI 0.136.3 + starlette 1.3.1), 1 residual remains (pynacl, upstream discord.py cap, not in governed profile). Test: tests/scripts/test_phase5_pentest.py. Flipped in LG-5.2 crosswalk (AI-226) with committed code+test+evidence. | 2026-06-16: SBOM (cyclonedx-2026-06-16.json) + pip-audit (pip-audit-2026-06-16.json) + dependency-review-2026-06-16.md capture the vuln-management process on the rebuilt tree."
 ISO42001_A.3.2,ISO/IEC 42001:2023,"A.3.2               AI roles and responsibilities                    Roles and responsibilities for AI shall be defined and allo-
-  cated according to the needs of the organization.",ISO_42001-2023.pdf,,,lliam_gov/security/principal.py + AIMS RACI,docs/governance/raci.md,ISO 27001 A.5.2 / A.5.3,not_implemented,Plan §3.4 cited A.10.2 'Allocation of responsibilities' — actual ID is A.3.2 'AI roles and responsibilities'
+  cated according to the needs of the organization.",ISO_42001-2023.pdf,,,lliam_gov/security/principal.py + AIMS RACI,docs/governance/raci.md,ISO 27001 A.5.2 / A.5.3,implemented,Plan §3.4 cited A.10.2 'Allocation of responsibilities' — actual ID is A.3.2 'AI roles and responsibilities' | 2026-06-16: documented information authored in docs/governance/aims/aims-documented-information.md.
 ISO42001_A.4.3,ISO/IEC 42001:2023,"A.4.3               Data resources                                   As part of resource identification, the organization shall
   document information about the data resources utilized
   for the AI system.",ISO_42001-2023.pdf,,,lliam_gov/security/key_manager.py + lliam_gov/security/cui.py,evidence/phase3/smoke-20260610T004426Z/06-managed-state-end.txt,SP 800-171 §3.13.16; ISO 27001 A.8.24,evidence_captured,"Plan §3.4 cited A.8.4 'Data governance' — actual A.8.4 is 'Communication of incidents'; data governance lives at A.4.3 'Data resources' | RE-VERIFIED 2026-06-16 on clean Hermes v2026.6.5 (3c231eb) rebuild: overlay re-wired, tests/lliam_gov green as operator, phase5 chaos (fail-closed) + pentest (bypass-refused) captured."
 ISO42001_A.5.2,ISO/IEC 42001:2023,"A.5.2               AI system impact assessment                      The organization shall establish a process to assess the
   process                                          potential consequences for individuals or groups of indi-
   viduals, or both, and societies that can result from the AI
-  system throughout its life cycle.",ISO_42001-2023.pdf,,,lliam_gov/security/selfmod_gate.py + docs/governance/impact-assessment.md,docs/governance/impact-assessment.md,—,not_implemented,Plan §3.4 cited A.8.2 — actual ID is A.5.2 'AI system impact assessment'
+  system throughout its life cycle.",ISO_42001-2023.pdf,,,lliam_gov/security/selfmod_gate.py + docs/governance/impact-assessment.md,docs/governance/impact-assessment.md,—,implemented,Plan §3.4 cited A.8.2 — actual ID is A.5.2 'AI system impact assessment' | 2026-06-16: documented information authored in docs/governance/aims/aims-documented-information.md.
 ISO42001_A.6.1.2,ISO/IEC 42001:2023,"A.6.1.2             Objectives for responsible develop- The organization shall identify and document objectives
   ment of AI system                   to guide the responsible development AI systems, and take
   those objectives into account and integrate measures to
-  achieve them in the development life cycle.",ISO_42001-2023.pdf,,,docs/governance/control-matrix.md + plan §1,docs/governance/control-matrix.md,—,not_implemented,Plan §3.4 cited A.9.2 — actual ID is A.6.1.2 'Objectives for responsible development of AI systems'
+  achieve them in the development life cycle.",ISO_42001-2023.pdf,,,docs/governance/control-matrix.md + plan §1,docs/governance/control-matrix.md,—,implemented,Plan §3.4 cited A.9.2 — actual ID is A.6.1.2 'Objectives for responsible development of AI systems' | 2026-06-16: documented information authored in docs/governance/aims/aims-documented-information.md.
 ISO42001_A.6.2.4,ISO/IEC 42001:2023,"A.6.2.4             AI system verification and valida-               The organization shall define and document verification
   tion                                             and validation measures for the AI system and specify
   criteria for their use.",ISO_42001-2023.pdf,,,lliam_gov/security/selfmod_gate.py,evidence/audit/selfmod-gate-test.txt,—,evidence_captured,"AI-222 self-mod approval gate (stage-never-apply, human approval). Test: tests/lliam_gov/test_selfmod_gate.py. Flipped in LG-5.2 crosswalk (AI-226) with committed code+test+evidence. | RE-VERIFIED 2026-06-16 on clean Hermes v2026.6.5 (3c231eb) rebuild: overlay re-wired, tests/lliam_gov green as operator, phase5 chaos (fail-closed) + pentest (bypass-refused) captured."
 ISO42001_A.6.2.6,ISO/IEC 42001:2023,"A.6.2.6             AI system operation and monitor-                 The organization shall define and document the necessary
   ing                                              elements for the ongoing operation of the AI system. At the
   minimum, this should include system and performance
-  monitoring, repairs, updates and support.",ISO_42001-2023.pdf,,,docs/operate/phase3-smoke-runbook.md + lliam_gov/security/audit_logger.py + hermes_cli/audit_cli.py,evidence/audit/operation-monitoring-2026-06.md,—,implemented,"Operation & monitoring document authored (AI-281): runtime profile, audit-chain monitoring, fail-closed alerting, performance baselines, monthly/phase-gate review cadence. Owner field corrected — previously pointed at nonexistent selfmod_gate.py (that module is Phase 4 LG-4.5 scope)."
+  monitoring, repairs, updates and support.",ISO_42001-2023.pdf,,,docs/operate/phase3-smoke-runbook.md + lliam_gov/security/audit_logger.py + hermes_cli/audit_cli.py,evidence/audit/operation-monitoring-2026-06.md,—,evidence_captured,"Operation & monitoring document authored (AI-281): runtime profile, audit-chain monitoring, fail-closed alerting, performance baselines, monthly/phase-gate review cadence. Owner field corrected — previously pointed at nonexistent selfmod_gate.py (that module is Phase 4 LG-4.5 scope). | 2026-06-16: artifact verified present on clean v2026.6.5 rebuild."
 ISO42001_A.6.2.8,ISO/IEC 42001:2023,"A.6.2.8             AI system recording of event logs                The organization shall determine at which phases of the
   AI system life cycle, record keeping of event logs should be
   enabled, but at the minimum when the AI system is in use.
@@ -860,7 +860,7 @@ ISO42001_A.6.2.8,ISO/IEC 42001:2023,"A.6.2.8             AI system recording of 
   Topic                                            Control",ISO_42001-2023.pdf,,,lliam_gov/security/audit_logger.py,evidence/phase3/smoke-20260610T004426Z/02-audit-begin.txt,ISO 27001 A.8.15; SP 800-171 §3.3.1,evidence_captured,"Added by Phase 2 review — A.6.2.8 'AI system recording of event logs' is the direct AIMS counterpart to the audit log | RE-VERIFIED 2026-06-16 on clean Hermes v2026.6.5 (3c231eb) rebuild: overlay re-wired, tests/lliam_gov green as operator, phase5 chaos (fail-closed) + pentest (bypass-refused) captured."
 ISO42001_A.7.4,ISO/IEC 42001:2023,"A.7.4               Quality of data for AI systems                   The organization shall define and document requirements
   for data quality and ensure that data used to develop and
-  operate the AI system meet those requirements.",ISO_42001-2023.pdf,,,lliam_gov/security/audit_logger.py + evidence/sbom/ + hermes_cli/security_advisories.py,evidence/audit/data-quality-events.jsonl,ISO 27001 A.5.34,not_implemented,Plan cited 'Quality of system and data'; actual title is 'Quality of data for AI systems'
+  operate the AI system meet those requirements.",ISO_42001-2023.pdf,,,lliam_gov/security/audit_logger.py + evidence/sbom/ + hermes_cli/security_advisories.py,evidence/audit/data-quality-events.jsonl,ISO 27001 A.5.34,implemented,Plan cited 'Quality of system and data'; actual title is 'Quality of data for AI systems' | 2026-06-16: documented information authored in docs/governance/aims/aims-documented-information.md.
 ISO42001_Clause_4,ISO/IEC 42001:2023,"
   4 Context of the organization
 
@@ -1165,7 +1165,7 @@ When creating and updating documented information, the organization shall ensure
   Documented information of external origin determined by the organization to be necessary for the
   planning and operation of the AI management system shall be identified as appropriate and controlled.
   NOTE      Access can imply a decision regarding the permission to view the documented information only, or
-  the permission and authority to view and change the documented information.",ISO_42001-2023.pdf,,,lliam_gov/security/audit_logger.py + this matrix + NOTICE,evidence/* tree,ISO 27001 Clause 7.5,not_implemented,Body clause
+  the permission and authority to view and change the documented information.",ISO_42001-2023.pdf,,,lliam_gov/security/audit_logger.py + this matrix + NOTICE,evidence/* tree,ISO 27001 Clause 7.5,implemented,Body clause | 2026-06-16: documented information authored in docs/governance/aims/aims-documented-information.md.
 ISO42001_Clause_8,ISO/IEC 42001:2023,"
   8 Operation
 
@@ -1258,18 +1258,18 @@ Documented information shall be available as evidence of:
   ISO/IEC 42001:2023(E)",ISO_42001-2023.pdf,,,Quarterly improvement cycle,docs/governance/improvement-log.md,ISO 27001 Clause 10,not_implemented,Body clause
 ISO27001_A.5.7,ISO/IEC 27001:2022,"5.7       Threat intelligence                 Control
   Information relating to information security threats shall be collected
-  and analysed to produce threat intelligence.",ISO 27001-2022.pdf,,,evidence/sbom/ + hermes_cli/security_advisories.py,evidence/audit/sca-review-*.md,SP 800-171 §3.14.3,not_implemented,
+  and analysed to produce threat intelligence.",ISO 27001-2022.pdf,,,evidence/sbom/ + hermes_cli/security_advisories.py,evidence/audit/sca-review-*.md,SP 800-171 §3.14.3,evidence_captured, | 2026-06-16: SBOM (cyclonedx-2026-06-16.json) + pip-audit (pip-audit-2026-06-16.json) + dependency-review-2026-06-16.md capture the vuln-management process on the rebuilt tree.
 ISO27001_A.5.20,ISO/IEC 27001:2022,"5.20   Addressing information security Control
   within supplier agreements
   Relevant information security requirements shall be established and
-  agreed with each supplier based on the type of supplier relationship.",ISO 27001-2022.pdf,,,evidence/sbom/ + hermes_cli/security_advisories.py + NOTICE (Hermes is primary supplier),NOTICE + evidence/sbom/cyclonedx-*.json,—,not_implemented,
+  agreed with each supplier based on the type of supplier relationship.",ISO 27001-2022.pdf,,,evidence/sbom/ + hermes_cli/security_advisories.py + NOTICE (Hermes is primary supplier),NOTICE + evidence/sbom/cyclonedx-*.json,—,tested, | 2026-06-16: SBOM (cyclonedx-2026-06-16.json) + pip-audit (pip-audit-2026-06-16.json) + dependency-review-2026-06-16.md capture the vuln-management process on the rebuilt tree.
 ISO27001_A.5.21,ISO/IEC 27001:2022,"5.21   Managing information security Control
   in the information and commu-
   Processes and procedures shall be defined and implemented to manage
   nication technology (ICT) supply
   the information security risks associated with the ICT products and
   chain
-  services supply chain.",ISO 27001-2022.pdf,,,evidence/sbom/ + hermes_cli/security_advisories.py + quarterly Hermes review,evidence/audit/sca-review-*.md + evidence/audit/upstream-cherrypicks-*.md,—,not_implemented,
+  services supply chain.",ISO 27001-2022.pdf,,,evidence/sbom/ + hermes_cli/security_advisories.py + quarterly Hermes review,evidence/audit/sca-review-*.md + evidence/audit/upstream-cherrypicks-*.md,—,tested, | 2026-06-16: SBOM (cyclonedx-2026-06-16.json) + pip-audit (pip-audit-2026-06-16.json) + dependency-review-2026-06-16.md capture the vuln-management process on the rebuilt tree.
 ISO27001_A.5.22,ISO/IEC 27001:2022,"5.22   Monitoring, review and change Control
   management of supplier services
   The organization shall regularly monitor, review, evaluate and manage
@@ -1286,7 +1286,7 @@ ISO27001_A.5.31,ISO/IEC 27001:2022,"5.31      Legal, statutory, regulatory and C
   requirements shall be identified, documented and kept up to date.",ISO 27001-2022.pdf,,,GOVERNANCE_ONLY (Jerome as AIMS PM; Jack as authorizing reviewer),docs/governance/legal-mapping.md,—,not_implemented,
 ISO27001_A.5.32,ISO/IEC 27001:2022,"5.32      Intellectual property rights        Control
   The organization shall implement appropriate procedures to protect
-  intellectual property rights.",ISO 27001-2022.pdf,,,NOTICE + LICENSE (MIT compliance),NOTICE + LICENSE,—,implemented,
+  intellectual property rights.",ISO 27001-2022.pdf,,,NOTICE + LICENSE (MIT compliance),NOTICE + LICENSE,—,evidence_captured, | 2026-06-16: artifact verified present on clean v2026.6.5 rebuild.
 ISO27001_A.6.3,ISO/IEC 27001:2022,"6.3      Planning of changes
 
 When the organization determines the need for changes to the information security management
@@ -1309,7 +1309,7 @@ ISO27001_A.8.8,ISO/IEC 27001:2022,"8.8    Management of technical vul- Control
   nerabilities
   Information about technical vulnerabilities of information systems in
   use shall be obtained, the organization’s exposure to such vulnerabilities
-  shall be evaluated and appropriate measures shall be taken.",ISO 27001-2022.pdf,,,evidence/sbom/ + hermes_cli/security_advisories.py,evidence/audit/sca-review-*.md,SP 800-171 §3.14.2,not_implemented,
+  shall be evaluated and appropriate measures shall be taken.",ISO 27001-2022.pdf,,,evidence/sbom/ + hermes_cli/security_advisories.py,evidence/audit/sca-review-*.md,SP 800-171 §3.14.2,evidence_captured, | 2026-06-16: SBOM (cyclonedx-2026-06-16.json) + pip-audit (pip-audit-2026-06-16.json) + dependency-review-2026-06-16.md capture the vuln-management process on the rebuilt tree.
 ISO27001_A.8.10,ISO/IEC 27001:2022,"8.10   Information deletion              Control
   Information stored in information systems, devices or in any other
   storage media shall be deleted when no longer required.",ISO 27001-2022.pdf,,,lliam_gov/security/cui.py on-delete sanitization,evidence/audit/cui-custody-test.txt,—,evidence_captured,"AI-223 CUI on-delete sanitization (best-effort + audited). Test: tests/lliam_gov/test_cui.py. Flipped in LG-5.2 crosswalk (AI-226) with committed code+test+evidence. | RE-VERIFIED 2026-06-16 on clean Hermes v2026.6.5 (3c231eb) rebuild: overlay re-wired, tests/lliam_gov green as operator, phase5 chaos (fail-closed) + pentest (bypass-refused) captured."
@@ -1331,7 +1331,7 @@ ISO27001_A.8.16,ISO/IEC 27001:2022,"8.16   Monitoring activities             Con
   mation security incidents.",ISO 27001-2022.pdf,,,lliam_gov/security/audit_logger.py review cadence,evidence/audit/audit-log-review-*.md,SP 800-171 §3.3.4,not_implemented,
 ISO27001_A.8.20,ISO/IEC 27001:2022,"8.20      Networks security                   Control
   Networks and network devices shall be secured, managed and controlled
-  to protect information in systems and applications.",ISO 27001-2022.pdf,,,"lliam_gov/security/egress.py + gateway/platforms/{slack,email,telegram}.py (other adapters deleted)",evidence/audit/boundary-controls.txt,SP 800-171 §3.13.1,scaffolded,
+  to protect information in systems and applications.",ISO 27001-2022.pdf,,,"lliam_gov/security/egress.py + gateway/platforms/{slack,email,telegram}.py (other adapters deleted)",evidence/audit/boundary-controls.txt,SP 800-171 §3.13.1,evidence_captured, | 2026-06-16: artifact verified present on clean v2026.6.5 rebuild.
 ISO27001_A.8.21,ISO/IEC 27001:2022,"8.21      Security of network services        Control
   Security mechanisms, service levels and service requirements of network
   services shall be identified, implemented and monitored.",ISO 27001-2022.pdf,,,"lliam_gov/security/egress.py (TLS 1.2+, verify=True)",evidence/audit/egress-policy-test.txt,—,evidence_captured,"AI-220 network-service TLS posture. Test: tests/lliam_gov/test_egress.py. Flipped in LG-5.2 crosswalk (AI-226) with committed code+test+evidence. | RE-VERIFIED 2026-06-16 on clean Hermes v2026.6.5 (3c231eb) rebuild: overlay re-wired, tests/lliam_gov green as operator, phase5 chaos (fail-closed) + pentest (bypass-refused) captured."
@@ -1348,4 +1348,4 @@ ISO27001_A.8.28,ISO/IEC 27001:2022,"8.28      Secure coding                     
   Secure coding principles shall be applied to software development.",ISO 27001-2022.pdf,,,Hermes upstream practice + PR review,(upstream CONTRIBUTING.md + repo PR review),—,not_implemented,
 ISO27001_A.8.30,ISO/IEC 27001:2022,"8.30      Outsourced development              Control
   The organization shall direct, monitor and review the activities related
-  to outsourced system development.",ISO 27001-2022.pdf,,,Hermes upstream lineage,NOTICE,—,implemented,
+  to outsourced system development.",ISO 27001-2022.pdf,,,Hermes upstream lineage,NOTICE,—,evidence_captured, | 2026-06-16: artifact verified present on clean v2026.6.5 rebuild.
