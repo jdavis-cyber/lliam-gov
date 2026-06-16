@@ -58,6 +58,14 @@ from agent.trajectory import has_incomplete_scratchpad
 from agent.usage_pricing import estimate_usage_cost, normalize_usage
 from hermes_constants import PARTIAL_STREAM_STUB_ID
 from hermes_logging import set_session_context
+from lliam_gov.security.audit_logger import AuditLoggerError
+from lliam_gov.security.session_audit import (
+    audit_failure_result,
+    audit_session_event,
+    session_open_params,
+    turn_end_params,
+    turn_start_params,
+)
 from tools.skill_provenance import set_current_write_origin
 from utils import base_url_host_matches, env_var_enabled
 
@@ -438,6 +446,33 @@ def run_conversation(
     turn_id = f"{agent.session_id or 'session'}:{effective_task_id}:{uuid.uuid4().hex[:8]}"
     agent._current_turn_id = turn_id
     agent._current_api_request_id = ""
+
+    # Session audit (LG, SP 800-171 3.3.x): record session_open (once) and
+    # conversation_turn_start to the append-only hash-chained log. Fail-closed
+    # — a turn that cannot be audited does not run.
+    turn_started_at = time.monotonic()
+    try:
+        if not getattr(agent, "_lliam_audit_session_open_logged", False):
+            audit_session_event(
+                agent,
+                "session_open",
+                params=session_open_params(agent),
+            )
+            agent._lliam_audit_session_open_logged = True
+        audit_session_event(
+            agent,
+            "conversation_turn_start",
+            params=turn_start_params(
+                agent,
+                conversation_history=conversation_history,
+                stream_callback=stream_callback,
+                task_id=effective_task_id,
+            ),
+        )
+    except AuditLoggerError as exc:
+        logger.error("Audit logging failed closed before conversation start: %s", exc)
+        agent._stream_callback = None
+        return audit_failure_result(agent, exc)
     
     # Reset retry counters and iteration budget at the start of each turn
     # so subagent usage from a previous turn doesn't eat into the next one.
@@ -4644,6 +4679,28 @@ def run_conversation(
         )
     else:
         logger.info(_diag_msg, *_diag_args)
+
+    # Session audit (LG, SP 800-171 3.3.x): record conversation_turn_end with
+    # the turn's outcome + duration to the append-only chain. The turn has
+    # already completed here, so an audit-write failure is logged rather than
+    # unwound.
+    try:
+        audit_session_event(
+            agent,
+            "conversation_turn_end",
+            params=turn_end_params(
+                agent,
+                api_call_count=api_call_count,
+                completed=completed,
+                failed=failed,
+                interrupted=interrupted,
+                message_count=len(messages),
+                turn_exit_reason=_turn_exit_reason,
+            ),
+            duration_ms=int((time.monotonic() - turn_started_at) * 1000),
+        )
+    except AuditLoggerError as exc:
+        logger.error("Audit logging failed closed after conversation end: %s", exc)
 
     # File-mutation verifier footer.
     # If one or more ``write_file`` / ``patch`` calls failed during this
