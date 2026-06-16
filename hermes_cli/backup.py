@@ -141,6 +141,92 @@ def _format_size(nbytes: int) -> str:
     return f"{nbytes:.1f} TB"
 
 
+# ---------------------------------------------------------------------------
+# CUI backup encryption at rest (LG-3.9 / AI-279, SP 800-171 3.8.9)
+# ---------------------------------------------------------------------------
+
+ENCRYPTED_BACKUP_SUFFIX = ".enc"
+
+
+def _backup_encryption_enabled() -> bool:
+    """Backups encrypt whenever persisted-state encryption is on.
+
+    Single gate (``LLIAM_GOV_ENCRYPT_STATE=1``) so the production profile can't
+    end up with encrypted live state but plaintext CUI in backup archives.
+    """
+    from lliam_gov.security.state_codec import state_encryption_enabled
+
+    return state_encryption_enabled()
+
+
+def _backup_key_manager(key_manager=None):
+    if key_manager is not None:
+        return key_manager
+    from lliam_gov.security.encrypted_file import get_shared_key_manager
+
+    return get_shared_key_manager()
+
+
+def encrypt_backup_archive(zip_path: Path, *, key_manager=None) -> Path:
+    """Encrypt a completed backup zip to ``<name>.zip.enc`` and remove plaintext.
+
+    Fail-closed: the plaintext zip is removed in BOTH outcomes — on success it
+    is replaced by the ciphertext file, on failure it is deleted before the
+    error propagates, so an unencryptable backup never leaves CUI at rest.
+
+    NOTE ``EncryptedFile`` is deliberately not used here: its atomic writer
+    chmods the destination directory to 0700, which is wrong for user-chosen
+    output locations. The archive is written 0600 in the same KeyManager wire
+    format, so ``hermes import`` recognizes it.
+
+    Restorability: the ciphertext is bound to the CURRENT Keychain key. After
+    ``rotate-key`` the old key is gone and prior encrypted backups become
+    unreadable — the rotate runbook requires a fresh backup after rotation.
+    """
+    enc_path = zip_path.with_name(zip_path.name + ENCRYPTED_BACKUP_SUFFIX)
+    try:
+        km = _backup_key_manager(key_manager)
+        ciphertext = km.encrypt(zip_path.read_bytes())
+        fd = os.open(enc_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, ciphertext)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except BaseException:
+        enc_path.unlink(missing_ok=True)
+        zip_path.unlink(missing_ok=True)
+        raise
+    zip_path.unlink(missing_ok=True)
+    return enc_path
+
+
+def decrypt_backup_archive(enc_path: Path, *, key_manager=None) -> Path:
+    """Decrypt an encrypted backup to a 0600 temp zip; caller deletes it."""
+    km = _backup_key_manager(key_manager)
+    plaintext = km.decrypt(enc_path.read_bytes())
+    fd, tmp_name = tempfile.mkstemp(suffix=".zip", prefix="lliam-backup-")
+    try:
+        os.fchmod(fd, 0o600)
+        os.write(fd, plaintext)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    return Path(tmp_name)
+
+
+def _looks_like_encrypted_backup(path: Path) -> bool:
+    """Static wire-format sniff that never touches the Keychain."""
+    from lliam_gov.security.state_codec import looks_encrypted
+
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(64)
+    except OSError:
+        return False
+    return looks_encrypted(head)
+
+
 def run_backup(args) -> None:
     """Create a zip backup of the Hermes home directory."""
     hermes_root = get_default_hermes_root()
@@ -233,6 +319,19 @@ def run_backup(args) -> None:
                 print(f"  {i}/{file_count} files ...")
 
     elapsed = time.monotonic() - t0
+
+    # CUI backup encryption at rest (LG-3.9 / AI-279, SP 800-171 3.8.9): when
+    # state encryption is enabled, encrypt the completed archive and remove the
+    # plaintext zip. Fail-closed — the plaintext is deleted on any failure.
+    if _backup_encryption_enabled():
+        try:
+            out_path = encrypt_backup_archive(out_path)
+        except Exception as exc:
+            # Fail closed: encrypt_backup_archive already removed the plaintext
+            # and any partial ciphertext, so no CUI is left at rest. Surface a
+            # non-zero exit rather than leaving an unencrypted backup.
+            print(f"Error: backup encryption failed (fail-closed): {exc}")
+            sys.exit(1)
     zip_size = out_path.stat().st_size
 
     # Summary
@@ -314,13 +413,35 @@ def _detect_prefix(zf: zipfile.ZipFile) -> str:
 
 
 def run_import(args) -> None:
-    """Restore a Hermes backup from a zip file."""
+    """Restore a Hermes backup from a zip file (decrypting first if needed)."""
     zip_path = Path(args.zipfile).expanduser().resolve()
 
     if not zip_path.is_file():
         print(f"Error: File not found: {zip_path}")
         sys.exit(1)
 
+    # Encrypted-at-rest backup (SP 800-171 3.8.9): decrypt to a 0600 temp zip
+    # for the duration of the import, then remove it.
+    decrypted_tmp: Optional[Path] = None
+    if not zipfile.is_zipfile(zip_path) and _looks_like_encrypted_backup(zip_path):
+        print("Encrypted backup detected; decrypting ...")
+        try:
+            zip_path = decrypted_tmp = decrypt_backup_archive(zip_path)
+        except Exception as exc:
+            print(f"Error: cannot decrypt backup archive: {exc}")
+            print("The archive is bound to the Keychain key that encrypted it; "
+                  "backups taken before a rotate-key cannot be restored.")
+            sys.exit(1)
+
+    try:
+        _run_import_zip(zip_path, args)
+    finally:
+        if decrypted_tmp is not None:
+            decrypted_tmp.unlink(missing_ok=True)
+
+
+def _run_import_zip(zip_path: Path, args) -> None:
+    """Import a plaintext backup zip onto the Hermes home root."""
     if not zipfile.is_zipfile(zip_path):
         print(f"Error: Not a valid zip file: {zip_path}")
         sys.exit(1)
