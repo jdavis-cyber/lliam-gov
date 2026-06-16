@@ -557,6 +557,36 @@ _AGENT_LOOP_TOOLS = {"todo", "memory", "session_search", "delegate_task"}
 _READ_SEARCH_TOOLS = {"read_file", "search_files"}
 
 
+def _get_tool_audit_logger():
+    """Return the process audit logger for tool dispatch events."""
+
+    from lliam_gov.security.audit_logger import get_shared_audit_logger
+
+    return get_shared_audit_logger()
+
+
+def _tool_audit_failure(exc: Exception) -> str:
+    return json.dumps(
+        {"error": f"Audit logging failed closed: {exc}"},
+        ensure_ascii=False,
+    )
+
+
+def _audit_tool_event(**kwargs) -> "Optional[str]":
+    """Append a tool audit event (LG-4.x, SP 800-171 3.3.x).
+
+    Returns a JSON error string when audit logging fails, because tool
+    dispatch must fail closed if audit evidence cannot be written.
+    """
+
+    try:
+        _get_tool_audit_logger().log_event(**kwargs)
+    except Exception as exc:
+        logger.error("tool audit logging failed closed: %s", exc, exc_info=True)
+        return _tool_audit_failure(exc)
+    return None
+
+
 # =========================================================================
 # Tool error sanitization
 # =========================================================================
@@ -1021,6 +1051,77 @@ def handle_function_call(
                 )
                 return result
 
+        # Capability gate (LG-4.2, SP 800-171 3.1.2): under the governed
+        # profile (LLIAM_GOV_CAPABILITY_ENFORCE=1) every dispatch must be
+        # covered by the session's authorized capability set. Denials are
+        # audited like plugin blocks and fail closed if the audit write fails.
+        # No-op when enforcement is off.
+        from lliam_gov.security.capabilities import CapabilityDenied, check_dispatch
+
+        try:
+            check_dispatch(function_name)
+        except CapabilityDenied as cap_exc:
+            audit_error = _audit_tool_event(
+                event_type="tool_call_blocked",
+                session_id=session_id or "",
+                tool_name=function_name,
+                tool_call_id=tool_call_id or "",
+                params=function_args,
+                duration_ms=0,
+                blocked=True,
+                block_reason=f"capability_denied: {cap_exc}",
+                error=str(cap_exc),
+            )
+            if audit_error is not None:
+                return audit_error
+            return json.dumps({"error": str(cap_exc)}, ensure_ascii=False)
+
+        # Self-modification gate (LG-4.5, ISO 42001 A.6.2.4): when enabled
+        # (LLIAM_GOV_SELFMOD_GATE=1), selfmod- and memory-write-tagged dispatch
+        # is STAGED as a proposal for human approval instead of executing. The
+        # handler is never invoked, so a rejected proposal has nothing to leak
+        # into live state. No-op when the gate is off.
+        from lliam_gov.security.selfmod_gate import (
+            GATED_CAPABILITIES,
+            propose,
+            selfmod_gate_enabled,
+        )
+
+        if selfmod_gate_enabled():
+            from lliam_gov.security.capabilities import capability_for_tool
+            from tools.registry import registry as _tool_registry
+
+            _entry = _tool_registry.get_entry(function_name)
+            _cap = capability_for_tool(
+                function_name, _entry.toolset if _entry else None
+            )
+            if _cap in GATED_CAPABILITIES:
+                try:
+                    proposal_id = propose(
+                        kind=f"tool:{function_name}",
+                        summary=f"staged {function_name} dispatch ({_cap})",
+                        payload={"tool": function_name, "args": function_args},
+                    )
+                except Exception as stage_exc:
+                    return json.dumps(
+                        {"error": f"self-mod staging failed closed: {stage_exc}"},
+                        ensure_ascii=False,
+                    )
+                return json.dumps(
+                    {
+                        "staged": True,
+                        "proposal_id": proposal_id,
+                        "message": (
+                            f"{function_name} is self-modifying ({_cap}) and the "
+                            "Lliam-GOV approval gate is active. The request was "
+                            f"staged as proposal {proposal_id}; a privileged "
+                            "operator must run 'lliam-gov approve "
+                            f"{proposal_id} --note ...' before it can be applied."
+                        ),
+                    },
+                    ensure_ascii=False,
+                )
+
         # ACP/Zed edit approval runs before any file mutation.  The requester
         # is bound via ContextVar only for ACP sessions, so CLI/gateway paths
         # are unaffected when it is unset.
@@ -1043,6 +1144,19 @@ def handle_function_call(
                 notify_other_tool_call(task_id or "default")
             except Exception:
                 pass  # file_tools may not be loaded yet
+
+        # Tool dispatch audit (LG-4.x, SP 800-171 3.3.x): always-on append-only
+        # evidence. Fail closed — a dispatch that cannot be audited must not run.
+        audit_error = _audit_tool_event(
+            event_type="tool_call_start",
+            session_id=session_id or "",
+            tool_name=function_name,
+            tool_call_id=tool_call_id or "",
+            params=function_args,
+            blocked=False,
+        )
+        if audit_error is not None:
+            return audit_error
 
         # Measure tool dispatch latency so post_tool_call and
         # transform_tool_result hooks can observe per-tool duration.
@@ -1090,6 +1204,33 @@ def handle_function_call(
                 except Exception:
                     pass
         duration_ms = int((time.monotonic() - _dispatch_start) * 1000)
+
+        audit_error = _audit_tool_event(
+            event_type="tool_call_end",
+            session_id=session_id or "",
+            tool_name=function_name,
+            tool_call_id=tool_call_id or "",
+            params=function_args,
+            duration_ms=duration_ms,
+            blocked=False,
+            error=None,
+        )
+        if audit_error is not None:
+            return audit_error
+
+        # CUI chain of custody (LG-4.6): evidence marked-path access after a
+        # successful dispatch. Marking + audit only — never blocks. Custody
+        # evidence is the control, so a chain failure here fails closed like
+        # the other tool audit events. No-op when no CUI manifest is present.
+        try:
+            from lliam_gov.security.cui import scan_args_for_cui
+
+            scan_args_for_cui(
+                function_name, function_args, session_id=session_id or ""
+            )
+        except Exception as cui_exc:
+            logger.error("CUI custody audit failed closed: %s", cui_exc)
+            return _tool_audit_failure(cui_exc)
 
         _emit_post_tool_call_hook(
             function_name=function_name,
