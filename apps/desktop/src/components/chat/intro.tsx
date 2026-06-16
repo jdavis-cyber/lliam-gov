@@ -142,7 +142,7 @@ function pickCopy(copies: IntroCopy[], seed = 0): IntroCopy {
   return copies[Math.abs(seed) % copies.length] || FALLBACK_COPY[0]
 }
 
-const WORDMARK = 'HERMES AGENT'
+const WORDMARK = 'LLIAM-GOV'
 
 function resolveCopy(personality?: string, seed?: number): IntroCopy {
   const personalityKey = normalizeKey(personality)
@@ -166,8 +166,8 @@ export function Intro({ personality, seed }: IntroProps) {
       <div className="w-full min-w-0">
         <p
           aria-label={WORDMARK}
-          className="fit-text mx-auto mb-3 w-[88%] font-['Collapse'] font-bold uppercase leading-[0.9] tracking-[0.08em] text-midground mix-blend-plus-lighter dark:text-foreground/90"
-          style={{ '--fit-text-line-height': '0.9', '--fit-text-min': '2.75rem' } as CSSProperties}
+          className="fit-text mx-auto mb-3 w-[88%] font-['Collapse'] font-bold uppercase leading-[0.9] tracking-[0.08em]"
+          style={{ '--fit-text-line-height': '0.9', '--fit-text-min': '2.75rem', color: '#2563eb' } as CSSProperties}
         >
           <span>
             <span>{WORDMARK}</span>
