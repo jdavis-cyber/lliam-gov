@@ -24,9 +24,11 @@ custom provider  →  http://127.0.0.1:8765/v1  (claude_bridge.py, loopback)
    └─ OR provider=openai-codex → chatgpt.com/backend-api/codex → Codex/gpt-5.5
 ```
 
-- **Two homes, never shared:** the user's EA Hermes lives in `~/.hermes`; Lliam-GOV
-  is pinned to **`~/.lliam-gov`** via `HERMES_HOME`. Sharing the default pollutes
-  the EA (sessions, skills, auth, gateway).
+- **Isolated home:** Lliam-GOV is pinned to **`~/.lliam-gov`** via `HERMES_HOME`
+  (first-run writes config, egress allowlist, and auth there). On a machine that
+  *also* runs the upstream EA Hermes (which defaults to `~/.hermes`), this pin is
+  what keeps the two from sharing sessions, skills, auth, or gateway — but no EA
+  install is required, and a clean GOV-only box never creates `~/.hermes`.
 - **Two model paths:** Codex (`gpt-5.5`, native HTTP) and Claude-on-Max (via the
   local `claude_bridge.py` that shells out to `claude -p`).
 - **The bridge** is what lets Claude run on the Max subscription (first-party
@@ -107,6 +109,13 @@ HERMES_HOME=~/.lliam-gov ~/lliam-gov/venv/bin/hermes config set model.openai_run
 GOTCHA: do NOT use `openai_runtime: codex_app_server` (needs an uninstalled
 `codex` CLI binary → empty responses). `auto` uses the HTTP backend.
 
+This provider is **self-contained**: `gpt-5.5` + `auto` makes native HTTPS calls
+to `chatgpt.com` and needs **no** `codex` CLI binary — its only requirements are
+the OpenAI OAuth token (`auth.json`, written to `~/.lliam-gov`) and the egress
+hosts in §3a. The `codex`/`gemini` CLIs are optional; install them to the same
+npm global prefix (`npm i -g @openai/codex @google/gemini-cli`) only if you want
+those runtimes. So **both** providers install without ever touching `~/.hermes`.
+
 ---
 
 ## 5. Provider auth B — Claude on Max via the bridge
@@ -114,9 +123,12 @@ GOTCHA: do NOT use `openai_runtime: codex_app_server` (needs an uninstalled
 This is what makes Claude run on the **Max subscription** (not the metered API).
 
 ### 5a. Install the Claude Code CLI + mint a token
+Uses the system Node from §1 — the CLI installs into your npm global prefix
+(`npm prefix -g`/bin) and is exposed on the bridge's PATH via `~/.local/bin`.
+No `~/.hermes` and no EA install required.
 ```bash
-npm install -g @anthropic-ai/claude-code      # lands in ~/.hermes/node/bin
-ln -sf ~/.hermes/node/bin/claude ~/.local/bin/claude
+npm install -g @anthropic-ai/claude-code      # lands in your npm global prefix (on PATH)
+ln -sf "$(command -v claude)" ~/.local/bin/claude   # expose on the bridge PATH (/opt/homebrew/bin:~/.local/bin)
 claude setup-token                            # browser auth with Max → prints a token
 ```
 `setup-token` prints a token for the `CLAUDE_CODE_OAUTH_TOKEN` env var (it does

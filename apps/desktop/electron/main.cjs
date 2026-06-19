@@ -5367,7 +5367,7 @@ function startLliamBridge() {
     const py = path.join(home, 'lliam-gov', 'venv', 'bin', 'python')
     const bridge = path.join(home, '.lliam-gov', 'claude_bridge.py')
     if (!fileExists(py) || !fileExists(bridge)) return
-    const extraPath = ['/opt/homebrew/bin', path.join(home, '.local', 'bin'), path.join(home, '.hermes', 'node', 'bin')].join(':')
+    const extraPath = ['/opt/homebrew/bin', path.join(home, '.local', 'bin')].join(':')
     _lliamBridgeProc = spawn(py, [bridge], {
       stdio: 'ignore',
       env: { ...process.env, PATH: `${extraPath}:${process.env.PATH || ''}` }
