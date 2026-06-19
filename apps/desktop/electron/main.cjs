@@ -200,7 +200,10 @@ function resolveHermesHome() {
     if (!directoryExists(localappdata) && directoryExists(legacy)) return legacy
     return localappdata
   }
-  return path.join(app.getPath('home'), '.hermes')
+  // Lliam-GOV governance fork: default to the isolated home so a Finder-launched
+  // packaged build never adopts the executive-assistant's ~/.hermes. Explicit
+  // HERMES_HOME (e.g. `npm start`) still wins via the check at the top.
+  return path.join(app.getPath('home'), '.lliam-gov')
 }
 
 const HERMES_HOME = resolveHermesHome()
@@ -5355,12 +5358,37 @@ ipcMain.handle('hermes:version', async () => ({
   hermesRoot: resolveUpdateRoot()
 }))
 
+// --- Lliam-GOV: local Claude bridge (the claude -p model endpoint on 127.0.0.1).
+// Started when the app opens, stopped on quit. No login-persistent service.
+let _lliamBridgeProc = null
+function startLliamBridge() {
+  try {
+    const home = app.getPath('home')
+    const py = path.join(home, 'lliam-gov', 'venv', 'bin', 'python')
+    const bridge = path.join(home, '.lliam-gov', 'claude_bridge.py')
+    if (!fileExists(py) || !fileExists(bridge)) return
+    const extraPath = ['/opt/homebrew/bin', path.join(home, '.local', 'bin'), path.join(home, '.hermes', 'node', 'bin')].join(':')
+    _lliamBridgeProc = spawn(py, [bridge], {
+      stdio: 'ignore',
+      env: { ...process.env, PATH: `${extraPath}:${process.env.PATH || ''}` }
+    })
+    _lliamBridgeProc.on('error', () => { _lliamBridgeProc = null })
+    _lliamBridgeProc.on('exit', () => { _lliamBridgeProc = null })
+  } catch {
+    void 0
+  }
+}
+function stopLliamBridge() {
+  try { if (_lliamBridgeProc) { _lliamBridgeProc.kill(); _lliamBridgeProc = null } } catch { void 0 }
+}
+
 app.whenReady().then(() => {
   if (IS_MAC) {
     Menu.setApplicationMenu(buildApplicationMenu())
   } else {
     Menu.setApplicationMenu(null)
   }
+  startLliamBridge()
   installMediaPermissions()
   registerMediaProtocol()
   ensureWslWindowsFonts()
@@ -5397,6 +5425,7 @@ function configureSpellChecker() {
 }
 
 app.on('before-quit', () => {
+  stopLliamBridge()
   // Quitting mid-install should stop the installer, not orphan it.
   if (bootstrapAbortController) {
     try {

@@ -130,10 +130,10 @@
   },
   "build": {
     "electronVersion": "40.9.3",
-    "appId": "com.nousresearch.hermes",
-    "productName": "Hermes",
-    "executableName": "Hermes",
-    "artifactName": "Hermes-${version}-${os}-${arch}.${ext}",
+    "appId": "gov.lliam.desktop",
+    "productName": "Lliam-GOV",
+    "executableName": "Lliam-GOV",
+    "artifactName": "Lliam-GOV-${version}-${os}-${arch}.${ext}",
     "icon": "assets/icon",
     "directories": {
       "output": "release"
@@ -173,9 +173,9 @@
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.inherit.plist",
       "extendInfo": {
-        "CFBundleDisplayName": "Hermes",
-        "CFBundleExecutable": "Hermes",
-        "CFBundleName": "Hermes",
+        "CFBundleDisplayName": "Lliam-GOV",
+        "CFBundleExecutable": "Lliam-GOV",
+        "CFBundleName": "Lliam-GOV",
         "NSAudioCaptureUsageDescription": "Hermes uses audio capture for voice conversations.",
         "NSMicrophoneUsageDescription": "Hermes uses the microphone for voice input and voice conversations."
       },
@@ -184,7 +184,8 @@
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "identity": null
     },
     "dmg": {
       "title": "Install Hermes",
