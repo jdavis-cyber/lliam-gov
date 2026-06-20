@@ -7302,22 +7302,40 @@ def _write_desktop_build_stamp(project_root: Path, *, source_mode: bool) -> None
 
 
 def _desktop_packaged_executable(desktop_dir: Path) -> Optional[Path]:
-    """Return the current platform's unpacked Electron app executable."""
+    """Return the current platform's unpacked Electron app executable.
+
+    The executable basename follows the configured electron-builder
+    ``executableName``/``productName`` rather than a hardcoded "Hermes", so a
+    rebranded fork (e.g. Lliam-GOV → ``Lliam-GOV.app``) is discovered exactly
+    like an upstream build. Falls back to globbing any built ``.app`` so an
+    unexpected name still launches.
+    """
     release_dir = desktop_dir / "release"
+    name = "Hermes"
+    try:
+        import json as _json
+        pkg = _json.loads((desktop_dir / "package.json").read_text())
+        build = pkg.get("build") or {}
+        name = build.get("executableName") or build.get("productName") or pkg.get("productName") or name
+    except Exception:
+        pass
+
     if sys.platform == "darwin":
-        candidates = list(release_dir.glob("mac*/Hermes.app/Contents/MacOS/Hermes"))
+        candidates = list(release_dir.glob(f"mac*/{name}.app/Contents/MacOS/{name}"))
+        if not candidates:  # fall back to any built .app
+            candidates = [a / "Contents" / "MacOS" / a.stem for a in release_dir.glob("mac*/*.app")]
     elif sys.platform == "win32":
         candidates = [
-            release_dir / "win-unpacked" / "Hermes.exe",
-            release_dir / "win-ia32-unpacked" / "Hermes.exe",
-            release_dir / "win-arm64-unpacked" / "Hermes.exe",
+            release_dir / "win-unpacked" / f"{name}.exe",
+            release_dir / "win-ia32-unpacked" / f"{name}.exe",
+            release_dir / "win-arm64-unpacked" / f"{name}.exe",
         ]
     else:
         candidates = [
-            release_dir / "linux-unpacked" / "hermes",
-            release_dir / "linux-unpacked" / "Hermes",
-            release_dir / "linux-arm64-unpacked" / "hermes",
-            release_dir / "linux-arm64-unpacked" / "Hermes",
+            release_dir / "linux-unpacked" / name,
+            release_dir / "linux-unpacked" / name.lower(),
+            release_dir / "linux-arm64-unpacked" / name,
+            release_dir / "linux-arm64-unpacked" / name.lower(),
         ]
 
     existing = [p for p in candidates if p.exists()]

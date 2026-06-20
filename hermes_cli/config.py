@@ -1546,7 +1546,8 @@ DEFAULT_CONFIG = {
     "tts": {
         "provider": "edge",  # "edge" (free) | "elevenlabs" (premium) | "openai" | "xai" | "minimax" | "mistral" | "gemini" | "neutts" (local) | "kittentts" (local) | "piper" (local)
         "edge": {
-            "voice": "en-US-AriaNeural",
+            "voice": "en-US-SteffanNeural",  # Lliam-GOV default voice
+            "speed": 1.2,
             # Popular: AriaNeural, JennyNeural, AndrewNeural, BrianNeural, SoniaNeural
         },
         "elevenlabs": {
@@ -1614,6 +1615,7 @@ DEFAULT_CONFIG = {
         "record_key": "ctrl+b",
         "max_recording_seconds": 120,
         "auto_tts": False,
+        "desktop_auto_tts": True,     # Lliam-GOV: speak replies aloud in the desktop app (no MP3s into threads)
         "beep_enabled": True,         # Play record start/stop beeps in CLI voice mode
         "silence_threshold": 200,     # RMS below this = silence (0-32767)
         "silence_duration": 3.0,      # Seconds of silence before auto-stop
