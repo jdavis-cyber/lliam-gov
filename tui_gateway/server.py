@@ -4603,9 +4603,36 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
                 else:
                     run_message = _enrich_with_attached_images(prompt, images)
 
+            # Streaming TTS: feed text deltas into a sentence chunker so local
+            # voice playback starts while the response is still generating. This
+            # uses temp files for sync providers like Edge and does not send
+            # MEDIA:/attachments to any gateway thread.
+            use_streaming_tts = False
+            tts_text_queue = None
+            tts_stop_event = None
+            tts_done_event = None
+            tts_thread = None
+            if _voice_tts_enabled():
+                try:
+                    from tools.tts_tool import stream_tts_to_speaker
+                    tts_text_queue = queue.Queue()
+                    tts_stop_event = threading.Event()
+                    tts_done_event = threading.Event()
+                    tts_thread = threading.Thread(
+                        target=stream_tts_to_speaker,
+                        args=(tts_text_queue, tts_stop_event, tts_done_event),
+                        daemon=True,
+                    )
+                    tts_thread.start()
+                    use_streaming_tts = True
+                except Exception as _tts_exc:
+                    logger.warning("streaming TTS setup failed: %s", _tts_exc)
+
             def _stream(delta):
                 with session["history_lock"]:
                     _append_inflight_delta(session, delta)
+                if use_streaming_tts and tts_text_queue is not None:
+                    tts_text_queue.put(delta)
                 payload = {"text": delta}
                 if streamer and (r := streamer.feed(delta)) is not None:
                     payload["rendered"] = r
@@ -4785,15 +4812,15 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
                 except Exception:
                     pass
 
-            # CLI parity: when voice-mode TTS is on, speak the agent reply
-            # (cli.py:_voice_speak_response).  Only the final text — tool
-            # calls / reasoning already stream separately and would be
-            # noisy to read aloud.
+            # CLI parity fallback: if streaming TTS was not active, speak the
+            # final reply after completion. When streaming was active, sending
+            # the final text again would duplicate the spoken response.
             if (
                 status == "complete"
                 and isinstance(raw, str)
                 and raw.strip()
                 and _voice_tts_enabled()
+                and not use_streaming_tts
             ):
                 try:
                     from hermes_cli.voice import speak_text
@@ -4806,7 +4833,17 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
                     logger.warning("voice TTS skipped: hermes_cli.voice unavailable")
                 except Exception as e:
                     logger.warning("voice TTS dispatch failed: %s", e)
+            if use_streaming_tts and tts_text_queue is not None:
+                try:
+                    tts_text_queue.put(None)
+                except Exception:
+                    pass
         except Exception as e:
+            try:
+                if 'use_streaming_tts' in locals() and use_streaming_tts and tts_text_queue is not None:
+                    tts_text_queue.put(None)
+            except Exception:
+                pass
             import traceback
 
             trace = traceback.format_exc()

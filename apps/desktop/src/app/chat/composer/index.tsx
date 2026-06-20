@@ -14,6 +14,7 @@ import {
 } from 'react'
 
 import { hermesDirectiveFormatter } from '@/components/assistant-ui/directive-text'
+import { getHermesConfigRecord } from '@/hermes'
 import { Button } from '@/components/ui/button'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
@@ -22,6 +23,7 @@ import { chatMessageText } from '@/lib/chat-messages'
 import { SLASH_COMMAND_RE } from '@/lib/chat-runtime'
 import { DATA_IMAGE_URL_RE } from '@/lib/embedded-images'
 import { triggerHaptic } from '@/lib/haptics'
+import { playSpeechText } from '@/lib/voice-playback'
 import { cn } from '@/lib/utils'
 import { $composerAttachments, clearComposerAttachments, type ComposerAttachment } from '@/store/composer'
 import {
@@ -32,6 +34,7 @@ import {
   shouldAutoDrainOnSettle,
   updateQueuedPrompt
 } from '@/store/composer-queue'
+import { notifyError } from '@/store/notifications'
 import { $gatewayState, $messages } from '@/store/session'
 import { $threadScrolledUp } from '@/store/thread-scroll'
 
@@ -76,6 +79,56 @@ import { UrlDialog } from './url-dialog'
 import { VoiceActivity, VoicePlaybackActivity } from './voice-activity'
 
 const COMPOSER_STACK_BREAKPOINT_PX = 320
+
+
+type AssistantMessageLike = {
+  hidden?: boolean
+  id?: string
+  pending?: boolean
+  role?: string
+}
+
+function takeAutoSpeechChunk(bufferRef: { current: string }, force = false): string | null {
+  const buffer = bufferRef.current.replace(/\s+/g, ' ').trim()
+
+  if (!buffer) {
+    bufferRef.current = ''
+
+    return null
+  }
+
+  const sentence = buffer.match(/^(.+?[.!?。！？])(?:\s+|$)/)
+
+  if (sentence?.[1] && (sentence[1].length >= 8 || force)) {
+    const chunk = sentence[1].trim()
+    bufferRef.current = buffer.slice(sentence[1].length).trim()
+
+    return chunk
+  }
+
+  if (!force && buffer.length > 220) {
+    const softBoundary = Math.max(
+      buffer.lastIndexOf(', ', 180),
+      buffer.lastIndexOf('; ', 180),
+      buffer.lastIndexOf(': ', 180)
+    )
+
+    if (softBoundary > 80) {
+      const chunk = buffer.slice(0, softBoundary + 1).trim()
+      bufferRef.current = buffer.slice(softBoundary + 1).trim()
+
+      return chunk
+    }
+  }
+
+  if (!force) {
+    return null
+  }
+
+  bufferRef.current = ''
+
+  return buffer
+}
 
 // A single editor line is ~28px (--composer-input-min-height 1.625rem + 0.5rem
 // vertical padding). Anything taller means the text wrapped to a second line,
@@ -155,7 +208,13 @@ export function ChatBar({
   const dragDepthRef = useRef(0)
   const composingRef = useRef(false) // true during IME composition (CJK input)
   const lastSpokenIdRef = useRef<string | null>(null)
+  const autoReadMessageIdRef = useRef<string | null>(null)
+  const autoReadSourceLengthRef = useRef(0)
+  const autoReadBufferRef = useRef('')
+  const autoReadDrainingRef = useRef(false)
+  const [autoReadEnabled, setAutoReadEnabled] = useState(false)
 
+  const messages = useStore($messages)
   const narrow = useMediaQuery('(max-width: 30rem)')
 
   const at = useAtCompletions({ gateway: gateway ?? null, sessionId: sessionId ?? null, cwd: cwd ?? null })
@@ -209,6 +268,93 @@ export function ChatBar({
       ? t.composer.placeholderReconnecting
       : t.composer.placeholderStarting
     : restingPlaceholder
+
+  useEffect(() => {
+    let cancelled = false
+
+    getHermesConfigRecord()
+      .then(config => {
+        if (!cancelled) {
+          const voiceConfig = config.voice as Record<string, unknown> | undefined
+          setAutoReadEnabled(
+            Boolean(
+              voiceConfig &&
+                typeof voiceConfig === 'object' &&
+                (voiceConfig.desktop_auto_tts ?? voiceConfig.auto_tts)
+            )
+          )
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAutoReadEnabled(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!autoReadEnabled || voiceConversationActive) {
+      return
+    }
+
+    const last = messages.findLast(m => {
+      const row = m as AssistantMessageLike
+
+      return row.role === 'assistant' && !row.hidden
+    }) as AssistantMessageLike | undefined
+
+    if (!last?.id) {
+      return
+    }
+
+    if (last.id !== autoReadMessageIdRef.current) {
+      autoReadMessageIdRef.current = last.id
+      autoReadSourceLengthRef.current = 0
+      autoReadBufferRef.current = ''
+    }
+
+    const text = chatMessageText(last as unknown as Parameters<typeof chatMessageText>[0]).trim()
+
+    if (!text) {
+      return
+    }
+
+    if (text.length > autoReadSourceLengthRef.current) {
+      autoReadBufferRef.current = `${autoReadBufferRef.current}${text.slice(autoReadSourceLengthRef.current)}`
+      autoReadSourceLengthRef.current = text.length
+    }
+
+    if (autoReadDrainingRef.current) {
+      return
+    }
+
+    autoReadDrainingRef.current = true
+
+    const drain = async () => {
+      try {
+        while (true) {
+          const pending = Boolean((messages.find(m => (m as AssistantMessageLike).id === autoReadMessageIdRef.current) as AssistantMessageLike | undefined)?.pending)
+          const chunk = takeAutoSpeechChunk(autoReadBufferRef, !pending && !busy)
+
+          if (!chunk) {
+            break
+          }
+
+          await playSpeechText(chunk, { messageId: autoReadMessageIdRef.current, source: 'voice-conversation' })
+        }
+      } catch (error) {
+        notifyError(error, 'Automatic read aloud failed')
+      } finally {
+        autoReadDrainingRef.current = false
+      }
+    }
+
+    void drain()
+  }, [autoReadEnabled, busy, messages, voiceConversationActive])
 
   const focusInput = useCallback(() => {
     focusComposerInput(editorRef.current)

@@ -12278,21 +12278,12 @@ class HermesCLI:
 
             if self._voice_tts:
                 try:
-                    from tools.tts_tool import (
-                        _load_tts_config as _load_tts_cfg,
-                        _get_provider as _get_prov,
-                        _import_elevenlabs,
-                        _import_sounddevice,
-                        stream_tts_to_speaker,
-                    )
-                    _tts_cfg = _load_tts_cfg()
-                    if _get_prov(_tts_cfg) == "elevenlabs":
-                        # Verify both ElevenLabs SDK and audio output are available
-                        _import_elevenlabs()
-                        _import_sounddevice()
-                        use_streaming_tts = True
-                except (ImportError, OSError):
-                    pass
+                    from tools.tts_tool import stream_tts_to_speaker
+                    # stream_tts_to_speaker handles provider-specific setup. For Edge
+                    # and other sync providers it synthesizes sentence chunks to temp
+                    # files and plays them locally, so no ElevenLabs dependency is
+                    # required for near-real-time spoken output.
+                    use_streaming_tts = True
                 except Exception:
                     pass
 
