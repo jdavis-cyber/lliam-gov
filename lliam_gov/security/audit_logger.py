@@ -25,6 +25,11 @@ import socket
 import threading
 from typing import Any
 
+try:
+    import fcntl  # POSIX advisory inter-process file locking
+except ImportError:  # pragma: no cover - non-POSIX platforms (e.g. Windows)
+    fcntl = None  # type: ignore[assignment]
+
 from hermes_constants import get_hermes_home
 
 
@@ -33,6 +38,20 @@ AUDIT_FILE_SUFFIX = ".jsonl"
 HASH_PREFIX = "sha256:"
 _shared_audit_logger: AuditLogger | None = None
 _shared_audit_logger_lock = threading.Lock()
+
+
+def _flock_exclusive(fd: int) -> None:
+    """Take an exclusive advisory lock on ``fd`` (no-op off POSIX)."""
+
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+
+
+def _flock_release(fd: int) -> None:
+    """Release the advisory lock on ``fd`` (no-op off POSIX)."""
+
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_UN)
 
 
 class AuditLoggerError(Exception):
@@ -237,11 +256,14 @@ class AuditLogger:
                 "prev_hash": self._previous_hash,
             }
 
-            line = canonical_json(record)
-            record_hash = sha256_text(line)
-            self._append_line(path, line)
-            self._previous_hash = record_hash
-            return AuditWriteResult(path=path, record_hash=record_hash, record=record)
+            # ``prev_hash`` set above is only a cache-derived placeholder. The
+            # authoritative value is recomputed inside ``_append_chained`` from
+            # the file's real tail while holding an inter-process lock
+            # (issue #69), so a concurrent app+CLI write can never fork the
+            # hash chain into a false "tamper" state.
+            result = self._append_chained(path, record)
+            self._previous_hash = result.record_hash
+            return result
 
     def verify_current_month(self) -> AuditChainVerification:
         with self._lock:
@@ -297,8 +319,25 @@ class AuditLogger:
                     f"cannot rotate audit file {path} to {archive_path}: {exc}"
                 ) from exc
 
-    def _append_line(self, path: Path, line: str) -> None:
-        flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT
+    def _append_chained(self, path: Path, record: dict[str, Any]) -> AuditWriteResult:
+        """Append one record, chaining from the file's *real* tail.
+
+        Correctness under concurrent writers (issue #69): the desktop app and a
+        ``hermes`` CLI turn are separate processes, each with its own in-memory
+        ``_previous_hash``. To stop their writes forking the chain we:
+
+        1. take an exclusive ``flock`` on the monthly file (serialises across
+           processes, not just threads), then
+        2. *while holding the lock* re-read the actual last line and derive
+           ``prev_hash`` from it — never from the possibly-stale cache, then
+        3. write under ``O_APPEND`` (atomic at end-of-file) and ``fsync``,
+           then release.
+
+        Read-tail and write therefore live in one critical section, so two
+        writers serialise and the chain stays single-threaded on disk.
+        """
+
+        flags = os.O_RDWR | os.O_APPEND | os.O_CREAT
         try:
             fd = os.open(path, flags, 0o600)
         except OSError as exc:
@@ -306,14 +345,52 @@ class AuditLogger:
 
         try:
             os.chmod(path, 0o600)
-            os.write(fd, (line + "\n").encode("utf-8"))
-            os.fsync(fd)
+            _flock_exclusive(fd)
+            try:
+                record["prev_hash"] = self._tail_hash(fd)
+                line = canonical_json(record)
+                record_hash = sha256_text(line)
+                os.write(fd, (line + "\n").encode("utf-8"))
+                os.fsync(fd)
+            finally:
+                _flock_release(fd)
         except OSError as exc:
             raise AuditLoggerWriteError(
                 f"cannot write audit log {path}: {exc}"
             ) from exc
         finally:
             os.close(fd)
+
+        return AuditWriteResult(path=path, record_hash=record_hash, record=record)
+
+    @staticmethod
+    def _tail_hash(fd: int) -> str:
+        """Return ``sha256:`` of the last non-empty line currently in ``fd``.
+
+        Reads backwards from EOF, so the cost is the size of the final record
+        rather than the whole month. Returns :data:`GENESIS_HASH` for an empty
+        file. Must be called while holding the file's exclusive lock so the
+        tail reflects every prior writer (issue #69).
+        """
+
+        size = os.fstat(fd).st_size
+        if size == 0:
+            return AuditLogger.GENESIS_HASH
+
+        chunk = 8192
+        data = b""
+        pos = size
+        while pos > 0:
+            step = min(chunk, pos)
+            pos -= step
+            data = os.pread(fd, step, pos) + data
+            stripped = data.rstrip(b"\n")
+            if b"\n" in stripped or pos == 0:
+                last_line = stripped.rsplit(b"\n", 1)[-1]
+                if not last_line:
+                    return AuditLogger.GENESIS_HASH
+                return sha256_text(last_line.decode("utf-8"))
+        return AuditLogger.GENESIS_HASH
 
     def _audit_path(self, month: str) -> Path:
         return self.audit_dir / f"{AUDIT_FILE_PREFIX}-{month}{AUDIT_FILE_SUFFIX}"

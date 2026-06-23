@@ -69,24 +69,24 @@ def test_log_event_builds_hash_chain_and_verifies(tmp_path: Path) -> None:
 
 def test_log_event_serializes_concurrent_writes(tmp_path: Path, monkeypatch) -> None:
     logger = AuditLogger(audit_dir=tmp_path, session_id="s1", principal="jerome")
-    real_append_line = logger._append_line
+    real_append = logger._append_chained
     active_appends = 0
     max_active_appends = 0
     active_lock = threading.Lock()
 
-    def slow_append(path: Path, line: str) -> None:
+    def slow_append(path, record):
         nonlocal active_appends, max_active_appends
         with active_lock:
             active_appends += 1
             max_active_appends = max(max_active_appends, active_appends)
         try:
             time.sleep(0.02)
-            real_append_line(path, line)
+            return real_append(path, record)
         finally:
             with active_lock:
                 active_appends -= 1
 
-    monkeypatch.setattr(logger, "_append_line", slow_append)
+    monkeypatch.setattr(logger, "_append_chained", slow_append)
 
     threads = [
         threading.Thread(
@@ -107,6 +107,50 @@ def test_log_event_serializes_concurrent_writes(tmp_path: Path, monkeypatch) -> 
 
     assert max_active_appends == 1
     assert verify_audit_chain(tmp_path / "tool-calls-2026-01.jsonl").record_count == 8
+
+
+def test_concurrent_independent_writers_do_not_fork_chain(tmp_path: Path) -> None:
+    """Issue #69 regression: two *independent* writers (the desktop app and a
+    CLI turn) share the monthly file but not the in-memory chain tail.
+
+    Each ``AuditLogger`` has its own ``_previous_hash`` cache and its own
+    thread lock, exactly like two OS processes. Before the fix their
+    interleaved appends forked the chain and ``verify_audit_chain`` raised a
+    false ``prev_hash mismatch`` (the fail-closed tamper lockout). With the
+    inter-process ``flock`` + re-read-tail-under-lock fix, the on-disk chain
+    must stay single and verify clean.
+    """
+
+    app_writer = AuditLogger(
+        audit_dir=tmp_path, session_id="app", principal="jerome", pid=1001
+    )
+    cli_writer = AuditLogger(
+        audit_dir=tmp_path, session_id="cli", principal="jerome", pid=2002
+    )
+    per_writer = 25
+
+    def hammer(logger: AuditLogger, tag: str) -> None:
+        for index in range(per_writer):
+            logger.log_event(
+                event_type="tool_call_start",
+                tool_name="terminal",
+                tool_call_id=f"{tag}-{index}",
+                at=JANUARY,
+            )
+
+    threads = [
+        threading.Thread(target=hammer, args=(app_writer, "app")),
+        threading.Thread(target=hammer, args=(cli_writer, "cli")),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    path = tmp_path / "tool-calls-2026-01.jsonl"
+    # Must NOT raise AuditChainError: the chain is intact across both writers.
+    verification = verify_audit_chain(path)
+    assert verification.record_count == per_writer * 2
 
 
 def test_shared_audit_logger_reuses_single_chain_writer(tmp_path: Path, monkeypatch) -> None:
@@ -198,7 +242,11 @@ def test_file_modes_and_append_only_open_flags(
 
     path = tmp_path / "tool-calls-2026-01.jsonl"
     assert observed["flags"] & os.O_APPEND
-    assert observed["flags"] & os.O_WRONLY
+    # O_RDWR (not O_WRONLY) because the append path re-reads the chain tail
+    # under the lock before writing (issue #69). Append-only is preserved by
+    # O_APPEND + the absence of O_TRUNC.
+    assert (observed["flags"] & os.O_RDWR) == os.O_RDWR
+    assert not (observed["flags"] & os.O_TRUNC)
     assert observed["flags"] & os.O_CREAT
     assert observed["mode"] == 0o600
     assert stat_mode(path) == 0o600
