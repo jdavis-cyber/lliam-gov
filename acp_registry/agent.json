@@ -1,11 +1,11 @@
 {
   "id": "hermes-agent",
-  "name": "Hermes Agent",
+  "name": "Lliam-GOV",
   "version": "0.16.0",
-  "description": "Self-improving open-source AI agent by Nous Research with ACP editor integration, persistent memory, skills, and rich tool support.",
-  "repository": "https://github.com/NousResearch/hermes-agent",
-  "website": "https://hermes-agent.nousresearch.com/docs/user-guide/features/acp",
-  "authors": ["Nous Research"],
+  "description": "A personal AI agent with governance built in — policy controls, approval gates, and auditability. Built on Hermes Agent by Nous Research (MIT). ACP editor integration, persistent memory, skills, and rich tool support.",
+  "repository": "https://github.com/jdavis-cyber/lliam-gov",
+  "website": "https://github.com/jdavis-cyber/lliam-gov#readme",
+  "authors": ["Jerome Davis (Lliam-GOV)", "Nous Research (upstream Hermes Agent)"],
   "license": "MIT",
   "distribution": {
     "uvx": {
