@@ -34,6 +34,10 @@ WORK_DIR.mkdir(parents=True, exist_ok=True)
 PORT = int(os.getenv("CLAUDE_BRIDGE_PORT", "8765"))
 DEFAULT_MODEL = "claude-via-cli"
 CLAUDE_TIMEOUT = int(os.getenv("CLAUDE_BRIDGE_TIMEOUT", "240"))
+# Exact, vetted version of the Linear MCP package run via npx. Pinned so npm
+# can't resolve a floating 'latest' at call time (the user's Linear token is
+# passed into this process). Bump deliberately after vetting a new release.
+LINEAR_MCP_PKG = "@tacticlaunch/mcp-linear@1.1.2"
 
 app = FastAPI(title="claude-bridge")
 
@@ -49,10 +53,32 @@ def _load_token() -> str:
     return ""
 
 
+LOG_DIR = HOME / ".lliam-gov" / "logs"
+LOG_FILE = LOG_DIR / "claude_bridge.log"
+
+
 def _log(msg: str) -> None:
+    """Append a line to the bridge log under ~/.lliam-gov/logs (0600).
+
+    Kept out of world-readable /tmp: the bridge logs prompt/project snippets
+    and error output that could otherwise be read by other local users on a
+    shared machine.
+    """
     try:
-        with open("/tmp/claude_bridge.log", "a", encoding="utf-8") as fh:
-            fh.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(LOG_DIR, 0o700)
+        except OSError:
+            pass
+        fd = os.open(str(LOG_FILE), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.write(fd, f"[{time.strftime('%H:%M:%S')}] {msg}\n".encode("utf-8"))
+        finally:
+            os.close(fd)
+        try:
+            os.chmod(LOG_FILE, 0o600)
+        except OSError:
+            pass
     except OSError:
         pass
 
@@ -200,9 +226,14 @@ def _mcp_config(servers: list, write: bool) -> dict:
         if key:
             # Linear's official remote MCP is OAuth-only (no PAT via header), so
             # use a local key-based stdio server with a Personal API Key.
+            # Pinned to an exact, vetted version (dependency-pinning policy):
+            # npx must not resolve a floating 'latest' at call time, since
+            # LINEAR_API_TOKEN is handed to whatever version npm fetches —
+            # a registry update or compromise would otherwise be code execution
+            # with the user's Linear token. Bump deliberately after vetting.
             out["linear"] = {
                 "command": "npx",
-                "args": ["-y", "@tacticlaunch/mcp-linear"],
+                "args": ["-y", LINEAR_MCP_PKG],
                 "env": {"LINEAR_API_TOKEN": key},
             }
     return {"mcpServers": out}
@@ -244,11 +275,25 @@ def _tools_mode() -> str:
 
 PROJECT_FILE = HOME / ".lliam-gov" / ".bridge_project"
 # Paths the project setting may never expose (creds / other instances / system).
-_PROJECT_DENY = {
-    str(HOME), str(HOME / ".lliam-gov"), str(HOME / ".hermes"),
+# Exact-match-only: blocking these recursively would also reject legitimate
+# projects, since real project folders live under $HOME (and everything is
+# under "/").
+_PROJECT_DENY_EXACT = {str(HOME), "/"}
+# Recursive denies: reject the directory itself AND anything beneath it, so a
+# descendant like ~/.hermes/profiles/coder or ~/.ssh/keys can't smuggle
+# auth/config/session data into --add-dir.
+_PROJECT_DENY_TREE = {
+    str(HOME / ".lliam-gov"), str(HOME / ".hermes"),
     str(HOME / ".ssh"), str(HOME / ".aws"), str(HOME / ".gnupg"),
-    str(HOME / ".config"), "/", "/etc", "/var", "/usr",
+    str(HOME / ".config"), "/etc", "/var", "/usr",
 }
+
+
+def _is_denied_project(rp: str) -> bool:
+    """True if rp is a forbidden root or lives under a sensitive tree."""
+    if rp in _PROJECT_DENY_EXACT or rp in _PROJECT_DENY_TREE:
+        return True
+    return any(rp.startswith(root + os.sep) for root in _PROJECT_DENY_TREE)
 
 
 # The desktop app's native folder picker (Choose project directory) saves the
@@ -291,7 +336,7 @@ def _project_dirs() -> list:
             rp = str(Path(p).expanduser().resolve())
         except Exception:
             continue
-        if rp in _PROJECT_DENY or not Path(rp).is_dir():
+        if _is_denied_project(rp) or not Path(rp).is_dir():
             continue
         if rp not in out:
             out.append(rp)
