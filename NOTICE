@@ -16,3 +16,9 @@ frames the agent as evidence for the Katmai ISO 42001 program.
 
 Lliam-GOV is maintained by Jerome Davis. No original authorship of
 the upstream Hermes Agent codebase is claimed.
+
+  Copyright (c) 2025 Nous Research   -- upstream Hermes Agent (MIT; see LICENSE)
+  Copyright (c) 2025 Jerome Davis    -- Lliam-GOV governance overlay & docs (MIT)
+
+Both notices are retained together; neither replaces the other. See
+ATTRIBUTION.md for the full lineage.
