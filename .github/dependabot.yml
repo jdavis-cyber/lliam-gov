@@ -36,9 +36,11 @@ updates:
       prefix: "chore(actions)"
       include: "scope"
     groups:
-      # Batch routine action bumps into one PR per week to reduce noise.
-      # Security updates still open individually and bypass grouping.
-      actions-minor-patch:
-        update-types:
-          - "minor"
-          - "patch"
+      # Batch ALL routine action bumps (major, minor AND patch) into a single
+      # weekly PR to stop one-PR-per-action noise. Omitting `update-types`
+      # means every semver bump for any matched action lands in this one group.
+      # Security updates are unaffected: they bypass grouping and still open
+      # individually and immediately when a CVE affects a pinned version.
+      github-actions:
+        patterns:
+          - "*"
