@@ -101,8 +101,8 @@ Lliam-GOV is distributed as source. Clone the repo and run the setup script, whi
 ```bash
 git clone https://github.com/jdavis-cyber/lliam-gov.git
 cd lliam-gov
-./setup-hermes.sh     # installs uv, creates .venv, installs .[all], links the CLI
-./hermes              # auto-detects the venv — no need to `source` first
+./setup-hermes.sh     # installs uv, creates venv/, installs .[all], links the `hermes` CLI onto your PATH
+./venv/bin/hermes     # run the installed CLI (or just `hermes` once your shell picks up the new PATH)
 ```
 
 Then configure a model provider and start a conversation:
