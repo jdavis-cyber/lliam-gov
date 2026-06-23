@@ -1,18 +1,76 @@
 # Lliam-GOV
 
-**A personal AI agent with governance built in.**
+**A personal AI agent with enterprise-grade governance built in.**
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
   <a href="ATTRIBUTION.md"><img src="https://img.shields.io/badge/Built%20on-Hermes%20Agent-blueviolet?style=for-the-badge" alt="Built on Hermes Agent"></a>
-  <a href="docs/governance/control-matrix.md"><img src="https://img.shields.io/badge/Governance-ISO%2042001%20%2F%20NIST%20AI%20RMF-0A66C2?style=for-the-badge" alt="Governance"></a>
+  <a href="docs/governance/control-matrix.md"><img src="https://img.shields.io/badge/Governance-ISO%2042001%20%2F%2027001%20%2F%20NIST%20AI%20RMF-0A66C2?style=for-the-badge" alt="Governance"></a>
+  <a href="docs/governance/control-matrix.md"><img src="https://img.shields.io/badge/Approach-Governance--as--Code-111?style=for-the-badge" alt="Governance as Code"></a>
 </p>
+
+> ### For hiring managers — what this demonstrates
+> This repo is evidence that I can **build the systems, govern the systems, and defend the evidence.** It takes a capable open-source AI agent and wraps it in a *governance-as-code* overlay — policy controls, approval gates, encryption, and a tamper-evident audit trail enforced at the runtime boundary — then backs it with an auditor-ready control matrix crosswalked to **CMMC L2 / NIST SP 800-171 / ISO/IEC 42001 / ISO/IEC 27001**. It's the same discipline I apply to DoD/federal program execution: turn a framework into enforced, testable controls and produce the evidence an assessor would actually accept.
+>
+> **Bridges:** DoD/federal program execution · security, compliance & audit · ISO 42001/27001 + NIST AI RMF · hands-on GenAI engineering · governance-as-code.
+> **More:** [secondorderstrategy.com](https://secondorderstrategy.com) · author: Jerome Davis
+
+---
+
+## By the numbers
+
+| Signal | Value |
+| --- | --- |
+| Governance overlay (original work) | **14 security modules · ~2,870 LOC** in `lliam_gov/security/` |
+| Governance test coverage | **163 unit tests** in `tests/lliam_gov/` |
+| Enforced controls wired to code | **7** privileged-path controls (table below) |
+| Control matrix crosswalk | **CMMC L2 · NIST SP 800-171 Rev 2/3 · ISO/IEC 42001 · ISO/IEC 27001** |
+| Evidence artifacts | **66** under `evidence/` (incl. SBOM, audit, release) |
+| Audit trail | Append-only, **hash-chained**, tamper-evident |
+
+
+---
+
+## What it is
 
 Lliam-GOV is an agentic LLM assistant for environments where **autonomy has to stay accountable**. It pairs a capable open-source agent runtime with a governance overlay that puts policy controls, approval gates, and auditability at the core — not bolted on afterward. Every privileged action is mediated, logged to an append-only audit trail, and constrained by an explicit egress and capability policy.
 
-It is built for operators who need an AI number-two they can actually answer for: encryption at rest, a human-approval gate over the agent's own self-modification, a narrowed messaging surface, and a documented control set that maps to ISO/IEC 42001 and the NIST AI RMF.
+It is built for operators who need an AI number-two they can actually answer for: encryption at rest, a human-approval gate over the agent's own self-modification, a narrowed messaging surface, and a documented control set that maps to ISO/IEC 42001, ISO/IEC 27001, and the NIST AI RMF.
 
-> **Built on Hermes Agent.** Lliam-GOV is derived from [Hermes Agent](https://github.com/NousResearch/hermes-agent) by Nous Research (MIT-licensed). The agent runtime, conversation loop, tool system, and gateway are upstream work; Lliam-GOV's contribution is the governance overlay and the evidence set around it. See [ATTRIBUTION.md](ATTRIBUTION.md) for the full lineage and credit.
+> **Built on Hermes Agent.** Lliam-GOV is derived from [Hermes Agent](https://github.com/NousResearch/hermes-agent) by Nous Research (MIT-licensed). The agent runtime, conversation loop, tool system, and gateway are upstream work; **Lliam-GOV's original contribution is the governance overlay and the evidence set around it.** See [ATTRIBUTION.md](ATTRIBUTION.md) for the full lineage and credit.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TB
+    User([Operator]) --> CLI[Terminal UI / Gateway<br/>Slack · Email · Telegram]
+    CLI --> Loop[Conversation Loop<br/><i>upstream Hermes runtime</i>]
+    Loop -->|every privileged action| Guard{{Governance Boundary<br/><b>lliam_gov/security</b>}}
+
+    subgraph GOV [Governance-as-Code Overlay · original work]
+        direction TB
+        Cap[Capability &amp; Principal<br/>Isolation]
+        Self[Self-Modification<br/>Human-Approval Gate]
+        Egr[Egress Allowlist<br/>+ TLS Enforcement]
+        Enc[Encryption at Rest<br/>Key Manager]
+        Aud[(Append-Only<br/>Hash-Chained Audit)]
+    end
+
+    Guard --> Cap & Self & Egr & Enc
+    Cap & Self & Egr & Enc --> Aud
+    Guard -->|allowed| Tools[Tools · Skills · Subagents]
+    Aud --> AEP[[Automated Evidence<br/>Package export]]
+    AEP --> Matrix[Control Matrix<br/>CMMC · 800-171 · 42001 · 27001]
+
+    style GOV fill:#0A66C2,stroke:#06408a,color:#fff
+    style Guard fill:#111,stroke:#000,color:#fff
+    style Aud fill:#1a7f37,stroke:#0b5023,color:#fff
+    style Matrix fill:#6f42c1,stroke:#4b2a86,color:#fff
+```
+
+The runtime is the upstream Hermes Agent. Lliam-GOV adds the `lliam_gov/` package and wires its controls into the runtime's privileged paths (e.g. the audit hooks in `agent/conversation_loop.py`). Governance is enforced at the boundary, so the agent's day-to-day capabilities are unchanged while every privileged action remains accountable.
 
 ---
 
@@ -30,7 +88,7 @@ The governance overlay lives in [`lliam_gov/`](lliam_gov/) and is wired into the
 | **CUI marking & handling** | Controlled-information marking and audit instrumentation (the demo boundary is fail-closed: **no CUI in scope**). | `lliam_gov/security/cui.py` |
 | **Audit evidence export** | Governance evidence can be exported as an auditor-ready package (AEP). | `lliam_gov/security/aep_export.py` |
 
-The full control set, with crosswalks to ISO/IEC 42001 and the NIST AI RMF, is documented in [`docs/governance/control-matrix.md`](docs/governance/control-matrix.md). Supporting evidence lives under [`evidence/`](evidence/).
+The full control set, with crosswalks to ISO/IEC 42001, ISO/IEC 27001, and the NIST AI RMF, is documented in [`docs/governance/control-matrix.md`](docs/governance/control-matrix.md) and the machine-readable [`evidence/control-matrix.csv`](evidence/control-matrix.csv) (reproducible from local source PDFs — zero manual round-trips). Supporting evidence lives under [`evidence/`](evidence/).
 
 Under the governance layer sits a full-featured agent: a terminal UI, a messaging gateway (narrowed to Slack, email, and Telegram), provider-agnostic model support, a skill system, scheduled automations, and subagent delegation — all inherited from the Hermes Agent runtime.
 
@@ -47,22 +105,11 @@ cd lliam-gov
 ./hermes              # auto-detects the venv — no need to `source` first
 ```
 
-Manual path (equivalent):
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv venv .venv --python 3.11
-source .venv/bin/activate
-uv pip install -e ".[all,dev]"
-scripts/run_tests.sh
-```
-
 Then configure a model provider and start a conversation:
 
 ```bash
 hermes              # interactive CLI
 hermes model        # choose your LLM provider and model
-hermes tools        # configure which tools are enabled
 hermes gateway      # start the messaging gateway (Slack, email, Telegram)
 hermes setup        # full first-run setup wizard
 hermes doctor       # diagnose issues
@@ -72,27 +119,15 @@ hermes doctor       # diagnose issues
 
 Use any model you want — OpenAI, Anthropic, OpenRouter, or your own endpoint. Switch with `hermes model`; no code changes.
 
+**Scope boundary:** Lliam-GOV's reference deployment is a single-operator evaluation environment. The demo boundary is fail-closed and carries **no CUI**. See [`docs/governance/`](docs/governance/) for the documented scope and control posture.
+
 ---
 
-## Architecture
+## About the author
 
-```
-lliam-gov/
-├── lliam_gov/            # ← Governance overlay (Lliam-GOV's contribution)
-│   └── security/         #   encryption, audit, egress, CUI, self-mod gate, isolation
-├── agent/                # Agent runtime — conversation loop, providers, tools (upstream Hermes)
-├── hermes_cli/           # CLI entry points (upstream Hermes)
-├── gateway/              # Messaging gateway, narrowed to Slack / email / Telegram
-├── tools/ · toolsets.py  # Tool implementations and toolset system
-├── docs/
-│   ├── governance/       # Control matrix, AIMS documented information, threat models
-│   └── upstream/         # Preserved upstream Hermes docs & release notes (attribution)
-└── evidence/             # Governance evidence artifacts
-```
+Built by **Jerome Davis** — a governance operator who bridges DoD/federal program execution, security/compliance/audit, and hands-on GenAI engineering. Lliam-GOV is part of a portfolio that demonstrates governance-as-code from agent runtime to auditor evidence.
 
-The runtime is the upstream Hermes Agent. Lliam-GOV adds the `lliam_gov/` package and wires its controls into the runtime's privileged paths (e.g. the audit hooks in `agent/conversation_loop.py`). Governance is enforced at the boundary, so the agent's day-to-day capabilities are unchanged while every privileged action remains accountable.
-
-**Scope boundary:** Lliam-GOV's reference deployment is a single-operator evaluation environment. The demo boundary is fail-closed and carries **no CUI**. See [`docs/governance/`](docs/governance/) for the documented scope and control posture.
+🔗 **[secondorderstrategy.com](https://secondorderstrategy.com)** · companion projects: [Priora](https://github.com/jdavis-cyber/priora) (AI lifecycle governance platform) · [DoW AI PM Builder Template](https://github.com/jdavis-cyber/dow-ai-pm-builder-template) (governed AI software factory)
 
 ---
 
