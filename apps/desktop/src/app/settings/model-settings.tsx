@@ -34,8 +34,8 @@ import { CONTROL_TEXT } from './constants'
 import { getNested, setNested } from './helpers'
 import { ListRow, LoadingState, Pill, SectionHeading } from './primitives'
 
-// Hermes' reasoning levels (VALID_REASONING_EFFORTS); `none` = thinking off.
-// Empty config = Hermes default (medium), shown as Medium.
+// LLIAM-GOV' reasoning levels (VALID_REASONING_EFFORTS); `none` = thinking off.
+// Empty config = LLIAM-GOV default (medium), shown as Medium.
 const EFFORT_VALUES = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
 
 // agent.service_tier stores "fast"/"priority"/"on" for fast; anything else is
@@ -583,7 +583,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
           <p className="mt-2 text-xs text-muted-foreground">
             {selectedProviderRow?.auth_type === 'api_key'
               ? `${selectedProviderRow?.name} needs an API key — set it up to choose a model.`
-              : `${selectedProviderRow?.name} signs in through your browser — Hermes runs the flow for you.`}
+              : `${selectedProviderRow?.name} signs in through your browser — LLIAM-GOV runs the flow for you.`}
           </p>
         )}
         {config && mainModel && (reasoningSupported || fastSupported) && (
