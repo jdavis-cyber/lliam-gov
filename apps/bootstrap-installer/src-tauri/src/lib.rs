@@ -132,6 +132,13 @@ pub fn run() {
             if cfg!(target_os = "macos") && mode == AppMode::Install && !force_setup {
                 let install_root = paths::hermes_home().join("hermes-agent");
                 if bootstrap::hermes_is_installed(&install_root) {
+                    // Launcher fast path is a pure hand-off: spawn the desktop
+                    // app and exit. Drop to an Accessory (no Dock tile) app so we
+                    // don't flash a second Dock tile that then vanishes.
+                    #[cfg(target_os = "macos")]
+                    {
+                        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                    }
                     match bootstrap::spawn_installed_desktop(&install_root) {
                         Ok(()) => {
                             // Brief grace so the spawned app is registered
