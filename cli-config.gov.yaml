@@ -62,8 +62,34 @@ security:
   tirith_fail_open: false     # config.py:2418  DEFAULT True  -> OVERRIDE false (scanner fails closed)
   allow_private_urls: false   # config.py:2413  DEFAULT False  (confirm-pinned; SSRF/metadata stay blocked)
   allow_lazy_installs: false  # config.py:2438  DEFAULT True  -> OVERRIDE false (no runtime PyPI installs)
-  redact_secrets: true        # config.py:2414  DEFAULT True   (confirm-pinned)
+  redact_secrets: true        # config.py:2414  DEFAULT True   (confirm-pinned; LG-DP-03 secret redaction ON)
   deny_on_no_approver: true   # [additive] high-risk actions fail closed when no approver is reachable
+
+
+# =============================================================================
+# [ACTIVE @ P0.2]  FLIP PERMISSIVE DEFAULTS TO THE CUI FLOOR
+#    Control: LG-CH-07 (flip permissive defaults to strict for CUI)
+#    Cross-refs: LG-DP-04 (PII), LG-HO-04 (staged write-approval), LG-SC-02/06
+# -----------------------------------------------------------------------------
+# These keys ALL already exist in Hermes DEFAULT_CONFIG and are consumed by
+# SHIPPED code today — flipping them is capability-preserving:
+#   * write_approval only DELAYS/STAGES memory & skill writes (to <HERMES_HOME>/
+#     pending/{memory,skills}) for review; it never drops them. Ordinary file
+#     writes (the file_write tool) are NOT gated by these.
+#   * redact_pii only masks PII in the context sent to providers.
+#   * guard_agent_created only turns on AST scanning of AGENT-authored skills.
+# Each line: SHIPPED DEFAULT -> OVERRIDE (control).
+# =============================================================================
+privacy:
+  redact_pii: true            # config.py:1908  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-DP-04: redact PII to providers)
+
+memory:
+  write_approval: true        # config.py:2037  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-HO-04: stage memory writes for review)
+
+skills:
+  write_approval: true        # config.py:2176  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-HO-04: stage skill writes for review)
+  guard_agent_created: true   # config.py:2164  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-SC-02: AST-scan agent-authored skills)
+  inline_shell: false         # config.py:2151  DEFAULT False  (confirm-pinned;  LG-SC-06: no host inline-shell pre-exec)
 
 
 # =============================================================================
@@ -73,16 +99,14 @@ security:
 # Reference: 03_Implementation_Plan/baseline_overlay/cli-config.gov.yaml.example
 # =============================================================================
 #
-# [P0.x  CH-07 / DP-03/04]  security.cui_redaction: true
+# [P0.x  CH-07 / DP-04]    security.cui_redaction: true   (needs new cui_patterns module)
 # [P0.x  CH-04 / AZ-02/03]  security.tool_allowlist / tool_denylist; toolset pruning
 # [P0.x  CH-05]             terminal.backend: docker        (sandboxed execution)
 # [P0.x  CH-04 / AZ-11]     disabled_toolsets: [computer_use, browser]
 # [P0.x  SC-01 / CH-06]     skills.disabled: [godmode, sherlock, web-pentest]
-# [P0.x  CH-07]             skills.write_approval / guard_agent_created: true
-# [P0.x  CH-07]             memory.write_approval: true ; privacy.redact_pii: true
-# [P0.x  PI-05]             (tirith fail-closed already pinned above)
 # [P0.x  AZ-12]             tool_loop_guardrails.hard_stop_enabled: true ; max_iterations
-# [P0.x  SS-07]             (allow_lazy_installs already pinned false above)
+# [DONE P0.1]               security: posture/tirith_fail_open/allow_private_urls/allow_lazy_installs/deny_on_no_approver
+# [DONE P0.2  CH-07]        privacy.redact_pii ; memory.write_approval ; skills.write_approval/guard_agent_created/inline_shell
 # [P1   AU-01..10]          audit: { ledger_enabled, hash-chained ledger, fail_closed, ... }
 # [P1   IA-*]               dashboard auth + MFA ; gateway.multiplex_profiles ; secrets source
 # [P2   MP-01..]            security.provider_allowlist_enforce / allowed_providers
