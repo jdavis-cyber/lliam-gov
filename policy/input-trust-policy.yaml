@@ -1,0 +1,141 @@
+# =============================================================================
+# input-trust-policy.yaml — Lliam-GOV Input-Integrity & Path-Safety Policy
+# =============================================================================
+#
+# | Field          | Value                                                      |
+# |----------------|------------------------------------------------------------|
+# | Document       | Input-Integrity & Path-Safety Policy                       |
+# | Owner          | Lliam-GOV Program                                          |
+# | Classification | CUI//SP-PRIV (template — mark per instance)                |
+# | Version        | 0.1 DRAFT                                                  |
+#
+# WHAT THIS IS — the reviewable policy of record for "treat all untrusted/external
+# content as hostile". Consumed by the NEW tools/input_integrity.py gate and
+# mirrored by security.* keys in cli-config.gov.yaml. Active ONLY under
+# security.posture: strict. PATH-FREEZE: no existing module/scanner renamed; every
+# enforcement point is an EXISTING identifier or a NEW additive wrapper.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# 1. SOURCE TRUST TIERS  [LG-PI-01]
+# -----------------------------------------------------------------------------
+# Operator input is trusted; everything ingested from outside the boundary is
+# UNTRUSTED and must be sanitized/delimited and scanned before it can influence
+# tool dispatch. Tagging/routing only — it does not block legitimate retrieval.
+trust_tiers:
+  trusted:   [operator]                       # the authenticated human operator
+  untrusted: [web, file, tool_result, mcp, rag]   # hostile-by-default
+  default: untrusted
+  lg: [LG-PI-01]
+
+
+# -----------------------------------------------------------------------------
+# 2. SANITIZE + DELIMIT UNTRUSTED CONTENT  [LG-PI-02]
+# -----------------------------------------------------------------------------
+# Enforced by the EXISTING always-on agent/message_sanitization.py pure functions
+# (_sanitize_surrogates, _strip_non_ascii, _escape_invalid_chars_in_json_strings,
+# _repair_tool_call_arguments) in the run_agent path. The strict profile pins
+# them ON and delimits untrusted content so embedded text is treated literally.
+sanitization:
+  always_on: true                             # message_sanitization is non-optional
+  strip_surrogates: true
+  repair_tool_call_json: true
+  delimit_untrusted: true                      # wrap untrusted blocks so they read as data, not instructions
+  lg: [LG-PI-02]
+
+
+# -----------------------------------------------------------------------------
+# 3. TOOL / MCP SCHEMA VALIDATION BEFORE BINDING  [LG-PI-03]  (ACTIVE @ P0.5)
+# -----------------------------------------------------------------------------
+# After the EXISTING tools/schema_sanitizer.sanitize_tool_schemas() coerces shapes,
+# the NEW tools/input_integrity.validate_tool_schemas() REJECTS (drops) any tool
+# whose schema is structurally invalid or exceeds max_schema_bytes, before the
+# tool is bound for the model (wired at model_tools.py:526). reject-on-fail.
+schema_validation:
+  mode: reject                                 # reject | coerce  (CUI floor: reject)
+  max_schema_bytes: 65536                      # oversized schema (DoS/context-bloat) -> reject
+  rejects:
+    - non-object tool entry
+    - missing function object / missing-or-empty name
+    - parameters that are not an object
+    - schema larger than max_schema_bytes
+    - non-JSON-serializable schema
+  capability_note: "Well-formed core/MCP tools always pass; only objective malformation is dropped."
+  lg: [LG-PI-03]
+
+
+# -----------------------------------------------------------------------------
+# 4. CONTENT-SCANNER FAIL-CLOSED (tirith)  [LG-PI-05]  (pinned P0.1, asserted here)
+# -----------------------------------------------------------------------------
+# tools/tirith_security.check_command_security() returns action:"block" instead of
+# "allow" when the scanner is missing/timed-out/crashed and fail_open is false.
+tirith:
+  enabled: true
+  fail_open: false                             # security.tirith_fail_open: false (gov overlay)
+  on_scanner_outage: block                     # fail-closed (vs shipped default: allow)
+  lg: [LG-PI-05]
+
+
+# -----------------------------------------------------------------------------
+# 5. SMART-APPROVAL GUARD HARDENING + ALLOWABLE ACTIONS  [LG-PI-07]
+# -----------------------------------------------------------------------------
+# The EXISTING tools/approval.py _smart_approve guard hardening (comment-strip,
+# XML delimiters, guard warning) is retained and asserted on. The agent is
+# constrained to predefined allowable action classes; out-of-scope actions route
+# to approval (graduated — not a hard refusal of novel-but-legitimate work).
+smart_approval_guard:
+  hardened: true
+  approvals_mode_must_not_be: off              # never bypass approvals in a CUI profile
+  allowable_action_classes:                    # constrain agent to predefined actions/topics
+    - file_read
+    - file_write
+    - search
+    - shell            # sandboxed + approval-gated
+    - provider_inference
+  out_of_scope_disposition: approve            # route unknown action classes to HITL (not silent allow)
+  lg: [LG-PI-07]
+
+
+# -----------------------------------------------------------------------------
+# 6. INBOUND AI-GENERATED / LOW-CREDIBILITY SCREENING  [LG-PI-08]
+# -----------------------------------------------------------------------------
+# Post-fetch screening on web_search / web_fetch / file_read paths. Detect-and-log
+# only (does not block retrieval); flagged content is tagged low-credibility and
+# excluded from auto-curation into memory (pairs with the memory-write gate).
+inbound_screening:
+  enabled: true
+  mode: log                                    # log | tag  (detect-and-log; never blocks retrieval)
+  flag_synthetic: true                         # AI-generated heuristics
+  credibility_allowlist: []                    # seed with trusted source domains; empty = tag-all-as-unverified
+  exclude_flagged_from_auto_memory: true
+  lg: [LG-PI-08]
+
+
+# -----------------------------------------------------------------------------
+# 7. MEMORY-POISONING DEFENSE (scan before persistent write)  [LG-MC-01]
+# -----------------------------------------------------------------------------
+# tools/input_integrity.scan_memory_content() runs the EXISTING threat scan at
+# strict scope BEFORE content enters persistent memory. block | placeholder | log.
+memory_poisoning_defense:
+  enabled: true
+  mode: block                                  # block | placeholder | log  (CUI floor: block)
+  scope: strict
+  capability_note: "A benign note quoting injection-like text can be set to placeholder/log per deviation."
+  lg: [LG-MC-01]
+
+
+# -----------------------------------------------------------------------------
+# 8. PATH-TRAVERSAL VALIDATION ON FILE/SKILL/CRON OPS  [LG-AZ-05]
+# -----------------------------------------------------------------------------
+# The EXISTING tools/path_security.validate_within_dir() (resolve + relative_to,
+# fail-closed) and has_traversal_component() are the enforcement points; the strict
+# profile pins them ON. tools/input_integrity.validate_path_within() exposes them.
+path_traversal_validation:
+  enabled: true
+  fail_closed: true
+  applies_to: [file, skill, cron, credential]
+  lg: [LG-AZ-05]
+
+# Built on Hermes Agent (Nous Research, MIT). Governance overlay is additive and
+# capability-preserving.

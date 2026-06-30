@@ -527,6 +527,15 @@ def _compute_tool_definitions(
     except Exception as e:  # pragma: no cover — defensive
         logger.warning("Schema sanitization skipped: %s", e)
 
+    # Lliam-GOV LG-PI-03: reject (don't just coerce) malformed/oversized tool/MCP
+    # schemas before binding, in the strict profile. Additive — no-op unless
+    # security.posture==strict and security.schema_validation.mode==reject.
+    try:
+        from tools.input_integrity import validate_tool_schemas
+        filtered_tools, _rejected = validate_tool_schemas(filtered_tools)
+    except Exception as e:  # pragma: no cover — never break the model call
+        logger.warning("Gov schema validation skipped: %s", e)
+
     # ── Tool Search (progressive disclosure) ────────────────────────────
     # Conditionally replace MCP + plugin (non-core) tools with three bridge
     # tools (tool_search / tool_describe / tool_call) when the deferrable

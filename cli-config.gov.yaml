@@ -99,6 +99,33 @@ security:
     - computer_use
     - browser
 
+  # [ACTIVE @ P0.5]  INPUT-INTEGRITY & PATH-SAFETY  (treat untrusted = hostile)
+  # Reviewable policy: policy/input-trust-policy.yaml. Consumed by the NEW
+  # tools/input_integrity.py gate + the EXISTING sanitizer/scanner/path modules.
+  # tirith_fail_open is already pinned false above (P0.1) — LG-PI-05.
+  schema_validation:               # [additive] LG-PI-03: reject malformed/oversized tool/MCP schemas before binding
+    mode: reject                   #   reject | coerce  (CUI floor: reject)
+    max_schema_bytes: 65536
+  input_trust:                     # [additive] LG-PI-01/02: untrusted-by-default + sanitize/delimit
+    enabled: true
+    policy_path: policy/input-trust-policy.yaml
+    untrusted_sources: [web, file, tool_result, mcp, rag]
+    sanitize: true                 #   message_sanitization always-on (pinned)
+    delimit_untrusted: true
+  smart_approval_guard:            # [additive] LG-PI-07: harden guard; constrain to allowable actions
+    hardened: true
+    out_of_scope_disposition: approve
+  inbound_screening:               # [additive] LG-PI-08: AI-generated/low-credibility screening (detect-and-log)
+    enabled: true
+    mode: log
+  memory_poisoning_defense:        # [additive] LG-MC-01: scan content before persistent memory write
+    enabled: true
+    mode: block                    #   block | placeholder | log  (CUI floor: block)
+    scope: strict
+  path_traversal_validation:       # [additive] LG-AZ-05: pin path_security on for file/skill/cron ops
+    enabled: true
+    fail_closed: true
+
 
 # =============================================================================
 # [ACTIVE @ P0.2]  FLIP PERMISSIVE DEFAULTS TO THE CUI FLOOR
@@ -194,6 +221,7 @@ agent:
 # [DONE P0.2  CH-07]        privacy.redact_pii ; memory.write_approval ; skills.write_approval/guard_agent_created/inline_shell
 # [DONE P0.3  SC-01/02/06]  skills.disabled[godmode..] + deny_tags + security.skill_policy/allowlist ; tools/tool_policy.py gate
 # [DONE P0.4  CH-05/AZ-03/11] terminal.backend:docker ; agent.disabled_toolsets[computer_use,browser] ; security.tool_denylist/tool_risk_policy
+# [DONE P0.5  PI-01/02/03/05/07/08, MC-01, AZ-05] schema_validation:reject ; input_trust ; memory_poisoning_defense ; tools/input_integrity.py
 # [P1   AU-01..10]          audit: { ledger_enabled, hash-chained ledger, fail_closed, ... }
 # [P1   IA-*]               dashboard auth + MFA ; gateway.multiplex_profiles ; secrets source
 # [P2   MP-01..]            security.provider_allowlist_enforce / allowed_providers
