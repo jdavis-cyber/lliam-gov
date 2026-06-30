@@ -14,9 +14,11 @@ name: Governance Gates
 # paths (additive overlays always pass).
 
 on:
-  pull_request:
-  push:
-    branches: ["harden/**", "main"]
+  # Driven by the ci.yml orchestrator (which runs on pull_request + push) so the
+  # gates feed the single required `all-checks-pass` check. Kept callable +
+  # manually dispatchable; the standalone pull_request/push triggers are removed
+  # to avoid duplicate runs once wired into ci.yml.
+  workflow_call: {}
   workflow_dispatch:
 
 permissions:
