@@ -68,6 +68,13 @@ critical_keys:
     activated_in: P0.1
     note: no runtime PyPI installs (air-gap / supply-chain integrity).
 
+  - key: security.require_hashed_install
+    expect: true
+    severity: critical
+    control: LG-SS-01
+    activated_in: P0.6
+    note: install path must be hash-verified against the committed uv.lock.
+
   - key: security.redact_secrets
     expect: true
     severity: critical
@@ -141,7 +148,7 @@ critical_keys:
     expect: true
     severity: warn
     control: LG-AZ-12
-    activated_in: P0.x
+    activated_in: P2
 
   - key: audit.ledger_enabled
     expect: true

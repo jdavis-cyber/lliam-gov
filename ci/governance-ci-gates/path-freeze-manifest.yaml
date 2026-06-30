@@ -1,0 +1,54 @@
+# path-freeze-manifest.yaml — frozen modules and identifiers (LG-SD-01).
+#
+# These are ADDITIVE-ONLY surfaces: they may be appended to / modified in place,
+# but NEVER renamed, moved, or deleted. The Lliam-GOV governance overlay is
+# realized entirely as NEW files wired into these existing chokepoints; renaming
+# any of them broke prior rebuild attempts and is the exact failure mode the
+# path-freeze guard (ci/governance-ci-gates/path_freeze_gate.py) prevents.
+#
+# The guard fails a PR that renames (R) or deletes (D) any path below. A normal
+# in-place modification (M) or a brand-new additive file (A) always passes.
+
+frozen_paths:
+  # Runtime enforcement chokepoints
+  - agent/tool_executor.py
+  - agent/tool_guardrails.py
+  - agent/message_sanitization.py
+  - agent/redact.py
+  - agent/secret_scope.py
+  - agent/file_safety.py
+  - agent/skill_utils.py
+  - tools/approval.py
+  - tools/write_approval.py
+  - tools/url_safety.py
+  - tools/website_policy.py
+  - tools/path_security.py
+  - tools/schema_sanitizer.py
+  - tools/skill_provenance.py
+  - tools/skills_ast_audit.py
+  - tools/tirith_security.py
+  - tools/lazy_deps.py
+  - model_tools.py
+  # CLI / config surfaces
+  - hermes_cli/config.py
+  - hermes_cli/security_audit.py
+  - hermes_cli/security_audit_startup.py
+  - hermes_cli/security_advisories.py
+  - hermes_cli/mcp_security.py
+  - hermes_cli/skills_config.py
+  - hermes_cli/mcp_config.py
+  - hermes_cli/tools_config.py
+  # CI surfaces the gates extend (additive only)
+  - .github/workflows/ci.yml
+  - .github/workflows/supply-chain-audit.yml
+  - .github/workflows/osv-scanner.yml
+
+# Frozen CLI command identifiers — these command strings must keep working as
+# they ship today (the gates and runtime call them verbatim). Documented for
+# reviewers; the diff-based guard above enforces the file-path half.
+frozen_cli_identifiers:
+  - "hermes security audit"
+  - "hermes skills audit"
+  - "hermes mcp add"
+  - "hermes doctor"
+  - "hermes status"

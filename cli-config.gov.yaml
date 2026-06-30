@@ -238,6 +238,7 @@ agent:
 # [DONE P0.4  CH-05/AZ-03/11] terminal.backend:docker ; agent.disabled_toolsets[computer_use,browser] ; security.tool_denylist/tool_risk_policy
 # [DONE P0.5  PI-01/02/03/05/07/08, MC-01, AZ-05] schema_validation:reject ; input_trust ; memory_poisoning_defense ; tools/input_integrity.py
 # [DONE P0.6  SS-01/07]     require_hashed_install + supply_chain (pyproject ==pins / uv.lock 1798 hashes) ; allow_lazy_installs:false refuses runtime installs
+# [DONE P0.7  CH-06/CH-03/SD-01/GV-02/CH-08] ci/governance-ci-gates/ (godmode/drift/path-freeze/deps) + .github/workflows/governance-gates.yml + intended-use.md + deviation-register
 # [P1   AU-01..10]          audit: { ledger_enabled, hash-chained ledger, fail_closed, ... }
 # [P1   IA-*]               dashboard auth + MFA ; gateway.multiplex_profiles ; secrets source
 # [P2   MP-01..]            security.provider_allowlist_enforce / allowed_providers
