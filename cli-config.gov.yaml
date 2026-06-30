@@ -65,6 +65,25 @@ security:
   redact_secrets: true        # config.py:2414  DEFAULT True   (confirm-pinned; LG-DP-03 secret redaction ON)
   deny_on_no_approver: true   # [additive] high-risk actions fail closed when no approver is reachable
 
+  # [ACTIVE @ P0.3]  SKILL ENABLEMENT POLICY MIRROR  (LG-SC-01/02/03/06, LG-AZ-02)
+  # Consumed by the NEW tools/tool_policy.py gate. The detailed, reviewable policy
+  # is policy/skills-allowlist.yaml; these keys mirror it for one-artifact audit.
+  skill_policy:
+    mode: enforce                  # [additive] hard-refuse the named denylist + deny_tags
+    unlisted_disposition: log      # [additive] non-allowlisted skills LOGGED, not blocked (capability-preserving)
+    path: policy/skills-allowlist.yaml   # [additive] detailed policy artifact
+    constrain_mobile_code: true    # [additive] LG-SC-06: inline_shell off (above) + sandbox/browser gating (CH-05/04)
+  require_signed_skills: true      # [additive] LG-SC-03: clean provenance + signature for third-party high-impact exec
+  require_ast_audit: true          # [additive] LG-SC-02: ast_scan_path() must pass before load
+  require_provenance: true         # [additive] LG-SC-03: no clean provenance => no high-impact exec
+  skill_allowlist:                 # [additive] mirror of policy/skills-allowlist.yaml security.skill_allowlist
+    - name: pdf
+      source: builtin
+    - name: xlsx
+      source: builtin
+    - name: docx
+      source: builtin
+
 
 # =============================================================================
 # [ACTIVE @ P0.2]  FLIP PERMISSIVE DEFAULTS TO THE CUI FLOOR
@@ -91,6 +110,28 @@ skills:
   guard_agent_created: true   # config.py:2164  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-SC-02: AST-scan agent-authored skills)
   inline_shell: false         # config.py:2151  DEFAULT False  (confirm-pinned;  LG-SC-06: no host inline-shell pre-exec)
 
+  # ---------------------------------------------------------------------------
+  # [ACTIVE @ P0.3]  LEAST-FUNCTIONALITY DENYLIST  (LG-SC-01 / LG-CH-04 / LG-HO-03)
+  # Offensive/jailbreak optional-skills denied for the CUI profile. Enforced via
+  # the NEW tools/tool_policy.py gate unioned into get_disabled_skill_names() (so
+  # they are refused at discovery, slash-command registration, and prompting).
+  # Detailed reviewable policy: policy/skills-allowlist.yaml.
+  # ---------------------------------------------------------------------------
+  disabled:                   # config.py skills.disabled  SHIPPED DEFAULT: [] -> deny offensive set
+    - godmode                 #   JAILBREAK — MANDATORY deny (LG-SC-01 / LG-HO-03)
+    - obliteratus             #   weight-abliteration / uncensoring — MANDATORY deny (LG-SC-01)
+    - web-pentest             #   active web exploitation, dual-use — deny by default
+    - sherlock                #   OSINT account-enumeration, dual-use — deny by default
+    - oss-forensics           #   forensics/IR, dual-use — deny by default (REVIEW-to-allow)
+  deny_tags:                  # [additive] intent-based denial of re-vendored/renamed offensive skills (LG-SC-01/02)
+    - jailbreak
+    - uncensoring
+    - safety-bypass
+    - refusal-removal
+    - abliteration
+    - guardrail-removal
+    - prompt-injection-offense
+
 
 # =============================================================================
 # SCAFFOLD — sections below are authored in their dedicated later Phase-0..2
@@ -103,10 +144,11 @@ skills:
 # [P0.x  CH-04 / AZ-02/03]  security.tool_allowlist / tool_denylist; toolset pruning
 # [P0.x  CH-05]             terminal.backend: docker        (sandboxed execution)
 # [P0.x  CH-04 / AZ-11]     disabled_toolsets: [computer_use, browser]
-# [P0.x  SC-01 / CH-06]     skills.disabled: [godmode, sherlock, web-pentest]
+# [P0.x  CH-06]             CI preflight that fails if a denied skill is enabled
 # [P0.x  AZ-12]             tool_loop_guardrails.hard_stop_enabled: true ; max_iterations
 # [DONE P0.1]               security: posture/tirith_fail_open/allow_private_urls/allow_lazy_installs/deny_on_no_approver
 # [DONE P0.2  CH-07]        privacy.redact_pii ; memory.write_approval ; skills.write_approval/guard_agent_created/inline_shell
+# [DONE P0.3  SC-01/02/06]  skills.disabled[godmode..] + deny_tags + security.skill_policy/allowlist ; tools/tool_policy.py gate
 # [P1   AU-01..10]          audit: { ledger_enabled, hash-chained ledger, fail_closed, ... }
 # [P1   IA-*]               dashboard auth + MFA ; gateway.multiplex_profiles ; secrets source
 # [P2   MP-01..]            security.provider_allowlist_enforce / allowed_providers
