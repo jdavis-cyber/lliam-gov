@@ -1,0 +1,96 @@
+# =============================================================================
+# Lliam-GOV — HARDENED GOVERNANCE OVERLAY  (cli-config.gov.yaml)
+# =============================================================================
+#
+# | Field          | Value                                                     |
+# |----------------|-----------------------------------------------------------|
+# | Document       | cli-config.gov.yaml — Hardened Governance Overlay (CUI)    |
+# | Owner          | Lliam-GOV Program                                          |
+# | Classification | CUI//SP-PRIV (template — mark per instance)                |
+# | Version        | 0.1 DRAFT                                                  |
+# | Approval       | Pending                                                    |
+#
+# APPROVED BASELINE PIN (LG-CH-01) — fill at each signed save point:
+#   baseline_git_tag:   <UNSET — set to e.g. gov-P0-good at the phase verify gate>
+#   baseline_git_hash:  <UNSET — commit hash the signed tag points at>
+# The LG-CH-03 startup drift check pins the running config to this tag/hash.
+#
+# -----------------------------------------------------------------------------
+# WHAT THIS FILE IS
+# -----------------------------------------------------------------------------
+# The single, version-controlled, fail-closed configuration OVERLAY that moves
+# Lliam-GOV (a fork of Hermes Agent, Nous Research, MIT) from its shipped
+# permissive defaults to the CUI posture floor: NIST SP 800-171 r3 / CMMC L2.
+# It is the documented secure baseline for control LG-CH-01.
+#
+# HOW IT LOADS  (ADDITIVE — no existing module renamed; PATH-FREEZE honored)
+#   Selected at runtime via the EXISTING env var HERMES_CONFIG (already in the
+#   allowlist at hermes_cli/config.py:198). The additive selector
+#   hermes_cli/config._gov_overlay_path() resolves it and deep-merges this file
+#   OVER the home config.yaml (highest precedence below the managed layer), then
+#   hermes_cli/posture_resolver.resolve() coerces the fail-open guards to
+#   fail-closed. Writes still target the home config.yaml — the agent never
+#   clobbers this version-controlled overlay.
+#       export HERMES_CONFIG=<path>/cli-config.gov.yaml
+#   Rollback (config-only, reversible): unset/repoint HERMES_CONFIG, or check out
+#   the previous signed git tag of this file. No frozen path is ever renamed.
+#
+# BUILD ORDER (this file grows across the Phase-0..2 steps — each step ACTIVATES
+# its own section here; everything below the active block is scaffolded as
+# step-tagged comments so the structure is visible key-for-key without
+# prematurely enabling half-built enforcement). Capability-preserving throughout.
+# =============================================================================
+
+
+# =============================================================================
+# [ACTIVE @ P0.1]  0. MASTER POSTURE SWITCH  +  FAIL-OPEN -> FAIL-CLOSED COHERENCE
+#    Controls: LG-CH-02 (strict-posture switch), LG-CH-01 (documented baseline),
+#              LG-CH-09 (startup posture findings become blocking)
+#    Consumed by: hermes_cli/posture_resolver.py (additive module)
+# -----------------------------------------------------------------------------
+# `security.posture: strict` is the single coherent switch. The resolver forces
+# the keys below to their fail-closed values after every config merge, so the
+# secure state cannot be reached by accidental half-configuration. The keys are
+# ALSO set explicitly here so the posture is auditable as one flat artifact (the
+# resolver still wins if any is edited). Low-side deployments simply do not load
+# this overlay; their permissive defaults are untouched.
+# =============================================================================
+security:
+  posture: strict             # [additive] SHIPPED DEFAULT: (none/implicit permissive)
+
+  tirith_enabled: true        # config.py:2415  DEFAULT True   (confirm-pinned)
+  tirith_fail_open: false     # config.py:2418  DEFAULT True  -> OVERRIDE false (scanner fails closed)
+  allow_private_urls: false   # config.py:2413  DEFAULT False  (confirm-pinned; SSRF/metadata stay blocked)
+  allow_lazy_installs: false  # config.py:2438  DEFAULT True  -> OVERRIDE false (no runtime PyPI installs)
+  redact_secrets: true        # config.py:2414  DEFAULT True   (confirm-pinned)
+  deny_on_no_approver: true   # [additive] high-risk actions fail closed when no approver is reachable
+
+
+# =============================================================================
+# SCAFFOLD — sections below are authored in their dedicated later Phase-0..2
+# steps (kept as comments so this file maps key-for-key to the GOV template and
+# stays capability-preserving until each control is built + verified).
+# Reference: 03_Implementation_Plan/baseline_overlay/cli-config.gov.yaml.example
+# =============================================================================
+#
+# [P0.x  CH-07 / DP-03/04]  security.cui_redaction: true
+# [P0.x  CH-04 / AZ-02/03]  security.tool_allowlist / tool_denylist; toolset pruning
+# [P0.x  CH-05]             terminal.backend: docker        (sandboxed execution)
+# [P0.x  CH-04 / AZ-11]     disabled_toolsets: [computer_use, browser]
+# [P0.x  SC-01 / CH-06]     skills.disabled: [godmode, sherlock, web-pentest]
+# [P0.x  CH-07]             skills.write_approval / guard_agent_created: true
+# [P0.x  CH-07]             memory.write_approval: true ; privacy.redact_pii: true
+# [P0.x  PI-05]             (tirith fail-closed already pinned above)
+# [P0.x  AZ-12]             tool_loop_guardrails.hard_stop_enabled: true ; max_iterations
+# [P0.x  SS-07]             (allow_lazy_installs already pinned false above)
+# [P1   AU-01..10]          audit: { ledger_enabled, hash-chained ledger, fail_closed, ... }
+# [P1   IA-*]               dashboard auth + MFA ; gateway.multiplex_profiles ; secrets source
+# [P2   MP-01..]            security.provider_allowlist_enforce / allowed_providers
+# [P2   NE-01..06 / DP-10]  security.egress.{mode,proxy,allowed_domains} ; website_policy fail_closed
+# [P2   HO-01..10]          security.high_impact_actions / locked_confirmation_ops ; approvals.*
+# [P2   DP-07/11]           storage.encrypt_at_rest: true ; tool_result_ttl
+#
+# -----------------------------------------------------------------------------
+# Built on Hermes Agent (Nous Research, MIT). Governance overlay is additive and
+# capability-preserving.
+# -----------------------------------------------------------------------------
