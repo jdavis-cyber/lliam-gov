@@ -26,4 +26,5 @@ blocks that are acceptable"); anything outside that set needs a Tune or Revert d
 
 | Control ID | What regressed | Decision (Accept / Tune / Revert) | Date |
 |---|---|---|---|
-| — | _No regressions recorded yet. Baseline captured at S0.1; agent fully functional._ | — | 2026-06-29 |
+| — | _No capability regressions recorded._ Baseline captured at S0.1; agent fully functional through P0.4. | — | 2026-06-29 |
+| LG-CH-05 | Under `terminal.backend: docker` the agent's file edits write INSIDE the container (`mount_docker_cwd` defaults false), so they don't persist to the host workspace by default. Coding tasks still complete in-sandbox (verified: `add(2,3)=5`). | **Accept (not a regression) + deployment note**: for real CUI coding work, the enclave must set `TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE=true` and bind-mount `HERMES_WRITE_SAFE_ROOT` so edits persist while staying sandboxed. Tracked for the Phase-6 deployment config. | 2026-06-30 |

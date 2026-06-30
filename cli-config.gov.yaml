@@ -84,6 +84,21 @@ security:
     - name: docx
       source: builtin
 
+  # [ACTIVE @ P0.4]  LEAST-PRIVILEGE TOOL ENABLEMENT  (LG-AZ-03/11, LG-AZ-02)
+  # Mirror of policy/tool-risk-policy.yaml. computer_use + browser are policy-
+  # disabled in the CUI baseline (also enforced via agent.disabled_toolsets below
+  # which removes them from the resolved toolset). tool_denylist is read by the
+  # NEW tools/tool_policy.py gate. The full per-call PDP lands in Phase 2.
+  tool_risk_policy:
+    enabled: true                  # [additive] policy of record active (PDP wiring = Phase 2)
+    policy_path: policy/tool-risk-policy.yaml   # [additive] reviewable tier policy
+    default_disposition: deny      # [additive] deny-by-default for the Phase-2 PDP
+    fail_closed: true              # [additive] on policy parse/eval error -> deny
+  tool_allowlist: []               # [additive] LG-AZ-02 (empty = no positive tool allowlist yet)
+  tool_denylist:                   # [additive] LG-AZ-11/AZ-02: refuse these capabilities for CUI
+    - computer_use
+    - browser
+
 
 # =============================================================================
 # [ACTIVE @ P0.2]  FLIP PERMISSIVE DEFAULTS TO THE CUI FLOOR
@@ -134,6 +149,37 @@ skills:
 
 
 # =============================================================================
+# [ACTIVE @ P0.4]  SANDBOXED EXECUTION BACKEND  (LG-CH-05)
+# -----------------------------------------------------------------------------
+# Run shell/code (and the file tools, which wrap the terminal backend's
+# execute()) inside a hardened container instead of on the host. config.py:1095
+# ships "local"; the CUI baseline OVERRIDES to "docker". terminal.backend is
+# bridged to the TERMINAL_ENV env var by apply_terminal_config_to_env at startup,
+# so the terminal tool runs every command in the sandbox. The LG-CH-03 drift gate
+# (later) flags terminal.backend: local as CRITICAL drift for a CUI profile.
+# =============================================================================
+terminal:
+  backend: docker             # config.py:1095  DEFAULT "local" -> OVERRIDE "docker" (sandboxed exec)
+  timeout: 180                # config.py:1098  (confirm-pinned)
+
+
+# =============================================================================
+# [ACTIVE @ P0.4]  LEAST-PRIVILEGE TOOLSET PROFILE  (LG-AZ-03 / LG-AZ-11)
+# -----------------------------------------------------------------------------
+# agent.disabled_toolsets (config.py:1091; read in hermes_cli/tools_config.py
+# _get_platform_tools L1653, applied LAST so it overrides everything) removes
+# these toolsets from the resolved enabled set for EVERY platform. computer_use
+# (desktop/OS automation) and browser (interactive web automation) are OFF in the
+# CUI baseline; re-enable per mission via the deviation register + JIT grant +
+# approval. terminal/file/web/search remain available (shell is sandboxed above).
+# =============================================================================
+agent:
+  disabled_toolsets:          # config.py:1091  DEFAULT [] -> disable high-risk toolsets for CUI
+    - computer_use            #   LG-AZ-11: desktop/OS automation OFF in CUI baseline
+    - browser                 #   LG-AZ-03: interactive web automation OFF in CUI baseline
+
+
+# =============================================================================
 # SCAFFOLD — sections below are authored in their dedicated later Phase-0..2
 # steps (kept as comments so this file maps key-for-key to the GOV template and
 # stays capability-preserving until each control is built + verified).
@@ -142,13 +188,12 @@ skills:
 #
 # [P0.x  CH-07 / DP-04]    security.cui_redaction: true   (needs new cui_patterns module)
 # [P0.x  CH-04 / AZ-02/03]  security.tool_allowlist / tool_denylist; toolset pruning
-# [P0.x  CH-05]             terminal.backend: docker        (sandboxed execution)
-# [P0.x  CH-04 / AZ-11]     disabled_toolsets: [computer_use, browser]
 # [P0.x  CH-06]             CI preflight that fails if a denied skill is enabled
 # [P0.x  AZ-12]             tool_loop_guardrails.hard_stop_enabled: true ; max_iterations
 # [DONE P0.1]               security: posture/tirith_fail_open/allow_private_urls/allow_lazy_installs/deny_on_no_approver
 # [DONE P0.2  CH-07]        privacy.redact_pii ; memory.write_approval ; skills.write_approval/guard_agent_created/inline_shell
 # [DONE P0.3  SC-01/02/06]  skills.disabled[godmode..] + deny_tags + security.skill_policy/allowlist ; tools/tool_policy.py gate
+# [DONE P0.4  CH-05/AZ-03/11] terminal.backend:docker ; agent.disabled_toolsets[computer_use,browser] ; security.tool_denylist/tool_risk_policy
 # [P1   AU-01..10]          audit: { ledger_enabled, hash-chained ledger, fail_closed, ... }
 # [P1   IA-*]               dashboard auth + MFA ; gateway.multiplex_profiles ; secrets source
 # [P2   MP-01..]            security.provider_allowlist_enforce / allowed_providers
