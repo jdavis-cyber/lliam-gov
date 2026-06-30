@@ -11,8 +11,8 @@
 # | Approval       | Pending                                                    |
 #
 # APPROVED BASELINE PIN (LG-CH-01) — fill at each signed save point:
-#   baseline_git_tag:   <UNSET — set to e.g. gov-P0-good at the phase verify gate>
-#   baseline_git_hash:  <UNSET — commit hash the signed tag points at>
+#   baseline_git_tag:   gov-P0-good   (Phase 0 verify gate, 2026-06-30 — annotated tag)
+#   baseline_git_hash:  <the commit gov-P0-good points at on harden/phase-0-baseline>
 # The LG-CH-03 startup drift check pins the running config to this tag/hash.
 #
 # -----------------------------------------------------------------------------
