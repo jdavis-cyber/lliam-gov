@@ -64,6 +64,7 @@ security:
   allow_lazy_installs: false  # config.py:2438  DEFAULT True  -> OVERRIDE false (no runtime PyPI installs)
   redact_secrets: true        # config.py:2414  DEFAULT True   (confirm-pinned; LG-DP-03 secret redaction ON)
   deny_on_no_approver: true   # [additive] high-risk actions fail closed when no approver is reachable
+  posture_findings_blocking: true  # [additive] LG-CH-09 — startup posture findings BLOCK (also stamped by posture_resolver; pinned explicitly so the flat artifact + drift gate are self-contained)
 
   # [ACTIVE @ P0.3]  SKILL ENABLEMENT POLICY MIRROR  (LG-SC-01/02/03/06, LG-AZ-02)
   # Consumed by the NEW tools/tool_policy.py gate. The detailed, reviewable policy
