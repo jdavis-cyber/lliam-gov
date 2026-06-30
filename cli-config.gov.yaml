@@ -126,6 +126,21 @@ security:
     enabled: true
     fail_closed: true
 
+  # [ACTIVE @ P0.6]  SOFTWARE SUPPLY-CHAIN PINNING + AIR-GAP  (LG-SS-01, LG-SS-07)
+  # The dependency supply chain is pinned at build time: pyproject.toml exact
+  # pins (==) / bounded ranges (<next_major) + uv.lock with 1798 sha256 hashes
+  # (both committed). allow_lazy_installs:false (pinned in P0.1 above) makes
+  # tools/lazy_deps.ensure() refuse any RUNTIME install. See evidence pack
+  # docs/governance/dependency-pinning.md and the pin-bump change-record.
+  require_hashed_install: true     # [additive] LG-SS-01: install path must be hash-verified (uv sync --locked / pip --require-hashes)
+  # allow_lazy_installs: false     #  LG-SS-07 — already pinned in the P0.1 block above (no runtime PyPI installs)
+  supply_chain:                    # [additive] supply-chain evidence + enforcement pointers
+    pinned_lockfile: uv.lock
+    lockfile_hash_algo: sha256
+    require_upper_bounds: true     #   enforced by .github/workflows/supply-chain-audit.yml (existing)
+    change_record: docs/governance/change-record.md   #   LG-SS-01: any pin bump requires an entry
+    osv_fail_on: high             #   [declared] LG-SS-02 scheduled/blocking OSV scan threshold (wired Phase 3)
+
 
 # =============================================================================
 # [ACTIVE @ P0.2]  FLIP PERMISSIVE DEFAULTS TO THE CUI FLOOR
@@ -222,6 +237,7 @@ agent:
 # [DONE P0.3  SC-01/02/06]  skills.disabled[godmode..] + deny_tags + security.skill_policy/allowlist ; tools/tool_policy.py gate
 # [DONE P0.4  CH-05/AZ-03/11] terminal.backend:docker ; agent.disabled_toolsets[computer_use,browser] ; security.tool_denylist/tool_risk_policy
 # [DONE P0.5  PI-01/02/03/05/07/08, MC-01, AZ-05] schema_validation:reject ; input_trust ; memory_poisoning_defense ; tools/input_integrity.py
+# [DONE P0.6  SS-01/07]     require_hashed_install + supply_chain (pyproject ==pins / uv.lock 1798 hashes) ; allow_lazy_installs:false refuses runtime installs
 # [P1   AU-01..10]          audit: { ledger_enabled, hash-chained ledger, fail_closed, ... }
 # [P1   IA-*]               dashboard auth + MFA ; gateway.multiplex_profiles ; secrets source
 # [P2   MP-01..]            security.provider_allowlist_enforce / allowed_providers
