@@ -224,9 +224,10 @@ _LAST_EXPANDED_CONFIG_BY_PATH: Dict[str, Any] = {}
 # produces a fresh inode, so stat() sees a new mtime_ns and the next
 # load repopulates automatically — no explicit invalidation hook.
 # Cached tuple is (user_mtime_ns, user_size, managed_mtime_ns, managed_size,
-# merged_value) — the managed-file signature is folded in so editing the
-# managed-scope config.yaml invalidates the cache (see managed_scope).
-_LOAD_CONFIG_CACHE: Dict[str, Tuple[int, int, int, int, Dict[str, Any]]] = {}
+# overlay_mtime_ns, overlay_size, merged_value) — the managed-file AND the
+# Lliam-GOV HERMES_CONFIG overlay signatures are folded in so editing either the
+# managed-scope config.yaml or the gov overlay invalidates the cache.
+_LOAD_CONFIG_CACHE: Dict[str, Tuple[int, int, int, int, int, int, Dict[str, Any]]] = {}
 # (path, mtime_ns, size) -> cached raw yaml dict. Same pattern as
 # _LOAD_CONFIG_CACHE but for read_raw_config() — used when callers want
 # the user's on-disk values without defaults merged in.
@@ -675,6 +676,33 @@ from utils import atomic_replace
 def get_config_path() -> Path:
     """Get the main config file path."""
     return get_hermes_home() / "config.yaml"
+
+
+def _gov_overlay_path(config_path: Path) -> Optional[Path]:
+    """Resolve the Lliam-GOV governance overlay selected by ``HERMES_CONFIG``.
+
+    ADDITIVE (LG-CH-01): ``HERMES_CONFIG`` is already in the env allowlist
+    (config.py:198) but was not previously consumed as a config-file selector.
+    When it points at an existing file *other than* the home ``config.yaml``,
+    that file is returned so ``_load_config_impl`` can deep-merge it OVER the home
+    base (governance overlay layering). Returns ``None`` when unset, empty,
+    missing, or identical to the home config — in which case load behavior is
+    exactly as shipped. This is read-only: ``get_config_path()`` and
+    ``save_config()`` are untouched, so the agent never writes the overlay.
+    Rollback is unset/repoint ``HERMES_CONFIG``.
+    """
+    raw = os.environ.get("HERMES_CONFIG")
+    if not raw or not raw.strip():
+        return None
+    try:
+        candidate = Path(raw).expanduser()
+        if not candidate.is_file():
+            return None
+        if candidate.resolve() == config_path.resolve():
+            return None
+        return candidate
+    except OSError:
+        return None
 
 def get_env_path() -> Path:
     """Get the .env file path (for API keys)."""
@@ -6176,23 +6204,38 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
         except OSError:
             managed_sig = (0, 0)
 
-        # Combined cache signature: user file + managed file. None only when the
-        # user config is absent AND no managed file exists (nothing to cache on).
+        # Lliam-GOV governance overlay (LG-CH-01): the EXISTING HERMES_CONFIG env
+        # var (already in the env allowlist at config.py:198) selects an additive
+        # overlay file deep-merged OVER the home config.yaml, below the managed
+        # layer. Additive — get_config_path()/save_config are untouched, so writes
+        # still target the home config.yaml and the version-controlled overlay is
+        # never clobbered by the agent. Rollback = unset/repoint HERMES_CONFIG.
+        overlay_path = _gov_overlay_path(config_path)
+        try:
+            ost = overlay_path.stat() if overlay_path else None
+            overlay_sig = (ost.st_mtime_ns, ost.st_size) if ost else (0, 0)
+        except OSError:
+            overlay_sig = (0, 0)
+
+        # Combined cache signature: user file + managed file + gov overlay. None
+        # only when ALL of them are absent (nothing to cache on).
         if user_sig is not None:
-            cache_sig: Optional[Tuple[int, int, int, int]] = (
+            cache_sig: Optional[Tuple[int, int, int, int, int, int]] = (
                 user_sig[0],
                 user_sig[1],
                 managed_sig[0],
                 managed_sig[1],
+                overlay_sig[0],
+                overlay_sig[1],
             )
-        elif managed_sig != (0, 0):
-            cache_sig = (0, 0, managed_sig[0], managed_sig[1])
+        elif managed_sig != (0, 0) or overlay_sig != (0, 0):
+            cache_sig = (0, 0, managed_sig[0], managed_sig[1], overlay_sig[0], overlay_sig[1])
         else:
             cache_sig = None
 
         cached = _LOAD_CONFIG_CACHE.get(path_key)
-        if cached is not None and cache_sig is not None and cached[:4] == cache_sig:
-            return copy.deepcopy(cached[4]) if want_deepcopy else cached[4]
+        if cached is not None and cache_sig is not None and cached[:6] == cache_sig:
+            return copy.deepcopy(cached[6]) if want_deepcopy else cached[6]
 
         config = copy.deepcopy(DEFAULT_CONFIG)
 
@@ -6212,6 +6255,18 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
             except Exception as e:
                 _warn_config_parse_failure(config_path, e)
 
+        # Lliam-GOV governance overlay merge (LG-CH-01): layer the HERMES_CONFIG
+        # overlay over the home config so it pins security values while preserving
+        # the home base (model/provider/etc.). Highest precedence below managed.
+        if overlay_path is not None:
+            try:
+                with open(overlay_path, encoding="utf-8") as f:
+                    overlay_config = yaml.safe_load(f) or {}
+                if isinstance(overlay_config, dict):
+                    config = _deep_merge(config, overlay_config)
+            except Exception as e:
+                _warn_config_parse_failure(overlay_path, e)
+
         normalized = _normalize_root_model_keys(_normalize_max_turns_config(config))
         expanded = _expand_env_vars(normalized)
         # Managed scope wins at the leaf. Applied AFTER user expansion so a user
@@ -6223,13 +6278,24 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
         if managed_config:
             managed_expanded = _expand_env_vars(managed_config)
             expanded = _deep_merge(expanded, managed_expanded)
+        # Lliam-GOV strict-posture coherence (LG-CH-02 / LG-CH-09): coerce the
+        # fail-open guards to fail-closed AFTER every merge so the secure state
+        # cannot be half-configured. No-op unless security.posture == strict.
+        try:
+            from hermes_cli import posture_resolver
+            posture_resolver.resolve(expanded)
+        except Exception:  # pragma: no cover - never brick config load
+            logging.getLogger("hermes.governance.posture").warning(
+                "posture_resolver unavailable; config left as loaded", exc_info=True
+            )
         _LAST_EXPANDED_CONFIG_BY_PATH[path_key] = copy.deepcopy(expanded)
         if cache_sig is not None:
             # Cache stores a separate deepcopy so subsequent ``load_config()``
             # (deepcopy=True) callers can mutate freely without affecting the
             # cached value, and ``load_config_readonly()`` (deepcopy=False)
             # callers all see the same stable cached object. The cached tuple is
-            # (user_mtime, user_size, managed_mtime, managed_size, value).
+            # (user_mtime, user_size, managed_mtime, managed_size,
+            #  overlay_mtime, overlay_size, value).
             cached_copy = copy.deepcopy(expanded)
             _LOAD_CONFIG_CACHE[path_key] = (*cache_sig, cached_copy)
             # On the readonly path return the same cached object subsequent

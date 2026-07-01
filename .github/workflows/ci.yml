@@ -127,6 +127,14 @@ jobs:
     name: OSV scan
     uses: ./.github/workflows/osv-scanner.yml
 
+  # Lliam-GOV additive lane — runs the governance gates (godmode/drift/path-freeze/
+  # deps) and feeds all-checks-pass so they are required. (LG-CH-06/03, SD-01, SS-01)
+  governance-gates:
+    name: Governance gates
+    needs: detect
+    uses: ./.github/workflows/governance-gates.yml
+    secrets: inherit
+
   # ─────────────────────────────────────────────────────────────────────
   # Gate: runs after everything. ``if: always()`` ensures it reports a
   # status even when some deps were skipped. Only actual ``failure``
@@ -147,6 +155,7 @@ jobs:
       - docker-lint
       - supply-chain
       - osv-scanner
+      - governance-gates
       # we don't require docker to pass rn because it's so slow lol
       # - docker
     if: always()

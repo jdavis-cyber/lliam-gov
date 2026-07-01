@@ -677,13 +677,19 @@ class TestAgentCacheBoundedGrowth:
         """_sweep_idle_cached_agents removes agents idle past the TTL."""
         from gateway import run as gw_run
 
-        monkeypatch.setattr(gw_run, "_AGENT_CACHE_IDLE_TTL_SECS", 0.05)
+        # Use a wide TTL with large separation between fresh/stale ages so the
+        # result is deterministic regardless of scheduling jitter. A 50 ms TTL
+        # here was flaky under loaded CI: >50 ms could elapse between stamping
+        # ``fresh`` and the sweep reading the clock, so ``fresh`` also crossed
+        # the TTL and evicted == 2. Real activity timestamps are seconds-to-
+        # minutes stale, so a multi-second TTL loses no coverage.
+        monkeypatch.setattr(gw_run, "_AGENT_CACHE_IDLE_TTL_SECS", 5.0)
         runner = self._bounded_runner()
         runner._cleanup_agent_resources = MagicMock()
 
         import time as _t
         fresh = self._fake_agent(last_activity=_t.time())
-        stale = self._fake_agent(last_activity=_t.time() - 10.0)
+        stale = self._fake_agent(last_activity=_t.time() - 3600.0)
         runner._agent_cache["fresh"] = (fresh, "s1")
         runner._agent_cache["stale"] = (stale, "s2")
 

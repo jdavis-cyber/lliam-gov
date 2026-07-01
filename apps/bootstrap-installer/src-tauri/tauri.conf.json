@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Hermes",
+  "productName": "Lliam-GOV",
   "version": "0.0.1",
   "identifier": "com.nousresearch.hermes.setup",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Hermes",
+        "title": "Lliam-GOV",
         "width": 880,
         "height": 620,
         "minWidth": 720,
