@@ -219,8 +219,8 @@ pub(crate) fn resolve_hermes_desktop_exe(install_root: &std::path::Path) -> Opti
         ]
     } else if cfg!(target_os = "macos") {
         &[
-            ("mac/Hermes.app/Contents/MacOS", "Hermes"),
-            ("mac-arm64/Hermes.app/Contents/MacOS", "Hermes"),
+            ("mac/Lliam-GOV.app/Contents/MacOS", "Lliam-GOV"),
+            ("mac-arm64/Lliam-GOV.app/Contents/MacOS", "Lliam-GOV"),
         ]
     } else {
         &[("linux-unpacked", "hermes")]

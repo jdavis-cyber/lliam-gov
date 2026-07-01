@@ -1,0 +1,144 @@
+# =============================================================================
+# tool-risk-policy.yaml — Lliam-GOV Tool Risk-Tier & Disposition Policy
+# =============================================================================
+#
+# | Field          | Value                                                      |
+# |----------------|------------------------------------------------------------|
+# | Document       | Tool Risk-Tier & Disposition Policy (tool-risk-policy.yaml) |
+# | Owner          | Lliam-GOV Program                                          |
+# | Classification | CUI//SP-PRIV (template — mark per instance)                |
+# | Version        | 0.1 DRAFT                                                  |
+#
+# WHAT THIS FILE IS
+#   The capability×impact risk-tier policy for the additive tool-dispatch PDP
+#   (tools/tool_policy.py). It assigns every tool/action class one of four
+#   graduated dispositions: allow / detect_log / hitl_approve / deny.
+#
+# SCOPE OF THIS STEP (P0.4 — "enablement portion for now")
+#   ACTIVE NOW (enforced this step):
+#     * Least-privilege default toolset profile — computer_use + browser OFF in
+#       the CUI baseline (LG-AZ-03, LG-AZ-11). Enforced via agent.disabled_toolsets
+#       in cli-config.gov.yaml + security.tool_denylist (the tool_policy gate).
+#     * Sandboxed execution backend — terminal.backend: docker (LG-CH-05).
+#     * Prefer narrow purpose-built tools over open-ended shell/SQL (LG-AZ-09) —
+#       declared here; open-ended tools are marked privileged for the Phase-2 PDP.
+#   DECLARED-FOR-PHASE-2 (the per-call PDP that resolves each tier at the
+#   before_call seam — LG-AZ-01/06/07/08/10, LG-RM-08 — lands in Phase 2):
+#     * The action_classes tier table below is the policy of record the PDP will
+#       consult; it is authored now so the posture is one reviewable artifact.
+#
+# ADDITIVE — NO EXISTING PATH RENAMED. Consumed by the NEW tools/tool_policy.py;
+# the existing tool_executor.py before_call seam (L425-427) is the wiring point
+# for the Phase-2 PDP. No existing tool identifier is renamed or moved.
+# =============================================================================
+
+
+metadata:
+  policy_id: "LG-TOOL-RISK-POLICY"
+  version: "0.1-DRAFT"
+  classification: "CUI//SP-PRIV"
+  owner: "Lliam-GOV Program"
+  default_disposition: deny          # [LG-AZ-02/RM-08] deny-by-default for the Phase-2 PDP
+  fail_closed: true
+  enforce: true                      # mirrors security.posture: strict
+  cui_floor: "NIST SP 800-171 r3 / CMMC L2"
+  pdp_module: "tools/tool_policy.py"
+  chokepoint: "agent/tool_executor.py before_call (L425-427)"   # EXISTING seam (Phase 2)
+  mappings:
+    nist_800_53r5: [AC-3, AC-6, "AC-6(1)", CM-7, PL-8, SI-4]
+    nist_800_171r3: ["03.01.05", "03.01.06", "03.01.07", "03.04.06"]
+    cmmc_l2: ["AC.L2-3.1.5", "AC.L2-3.1.6", "CM.L2-3.4.6"]
+
+
+# -----------------------------------------------------------------------------
+# 1. LEAST-PRIVILEGE TOOLSET PROFILE  [ACTIVE @ P0.4 — LG-AZ-03 / LG-AZ-11]
+# -----------------------------------------------------------------------------
+# The default CUI toolset profile. High-risk desktop/web-automation capabilities
+# are OFF unless a mission profile re-enables them via the deviation register
+# (LG-CH-08) + JIT grant + approval. Shell stays ENABLED but sandboxed
+# (terminal.backend: docker, §3) and approval-gated — it is mission-required for
+# a coding/ops assistant, so it is preserved, not removed (capability-preserving).
+# Enforced via agent.disabled_toolsets + security.tool_denylist in the gov overlay.
+toolset_profile:
+  enabled:                           # mission-required toolsets kept available
+    - terminal                       #   ENABLED but SANDBOXED (docker) + approval-gated
+    - file                           #   read/write within HERMES_WRITE_SAFE_ROOT
+    - web                            #   search / fetch (egress allowlist lands in P2)
+    - search
+  disabled:                          # OFF in the CUI baseline (LG-AZ-11 / LG-AZ-03)
+    - computer_use                   #   desktop/OS automation — disabled; JIT+approval to re-enable
+    - browser                        #   interactive web automation — disabled in CUI baseline
+  reenable_via: "docs/governance/deviation-register.yaml (LG-CH-08) + JIT grant + approval"
+  lg: [LG-AZ-03, LG-AZ-11]
+
+
+# -----------------------------------------------------------------------------
+# 2. PREFER NARROW PURPOSE-BUILT TOOLS OVER OPEN-ENDED SHELL/SQL  [LG-AZ-09]
+# -----------------------------------------------------------------------------
+# Constrain capability in the backend, not the prompt. Open-ended executors are
+# marked privileged so the Phase-2 PDP routes them through approval, while the
+# bounded purpose-built tools (file read/write/edit, search) stay low-friction.
+prefer_narrow_tools:
+  open_ended_privileged:             # marked privileged (Phase-2 PDP → hitl_approve)
+    - terminal                       #   open shell — prefer file/search tools where they suffice
+    - code_execution                 #   arbitrary code — sandboxed (docker) AND privileged-tier
+  prefer_bounded:                    # low-friction purpose-built tools
+    - file_read
+    - file_write
+    - file_edit
+    - search
+  guidance: "Use the narrowest tool that accomplishes the task; reach for open shell only when no bounded tool fits."
+  lg: [LG-AZ-09]
+
+
+# -----------------------------------------------------------------------------
+# 3. SANDBOXED EXECUTION BACKEND  [ACTIVE @ P0.4 — LG-CH-05]
+# -----------------------------------------------------------------------------
+# Shell/code tools run in a hardened container, not on the host. Set via
+# terminal.backend: docker in cli-config.gov.yaml. The LG-CH-03 drift gate
+# (later) flags terminal.backend: local as CRITICAL drift for a CUI profile.
+sandbox:
+  terminal_backend: docker           # cli-config.gov.yaml terminal.backend
+  rationale: "Host isolation: a shell/code tool cannot touch the host FS/network directly."
+  lg: [LG-CH-05]
+
+
+# -----------------------------------------------------------------------------
+# 4. TIER LADDER + ACTION-CLASS MAP  [DECLARED — Phase-2 PDP consumes this]
+# -----------------------------------------------------------------------------
+# The four graduated dispositions and the per-class mapping the Phase-2
+# tool-dispatch PDP will enforce at the before_call seam. Authored now so the
+# posture is one reviewable artifact; not yet wired per-call (that is Phase 2).
+tiers:
+  allow:        "low-risk idempotent reads — proceed + log; never prompts"
+  detect_log:   "medium-risk bounded mutation — proceed + ledger; NO prompt (anti-fatigue)"
+  hitl_approve: "high-risk/irreversible — authenticated approver; deny_on_no_approver only here"
+  deny:         "categorically unsafe — fail-closed block; terminal, no toggle re-enables"
+
+action_classes:
+  - {class: file_read, tier: allow}
+  - {class: file_write.in_safe_root, tier: detect_log}
+  - {class: file_write.outside_safe_root, tier: hitl_approve}
+  - {class: file_write.sensitive_path, tier: deny}
+  - {class: shell.non_destructive, tier: detect_log}
+  - {class: shell.destructive, tier: hitl_approve}
+  - {class: shell.hardline, tier: deny}            # rm -rf /, mkfs, dd-to-raw, fork bomb
+  - {class: shell.sudo_stdin, tier: deny}
+  - {class: computer_use.desktop_control, tier: deny}   # CUI baseline disable (LG-AZ-11)
+  - {class: browser.unlisted_or_action, tier: deny}
+  - {class: package_install, tier: deny}           # security.allow_lazy_installs=false
+  - {class: provider_call.allowlisted, tier: allow}
+  - {class: provider_call.non_allowlisted, tier: deny}  # CUI spillage (Phase 2/3)
+
+
+# -----------------------------------------------------------------------------
+# 5. TUNING / DEVIATIONS  [LG-RM-08 / LG-CH-08]
+# -----------------------------------------------------------------------------
+tuning:
+  deny_is_terminal: true             # deny entries are never tunable downward
+  deviation_register: "docs/governance/deviation-register.yaml"
+  preserve: ["≥1 in-boundary provider on allow", "generous HERMES_WRITE_SAFE_ROOT", "shell available (sandboxed)"]
+  lg: [LG-RM-08, LG-CH-08]
+
+# Built on Hermes Agent (Nous Research, MIT). Governance overlay is additive and
+# capability-preserving.
