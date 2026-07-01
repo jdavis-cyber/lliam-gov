@@ -230,9 +230,20 @@ def _tag_denied_installed_names() -> Set[str]:
     if cached is not None:
         return cached
     denied: Set[str] = set()
+    try:
+        from agent.skill_utils import iter_skill_index_files as _iter_skills
+    except Exception:
+        _iter_skills = None
     for d in dirs:
         try:
-            for md in d.glob("*/SKILL.md"):
+            # Match the loader's nested-aware traversal (category/name/SKILL.md),
+            # not just top-level */SKILL.md. Hermes discovery walks skills
+            # recursively via iter_skill_index_files, so a re-vendored offensive
+            # skill placed under a supported nested category is still registered
+            # — the deny-tag backstop must cover the same paths or it is bypassed
+            # under strict posture. (LG-SC-01/02)
+            index = _iter_skills(d, "SKILL.md") if _iter_skills else d.glob("*/SKILL.md")
+            for md in index:
                 meta = _skill_meta(md.parent)
                 if not meta:
                     continue
