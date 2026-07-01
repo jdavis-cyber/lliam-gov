@@ -1,0 +1,16 @@
+# deviation-register.yaml — machine-readable deviation register (LG-CH-08).
+#
+# Consumed by the governance gates (baseline-drift, prohibited-skills, config lint)
+# and the runtime startup drift check: an unexpired, approver-bound entry here
+# authorizes a specific deviation from the hardened baseline; without a matching
+# entry the gate fails closed. The human-readable register is deviation-register.md.
+#
+# never_eligible items can NEVER be authorized for a CUI profile (no entry enables them).
+never_eligible:
+  - godmode
+  - obliteratus
+
+# Each deviation: id, key (dotted config key or capability), profile (NEVER the
+# CUI profile for never_eligible), from -> to, justification, approver, expiry,
+# poam. Expired/unapproved entries are ignored (the baseline re-blocks).
+deviations: []
