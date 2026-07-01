@@ -1,0 +1,89 @@
+name: Governance Gates
+
+# Lliam-GOV additive CI/CD governance gates (Phase 0 subset).
+#
+# PATH-FREEZE: this is a NEW standalone workflow. It does NOT rename, replace, or
+# edit any existing workflow (ci.yml / supply-chain-audit.yml / osv-scanner.yml).
+# It runs the four Phase-0 governance gates whose helper scripts live under
+# ci/governance-ci-gates/. Later phases extend this (SBOM, secret-scan,
+# provenance/signing, config-policy lint) per
+# 03_Implementation_Plan/baseline_overlay/ci/governance-ci-gates.md.
+#
+# Capability-preserving: the drift + prohibited-skill gates are no-ops on a
+# non-gov profile; the path-freeze guard only blocks RENAME/DELETE of frozen
+# paths (additive overlays always pass).
+
+on:
+  # Driven by the ci.yml orchestrator (which runs on pull_request + push) so the
+  # gates feed the single required `all-checks-pass` check. Kept callable +
+  # manually dispatchable; the standalone pull_request/push triggers are removed
+  # to avoid duplicate runs once wired into ci.yml.
+  workflow_call: {}
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HERMES_CONFIG: cli-config.gov.yaml
+  GOV_CI_DIR: ci/governance-ci-gates
+
+jobs:
+  # GATE 7 — prohibited-skill (godmode) preflight (LG-CH-06 / LG-SC-01)
+  prohibited-skills:
+    name: Prohibited-skill (godmode) gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with: { python-version: "3.13" }
+      - name: Install PyYAML
+        run: python -m pip install --quiet pyyaml
+      - name: Assert prohibited skills denied in the gov overlay
+        run: bash "${GOV_CI_DIR}/prohibited_skills_gate.sh" "${HERMES_CONFIG}"
+
+  # GATE — baseline-drift gate (LG-CH-03 / LG-CH-09), fail-closed on critical drift
+  baseline-drift:
+    name: Baseline-drift gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with: { python-version: "3.13" }
+      - name: Install PyYAML
+        run: python -m pip install --quiet pyyaml
+      - name: Compare effective gov config to baseline-critical-keys (Phase 0)
+        run: |
+          python "${GOV_CI_DIR}/baseline_drift_gate.py" \
+            --overlay "${HERMES_CONFIG}" \
+            --baseline docs/governance/baseline-critical-keys.yaml \
+            --phase P0
+
+  # GATE 2 — dependency pin + hash check (LG-SS-01)
+  deps-hash:
+    name: Dependency pin + hash gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # 8.2.0
+      - name: Assert deps pinned with hashes + upper bounds
+        run: bash "${GOV_CI_DIR}/deps_hash_gate.sh"
+
+  # GATE 8 — path-freeze guardrail (LG-SD-01) — PR only (needs base/head)
+  path-freeze:
+    name: Path-freeze guardrail
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with: { python-version: "3.13" }
+      - name: Install PyYAML
+        run: python -m pip install --quiet pyyaml
+      - name: Assert no frozen path renamed or deleted
+        run: |
+          python "${GOV_CI_DIR}/path_freeze_gate.py" \
+            --manifest "${GOV_CI_DIR}/path-freeze-manifest.yaml" \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
