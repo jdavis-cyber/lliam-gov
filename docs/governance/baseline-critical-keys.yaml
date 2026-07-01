@@ -1,0 +1,178 @@
+# =============================================================================
+# Lliam-GOV — Baseline Critical Keys  (LG-CH-03 startup drift policy)
+# =============================================================================
+#
+# | Field          | Value                                                  |
+# |----------------|--------------------------------------------------------|
+# | Document       | baseline-critical-keys.yaml                            |
+# | Owner          | Lliam-GOV Program                                      |
+# | Classification | CUI//SP-PRIV (template — mark per instance)            |
+# | Version        | 0.1 DRAFT                                              |
+#
+# PURPOSE (LG-CH-03 / LG-CH-09)
+# -----------------------------------------------------------------------------
+# Enumerates the configuration keys whose drift away from the approved
+# cli-config.gov.yaml baseline is security-relevant for a CUI profile. The
+# startup drift gate — an additive extension of hermes_cli/security_audit_startup
+# built in a later Phase-0 step — compares the EFFECTIVE running config (after
+# the governance-overlay merge AND posture_resolver coercion) against the
+# expected values below. Under `security.posture: strict`:
+#   * severity: critical  -> FAIL CLOSED (block CUI-profile start) unless an
+#                            unexpired entry in docs/governance/deviation-register.yaml
+#                            (LG-CH-08) authorizes the exact key.
+#   * severity: warn      -> advisory log line; start proceeds.
+# Low-side (no overlay / posture != strict) is unaffected — the gate is keyed off
+# strict posture.
+#
+# ADDITIVE — this is a NEW policy file. No existing config key is renamed. Keys
+# are referenced by their dotted path in the effective Hermes config.
+#
+# STATUS LEGEND for `activated_in`:
+#   P0.1  -> enforced now (key is live in cli-config.gov.yaml + posture_resolver)
+#   P0.x / P1 / P2 -> the key's enforcing control ships in that step; listed here
+#                     now so the critical-keys policy is authored once and the
+#                     gate light up incrementally as each value goes live.
+# =============================================================================
+
+version: 1
+posture_required: strict          # the gate only fails closed when this matches
+
+critical_keys:
+
+  # ---- ACTIVE @ P0.1 — master switch + fail-open→fail-closed coherence --------
+  - key: security.posture
+    expect: strict
+    severity: critical
+    control: LG-CH-02
+    activated_in: P0.1
+    note: the master switch itself; absence/!=strict means the overlay did not load.
+
+  - key: security.tirith_fail_open
+    expect: false
+    severity: critical
+    control: LG-PI-05
+    activated_in: P0.1
+    note: content scanner must fail CLOSED (DEFAULT True is fail-open).
+
+  - key: security.allow_private_urls
+    expect: false
+    severity: critical
+    control: LG-NE-02
+    activated_in: P0.1
+    note: SSRF/private-IP/cloud-metadata egress stays blocked.
+
+  - key: security.allow_lazy_installs
+    expect: false
+    severity: critical
+    control: LG-SS-07
+    activated_in: P0.1
+    note: no runtime PyPI installs (air-gap / supply-chain integrity).
+
+  - key: security.require_hashed_install
+    expect: true
+    severity: critical
+    control: LG-SS-01
+    activated_in: P0.6
+    note: install path must be hash-verified against the committed uv.lock.
+
+  - key: security.redact_secrets
+    expect: true
+    severity: critical
+    control: LG-DP-03
+    activated_in: P0.1
+    note: secret redaction over output/logs/audit must stay on.
+
+  - key: security.deny_on_no_approver
+    expect: true
+    severity: critical
+    control: LG-HO-06
+    activated_in: P0.1
+    note: high-risk actions fail CLOSED when no human approver is reachable.
+
+  - key: security.posture_findings_blocking
+    expect: true
+    severity: critical
+    control: LG-CH-09
+    activated_in: P0.1
+    note: signal (stamped by posture_resolver) that startup posture findings block.
+
+  # ---- SCAFFOLDED — value goes live in the listed later step ------------------
+  - key: privacy.redact_pii
+    expect: true
+    severity: warn
+    control: LG-CH-07
+    activated_in: P0.x
+    note: PII redaction to providers; promote to critical when the step lands.
+
+  - key: terminal.backend
+    expect: docker
+    severity: critical
+    control: LG-CH-05
+    activated_in: P0.x
+    note: terminal.backend=local is CRITICAL drift for a CUI profile.
+
+  - key: skills.disabled
+    expect_contains: [godmode, sherlock, web-pentest]
+    severity: critical
+    control: LG-SC-01
+    activated_in: P0.x
+    note: prohibited offensive/jailbreak skills must be denied (godmode mandatory).
+
+  - key: skills.write_approval
+    expect: true
+    severity: warn
+    control: LG-CH-07
+    activated_in: P0.x
+
+  - key: skills.guard_agent_created
+    expect: true
+    severity: warn
+    control: LG-CH-07
+    activated_in: P0.x
+
+  - key: memory.write_approval
+    expect: true
+    severity: warn
+    control: LG-CH-07
+    activated_in: P0.x
+
+  - key: approvals.mode
+    expect: manual
+    forbid: [off]
+    severity: critical
+    control: LG-HO-01
+    activated_in: P2
+    note: never "off"; --yolo / HERMES_YOLO_MODE must not be used in a CUI profile.
+
+  - key: tool_loop_guardrails.hard_stop_enabled
+    expect: true
+    severity: warn
+    control: LG-AZ-12
+    activated_in: P2
+
+  - key: audit.ledger_enabled
+    expect: true
+    severity: critical
+    control: LG-AU-01
+    activated_in: P1
+    note: tamper-evident hash-chained ledger must be on.
+
+  - key: security.egress.mode
+    expect: allowlist
+    severity: critical
+    control: LG-NE-01
+    activated_in: P2
+    note: deny-by-default egress; not "allowlist" => refuse CUI-profile start.
+
+  - key: security.provider_allowlist_enforce
+    expect: true
+    severity: critical
+    control: LG-MP-01
+    activated_in: P2
+    note: CUI routing restricted to vetted US/FedRAMP/local providers on every path.
+
+  - key: storage.encrypt_at_rest
+    expect: true
+    severity: warn
+    control: LG-DP-07
+    activated_in: P2

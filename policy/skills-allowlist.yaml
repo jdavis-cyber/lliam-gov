@@ -1,0 +1,174 @@
+# =============================================================================
+# Lliam-GOV — SKILLS / PLUGINS ALLOWLIST + DENYLIST POLICY (skills-allowlist.yaml)
+# =============================================================================
+#
+# | Field          | Value                                                      |
+# |----------------|------------------------------------------------------------|
+# | Document       | skills-allowlist.yaml — Skills/Plugins Supply-Chain Policy  |
+# | Owner          | Lliam-GOV Program                                          |
+# | Classification | CUI//SP-PRIV (template — mark per instance)                |
+# | Version        | 0.1 DRAFT                                                  |
+#
+# WHAT THIS IS — a version-controlled, deny-by-default policy governing the
+# executable code Lliam-GOV may LOAD/RUN as skills. Consumed by the NEW additive
+# module tools/tool_policy.py and unioned into the EXISTING chokepoint
+# agent.skill_utils.get_disabled_skill_names() (which feeds skill discovery,
+# slash-command registration, and the prompt builder). No existing skill path,
+# scanner, or registry identifier is renamed (PATH-FREEZE).
+#
+# RESOLUTION: tool_policy looks for this file at, in order:
+#   $HERMES_SKILL_POLICY → $HERMES_HOME/policy/skills-allowlist.yaml →
+#   <dir(HERMES_CONFIG)>/policy/skills-allowlist.yaml → <repo>/policy/.
+#
+# ACTIVE ONLY UNDER security.posture: strict. Low-side deployments do not load
+# the gov overlay and are completely unaffected.
+# =============================================================================
+
+
+# =============================================================================
+# 1. POLICY MODE
+#    Controls: LG-SC-01 (deny-by-default), LG-CH-04 (least functionality)
+# -----------------------------------------------------------------------------
+# enforce: the named denylist + intent deny_tags are HARD-REFUSED at registration.
+# unlisted_disposition governs skills that are merely NOT-YET on the allowlist:
+#   log  -> detect-and-log, NOT blocked (capability-preserving default — the ~120
+#           built-in skills keep working while the allowlist is curated).
+#   hold -> deny-by-default (held pending SDL review). Flip to 'hold' only AFTER
+#           the allowlist below is fully populated, via the deviation register.
+# fail_closed: an unevaluable policy blocks the CUI start (enforced by the later
+# startup-gate step), never starts open.
+# =============================================================================
+policy:
+  mode: enforce
+  unlisted_disposition: log        # [P0.3] capability-preserving; -> hold after allowlist curation
+  fail_closed: true
+  applies_to_posture: strict
+  review_cadence_days: 90          # LG-SC-09 stale-vetting flag
+  codeowners_required: true        # LG-SC-09 CODEOWNERS approval to edit this file
+
+
+# =============================================================================
+# 2. SKILLS DENYLIST — OFFENSIVE / JAILBREAK LEAST-FUNCTIONALITY EXCLUSION
+#    Controls: LG-SC-01, LG-CH-04 / LG-CH-06, LG-HO-03
+# -----------------------------------------------------------------------------
+# These ship in-repo under optional-skills/ and are INSTALLABLE; nothing in the
+# shipped default config prevents enablement — hence this MANDATORY exclusion.
+# Mirrored into skills.disabled in cli-config.gov.yaml. tool_policy also enforces
+# an offensive BACKSTOP set so these stay denied even if this file is missing.
+# =============================================================================
+skills:
+  disabled:
+    - godmode                      # optional-skills/security/godmode/  JAILBREAK — MANDATORY deny (LG-SC-01/HO-03)
+    - obliteratus                  # optional-skills/mlops/obliteratus/ weight-abliteration — MANDATORY deny
+    - web-pentest                  # optional-skills/security/web-pentest/ active web exploitation — deny by default
+    - sherlock                     # optional-skills/security/sherlock/  OSINT account-enum — deny by default
+    - oss-forensics                # optional-skills/security/oss-forensics/ forensics/IR — deny by default (REVIEW-to-allow)
+
+  # Strict skill-subsystem posture (existing keys; also pinned in the overlay).
+  guard_agent_created: true        # LG-SC-02: scan agent-authored skills
+  inline_shell: false              # LG-SC-06: no host inline-shell pre-exec
+  write_approval: true             # LG-HO-04: stage SKILL.md writes for review
+
+  # Intent-based denial — catches RE-VENDORED / RENAMED offensive skills by the
+  # SKILL.md tags/description even if not named above (LG-SC-01/02). Enforced by
+  # tool_policy.enforce_skill_enablement / skill_load_decision.
+  deny_tags:
+    - jailbreak
+    - uncensoring
+    - safety-bypass
+    - refusal-removal
+    - abliteration
+    - guardrail-removal
+    - prompt-injection-offense
+
+
+# =============================================================================
+# 3-5. ALLOWLIST + ATTESTATION (vetted skills only; provenance + AST + signing)
+#    Controls: LG-SC-01 (allowlist), LG-SC-02 (provenance+AST), LG-SC-03 (signed)
+# -----------------------------------------------------------------------------
+# Only skills enumerated here are "vetted". With unlisted_disposition: log, a
+# non-listed skill is allowed-but-logged for now; tighten to 'hold' once curated.
+# require_* below drive the SDL/load gate (LG-SC-02/03).
+# =============================================================================
+security:
+  skill_allowlist:
+    - name: pdf
+      source: builtin
+      ast_audit: pass
+      provenance: foreground
+      attestation: builtin
+    - name: xlsx
+      source: builtin
+      ast_audit: pass
+      provenance: foreground
+      attestation: builtin
+    - name: docx
+      source: builtin
+      ast_audit: pass
+      provenance: foreground
+      attestation: builtin
+    # Vetted third-party skills are appended here only after the SDL gate (§6)
+    # completes, with content_hash + signer + sdl_record + approver + expiry.
+
+  plugin_allowlist:
+    - name: security-guidance       # plugins/security-guidance/ (SDL pattern source)
+      source: builtin
+      sdl_scan: pass
+  plugin_denylist: []
+
+  require_signed_skills: true       # LG-SC-03: clean provenance + signature precondition for third-party high-impact
+  require_ast_audit: true           # LG-SC-02: ast_scan_path() must pass before load
+  require_provenance: true          # LG-SC-03: no clean provenance => no high-impact exec
+  trusted_signers:
+    - "gov-skill-signing-authority"
+  unsigned_disposition: hold        # third-party skill w/o valid signature => held for review
+
+
+# =============================================================================
+# 6. SDL GATE — required before a skill/plugin enters the baseline (LG-SC-09)
+# =============================================================================
+sdl_gate:
+  require_provenance: true
+  require_ast_audit: true
+  require_guard_scan: true          # tools/skills_guard.scan_skill / should_allow_install
+  require_security_guidance_scan: true
+  require_osv_scan: true
+  osv_fail_on: high
+  require_codeowners: true
+  sdl_record_dir: "docs/governance/sdl"
+
+
+# =============================================================================
+# 7. EXCEPTIONS — sanctioned enablement of a denied dual-use skill (LG-CH-08)
+# -----------------------------------------------------------------------------
+# A denied DUAL-USE skill may be enabled for an authorized, scoped, time-boxed
+# mission in a SEPARATE non-CUI profile via the deviation register. godmode and
+# obliteratus are NEVER eligible for any CUI profile.
+# =============================================================================
+exceptions:
+  register: "docs/governance/deviation-register.yaml"
+  never_eligible:
+    - godmode
+    - obliteratus
+
+
+# =============================================================================
+# 8. CI / PREFLIGHT ASSERTIONS (enforced in the later CH-06 CI step)
+# =============================================================================
+ci_assertions:
+  assert_disabled:
+    - godmode
+    - obliteratus
+    - web-pentest
+    - sherlock
+    - oss-forensics
+  assert_pinned:
+    skills.guard_agent_created: true
+    skills.inline_shell: false
+    skills.write_approval: true
+    security.require_signed_skills: true
+    policy.mode: enforce
+    policy.fail_closed: true
+
+# Built on Hermes Agent (Nous Research, MIT). Governance overlay is additive and
+# capability-preserving.

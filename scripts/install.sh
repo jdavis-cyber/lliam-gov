@@ -2868,8 +2868,8 @@ install_desktop() {
     else
         local cand
         for cand in \
-            "$desktop_dir/release/mac-arm64/Hermes.app" \
-            "$desktop_dir/release/mac/Hermes.app"; do
+            "$desktop_dir/release/mac-arm64/Lliam-GOV.app" \
+            "$desktop_dir/release/mac/Lliam-GOV.app"; do
             if [ -d "$cand" ]; then
                 app="$cand"
                 break

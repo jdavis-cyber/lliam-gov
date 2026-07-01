@@ -364,27 +364,37 @@ def get_disabled_skill_names(platform: str | None = None) -> Set[str]:
     Reads the config file directly (no CLI config imports) to stay
     lightweight.
     """
-    parsed = _load_raw_config()
-    if not parsed:
-        return set()
-
-    skills_cfg = parsed.get("skills")
-    if not isinstance(skills_cfg, dict):
-        return set()
-
     from gateway.session_context import get_session_env
     resolved_platform = (
         platform
         or os.getenv("HERMES_PLATFORM")
         or get_session_env("HERMES_SESSION_PLATFORM")
     )
-    global_disabled = _normalize_string_set(skills_cfg.get("disabled"))
-    if resolved_platform:
-        platform_disabled = (skills_cfg.get("platform_disabled") or {}).get(
-            resolved_platform
-        )
-        if platform_disabled is not None:
-            return global_disabled | _normalize_string_set(platform_disabled)
+
+    parsed = _load_raw_config()
+    skills_cfg = parsed.get("skills") if isinstance(parsed, dict) else None
+    if isinstance(skills_cfg, dict):
+        global_disabled = _normalize_string_set(skills_cfg.get("disabled"))
+        if resolved_platform:
+            platform_disabled = (skills_cfg.get("platform_disabled") or {}).get(
+                resolved_platform
+            )
+            if platform_disabled is not None:
+                global_disabled = global_disabled | _normalize_string_set(platform_disabled)
+    else:
+        global_disabled = set()
+
+    # Lliam-GOV skill enablement gate (LG-SC-01 / LG-AZ-02): additively union the
+    # governance-policy denylist (godmode + offensive optional-skills, and any
+    # overlay/policy-file skills.disabled the lightweight raw-config read above
+    # cannot see). Runs on EVERY path — including when no home config.yaml exists —
+    # so a denied skill is refused regardless. No-op unless posture==strict; never
+    # breaks listing (faults swallowed, falling back to shipped behavior).
+    try:
+        from tools.tool_policy import policy_denied_skill_names
+        global_disabled = global_disabled | policy_denied_skill_names(resolved_platform)
+    except Exception:
+        pass
     return global_disabled
 
 
