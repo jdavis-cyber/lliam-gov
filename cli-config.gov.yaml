@@ -1,0 +1,253 @@
+# =============================================================================
+# Lliam-GOV — HARDENED GOVERNANCE OVERLAY  (cli-config.gov.yaml)
+# =============================================================================
+#
+# | Field          | Value                                                     |
+# |----------------|-----------------------------------------------------------|
+# | Document       | cli-config.gov.yaml — Hardened Governance Overlay (CUI)    |
+# | Owner          | Lliam-GOV Program                                          |
+# | Classification | CUI//SP-PRIV (template — mark per instance)                |
+# | Version        | 0.1 DRAFT                                                  |
+# | Approval       | Pending                                                    |
+#
+# APPROVED BASELINE PIN (LG-CH-01) — fill at each signed save point:
+#   baseline_git_tag:   gov-P0-good   (Phase 0 verify gate, 2026-06-30 — annotated tag)
+#   baseline_git_hash:  <the commit gov-P0-good points at on harden/phase-0-baseline>
+# The LG-CH-03 startup drift check pins the running config to this tag/hash.
+#
+# -----------------------------------------------------------------------------
+# WHAT THIS FILE IS
+# -----------------------------------------------------------------------------
+# The single, version-controlled, fail-closed configuration OVERLAY that moves
+# Lliam-GOV (a fork of Hermes Agent, Nous Research, MIT) from its shipped
+# permissive defaults to the CUI posture floor: NIST SP 800-171 r3 / CMMC L2.
+# It is the documented secure baseline for control LG-CH-01.
+#
+# HOW IT LOADS  (ADDITIVE — no existing module renamed; PATH-FREEZE honored)
+#   Selected at runtime via the EXISTING env var HERMES_CONFIG (already in the
+#   allowlist at hermes_cli/config.py:198). The additive selector
+#   hermes_cli/config._gov_overlay_path() resolves it and deep-merges this file
+#   OVER the home config.yaml (highest precedence below the managed layer), then
+#   hermes_cli/posture_resolver.resolve() coerces the fail-open guards to
+#   fail-closed. Writes still target the home config.yaml — the agent never
+#   clobbers this version-controlled overlay.
+#       export HERMES_CONFIG=<path>/cli-config.gov.yaml
+#   Rollback (config-only, reversible): unset/repoint HERMES_CONFIG, or check out
+#   the previous signed git tag of this file. No frozen path is ever renamed.
+#
+# BUILD ORDER (this file grows across the Phase-0..2 steps — each step ACTIVATES
+# its own section here; everything below the active block is scaffolded as
+# step-tagged comments so the structure is visible key-for-key without
+# prematurely enabling half-built enforcement). Capability-preserving throughout.
+# =============================================================================
+
+
+# =============================================================================
+# [ACTIVE @ P0.1]  0. MASTER POSTURE SWITCH  +  FAIL-OPEN -> FAIL-CLOSED COHERENCE
+#    Controls: LG-CH-02 (strict-posture switch), LG-CH-01 (documented baseline),
+#              LG-CH-09 (startup posture findings become blocking)
+#    Consumed by: hermes_cli/posture_resolver.py (additive module)
+# -----------------------------------------------------------------------------
+# `security.posture: strict` is the single coherent switch. The resolver forces
+# the keys below to their fail-closed values after every config merge, so the
+# secure state cannot be reached by accidental half-configuration. The keys are
+# ALSO set explicitly here so the posture is auditable as one flat artifact (the
+# resolver still wins if any is edited). Low-side deployments simply do not load
+# this overlay; their permissive defaults are untouched.
+# =============================================================================
+security:
+  posture: strict             # [additive] SHIPPED DEFAULT: (none/implicit permissive)
+
+  tirith_enabled: true        # config.py:2415  DEFAULT True   (confirm-pinned)
+  tirith_fail_open: false     # config.py:2418  DEFAULT True  -> OVERRIDE false (scanner fails closed)
+  allow_private_urls: false   # config.py:2413  DEFAULT False  (confirm-pinned; SSRF/metadata stay blocked)
+  allow_lazy_installs: false  # config.py:2438  DEFAULT True  -> OVERRIDE false (no runtime PyPI installs)
+  redact_secrets: true        # config.py:2414  DEFAULT True   (confirm-pinned; LG-DP-03 secret redaction ON)
+  deny_on_no_approver: true   # [additive] high-risk actions fail closed when no approver is reachable
+  posture_findings_blocking: true  # [additive] LG-CH-09 — startup posture findings BLOCK (also stamped by posture_resolver; pinned explicitly so the flat artifact + drift gate are self-contained)
+
+  # [ACTIVE @ P0.3]  SKILL ENABLEMENT POLICY MIRROR  (LG-SC-01/02/03/06, LG-AZ-02)
+  # Consumed by the NEW tools/tool_policy.py gate. The detailed, reviewable policy
+  # is policy/skills-allowlist.yaml; these keys mirror it for one-artifact audit.
+  skill_policy:
+    mode: enforce                  # [additive] hard-refuse the named denylist + deny_tags
+    unlisted_disposition: log      # [additive] non-allowlisted skills LOGGED, not blocked (capability-preserving)
+    path: policy/skills-allowlist.yaml   # [additive] detailed policy artifact
+    constrain_mobile_code: true    # [additive] LG-SC-06: inline_shell off (above) + sandbox/browser gating (CH-05/04)
+  require_signed_skills: true      # [additive] LG-SC-03: clean provenance + signature for third-party high-impact exec
+  require_ast_audit: true          # [additive] LG-SC-02: ast_scan_path() must pass before load
+  require_provenance: true         # [additive] LG-SC-03: no clean provenance => no high-impact exec
+  skill_allowlist:                 # [additive] mirror of policy/skills-allowlist.yaml security.skill_allowlist
+    - name: pdf
+      source: builtin
+    - name: xlsx
+      source: builtin
+    - name: docx
+      source: builtin
+
+  # [ACTIVE @ P0.4]  LEAST-PRIVILEGE TOOL ENABLEMENT  (LG-AZ-03/11, LG-AZ-02)
+  # Mirror of policy/tool-risk-policy.yaml. computer_use + browser are policy-
+  # disabled in the CUI baseline (also enforced via agent.disabled_toolsets below
+  # which removes them from the resolved toolset). tool_denylist is read by the
+  # NEW tools/tool_policy.py gate. The full per-call PDP lands in Phase 2.
+  tool_risk_policy:
+    enabled: true                  # [additive] policy of record active (PDP wiring = Phase 2)
+    policy_path: policy/tool-risk-policy.yaml   # [additive] reviewable tier policy
+    default_disposition: deny      # [additive] deny-by-default for the Phase-2 PDP
+    fail_closed: true              # [additive] on policy parse/eval error -> deny
+  tool_allowlist: []               # [additive] LG-AZ-02 (empty = no positive tool allowlist yet)
+  tool_denylist:                   # [additive] LG-AZ-11/AZ-02: refuse these capabilities for CUI
+    - computer_use
+    - browser
+
+  # [ACTIVE @ P0.5]  INPUT-INTEGRITY & PATH-SAFETY  (treat untrusted = hostile)
+  # Reviewable policy: policy/input-trust-policy.yaml. Consumed by the NEW
+  # tools/input_integrity.py gate + the EXISTING sanitizer/scanner/path modules.
+  # tirith_fail_open is already pinned false above (P0.1) — LG-PI-05.
+  schema_validation:               # [additive] LG-PI-03: reject malformed/oversized tool/MCP schemas before binding
+    mode: reject                   #   reject | coerce  (CUI floor: reject)
+    max_schema_bytes: 65536
+  input_trust:                     # [additive] LG-PI-01/02: untrusted-by-default + sanitize/delimit
+    enabled: true
+    policy_path: policy/input-trust-policy.yaml
+    untrusted_sources: [web, file, tool_result, mcp, rag]
+    sanitize: true                 #   message_sanitization always-on (pinned)
+    delimit_untrusted: true
+  smart_approval_guard:            # [additive] LG-PI-07: harden guard; constrain to allowable actions
+    hardened: true
+    out_of_scope_disposition: approve
+  inbound_screening:               # [additive] LG-PI-08: AI-generated/low-credibility screening (detect-and-log)
+    enabled: true
+    mode: log
+  memory_poisoning_defense:        # [additive] LG-MC-01: scan content before persistent memory write
+    enabled: true
+    mode: block                    #   block | placeholder | log  (CUI floor: block)
+    scope: strict
+  path_traversal_validation:       # [additive] LG-AZ-05: pin path_security on for file/skill/cron ops
+    enabled: true
+    fail_closed: true
+
+  # [ACTIVE @ P0.6]  SOFTWARE SUPPLY-CHAIN PINNING + AIR-GAP  (LG-SS-01, LG-SS-07)
+  # The dependency supply chain is pinned at build time: pyproject.toml exact
+  # pins (==) / bounded ranges (<next_major) + uv.lock with 1798 sha256 hashes
+  # (both committed). allow_lazy_installs:false (pinned in P0.1 above) makes
+  # tools/lazy_deps.ensure() refuse any RUNTIME install. See evidence pack
+  # docs/governance/dependency-pinning.md and the pin-bump change-record.
+  require_hashed_install: true     # [additive] LG-SS-01: install path must be hash-verified (uv sync --locked / pip --require-hashes)
+  # allow_lazy_installs: false     #  LG-SS-07 — already pinned in the P0.1 block above (no runtime PyPI installs)
+  supply_chain:                    # [additive] supply-chain evidence + enforcement pointers
+    pinned_lockfile: uv.lock
+    lockfile_hash_algo: sha256
+    require_upper_bounds: true     #   enforced by .github/workflows/supply-chain-audit.yml (existing)
+    change_record: docs/governance/change-record.md   #   LG-SS-01: any pin bump requires an entry
+    osv_fail_on: high             #   [declared] LG-SS-02 scheduled/blocking OSV scan threshold (wired Phase 3)
+
+
+# =============================================================================
+# [ACTIVE @ P0.2]  FLIP PERMISSIVE DEFAULTS TO THE CUI FLOOR
+#    Control: LG-CH-07 (flip permissive defaults to strict for CUI)
+#    Cross-refs: LG-DP-04 (PII), LG-HO-04 (staged write-approval), LG-SC-02/06
+# -----------------------------------------------------------------------------
+# These keys ALL already exist in Hermes DEFAULT_CONFIG and are consumed by
+# SHIPPED code today — flipping them is capability-preserving:
+#   * write_approval only DELAYS/STAGES memory & skill writes (to <HERMES_HOME>/
+#     pending/{memory,skills}) for review; it never drops them. Ordinary file
+#     writes (the file_write tool) are NOT gated by these.
+#   * redact_pii only masks PII in the context sent to providers.
+#   * guard_agent_created only turns on AST scanning of AGENT-authored skills.
+# Each line: SHIPPED DEFAULT -> OVERRIDE (control).
+# =============================================================================
+privacy:
+  redact_pii: true            # config.py:1908  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-DP-04: redact PII to providers)
+
+memory:
+  write_approval: true        # config.py:2037  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-HO-04: stage memory writes for review)
+
+skills:
+  write_approval: true        # config.py:2176  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-HO-04: stage skill writes for review)
+  guard_agent_created: true   # config.py:2164  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-SC-02: AST-scan agent-authored skills)
+  inline_shell: false         # config.py:2151  DEFAULT False  (confirm-pinned;  LG-SC-06: no host inline-shell pre-exec)
+
+  # ---------------------------------------------------------------------------
+  # [ACTIVE @ P0.3]  LEAST-FUNCTIONALITY DENYLIST  (LG-SC-01 / LG-CH-04 / LG-HO-03)
+  # Offensive/jailbreak optional-skills denied for the CUI profile. Enforced via
+  # the NEW tools/tool_policy.py gate unioned into get_disabled_skill_names() (so
+  # they are refused at discovery, slash-command registration, and prompting).
+  # Detailed reviewable policy: policy/skills-allowlist.yaml.
+  # ---------------------------------------------------------------------------
+  disabled:                   # config.py skills.disabled  SHIPPED DEFAULT: [] -> deny offensive set
+    - godmode                 #   JAILBREAK — MANDATORY deny (LG-SC-01 / LG-HO-03)
+    - obliteratus             #   weight-abliteration / uncensoring — MANDATORY deny (LG-SC-01)
+    - web-pentest             #   active web exploitation, dual-use — deny by default
+    - sherlock                #   OSINT account-enumeration, dual-use — deny by default
+    - oss-forensics           #   forensics/IR, dual-use — deny by default (REVIEW-to-allow)
+  deny_tags:                  # [additive] intent-based denial of re-vendored/renamed offensive skills (LG-SC-01/02)
+    - jailbreak
+    - uncensoring
+    - safety-bypass
+    - refusal-removal
+    - abliteration
+    - guardrail-removal
+    - prompt-injection-offense
+
+
+# =============================================================================
+# [ACTIVE @ P0.4]  SANDBOXED EXECUTION BACKEND  (LG-CH-05)
+# -----------------------------------------------------------------------------
+# Run shell/code (and the file tools, which wrap the terminal backend's
+# execute()) inside a hardened container instead of on the host. config.py:1095
+# ships "local"; the CUI baseline OVERRIDES to "docker". terminal.backend is
+# bridged to the TERMINAL_ENV env var by apply_terminal_config_to_env at startup,
+# so the terminal tool runs every command in the sandbox. The LG-CH-03 drift gate
+# (later) flags terminal.backend: local as CRITICAL drift for a CUI profile.
+# =============================================================================
+terminal:
+  backend: docker             # config.py:1095  DEFAULT "local" -> OVERRIDE "docker" (sandboxed exec)
+  timeout: 180                # config.py:1098  (confirm-pinned)
+
+
+# =============================================================================
+# [ACTIVE @ P0.4]  LEAST-PRIVILEGE TOOLSET PROFILE  (LG-AZ-03 / LG-AZ-11)
+# -----------------------------------------------------------------------------
+# agent.disabled_toolsets (config.py:1091; read in hermes_cli/tools_config.py
+# _get_platform_tools L1653, applied LAST so it overrides everything) removes
+# these toolsets from the resolved enabled set for EVERY platform. computer_use
+# (desktop/OS automation) and browser (interactive web automation) are OFF in the
+# CUI baseline; re-enable per mission via the deviation register + JIT grant +
+# approval. terminal/file/web/search remain available (shell is sandboxed above).
+# =============================================================================
+agent:
+  disabled_toolsets:          # config.py:1091  DEFAULT [] -> disable high-risk toolsets for CUI
+    - computer_use            #   LG-AZ-11: desktop/OS automation OFF in CUI baseline
+    - browser                 #   LG-AZ-03: interactive web automation OFF in CUI baseline
+
+
+# =============================================================================
+# SCAFFOLD — sections below are authored in their dedicated later Phase-0..2
+# steps (kept as comments so this file maps key-for-key to the GOV template and
+# stays capability-preserving until each control is built + verified).
+# Reference: 03_Implementation_Plan/baseline_overlay/cli-config.gov.yaml.example
+# =============================================================================
+#
+# [P0.x  CH-07 / DP-04]    security.cui_redaction: true   (needs new cui_patterns module)
+# [P0.x  CH-04 / AZ-02/03]  security.tool_allowlist / tool_denylist; toolset pruning
+# [P0.x  CH-06]             CI preflight that fails if a denied skill is enabled
+# [P0.x  AZ-12]             tool_loop_guardrails.hard_stop_enabled: true ; max_iterations
+# [DONE P0.1]               security: posture/tirith_fail_open/allow_private_urls/allow_lazy_installs/deny_on_no_approver
+# [DONE P0.2  CH-07]        privacy.redact_pii ; memory.write_approval ; skills.write_approval/guard_agent_created/inline_shell
+# [DONE P0.3  SC-01/02/06]  skills.disabled[godmode..] + deny_tags + security.skill_policy/allowlist ; tools/tool_policy.py gate
+# [DONE P0.4  CH-05/AZ-03/11] terminal.backend:docker ; agent.disabled_toolsets[computer_use,browser] ; security.tool_denylist/tool_risk_policy
+# [DONE P0.5  PI-01/02/03/05/07/08, MC-01, AZ-05] schema_validation:reject ; input_trust ; memory_poisoning_defense ; tools/input_integrity.py
+# [DONE P0.6  SS-01/07]     require_hashed_install + supply_chain (pyproject ==pins / uv.lock 1798 hashes) ; allow_lazy_installs:false refuses runtime installs
+# [DONE P0.7  CH-06/CH-03/SD-01/GV-02/CH-08] ci/governance-ci-gates/ (godmode/drift/path-freeze/deps) + .github/workflows/governance-gates.yml + intended-use.md + deviation-register
+# [P1   AU-01..10]          audit: { ledger_enabled, hash-chained ledger, fail_closed, ... }
+# [P1   IA-*]               dashboard auth + MFA ; gateway.multiplex_profiles ; secrets source
+# [P2   MP-01..]            security.provider_allowlist_enforce / allowed_providers
+# [P2   NE-01..06 / DP-10]  security.egress.{mode,proxy,allowed_domains} ; website_policy fail_closed
+# [P2   HO-01..10]          security.high_impact_actions / locked_confirmation_ops ; approvals.*
+# [P2   DP-07/11]           storage.encrypt_at_rest: true ; tool_result_ttl
+#
+# -----------------------------------------------------------------------------
+# Built on Hermes Agent (Nous Research, MIT). Governance overlay is additive and
+# capability-preserving.
+# -----------------------------------------------------------------------------
