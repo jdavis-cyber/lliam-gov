@@ -159,13 +159,16 @@ Expected: test suite at its known-green state (record the pass/fail count as the
 # Lliam-owned hermes identifiers (must reach 0 except the migration routine).
 # EXCLUDES: (a) upstream attribution — D4, license obligation;
 #           (b) generated output — regenerated, never hand-renamed;
-#           (c) historical evidence/audit logs — frozen, editing them is tampering.
+#           (c) historical evidence/audit logs — frozen, editing them is tampering;
+#           (d) these planning docs — they quote the OLD name on purpose (history);
+#               renaming their hermes mentions would corrupt the record.
 # These exclusion globs MUST match the guard test below exactly.
 rg -i --stats hermes \
   -g '!**/node_modules/**' -g '!**/.git/**' -g '!**/dist/**' -g '!**/build/**' \
   -g '!**/*.egg-info/**' -g '!graphify-out/**' -g '!evidence/**' \
   -g '!**/*.lock' -g '!**/package-lock.json' \
   -g '!NOTICE' -g '!ATTRIBUTION*' -g '!LICENSE*' -g '!docs/upstream/**' \
+  -g '!docs/governance/plans/**' \
   .
 ```
 
@@ -178,6 +181,7 @@ HERMES_EXCLUDES=(
   -g '!**/*.egg-info/**' -g '!graphify-out/**' -g '!evidence/**'
   -g '!**/*.lock' -g '!**/package-lock.json'
   -g '!NOTICE' -g '!ATTRIBUTION*' -g '!LICENSE*' -g '!docs/upstream/**'
+  -g '!docs/governance/plans/**'   # these plans quote the old name on purpose
 )
 ```
 
@@ -193,6 +197,7 @@ EXCLUDES = [
     "-g", "!**/build/**", "-g", "!**/*.egg-info/**", "-g", "!graphify-out/**",
     "-g", "!evidence/**", "-g", "!**/*.lock", "-g", "!**/package-lock.json",
     "-g", "!NOTICE", "-g", "!ATTRIBUTION*", "-g", "!LICENSE*", "-g", "!docs/upstream/**",
+    "-g", "!docs/governance/plans/**",   # planning docs quote the old name on purpose (history)
 ]
 ALLOWED = {
     # the one-time migration routine is the sole Lliam-owned file allowed to name the old path
@@ -213,52 +218,48 @@ def test_no_lliam_owned_hermes_refs():
 
 ### Task R.1: Data-home + env-var layer with one-time migration (do this FIRST — everything else depends on it)
 
-**Files:** Create `lliam_cli/migrate_home.py`; Modify `hermes_constants.py` (→ becomes `lliam_constants.py` in R.2, but edit in place now)
+**Files:** Create `hermes_cli/migrate_home.py` — **not** `lliam_cli/`. Creating `lliam_cli/` now would pre-create R.2's `git mv hermes_cli lliam_cli` destination and break the history-preserving move. The module rides along when the package moves in R.2 and its import path becomes `lliam_cli.migrate_home` then (the R.2 sweep rewrites it). Also modify `hermes_constants.py` (→ `lliam_constants.py` in R.2, edit in place now).
 
-- [ ] **Step 1: Failing test — new home resolves, old data migrates once**
+- [ ] **Step 1: Failing test — migration copies once, is idempotent, and respects the paths it's GIVEN**
 
 ```python
 # tests/rename/test_home_migration.py
-import os, pathlib
-from lliam_cli import migrate_home   # module exists after this task
+from hermes_cli import migrate_home   # becomes lliam_cli.migrate_home after R.2's sweep
 
-def test_migrates_old_home_when_new_absent(tmp_path, monkeypatch):
+def test_migrates_old_home_when_new_absent(tmp_path):
     old = tmp_path / ".hermes"; new = tmp_path / ".lliam"
     (old / "sessions").mkdir(parents=True); (old / "config.yaml").write_text("k: v")
-    monkeypatch.setattr(migrate_home, "OLD_HOME", old)
-    monkeypatch.setattr(migrate_home, "NEW_HOME", new)
-    migrate_home.migrate_if_needed()
+    migrate_home.migrate_if_needed(old, new)          # paths passed in, never hardcoded
     assert (new / "config.yaml").read_text() == "k: v"
     assert (new / ".migrated_from_hermes").exists()
 
-def test_noop_when_new_exists(tmp_path, monkeypatch):
+def test_noop_when_new_exists(tmp_path):
     old = tmp_path / ".hermes"; new = tmp_path / ".lliam"
     old.mkdir(); new.mkdir()
-    monkeypatch.setattr(migrate_home, "OLD_HOME", old)
-    monkeypatch.setattr(migrate_home, "NEW_HOME", new)
-    migrate_home.migrate_if_needed()   # must not raise, must not overwrite
+    migrate_home.migrate_if_needed(old, new)          # must not raise, must not overwrite
     assert not (new / ".migrated_from_hermes").exists()
 ```
 
-- [ ] **Step 2: Implement `lliam_cli/migrate_home.py`** (the ONLY file allowed to name `hermes`)
+- [ ] **Step 2: Implement `hermes_cli/migrate_home.py`** (the ONLY file allowed to name `hermes`). It takes the resolved homes as arguments — it must **never** hardcode `~/.hermes`/`~/.lliam`, or an isolated-`LLIAM_HOME` or profile run would silently copy the operator's real home.
 
 ```python
-"""One-time migration of on-disk data from the pre-rename ~/.hermes home.
-This is the sole Lliam-owned module permitted to reference the old identifier."""
-import os, shutil
+"""One-time migration of on-disk data from the pre-rename home.
+Sole Lliam-owned module permitted to name the old identifier. Callers pass the
+SAME resolved old/new home paths that lliam_constants computes (honoring
+LLIAM_HOME / HERMES_HOME / active profile), so isolated and profile homes migrate
+correctly and the operator's real ~/.hermes is never touched during isolated runs."""
+import shutil
 from pathlib import Path
 
-OLD_HOME = Path(os.path.expanduser("~/.hermes"))
-NEW_HOME = Path(os.path.expanduser("~/.lliam"))
-
-def migrate_if_needed() -> None:
-    if NEW_HOME.exists() or not OLD_HOME.exists():
+def migrate_if_needed(old_home, new_home) -> None:
+    old_home, new_home = Path(old_home), Path(new_home)
+    if new_home.exists() or not old_home.exists():
         return
-    shutil.copytree(OLD_HOME, NEW_HOME)          # copy, don't move — leave rollback source intact
-    (NEW_HOME / ".migrated_from_hermes").write_text("migrated by Lliam-GOV rename\n")
+    shutil.copytree(old_home, new_home)          # copy, don't move — leave rollback source intact
+    (new_home / ".migrated_from_hermes").write_text("migrated by Lliam-GOV rename\n")
 ```
 
-- [ ] **Step 3: Wire env-var fallback during the migration window.** In the home-resolution code (currently `hermes_constants.py`), read `LLIAM_HOME` first, fall back to `HERMES_HOME` if set (so an operator mid-transition isn't stranded), default to `~/.lliam`. Call `migrate_home.migrate_if_needed()` at startup before any home access. Apply the same LLIAM_→HERMES_ read-fallback for every `HERMES_*` env var via a small helper `getenv_compat("HOME", ...)`.
+- [ ] **Step 3: Wire env-var fallback + call migration with the RESOLVED homes.** In the home-resolution code (currently `hermes_constants.py`): resolve `new_home` = `LLIAM_HOME` else `~/.lliam`; resolve `old_home` = `HERMES_HOME` else `~/.hermes`; apply the active profile to both the same way. At startup, before any home access, call `migrate_home.migrate_if_needed(old_home, new_home)` with those resolved values (not module constants). Apply the same LLIAM_→HERMES_ read-fallback for every `HERMES_*` env var via a small helper `getenv_compat("HOME", ...)`.
 
 ```python
 def getenv_compat(suffix: str, default: str | None = None) -> str | None:
@@ -343,10 +344,12 @@ Expected: help renders with `lliam-gov` usage; version prints; no `hermes` in th
 }
 ```
 
-- [ ] **Step 2: Update the `@hermes/*` workspaces** — `git mv packages/hermes-ink packages/lliam-gov-ink`; rename `@hermes/shared`→`@lliam-gov/shared`, `@hermes/ink`→`@lliam-gov/ink` in every `package.json` `name` + dependency reference and every TS import.
+- [ ] **Step 2: Update the `@hermes/*` workspaces** — the Ink package lives at **`ui-tui/packages/hermes-ink`** (there is **no** top-level `packages/` dir), and most `@hermes/ink` / `@hermes/shared` imports are under **`ui-tui/`** (verified: ~59 files under `ui-tui/`, ~6 under `apps/`). `git mv ui-tui/packages/hermes-ink ui-tui/packages/lliam-gov-ink`; rename `@hermes/shared`→`@lliam-gov/shared`, `@hermes/ink`→`@lliam-gov/ink` in every `package.json` `name` + dependency reference and every TS import. Sweep the **whole repo** so no import area is missed (do NOT scope to `apps packages`):
 
 ```bash
-rg -l '@hermes/' apps packages -g '*.json' -g '*.ts' -g '*.tsx' | xargs sed -i '' 's|@hermes/|@lliam-gov/|g'
+git mv ui-tui/packages/hermes-ink ui-tui/packages/lliam-gov-ink
+rg -l '@hermes/' -g '*.json' -g '*.ts' -g '*.tsx' -g '!**/node_modules/**' . \
+  | xargs sed -i '' 's|@hermes/|@lliam-gov/|g'
 ```
 
 - [ ] **Step 3: `npm ci` from clean + typecheck + UI tests** — `cd apps/desktop && rm -rf node_modules && npm ci && npm run build && npm run test:ui`. Expected: builds and unit tests green. Commit. `git commit -m "refactor(rename): electron app identity + @hermes->@lliam-gov workspaces"`
