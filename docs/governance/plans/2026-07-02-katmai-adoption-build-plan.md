@@ -50,6 +50,17 @@ P6   → Promotion / Cutover to Live        (AI-505,507,509)         → tag gov
 
 **Every phase, no exceptions:** work in a dedicated clone on the phase branch with an isolated `LLIAM_HOME` (your live install stays untouched until P6); small reviewable commits; the path-freeze CI guard must pass (P1+); write a verification report to `docs/governance/verification/<step>-report.md`; the `.V` verify gate must prove **hardened AND still capable** before the `gov-PN-good` tag is pushed.
 
+## Linear tracking (every phase — keep the board honest)
+
+This plan's phases map 1:1 to Linear issues in project **Lliam-GOV Build** (see the Traceability table at the end): Phase R = **AI-341**; P1 = AI-516/517/518/519/520/479/480; P2 = AI-481…487; P3 = AI-488…492; P4 = AI-493…498; P5 = AI-499…503; P6 = AI-505/507/509. The executing agent keeps Linear current using the Linear MCP (`mcp__plugin_linear_linear__*`) as it works:
+
+- **Starting a task/issue:** set that issue's status to **In Progress**.
+- **Finishing an issue's work:** add a comment on the issue with the branch name, the key commit SHA(s), and the path to its `<step>-report.md`; move it to **In Review** (or **Done** if the plan marks it as needing no separate review).
+- **Passing a phase verify gate** (after `gov-PN-good` is tagged): move that phase's `.V` issue *and* its build issues to **Done**, with a comment citing the verification report path and the tag.
+- **If Linear is unreachable** (MCP not connected, auth error): do **not** silently skip it — say so explicitly in the checkpoint report so the operator can update the board manually. Never report a phase "done" while leaving its Linear issues untouched without flagging it.
+
+Status writes to Linear are the one exception to "no external pushes without approval" — issue-tracking updates are expected and in-scope. (Pushing *git* commits/PRs still requires explicit operator approval.)
+
 ---
 
 # PRE-FLIGHT
