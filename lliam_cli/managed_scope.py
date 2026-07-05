@@ -4,7 +4,7 @@ A system-level directory (default ``/etc/hermes``, root-owned and not
 user-writable) supplies ``config.yaml`` and ``.env`` values that WIN over the
 user's ``~/.hermes/config.yaml`` and ``~/.hermes/.env`` on a per-leaf-key basis.
 
-This is DISTINCT from ``hermes_cli.config.is_managed()`` / ``HERMES_MANAGED``,
+This is DISTINCT from ``lliam_cli.config.is_managed()`` / ``HERMES_MANAGED``,
 which is a coarse package-manager write-lock (declarative-distro / formula
 installs). That lock blocks all mutation; this layer injects specific immutable
 values. The two are independent and may coexist.
@@ -138,8 +138,8 @@ def apply_managed_overlay(config: dict) -> dict:
     """Overlay administrator-pinned config values on top of an already-built dict.
 
     The single, shared way for any config loader that builds its own dict
-    (rather than going through hermes_cli.config.load_config) to honor managed
-    scope. Mirrors hermes_cli.config._load_config_impl's managed merge exactly:
+    (rather than going through lliam_cli.config.load_config) to honor managed
+    scope. Mirrors lliam_cli.config._load_config_impl's managed merge exactly:
 
       * expand the managed config's ``${VAR}`` refs against the PROCESS env only
         (never user-config-defined refs), so a user cannot shadow a managed
@@ -159,7 +159,7 @@ def apply_managed_overlay(config: dict) -> dict:
         if not managed:
             return config
         # Imported lazily to avoid an import cycle (config imports managed_scope).
-        from hermes_cli.config import _deep_merge, _expand_env_vars, _normalize_root_model_keys
+        from lliam_cli.config import _deep_merge, _expand_env_vars, _normalize_root_model_keys
 
         managed_expanded = _normalize_root_model_keys(_expand_env_vars(managed))
         # A bare ``model: x/y`` string in the managed file must merge as

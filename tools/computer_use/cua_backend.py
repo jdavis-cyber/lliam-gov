@@ -115,7 +115,7 @@ def _cua_telemetry_disabled() -> bool:
     privacy-preserving default of telemetry disabled.
     """
     try:
-        from hermes_cli.config import load_config
+        from lliam_cli.config import load_config
 
         cfg = load_config() or {}
         cu = cfg.get("computer_use") or {}

@@ -50,7 +50,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
-from hermes_constants import secure_parent_dir
+from lliam_constants import secure_parent_dir
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ def _get_token_dir() -> Path:
     Layout: ``HERMES_HOME/mcp-tokens/``
     """
     try:
-        from hermes_constants import get_hermes_home
+        from lliam_constants import get_hermes_home
         base = Path(get_hermes_home())
     except ImportError:
         base = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))

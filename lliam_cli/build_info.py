@@ -2,7 +2,7 @@
 Baked-in build metadata for Hermes Agent.
 
 Source installs report their git revision live via ``git rev-parse`` (see
-``hermes_cli/dump.py`` and ``hermes_cli/banner.py``).  That doesn't work inside
+``lliam_cli/dump.py`` and ``lliam_cli/banner.py``).  That doesn't work inside
 the published Docker image because ``.dockerignore`` excludes ``.git``, so
 those callsites fall back to ``"(unknown)"`` / drop the banner suffix entirely.
 

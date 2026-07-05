@@ -26,7 +26,7 @@ from gateway.restart import (
     GATEWAY_SERVICE_RESTART_EXIT_CODE,
     parse_restart_drain_timeout,
 )
-from hermes_cli.config import (
+from lliam_cli.config import (
     get_env_value,
     get_hermes_home,
     is_managed,
@@ -37,8 +37,8 @@ from hermes_cli.config import (
 )
 
 # display_hermes_home is imported lazily at call sites to avoid ImportError
-# when hermes_constants is cached from a pre-update version during `hermes update`.
-from hermes_cli.setup import (
+# when lliam_constants is cached from a pre-update version during `hermes update`.
+from lliam_cli.setup import (
     print_header,
     print_info,
     print_success,
@@ -48,7 +48,7 @@ from hermes_cli.setup import (
     prompt_choice,
     prompt_yes_no,
 )
-from hermes_cli.colors import Colors, color
+from lliam_cli.colors import Colors, color
 
 logger = logging.getLogger(__name__)
 
@@ -387,7 +387,7 @@ def _scan_gateway_pids(
             # Hide the console window: this scan runs inside the windowless
             # pythonw.exe gateway/desktop backend, so a bare wmic/powershell
             # spawn would flash a conhost window on every watchdog probe.
-            from hermes_cli._subprocess_compat import windows_hide_flags
+            from lliam_cli._subprocess_compat import windows_hide_flags
 
             _no_window = {"creationflags": windows_hide_flags()}
             wmic_path = shutil.which("wmic")
@@ -616,7 +616,7 @@ def find_profile_gateway_processes(
     processes: list[ProfileGatewayProcess] = []
     try:
         from gateway.status import get_running_pid
-        from hermes_cli.profiles import list_profiles
+        from lliam_cli.profiles import list_profiles
     except Exception:
         return processes
 
@@ -636,7 +636,7 @@ def find_profile_gateway_processes(
 
 
 def _gateway_run_args_for_profile(profile: str) -> list[str]:
-    args = [get_python_path(), "-m", "hermes_cli.main"]
+    args = [get_python_path(), "-m", "lliam_cli.main"]
     if profile != "default":
         args.extend(["--profile", profile])
     args.extend(["gateway", "run", "--replace"])
@@ -647,7 +647,7 @@ def _capture_gateway_argv(pid: int) -> list[str] | None:
     """Return the live argv of a running gateway process, or ``None``.
 
     Used to respawn gateways that have no profile→PID-file mapping (e.g. a
-    Windows Scheduled Task running ``pythonw.exe -m hermes_cli.main gateway
+    Windows Scheduled Task running ``pythonw.exe -m lliam_cli.main gateway
     run``). ``_pause_windows_gateways_for_update`` force-kills such gateways
     before mutating the venv; without their original command line we cannot
     bring them back, so we snapshot it here before the kill.
@@ -727,7 +727,7 @@ def _spawn_gateway_restart_watcher(old_pid: int, run_argv: list[str]) -> bool:
     #
     # ``windows_detach_popen_kwargs()`` returns the right kwargs for the
     # host platform and is a no-op on POSIX (just ``start_new_session=True``).
-    from hermes_cli._subprocess_compat import (
+    from lliam_cli._subprocess_compat import (
         windows_detach_flags_without_breakaway,
         windows_detach_popen_kwargs,
     )
@@ -745,7 +745,7 @@ def _spawn_gateway_restart_watcher(old_pid: int, run_argv: list[str]) -> bool:
     respawn_env_overlay: dict[str, str] = {}
     if sys.platform == "win32":
         try:
-            from hermes_cli.gateway_windows import (
+            from lliam_cli.gateway_windows import (
                 windowless_gateway_restart_spec,
             )
 
@@ -770,7 +770,7 @@ def _spawn_gateway_restart_watcher(old_pid: int, run_argv: list[str]) -> bool:
         import subprocess
         import sys
         import time
-        from hermes_cli._subprocess_compat import (
+        from lliam_cli._subprocess_compat import (
             windows_detach_flags,
             windows_detach_flags_without_breakaway,
         )
@@ -801,7 +801,7 @@ def _spawn_gateway_restart_watcher(old_pid: int, run_argv: list[str]) -> bool:
         }}
         # Anchor the respawned gateway at the stable working dir and overlay
         # the env (VIRTUAL_ENV / PYTHONPATH / HERMES_HOME) the windowless
-        # base interpreter needs to import hermes_cli.  Empty on POSIX, where
+        # base interpreter needs to import lliam_cli.  Empty on POSIX, where
         # the venv python resolves imports without help.
         if _respawn_cwd:
             _popen_kwargs["cwd"] = _respawn_cwd
@@ -1245,14 +1245,14 @@ def get_gateway_runtime_snapshot(system: bool = False) -> GatewayRuntimeSnapshot
             gateway_pids=gateway_pids,
         )
 
-    from hermes_constants import is_container
+    from lliam_constants import is_container
 
     if is_linux() and is_container():
         # Phase 4: report s6 supervision when running under our /init.
         # Other container runtimes (or containers built before Phase 2)
         # still get the original "docker (foreground)" label.
         try:
-            from hermes_cli.service_manager import detect_service_manager, get_service_manager
+            from lliam_cli.service_manager import detect_service_manager, get_service_manager
             if detect_service_manager() == "s6":
                 profile = _profile_suffix() or "default"
                 service_name = f"gateway-{profile}"
@@ -1354,7 +1354,7 @@ def _print_other_profiles_gateway_status() -> None:
     avoid confusing another profile's process with the current one.
     """
     try:
-        from hermes_cli.profiles import get_active_profile_name
+        from lliam_cli.profiles import get_active_profile_name
 
         current = get_active_profile_name()
         other_processes = [
@@ -1379,7 +1379,7 @@ def _gateway_list() -> None:
     check each profile individually.
     """
     try:
-        from hermes_cli.profiles import list_profiles, get_active_profile_name
+        from lliam_cli.profiles import list_profiles, get_active_profile_name
     except Exception:
         print("Unable to list profiles.")
         return
@@ -1446,7 +1446,7 @@ def _reap_unsupervised_gateway_orphans() -> bool:
     """Kill no-supervisor gateway orphans the pidfile/runtime record can't see.
 
     On WSL/no-systemd hosts the manual restart fallback runs the gateway
-    in-process under a ``gateway restart`` argv (hermes_cli/gateway.py restart
+    in-process under a ``gateway restart`` argv (lliam_cli/gateway.py restart
     branch → ``run_gateway()``). If its pidfile or runtime record goes missing
     or stale, ``get_running_pid()`` returns ``None`` even though a live orphan
     still holds the webhook port, so a follow-up restart stacks a duplicate on
@@ -1565,7 +1565,7 @@ def is_linux() -> bool:
     return sys.platform.startswith("linux")
 
 
-from hermes_constants import is_container, is_termux, is_wsl
+from lliam_constants import is_container, is_termux, is_wsl
 
 
 def _wsl_systemd_operational() -> bool:
@@ -1671,7 +1671,7 @@ def _profile_suffix() -> str:
     """
     import hashlib
     import re
-    from hermes_constants import get_default_hermes_root
+    from lliam_constants import get_default_hermes_root
 
     home = get_hermes_home().resolve()
     default = get_default_hermes_root().resolve()
@@ -1706,7 +1706,7 @@ def _profile_arg(hermes_home: str | None = None, default_root: str | Path | None
             refer to root but the target profile lives under the service user.
     """
     import re
-    from hermes_constants import get_default_hermes_root
+    from lliam_constants import get_default_hermes_root
 
     home = Path(hermes_home or str(get_hermes_home())).resolve()
     default = Path(default_root).resolve() if default_root else get_default_hermes_root().resolve()
@@ -1725,7 +1725,7 @@ def _profile_arg(hermes_home: str | None = None, default_root: str | Path | None
 
 def _profile_arg_for_target_user(hermes_home: str, target_home_dir: str) -> str:
     """Return the profile arg for a system service running as another user."""
-    from hermes_constants import get_default_home_leaf
+    from lliam_constants import get_default_home_leaf
 
     # Post-rename default leaf is ``.lliam``; derive it instead of hardcoding.
     target_root = Path(target_home_dir) / get_default_home_leaf()
@@ -2012,8 +2012,8 @@ _LEGACY_SERVICE_NAMES: tuple[str, ...] = ("hermes.service",)
 # ExecStart content markers that identify a unit as running our gateway.
 # A legacy unit is only flagged when its file contains one of these.
 _LEGACY_UNIT_EXECSTART_MARKERS: tuple[str, ...] = (
-    "hermes_cli.main gateway",
-    "hermes_cli/main.py gateway",
+    "lliam_cli.main gateway",
+    "lliam_cli/main.py gateway",
     "gateway/run.py",
     " hermes gateway ",
     "/hermes gateway ",
@@ -2567,7 +2567,7 @@ def _hermes_home_for_target_user(target_home_dir: str) -> str:
       /root/.lliam/profiles/coder      → /home/alice/.lliam/profiles/coder
       /opt/custom-hermes               → /opt/custom-hermes  (kept as-is)
     """
-    from hermes_constants import get_default_home_leaf
+    from lliam_constants import get_default_home_leaf
 
     # Derive the default-home leaf (``.lliam``) from the constants module so this
     # stays correct through the rename instead of hardcoding the old ``.hermes``.
@@ -2627,7 +2627,7 @@ def _stable_service_working_dir() -> str:
     """Return a WorkingDirectory that will not disappear out from under systemd.
 
     The gateway does NOT need its cwd to be the source checkout — ``ExecStart``
-    uses an absolute python interpreter and ``-m hermes_cli.main``, so module
+    uses an absolute python interpreter and ``-m lliam_cli.main``, so module
     resolution does not depend on cwd. Pinning ``WorkingDirectory`` to
     ``PROJECT_ROOT`` (``Path(__file__).parent.parent``) is actively harmful:
     when the unit is generated from a transient checkout — a ``.worktrees/``
@@ -2709,7 +2709,7 @@ StartLimitIntervalSec=0
 Type=simple
 User={username}
 Group={group_name}
-ExecStart={python_path} -m hermes_cli.main{f" {profile_arg}" if profile_arg else ""} gateway run
+ExecStart={python_path} -m lliam_cli.main{f" {profile_arg}" if profile_arg else ""} gateway run
 WorkingDirectory={working_dir}
 Environment="HOME={home_dir}"
 Environment="USER={username}"
@@ -2746,7 +2746,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-ExecStart={python_path} -m hermes_cli.main{f" {profile_arg}" if profile_arg else ""} gateway run
+ExecStart={python_path} -m lliam_cli.main{f" {profile_arg}" if profile_arg else ""} gateway run
 WorkingDirectory={working_dir}
 Environment="PATH={sane_path}"
 Environment="VIRTUAL_ENV={venv_dir}"
@@ -3578,12 +3578,12 @@ def _launchd_unsupported_marker_exists() -> bool:
 
 
 def _gateway_run_command() -> list[str]:
-    """Build the `python -m hermes_cli.main [--profile X] gateway run --replace` argv.
+    """Build the `python -m lliam_cli.main [--profile X] gateway run --replace` argv.
 
     Profile-aware: honors the active HERMES_HOME via `_profile_arg()` so the
     detached fallback launches into the same profile as the CLI invocation.
     """
-    cmd = [get_python_path(), "-m", "hermes_cli.main"]
+    cmd = [get_python_path(), "-m", "lliam_cli.main"]
     profile_arg = _profile_arg()
     if profile_arg:
         cmd.extend(profile_arg.split())
@@ -3600,7 +3600,7 @@ def _spawn_detached_gateway() -> bool:
     gateway logs and the PID is tracked via the gateway.pid file that
     `run_gateway` writes, so stop/status/restart keep working.
     """
-    from hermes_cli._subprocess_compat import windows_detach_popen_kwargs
+    from lliam_cli._subprocess_compat import windows_detach_popen_kwargs
 
     log_dir = get_hermes_home() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -3632,7 +3632,7 @@ def _launchd_fallback_to_detached(reason: str, *, exit_on_failure: bool = True) 
     launched, prints the manual workaround and (by default) exits non-zero so
     the failure surfaces instead of silently doing nothing.
     """
-    from hermes_constants import display_hermes_home as _dhh
+    from lliam_constants import display_hermes_home as _dhh
 
     _write_launchd_unsupported_marker()
     print(f"⚠ launchd cannot manage the gateway on this macOS version ({reason}).")
@@ -3688,7 +3688,7 @@ def generate_launchd_plist() -> str:
     prog_args = [
         f"<string>{python_path}</string>",
         "<string>-m</string>",
-        "<string>hermes_cli.main</string>",
+        "<string>lliam_cli.main</string>",
     ]
     if profile_arg:
         for part in profile_arg.split():
@@ -3880,7 +3880,7 @@ def launchd_install(force: bool = False):
     print()
     print("Next steps:")
     print("  hermes gateway status             # Check status")
-    from hermes_constants import display_hermes_home as _dhh
+    from lliam_constants import display_hermes_home as _dhh
 
     print(f"  tail -f {_dhh()}/logs/gateway.log  # View logs")
 
@@ -4264,7 +4264,7 @@ def _guard_named_profile_under_multiplexer(force: bool = False) -> None:
         return  # default profile (or unrecognized) — this guard doesn't apply
 
     try:
-        from hermes_constants import get_default_hermes_root
+        from lliam_constants import get_default_hermes_root
         default_root = get_default_hermes_root()
         # (b) Is the default-profile gateway running?
         from gateway.status import get_running_pid as _default_running_pid  # noqa
@@ -4523,7 +4523,7 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False, fo
         if os.environ.get("HERMES_GATEWAY_EXIT_DIAG", "1") != "1":
             return
         try:
-            from hermes_constants import get_hermes_home as _ghh
+            from lliam_constants import get_hermes_home as _ghh
 
             log_dir = _ghh() / "logs"
             log_dir.mkdir(parents=True, exist_ok=True)
@@ -4815,7 +4815,7 @@ def _all_platforms() -> list[dict]:
     # User-installed platform plugins under ~/.hermes/plugins/ still require
     # opt-in via ``plugins.enabled`` (untrusted code).
     try:
-        from hermes_cli.plugins import discover_plugins
+        from lliam_cli.plugins import discover_plugins
 
         discover_plugins()
     except Exception as e:
@@ -5010,7 +5010,7 @@ def _setup_standard_platform(platform: dict):
         choice = prompt("  Choice [1/2]", default="1")
         if choice.strip() == "1":
             try:
-                from hermes_cli.telegram_managed_bot import (
+                from lliam_cli.telegram_managed_bot import (
                     auto_setup_telegram_bot_result,
                     is_valid_telegram_bot_token,
                 )
@@ -5174,7 +5174,7 @@ def _is_service_installed() -> bool:
     elif is_macos():
         return get_launchd_plist_path().exists()
     elif is_windows():
-        from hermes_cli import gateway_windows
+        from lliam_cli import gateway_windows
 
         return gateway_windows.is_installed()
     return False
@@ -5227,7 +5227,7 @@ def _is_service_running() -> bool:
         except subprocess.TimeoutExpired:
             return False
     elif is_windows():
-        from hermes_cli import gateway_windows
+        from lliam_cli import gateway_windows
 
         if gateway_windows.is_installed():
             # "installed" doesn't necessarily mean "running" on Windows. The
@@ -5668,10 +5668,10 @@ def _setup_signal():
 def _builtin_setup_fn(key: str):
     """Resolve the interactive setup function for a built-in platform key.
 
-    Late-bound to avoid a circular import with ``hermes_cli.setup`` (which
+    Late-bound to avoid a circular import with ``lliam_cli.setup`` (which
     imports from this module for the remaining bespoke flows).
     """
-    from hermes_cli import setup as _s
+    from lliam_cli import setup as _s
 
     return {
         # telegram moved into the plugin: setup_fn registered by
@@ -5881,7 +5881,7 @@ def gateway_setup():
                     elif is_macos():
                         launchd_restart()
                     elif is_windows():
-                        from hermes_cli import gateway_windows
+                        from lliam_cli import gateway_windows
 
                         gateway_windows.restart()
                     else:
@@ -5906,7 +5906,7 @@ def gateway_setup():
                     elif is_macos():
                         launchd_start()
                     elif is_windows():
-                        from hermes_cli import gateway_windows
+                        from lliam_cli import gateway_windows
 
                         gateway_windows.start()
                 except UserSystemdUnavailableError as e:
@@ -5946,7 +5946,7 @@ def gateway_setup():
                             launchd_install(force=False)
                             did_install = True
                         else:
-                            from hermes_cli import gateway_windows
+                            from lliam_cli import gateway_windows
 
                             gateway_windows.install(force=False)
                             did_install = True
@@ -5958,7 +5958,7 @@ def gateway_setup():
                                 elif is_macos():
                                     launchd_start()
                                 elif is_windows():
-                                    from hermes_cli import gateway_windows
+                                    from lliam_cli import gateway_windows
                                     gateway_windows.start()
                             except UserSystemdUnavailableError as e:
                                 print_error(
@@ -5989,7 +5989,7 @@ def gateway_setup():
                     "  To enable systemd: add systemd=true to /etc/wsl.conf, then 'wsl --shutdown'"
                 )
             elif is_termux():
-                from hermes_constants import display_hermes_home as _dhh
+                from lliam_constants import display_hermes_home as _dhh
 
                 print_info("  Termux does not use systemd/launchd services.")
                 print_info("  Run in foreground: hermes gateway run")
@@ -6023,10 +6023,10 @@ def _dispatch_via_service_manager_if_s6(
     The s6 service slot was created either by the Phase 4 profile-create
     hook or by the container-boot reconciler (cont-init.d/02-…). If it
     doesn't exist or s6 returns an error, the named errors from
-    :mod:`hermes_cli.service_manager` are caught and surfaced as
+    :mod:`lliam_cli.service_manager` are caught and surfaced as
     actionable CLI messages (no raw ``CalledProcessError`` traceback).
     """
-    from hermes_cli.service_manager import (
+    from lliam_cli.service_manager import (
         GatewayNotRegisteredError,
         S6CommandError,
         detect_service_manager,
@@ -6081,7 +6081,7 @@ def _dispatch_all_via_service_manager_if_s6(action: str) -> bool:
     ``action`` is one of ``stop`` / ``restart`` (``start --all`` isn't
     a supported CLI surface).
     """
-    from hermes_cli.service_manager import (
+    from lliam_cli.service_manager import (
         detect_service_manager,
         get_service_manager,
     )
@@ -6322,7 +6322,7 @@ def _gateway_command_inner(args):
         elif is_macos():
             launchd_install(force)
         elif is_windows():
-            from hermes_cli import gateway_windows
+            from lliam_cli import gateway_windows
 
             gateway_windows.install(
                 force=force,
@@ -6351,7 +6351,7 @@ def _gateway_command_inner(args):
             # Phase 4: inside a container with s6 the gateway service is
             # auto-registered when the profile is created (and reconciled
             # at every container boot). `install` is therefore informational.
-            from hermes_cli.service_manager import detect_service_manager
+            from lliam_cli.service_manager import detect_service_manager
             if detect_service_manager() == "s6":
                 print("Per-profile gateways are auto-registered when you create a profile.")
                 print()
@@ -6396,11 +6396,11 @@ def _gateway_command_inner(args):
         elif is_macos():
             launchd_uninstall()
         elif is_windows():
-            from hermes_cli import gateway_windows
+            from lliam_cli import gateway_windows
 
             gateway_windows.uninstall()
         elif is_container():
-            from hermes_cli.service_manager import detect_service_manager
+            from lliam_cli.service_manager import detect_service_manager
             if detect_service_manager() == "s6":
                 print("Per-profile gateways are auto-unregistered when you delete the profile.")
                 print()
@@ -6449,7 +6449,7 @@ def _gateway_command_inner(args):
         elif is_macos():
             launchd_start()
         elif is_windows():
-            from hermes_cli import gateway_windows
+            from lliam_cli import gateway_windows
 
             gateway_windows.start()
         elif is_wsl():
@@ -6530,7 +6530,7 @@ def _gateway_command_inner(args):
                 except subprocess.CalledProcessError:
                     pass
             elif is_windows():
-                from hermes_cli import gateway_windows
+                from lliam_cli import gateway_windows
 
                 if gateway_windows.is_installed():
                     try:
@@ -6563,7 +6563,7 @@ def _gateway_command_inner(args):
                 except subprocess.CalledProcessError:
                     pass
             elif is_windows():
-                from hermes_cli import gateway_windows
+                from lliam_cli import gateway_windows
 
                 if gateway_windows.is_installed():
                     try:
@@ -6627,7 +6627,7 @@ def _gateway_command_inner(args):
                 except subprocess.CalledProcessError:
                     pass
             elif is_windows():
-                from hermes_cli import gateway_windows
+                from lliam_cli import gateway_windows
 
                 if gateway_windows.is_installed():
                     try:
@@ -6651,7 +6651,7 @@ def _gateway_command_inner(args):
             elif is_macos() and get_launchd_plist_path().exists():
                 launchd_start()
             elif is_windows():
-                from hermes_cli import gateway_windows
+                from lliam_cli import gateway_windows
 
                 # On Windows, even without a registered Scheduled Task / Startup
                 # entry, gateway_windows.start() uses the safe detached
@@ -6682,7 +6682,7 @@ def _gateway_command_inner(args):
             except subprocess.CalledProcessError:
                 pass
         elif is_windows():
-            from hermes_cli import gateway_windows
+            from lliam_cli import gateway_windows
 
             # Prefer the Windows-specific restart path: it supports both
             # registered Scheduled Task / Startup installs and no-service
@@ -6748,7 +6748,7 @@ def _gateway_command_inner(args):
         # Check for service first
         _windows_service_installed = False
         if is_windows():
-            from hermes_cli import gateway_windows
+            from lliam_cli import gateway_windows
 
             _windows_service_installed = gateway_windows.is_installed()
         if supports_systemd_services() and (
@@ -6761,7 +6761,7 @@ def _gateway_command_inner(args):
             launchd_status(deep)
             _print_gateway_process_mismatch(snapshot)
         elif _windows_service_installed:
-            from hermes_cli import gateway_windows
+            from lliam_cli import gateway_windows
 
             gateway_windows.status(deep=deep)
             _print_gateway_process_mismatch(snapshot)

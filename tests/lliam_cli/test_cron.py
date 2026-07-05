@@ -1,11 +1,11 @@
-"""Tests for hermes_cli.cron command handling."""
+"""Tests for lliam_cli.cron command handling."""
 
 from argparse import Namespace
 
 import pytest
 
 from cron.jobs import create_job, get_job, list_jobs
-from hermes_cli.cron import cron_command
+from lliam_cli.cron import cron_command
 
 
 @pytest.fixture()
@@ -131,7 +131,7 @@ class TestGatewayNotRunningWarning:
     """
 
     def test_create_warns_when_gateway_absent(self, tmp_cron_dir, capsys, monkeypatch):
-        monkeypatch.setattr("hermes_cli.gateway.find_gateway_pids", lambda: [])
+        monkeypatch.setattr("lliam_cli.gateway.find_gateway_pids", lambda: [])
         cron_command(
             Namespace(
                 cron_command="create",
@@ -152,7 +152,7 @@ class TestGatewayNotRunningWarning:
         assert "Gateway is not running" in out
 
     def test_create_silent_when_gateway_running(self, tmp_cron_dir, capsys, monkeypatch):
-        monkeypatch.setattr("hermes_cli.gateway.find_gateway_pids", lambda: [4242])
+        monkeypatch.setattr("lliam_cli.gateway.find_gateway_pids", lambda: [4242])
         cron_command(
             Namespace(
                 cron_command="create",
@@ -174,7 +174,7 @@ class TestGatewayNotRunningWarning:
 
     def test_list_warns_when_gateway_absent(self, tmp_cron_dir, capsys, monkeypatch):
         create_job(prompt="Daily report", schedule="0 11 * * *")
-        monkeypatch.setattr("hermes_cli.gateway.find_gateway_pids", lambda: [])
+        monkeypatch.setattr("lliam_cli.gateway.find_gateway_pids", lambda: [])
         cron_command(Namespace(cron_command="list", all=True))
         out = capsys.readouterr().out
         assert "Gateway is not running" in out

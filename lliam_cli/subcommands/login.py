@@ -1,6 +1,6 @@
 """``hermes login`` subcommand parser.
 
-Extracted verbatim from ``hermes_cli/main.py:main()`` (god-file Phase 2).
+Extracted verbatim from ``lliam_cli/main.py:main()`` (god-file Phase 2).
 Handler injected to avoid importing ``main``.
 """
 
@@ -13,7 +13,7 @@ def build_login_parser(subparsers, *, cmd_login: Callable) -> None:
     """Attach the deprecated ``login`` subcommand to ``subparsers``.
 
     ``hermes login`` was removed in favor of ``hermes auth`` / ``hermes model``
-    (the runtime handler in ``hermes_cli/auth.py::login_command`` just prints a
+    (the runtime handler in ``lliam_cli/auth.py::login_command`` just prints a
     deprecation message and exits).  The subparser is kept registered so that
     old scripts/aliases invoking ``hermes login [--flags]`` still receive the
     actionable deprecation message rather than an argparse ``invalid choice:

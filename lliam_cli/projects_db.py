@@ -33,8 +33,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, List, Optional
 
-from hermes_cli.sqlite_util import add_column_if_missing as _add_column_if_missing, write_txn
-from hermes_constants import get_hermes_home
+from lliam_cli.sqlite_util import add_column_if_missing as _add_column_if_missing, write_txn
+from lliam_constants import get_hermes_home
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -156,7 +156,7 @@ def connect(db_path: Optional[Path] = None) -> sqlite3.Connection:
     """Open (and initialize if needed) the per-profile projects DB.
 
     WAL with DELETE fallback for network filesystems (shared helper from
-    ``hermes_state``). Schema init is idempotent (``CREATE TABLE IF NOT
+    ``lliam_state``). Schema init is idempotent (``CREATE TABLE IF NOT
     EXISTS`` + additive migrations) and cached per-path per-process.
     """
     path = db_path if db_path is not None else projects_db_path()
@@ -165,7 +165,7 @@ def connect(db_path: Optional[Path] = None) -> sqlite3.Connection:
     conn = sqlite3.connect(str(path))
     try:
         conn.row_factory = sqlite3.Row
-        from hermes_state import apply_wal_with_fallback
+        from lliam_state import apply_wal_with_fallback
 
         apply_wal_with_fallback(conn, db_label="projects.db")
         conn.execute("PRAGMA foreign_keys=ON")

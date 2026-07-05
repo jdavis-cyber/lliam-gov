@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple, Set
 
-from hermes_cli.secret_prompt import masked_secret_prompt
+from lliam_cli.secret_prompt import masked_secret_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -299,8 +299,8 @@ _EXTRA_ENV_KEYS = frozenset({
 })
 import yaml
 
-from hermes_cli.colors import Colors, color
-from hermes_cli.default_soul import DEFAULT_SOUL_MD, is_legacy_template_soul
+from lliam_cli.colors import Colors, color
+from lliam_cli.default_soul import DEFAULT_SOUL_MD, is_legacy_template_soul
 
 
 # =============================================================================
@@ -357,7 +357,7 @@ def get_managed_update_command() -> Optional[str]:
 def _install_method_project_root(project_root: Optional[Path] = None) -> Path:
     """Resolve the directory that holds the *running code* (the install tree).
 
-    This is the parent of ``hermes_cli/`` — i.e. the git checkout for source
+    This is the parent of ``lliam_cli/`` — i.e. the git checkout for source
     installs, ``/opt/hermes`` inside the published image, the venv's
     site-packages root for pip installs. It is a property of the running
     interpreter, NOT of ``$HERMES_HOME``, which is why a code-scoped stamp
@@ -446,9 +446,9 @@ def detect_install_method(project_root: Optional[Path] = None) -> str:
 
 
 def _running_in_container() -> bool:
-    """Thin wrapper around ``hermes_constants.is_container`` (import-safe)."""
+    """Thin wrapper around ``lliam_constants.is_container`` (import-safe)."""
     try:
-        from hermes_constants import is_container
+        from lliam_constants import is_container
 
         return is_container()
     except Exception:
@@ -533,7 +533,7 @@ def recommended_update_command() -> str:
 
 # Long-form text for ``hermes update`` / ``--check`` when running inside the
 # Docker image.  Surfaced by ``cmd_update`` and ``_cmd_update_check`` in
-# hermes_cli/main.py; lives here so the wording stays consistent and we
+# lliam_cli/main.py; lives here so the wording stays consistent and we
 # don't grow two slightly-different copies.
 #
 # Why this matters:
@@ -634,7 +634,7 @@ def get_container_exec_info() -> Optional[dict]:
     if os.environ.get("HERMES_DEV") == "1":
         return None
 
-    from hermes_constants import is_container
+    from lliam_constants import is_container
     if is_container():
         return None
 
@@ -669,8 +669,8 @@ def get_container_exec_info() -> Optional[dict]:
 # Config paths
 # =============================================================================
 
-# Re-export from hermes_constants — canonical definition lives there.
-from hermes_constants import get_hermes_home  # noqa: F811,E402
+# Re-export from lliam_constants — canonical definition lives there.
+from lliam_constants import get_hermes_home  # noqa: F811,E402
 from utils import atomic_replace
 
 def get_config_path() -> Path:
@@ -1387,7 +1387,7 @@ DEFAULT_CONFIG = {
     },
 
     # Kanban subsystem (orchestrator workers + dispatcher-driven child tasks).
-    # See tools/kanban_tools.py and hermes_cli/kanban_db.py for the actual
+    # See tools/kanban_tools.py and lliam_cli/kanban_db.py for the actual
     # implementations. Per-platform notification opt-out is handled by the
     # kanban dashboard (see ``hermes dashboard`` -> Notifications).
     "kanban": {
@@ -2454,7 +2454,7 @@ DEFAULT_CONFIG = {
         # compromised package, rotated credentials). Acked advisories no
         # longer trigger the startup banner. Add via `hermes doctor --ack
         # <id>`; remove by editing the list directly. See
-        # ``hermes_cli/security_advisories.py`` for the catalog.
+        # ``lliam_cli/security_advisories.py`` for the catalog.
         "acked_advisories": [],
         # Allow Hermes to lazy-install opt-in backend packages from PyPI
         # the first time the user enables a backend that needs them
@@ -4541,7 +4541,7 @@ def get_custom_provider_context_length(
     used by:
       * ``AIAgent.__init__`` (startup resolution)
       * ``AIAgent.switch_model`` (mid-session ``/model`` switch)
-      * ``hermes_cli.model_switch.resolve_display_context_length`` (``/model`` confirmation display)
+      * ``lliam_cli.model_switch.resolve_display_context_length`` (``/model`` confirmation display)
       * ``gateway.run._format_session_info`` (``/info`` display)
       * ``agent.model_metadata.get_model_context_length`` (when custom_providers is threaded through)
 
@@ -5412,7 +5412,7 @@ def migrate_config(interactive: bool = True, quiet: bool = False) -> Dict[str, A
     raw_mcp_servers = config.get("mcp_servers")
     if isinstance(raw_mcp_servers, dict):
         try:
-            from hermes_cli.mcp_security import validate_mcp_server_entry as _validate_mcp_server_entry
+            from lliam_cli.mcp_security import validate_mcp_server_entry as _validate_mcp_server_entry
         except Exception:
             _validate_mcp_server_entry = None
         if _validate_mcp_server_entry:
@@ -5443,7 +5443,7 @@ def migrate_config(interactive: bool = True, quiet: bool = False) -> Dict[str, A
     # error or warning. Surface it loudly instead. See #38798.
     try:
         from toolsets import validate_toolset
-        from hermes_cli.toolset_validation import validate_platform_toolsets
+        from lliam_cli.toolset_validation import validate_platform_toolsets
 
         ts_warnings = validate_platform_toolsets(
             read_raw_config().get("platform_toolsets"), validate_toolset
@@ -6194,7 +6194,7 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
         # Managed scope: fold the managed config file's (mtime, size) into the
         # cache signature so editing /etc/hermes/config.yaml invalidates the
         # cached merged result. (0, 0) means "no managed config file".
-        from hermes_cli import managed_scope
+        from lliam_cli import managed_scope
 
         managed_dir = managed_scope.get_managed_dir()
         managed_cfg_path = (managed_dir / "config.yaml") if managed_dir else None
@@ -6282,7 +6282,7 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
         # fail-open guards to fail-closed AFTER every merge so the secure state
         # cannot be half-configured. No-op unless security.posture == strict.
         try:
-            from hermes_cli import posture_resolver
+            from lliam_cli import posture_resolver
             posture_resolver.resolve(expanded)
         except Exception:  # pragma: no cover - never brick config load
             logging.getLogger("hermes.governance.posture").warning(
@@ -6411,7 +6411,7 @@ def save_config(
         # silently lose to managed on the next load. Single-key `config set`
         # hard-rejects (see set_config_value); this is the mechanical safety net
         # for bulk writes so the unmanaged remainder still lands.
-        from hermes_cli import managed_scope
+        from lliam_cli import managed_scope
 
         managed_keys = managed_scope.managed_config_keys()
         if managed_keys:
@@ -6758,7 +6758,7 @@ def save_env_value(key: str, value: str):
         return
     # Managed scope guard: a managed env key can't be set by the user — the
     # managed .env wins at load anyway. Distinct from is_managed() above.
-    from hermes_cli import managed_scope
+    from lliam_cli import managed_scope
 
     if managed_scope.is_env_managed(key):
         managed_dir = managed_scope.get_managed_dir()
@@ -6849,7 +6849,7 @@ def remove_env_value(key: str) -> bool:
         managed_error(f"remove {key}")
         return False
     # Managed scope guard: a managed env key can't be removed by the user.
-    from hermes_cli import managed_scope
+    from lliam_cli import managed_scope
 
     if managed_scope.is_env_managed(key):
         managed_dir = managed_scope.get_managed_dir()
@@ -7056,7 +7056,7 @@ def show_config():
 
     # Managed scope: surface that some settings are administrator-pinned so the
     # user understands why their config.yaml value may not be the effective one.
-    from hermes_cli import managed_scope
+    from lliam_cli import managed_scope
 
     _managed_keys = managed_scope.managed_config_keys()
     _managed_env = managed_scope.load_managed_env()
@@ -7106,7 +7106,7 @@ def show_config():
     for env_key, name in keys:
         value = get_env_value(env_key)
         print(f"  {name:<14} {redact_key(value)}")
-    from hermes_cli.auth import get_anthropic_key
+    from lliam_cli.auth import get_anthropic_key
     anthropic_value = get_anthropic_key()
     print(f"  {'Anthropic':<14} {redact_key(anthropic_value)}")
     
@@ -7302,7 +7302,7 @@ def set_config_value(key: str, value: str):
     # source. Distinct from is_managed() above (the package-manager write-lock).
     # Env-shaped keys (API keys / tokens) route to save_env_value below, which has
     # its own managed-env-key guard; this catches the config.yaml keys.
-    from hermes_cli import managed_scope
+    from lliam_cli import managed_scope
 
     if managed_scope.is_key_managed(key):
         managed_dir = managed_scope.get_managed_dir()

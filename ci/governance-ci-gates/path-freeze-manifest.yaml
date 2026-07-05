@@ -30,14 +30,14 @@ frozen_paths:
   - tools/lazy_deps.py
   - model_tools.py
   # CLI / config surfaces
-  - hermes_cli/config.py
-  - hermes_cli/security_audit.py
-  - hermes_cli/security_audit_startup.py
-  - hermes_cli/security_advisories.py
-  - hermes_cli/mcp_security.py
-  - hermes_cli/skills_config.py
-  - hermes_cli/mcp_config.py
-  - hermes_cli/tools_config.py
+  - lliam_cli/config.py
+  - lliam_cli/security_audit.py
+  - lliam_cli/security_audit_startup.py
+  - lliam_cli/security_advisories.py
+  - lliam_cli/mcp_security.py
+  - lliam_cli/skills_config.py
+  - lliam_cli/mcp_config.py
+  - lliam_cli/tools_config.py
   # CI surfaces the gates extend (additive only)
   - .github/workflows/ci.yml
   - .github/workflows/supply-chain-audit.yml

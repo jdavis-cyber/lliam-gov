@@ -57,7 +57,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from hermes_constants import get_hermes_home
+from lliam_constants import get_hermes_home
 from typing import Dict, List, Optional, Set, Tuple
 
 from utils import env_int

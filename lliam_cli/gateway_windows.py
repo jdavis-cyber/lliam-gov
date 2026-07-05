@@ -39,7 +39,7 @@ import time
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from hermes_cli._subprocess_compat import (
+from lliam_cli._subprocess_compat import (
     windows_detach_flags,
     windows_detach_flags_without_breakaway,
     windows_hide_flags,
@@ -95,7 +95,7 @@ def _preserve_hermes_home_path(path: str | Path) -> str:
     """
     candidate = Path(path)
     try:
-        from hermes_cli.config import get_hermes_home
+        from lliam_cli.config import get_hermes_home
 
         home = Path(get_hermes_home())
         resolved_home = home.resolve()
@@ -199,7 +199,7 @@ def _is_running_as_admin() -> bool:
 
 def _current_profile_cli_args() -> list[str]:
     """Return CLI args that preserve the current Hermes profile."""
-    from hermes_cli.gateway import _profile_arg
+    from lliam_cli.gateway import _profile_arg
 
     profile_arg = _profile_arg()
     return shlex.split(profile_arg) if profile_arg else []
@@ -213,7 +213,7 @@ def _launch_elevated_gateway_command(command: str, extra_args: list[str] | None 
     decisions are already collected in the parent shell before this point.
     """
     _assert_windows()
-    args = ["-m", "hermes_cli.main", *_current_profile_cli_args(), "gateway", command]
+    args = ["-m", "lliam_cli.main", *_current_profile_cli_args(), "gateway", command]
     if extra_args:
         args.extend(extra_args)
     params = subprocess.list2cmdline(args)
@@ -289,8 +289,8 @@ def get_task_name() -> str:
     Named profile X: ``Hermes_Gateway_<X>``
     """
     _assert_windows()
-    # Local import to avoid circular module initialization during hermes_cli boot.
-    from hermes_cli.gateway import _profile_suffix
+    # Local import to avoid circular module initialization during lliam_cli boot.
+    from lliam_cli.gateway import _profile_suffix
 
     suffix = _profile_suffix()
     if not suffix:
@@ -311,7 +311,7 @@ def get_task_script_path() -> Path:
     Hermes installs stay self-contained).
     """
     _assert_windows()
-    from hermes_cli.config import get_hermes_home
+    from lliam_cli.config import get_hermes_home
 
     script_dir = Path(get_hermes_home()) / "gateway-service"
     script_dir.mkdir(parents=True, exist_ok=True)
@@ -361,7 +361,7 @@ def _stable_gateway_working_dir(project_root: Path) -> str:
     configured spelling instead of resolving symlinks so AppData installs backed
     by a junction/symlink still identify themselves as AppData.
     """
-    from hermes_cli.config import get_hermes_home
+    from lliam_cli.config import get_hermes_home
 
     try:
         home = get_hermes_home()
@@ -389,7 +389,7 @@ def _build_gateway_cmd_script(
     The script:
       - cd's into a stable working directory
       - exports HERMES_HOME, PYTHONIOENCODING, VIRTUAL_ENV
-      - invokes ``pythonw -m hermes_cli.main [--profile X] gateway run``
+      - invokes ``pythonw -m lliam_cli.main [--profile X] gateway run``
         directly so the wrapper cmd.exe exits without a visible gateway console
 
     We intentionally do NOT inline PATH overrides here — cmd.exe inherits
@@ -403,7 +403,7 @@ def _build_gateway_cmd_script(
     lines.append('set "HERMES_GATEWAY_DETACHED=1"')
     pythonw_path, venv_dir, extra_pythonpath = _resolve_detached_python(python_path)
     # VIRTUAL_ENV lets the gateway's own python detection find the venv
-    # if someone imports hermes_constants-based logic during startup.
+    # if someone imports lliam_constants-based logic during startup.
     lines.append(f'set "VIRTUAL_ENV={_preserve_hermes_home_path(venv_dir)}"')
     pythonpath_entries = [
         _preserve_hermes_home_path(Path(__file__).resolve().parent.parent),
@@ -411,7 +411,7 @@ def _build_gateway_cmd_script(
     ]
     lines.append(f'set "PYTHONPATH={";".join([*pythonpath_entries, "%PYTHONPATH%"])}"')
 
-    prog_args = [pythonw_path, "-m", "hermes_cli.main"]
+    prog_args = [pythonw_path, "-m", "lliam_cli.main"]
     if profile_arg:
         prog_args.extend(profile_arg.split())
     prog_args.extend(["gateway", "run"])
@@ -462,7 +462,7 @@ def _build_gateway_vbs_script(
     """
     pythonw_path, venv_dir, extra_pythonpath = _resolve_detached_python(python_path)
 
-    prog_args = [pythonw_path, "-m", "hermes_cli.main"]
+    prog_args = [pythonw_path, "-m", "lliam_cli.main"]
     if profile_arg:
         prog_args.extend(profile_arg.split())
     prog_args.extend(["gateway", "run"])
@@ -528,8 +528,8 @@ def _write_task_script() -> Path:
     """Generate and write the gateway.cmd wrapper. Return its absolute path."""
     _assert_windows()
     # Local imports to avoid circular-init at module load time.
-    from hermes_cli.config import get_hermes_home
-    from hermes_cli.gateway import (
+    from lliam_cli.config import get_hermes_home
+    from lliam_cli.gateway import (
         PROJECT_ROOT,
         _profile_arg,
         get_python_path,
@@ -774,8 +774,8 @@ def _build_gateway_argv() -> tuple[list[str], str, dict[str, str]]:
     layer in between.
     """
     _assert_windows()
-    from hermes_cli.config import get_hermes_home
-    from hermes_cli.gateway import (
+    from lliam_cli.config import get_hermes_home
+    from lliam_cli.gateway import (
         PROJECT_ROOT,
         _profile_arg,
         get_python_path,
@@ -789,7 +789,7 @@ def _build_gateway_argv() -> tuple[list[str], str, dict[str, str]]:
     hermes_home = str(Path(get_hermes_home()))
     profile_arg = _profile_arg(hermes_home)
 
-    argv = [python_exe, "-m", "hermes_cli.main"]
+    argv = [python_exe, "-m", "lliam_cli.main"]
     if profile_arg:
         argv.extend(profile_arg.split())
     argv.extend(["gateway", "run"])
@@ -827,10 +827,10 @@ def windowless_gateway_restart_spec(
     a clean start: swap the interpreter for the windowless ``pythonw.exe``
     (base interpreter for uv venvs) and return the cwd + env overlay
     (VIRTUAL_ENV, PYTHONPATH) the base interpreter needs to resolve the
-    ``hermes_cli`` package without the venv launcher's site config.
+    ``lliam_cli`` package without the venv launcher's site config.
 
     Returns ``(new_argv, working_dir, env_overlay)``.  ``new_argv``
-    preserves every argument after the interpreter (``-m hermes_cli.main
+    preserves every argument after the interpreter (``-m lliam_cli.main
     [--profile X] gateway run [--replace]``) verbatim.  On non-Windows, or
     if ``run_argv`` doesn't start with a resolvable python, the argv is
     returned unchanged with an empty overlay.
@@ -840,8 +840,8 @@ def windowless_gateway_restart_spec(
     if sys.platform != "win32":
         return run_argv, "", {}
 
-    from hermes_cli.config import get_hermes_home
-    from hermes_cli.gateway import PROJECT_ROOT
+    from lliam_cli.config import get_hermes_home
+    from lliam_cli.gateway import PROJECT_ROOT
 
     python_exe = run_argv[0]
     rest = run_argv[1:]
@@ -883,7 +883,7 @@ def windowless_gateway_restart_spec(
 def _spawn_detached(script_path: Path | None = None) -> int:
     """Launch the gateway as a fully detached background process.
 
-    We spawn ``pythonw.exe -m hermes_cli.main gateway run``
+    We spawn ``pythonw.exe -m lliam_cli.main gateway run``
     directly — NOT through a cmd.exe shim — because on Windows a cmd.exe
     child inherits the parent session's console handle and tends to get
     reaped when the spawning shell exits. pythonw.exe has no console, and
@@ -918,7 +918,7 @@ def _spawn_detached(script_path: Path | None = None) -> int:
     # logging module writes to gateway.log through a FileHandler, so the
     # real gateway logs still land there — this just captures anything
     # that goes to print() or native stderr.
-    from hermes_cli.config import get_hermes_home
+    from lliam_cli.config import get_hermes_home
 
     log_dir = Path(get_hermes_home()) / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -982,7 +982,7 @@ def _prompt_install_choices(
     if start_now is not None and start_on_login is not None:
         return start_now, start_on_login
 
-    from hermes_cli.setup import prompt_yes_no
+    from lliam_cli.setup import prompt_yes_no
 
     if start_now is None:
         start_now = prompt_yes_no("Start the gateway now after install?", True)
@@ -1005,7 +1005,7 @@ def _install_startup_fallback(script_path: Path, start_now: bool, detail: str) -
     # Startup-folder fallback only installs login persistence. Starting is
     # controlled by the pre-UAC start_now answer so all user decisions happen
     # before any elevation prompt.
-    from hermes_cli.gateway import find_gateway_pids, _profile_arg
+    from lliam_cli.gateway import find_gateway_pids, _profile_arg
 
     running_pids = list(find_gateway_pids())
     if running_pids:
@@ -1059,7 +1059,7 @@ def install(
     # Access Denied. We already collected all intent questions above, so avoid
     # a mysterious post-question pause: ask for UAC before touching schtasks.
     if not _is_running_as_admin() and not elevated_handoff:
-        from hermes_cli.setup import prompt_yes_no
+        from lliam_cli.setup import prompt_yes_no
 
         print("↻ Scheduled Task install may need administrator approval on this Windows account.")
         print("  UAC is Windows' admin approval prompt; it is needed to create/update the Scheduled Task.")
@@ -1100,7 +1100,7 @@ def install(
     # users a UAC prompt instead of silently installing a less reliable login
     # item, and keeps the fallback for locked-down boxes / cancelled prompts.
     if _is_access_denied(detail) and not _is_running_as_admin():
-        from hermes_cli.setup import prompt_yes_no
+        from lliam_cli.setup import prompt_yes_no
 
         print(f"↻ Scheduled Task install needs administrator approval ({detail.splitlines()[0]})")
         print("  UAC is Windows' admin approval prompt; it is needed to create/update the Scheduled Task.")
@@ -1127,7 +1127,7 @@ def install(
         # Startup-folder fallback only installs login persistence. Starting is
         # controlled by the pre-UAC start_now answer so all user decisions happen
         # before any elevation prompt.
-        from hermes_cli.gateway import find_gateway_pids, _profile_arg
+        from lliam_cli.gateway import find_gateway_pids, _profile_arg
 
         running_pids = list(find_gateway_pids())
         if running_pids:
@@ -1153,7 +1153,7 @@ def _wait_for_gateway_ready(timeout_s: float = 6.0, interval_s: float = 0.4) -> 
     Returns the list of PIDs found. Empty list means nothing came up in
     time — the caller should surface that to the user as a failed start.
     """
-    from hermes_cli.gateway import find_gateway_pids
+    from lliam_cli.gateway import find_gateway_pids
 
     deadline = time.time() + timeout_s
     while time.time() < deadline:
@@ -1171,13 +1171,13 @@ def _report_gateway_start(via: str) -> None:
     else:
         print(f"⚠ Launched gateway via {via}, but no process detected after 6s.")
         print("  Check the log for startup errors:")
-        from hermes_cli.config import get_hermes_home
+        from lliam_cli.config import get_hermes_home
         print(f"    type {Path(get_hermes_home())}\\logs\\gateway.log")
         print(f"    type {Path(get_hermes_home())}\\logs\\gateway-stdio.log")
 
 
 def _print_next_steps() -> None:
-    from hermes_cli.config import get_hermes_home
+    from lliam_cli.config import get_hermes_home
 
     hermes_home = Path(get_hermes_home())
     print()
@@ -1203,7 +1203,7 @@ def uninstall() -> None:
             scheduled_task_removed = True
             print(f"✓ Removed Scheduled Task {task_name!r}")
         elif _is_access_denied(detail) and not _is_running_as_admin():
-            from hermes_cli.setup import prompt_yes_no
+            from lliam_cli.setup import prompt_yes_no
 
             print(f"↻ Scheduled Task uninstall needs administrator approval ({detail or 'access denied'})")
             print("  UAC is Windows' admin approval prompt; it is needed to remove the Scheduled Task.")
@@ -1276,7 +1276,7 @@ def query_task_status() -> dict[str, str]:
 
 def _gateway_pids() -> list[int]:
     """Reuse the cross-platform PID scanner in gateway.py."""
-    from hermes_cli.gateway import find_gateway_pids
+    from lliam_cli.gateway import find_gateway_pids
 
     return list(find_gateway_pids())
 
@@ -1300,7 +1300,7 @@ def _print_deep_probes() -> None:
     import json
     from datetime import datetime, timezone
 
-    from hermes_cli.config import get_hermes_home
+    from lliam_cli.config import get_hermes_home
 
     home = Path(get_hermes_home())
     pid_path = home / "gateway.pid"
@@ -1469,7 +1469,7 @@ def start() -> None:
     startup_installed = is_startup_entry_installed()
 
     if not task_installed and not startup_installed:
-        from hermes_cli.setup import prompt_yes_no
+        from lliam_cli.setup import prompt_yes_no
 
         print("✗ Gateway service is not installed")
         if not prompt_yes_no("  Install it now so the gateway starts on login?", True):
@@ -1529,7 +1529,7 @@ def _drain_gateway_pid(pid: int, drain_timeout: float) -> bool:
 def _windows_stop_drain_timeout() -> float:
     """Return a bounded Windows gateway stop grace period."""
     try:
-        from hermes_cli.gateway import _get_restart_drain_timeout
+        from lliam_cli.gateway import _get_restart_drain_timeout
 
         configured = float(_get_restart_drain_timeout() or 30.0)
     except Exception:

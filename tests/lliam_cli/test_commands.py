@@ -3,7 +3,7 @@
 from prompt_toolkit.completion import CompleteEvent
 from prompt_toolkit.document import Document
 
-from hermes_cli.commands import (
+from lliam_cli.commands import (
     COMMAND_REGISTRY,
     COMMANDS,
     COMMANDS_BY_CATEGORY,
@@ -711,17 +711,17 @@ class TestSubcommandCompletion:
 
     def test_tools_enable_completes_toolset_names(self, monkeypatch):
         """`/tools enable ` should suggest currently-disabled toolsets."""
-        from hermes_cli import commands as commands_mod
+        from lliam_cli import commands as commands_mod
 
         # `web` is enabled, `spotify` is disabled — enabling should only offer
         # the disabled ones.
         monkeypatch.setattr(
-            "hermes_cli.tools_config._get_platform_tools",
+            "lliam_cli.tools_config._get_platform_tools",
             lambda *_a, **_k: {"web", "file"},
         )
-        monkeypatch.setattr("hermes_cli.config.load_config", lambda: {})
+        monkeypatch.setattr("lliam_cli.config.load_config", lambda: {})
         monkeypatch.setattr(
-            "hermes_cli.tools_config._get_plugin_toolset_keys",
+            "lliam_cli.tools_config._get_plugin_toolset_keys",
             lambda: set(),
         )
 
@@ -734,12 +734,12 @@ class TestSubcommandCompletion:
 
     def test_tools_disable_completes_enabled_toolsets_only(self, monkeypatch):
         monkeypatch.setattr(
-            "hermes_cli.tools_config._get_platform_tools",
+            "lliam_cli.tools_config._get_platform_tools",
             lambda *_a, **_k: {"web", "file"},
         )
-        monkeypatch.setattr("hermes_cli.config.load_config", lambda: {})
+        monkeypatch.setattr("lliam_cli.config.load_config", lambda: {})
         monkeypatch.setattr(
-            "hermes_cli.tools_config._get_plugin_toolset_keys",
+            "lliam_cli.tools_config._get_plugin_toolset_keys",
             lambda: set(),
         )
 
@@ -750,12 +750,12 @@ class TestSubcommandCompletion:
 
     def test_tools_enable_partial_filters(self, monkeypatch):
         monkeypatch.setattr(
-            "hermes_cli.tools_config._get_platform_tools",
+            "lliam_cli.tools_config._get_platform_tools",
             lambda *_a, **_k: set(),
         )
-        monkeypatch.setattr("hermes_cli.config.load_config", lambda: {})
+        monkeypatch.setattr("lliam_cli.config.load_config", lambda: {})
         monkeypatch.setattr(
-            "hermes_cli.tools_config._get_plugin_toolset_keys",
+            "lliam_cli.tools_config._get_plugin_toolset_keys",
             lambda: set(),
         )
 
@@ -766,12 +766,12 @@ class TestSubcommandCompletion:
     def test_tools_enable_skips_already_listed(self, monkeypatch):
         """If the user already typed a name, don't suggest it again."""
         monkeypatch.setattr(
-            "hermes_cli.tools_config._get_platform_tools",
+            "lliam_cli.tools_config._get_platform_tools",
             lambda *_a, **_k: set(),
         )
-        monkeypatch.setattr("hermes_cli.config.load_config", lambda: {})
+        monkeypatch.setattr("lliam_cli.config.load_config", lambda: {})
         monkeypatch.setattr(
-            "hermes_cli.tools_config._get_plugin_toolset_keys",
+            "lliam_cli.tools_config._get_plugin_toolset_keys",
             lambda: set(),
         )
 
@@ -781,15 +781,15 @@ class TestSubcommandCompletion:
 
     def test_tools_suggests_mcp_server_prefixes(self, monkeypatch):
         monkeypatch.setattr(
-            "hermes_cli.tools_config._get_platform_tools",
+            "lliam_cli.tools_config._get_platform_tools",
             lambda *_a, **_k: set(),
         )
         monkeypatch.setattr(
-            "hermes_cli.config.load_config",
+            "lliam_cli.config.load_config",
             lambda: {"mcp_servers": {"github": {}, "linear": {}}},
         )
         monkeypatch.setattr(
-            "hermes_cli.tools_config._get_plugin_toolset_keys",
+            "lliam_cli.tools_config._get_plugin_toolset_keys",
             lambda: set(),
         )
 
@@ -1158,7 +1158,7 @@ class TestTelegramMenuCommands:
     def test_configured_priority_prepends_plugin_commands(self, tmp_path, monkeypatch):
         """Configured Telegram priorities keep local/plugin commands visible."""
         from unittest.mock import patch
-        import hermes_cli.plugins as plugins_mod
+        import lliam_cli.plugins as plugins_mod
 
         plugin_dir = tmp_path / "plugins" / "cmd-plugin"
         plugin_dir.mkdir(parents=True, exist_ok=True)
@@ -1193,7 +1193,7 @@ class TestTelegramMenuCommands:
     def test_configured_priority_append_keeps_defaults_before_user_priority(self, tmp_path, monkeypatch):
         """append mode preserves built-in defaults ahead of configured names."""
         from unittest.mock import patch
-        import hermes_cli.plugins as plugins_mod
+        import lliam_cli.plugins as plugins_mod
 
         plugin_dir = tmp_path / "plugins" / "cmd-plugin"
         plugin_dir.mkdir(parents=True, exist_ok=True)
@@ -1301,7 +1301,7 @@ class TestTelegramMenuCommands:
     def test_includes_plugin_commands_via_lazy_discovery(self, tmp_path, monkeypatch):
         """Telegram menu generation should discover plugin slash commands on first access."""
         from unittest.mock import patch
-        import hermes_cli.plugins as plugins_mod
+        import lliam_cli.plugins as plugins_mod
 
         plugin_dir = tmp_path / "plugins" / "cmd-plugin"
         plugin_dir.mkdir(parents=True, exist_ok=True)
@@ -1740,7 +1740,7 @@ class TestDiscordSkillCommands:
 # Discord skill commands grouped by category
 # ---------------------------------------------------------------------------
 
-from hermes_cli.commands import discord_skill_commands_by_category  # noqa: E402
+from lliam_cli.commands import discord_skill_commands_by_category  # noqa: E402
 
 
 class TestDiscordSkillCommandsByCategory:
@@ -2010,8 +2010,8 @@ class TestPluginCommandEnumeration:
     """
 
     def _patch_plugin_commands(self, monkeypatch, commands):
-        """Monkeypatch hermes_cli.plugins.get_plugin_commands() to a fixed dict."""
-        from hermes_cli import plugins as _plugins_mod
+        """Monkeypatch lliam_cli.plugins.get_plugin_commands() to a fixed dict."""
+        from lliam_cli import plugins as _plugins_mod
 
         monkeypatch.setattr(
             _plugins_mod, "get_plugin_commands", lambda: dict(commands)
@@ -2086,7 +2086,7 @@ class TestPluginCommandEnumeration:
 
     def test_is_gateway_known_command_recognizes_plugin_commands(self, monkeypatch):
         """is_gateway_known_command() must return True for plugin commands."""
-        from hermes_cli.commands import is_gateway_known_command
+        from lliam_cli.commands import is_gateway_known_command
 
         self._patch_plugin_commands(monkeypatch, {
             "metricas": {
@@ -2101,8 +2101,8 @@ class TestPluginCommandEnumeration:
 
     def test_is_gateway_known_command_still_recognizes_builtins(self, monkeypatch):
         """Built-in commands must remain known even when plugin discovery fails."""
-        from hermes_cli import plugins as _plugins_mod
-        from hermes_cli.commands import is_gateway_known_command
+        from lliam_cli import plugins as _plugins_mod
+        from lliam_cli.commands import is_gateway_known_command
 
         def _boom():
             raise RuntimeError("plugin system down")
@@ -2115,7 +2115,7 @@ class TestPluginCommandEnumeration:
 
     def test_plugin_enumerator_handles_missing_plugin_manager(self, monkeypatch):
         """Enumerators must never raise when plugin discovery raises."""
-        from hermes_cli import plugins as _plugins_mod
+        from lliam_cli import plugins as _plugins_mod
 
         def _boom():
             raise RuntimeError("plugin system down")

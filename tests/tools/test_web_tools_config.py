@@ -675,7 +675,7 @@ class TestCheckWebApiKey:
             return "fresh-token"
 
         monkeypatch.setattr(
-            "hermes_cli.auth.resolve_nous_access_token",
+            "lliam_cli.auth.resolve_nous_access_token",
             _record_refresh,
         )
 

@@ -7,7 +7,7 @@ import os
 import threading
 from typing import Optional
 
-from hermes_cli.auth import (
+from lliam_cli.auth import (
     ACCESS_TOKEN_REFRESH_SKEW_SECONDS,
     NOUS_INVOKE_JWT_MIN_TTL_SECONDS,
     AuthError,

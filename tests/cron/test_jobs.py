@@ -1304,13 +1304,13 @@ class TestCronOutputRetention:
     def test_cron_output_keep_reads_config(self, monkeypatch):
         import cron.jobs as jobs
         monkeypatch.setattr(
-            "hermes_cli.config.load_config", lambda: {"cron": {"output_retention": 7}}
+            "lliam_cli.config.load_config", lambda: {"cron": {"output_retention": 7}}
         )
         assert jobs._cron_output_keep() == 7
 
     def test_cron_output_keep_defaults_on_bad_config(self, monkeypatch):
         import cron.jobs as jobs
         monkeypatch.setattr(
-            "hermes_cli.config.load_config", lambda: {"cron": {"output_retention": "oops"}}
+            "lliam_cli.config.load_config", lambda: {"cron": {"output_retention": "oops"}}
         )
         assert jobs._cron_output_keep() == jobs._CRON_OUTPUT_DEFAULT_KEEP

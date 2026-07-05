@@ -13,7 +13,7 @@ import shutil
 import sys
 from typing import Optional, Sequence
 
-from hermes_cli._parser import (
+from lliam_cli._parser import (
     PRE_ARGPARSE_INHERITED_FLAGS,
     build_top_level_parser,
 )
@@ -83,7 +83,7 @@ def resolve_hermes_bin() -> Optional[str]:
     Priority:
       1. ``sys.argv[0]`` if it resolves to a real executable.
       2. ``shutil.which("hermes")`` on PATH.
-      3. ``None`` → caller should fall back to ``python -m hermes_cli.main``.
+      3. ``None`` → caller should fall back to ``python -m lliam_cli.main``.
 
     Windows note: ``os.access(path, os.X_OK)`` returns True for ``.py`` and
     ``.pyc`` files on Windows (the OS treats anything listed in PATHEXT as
@@ -92,7 +92,7 @@ def resolve_hermes_bin() -> Optional[str]:
     directly — CreateProcessW needs a real .exe, not a script associated
     with the Python launcher.  On Windows we therefore skip the argv[0]
     fast-path when it points at a .py file and fall through to either
-    ``hermes.exe`` on PATH or the ``sys.executable -m hermes_cli.main``
+    ``hermes.exe`` on PATH or the ``sys.executable -m lliam_cli.main``
     fallback.
     """
     argv0 = sys.argv[0]
@@ -141,7 +141,7 @@ def build_relaunch_argv(
     if bin_path:
         argv = [bin_path]
     else:
-        argv = [sys.executable, "-m", "hermes_cli.main"]
+        argv = [sys.executable, "-m", "lliam_cli.main"]
 
     src = list(original_argv) if original_argv is not None else list(sys.argv[1:])
 
@@ -169,7 +169,7 @@ def relaunch(
     *emulates* exec by spawning the child and exiting the parent, but
     only works when the target is a real Win32 executable.  Our target
     is usually ``hermes.exe`` (a Python console-script shim that wraps
-    ``python -m hermes_cli.main``) or a ``.cmd`` batch file, and both
+    ``python -m lliam_cli.main``) or a ``.cmd`` batch file, and both
     raise ``OSError(8, "Exec format error")`` on Windows' execvp.
 
     The Windows-correct pattern is: spawn the child with ``subprocess.run``

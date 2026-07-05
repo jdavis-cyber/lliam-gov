@@ -17,7 +17,7 @@ from difflib import get_close_matches
 from pathlib import Path
 from typing import Any, NamedTuple, Optional
 
-from hermes_cli import __version__ as _HERMES_VERSION
+from lliam_cli import __version__ as _HERMES_VERSION
 
 # Identify ourselves so endpoints fronted by Cloudflare's Browser Integrity
 # Check (error 1010) don't reject the default ``Python-urllib/*`` signature.
@@ -95,7 +95,7 @@ def _codex_curated_models() -> list[str]:
     This keeps the gateway /model picker in sync with the CLI `hermes model`
     flow without maintaining a separate static list.
     """
-    from hermes_cli.codex_models import DEFAULT_CODEX_MODELS, _add_forward_compat_models
+    from lliam_cli.codex_models import DEFAULT_CODEX_MODELS, _add_forward_compat_models
     return _add_forward_compat_models(list(DEFAULT_CODEX_MODELS))
 
 
@@ -758,7 +758,7 @@ def check_nous_free_tier(*, force_fresh: bool = False) -> bool:
             return cached_result
 
     try:
-        from hermes_cli.nous_account import get_nous_portal_account_info
+        from lliam_cli.nous_account import get_nous_portal_account_info
 
         account_info = get_nous_portal_account_info(force_fresh=force_fresh)
         result = account_info.is_free_tier
@@ -797,7 +797,7 @@ _nous_recommended_cache: dict[str, tuple[dict[str, Any], float]] = {}
 
 def _nous_recommended_disk_path() -> "Path":
     """Disk path for the persisted recommended-models cache."""
-    from hermes_constants import get_hermes_home
+    from lliam_constants import get_hermes_home
     return get_hermes_home() / "cache" / "nous_recommended_cache.json"
 
 
@@ -918,7 +918,7 @@ def fetch_nous_recommended_models(
 def _resolve_nous_portal_url() -> str:
     """Best-effort lookup of the Portal base URL the user is authed against."""
     try:
-        from hermes_cli.auth import (
+        from lliam_cli.auth import (
             DEFAULT_NOUS_PORTAL_URL,
             get_provider_auth_state,
         )
@@ -1271,7 +1271,7 @@ _PROVIDER_ALIASES = {
 # This is deliberately a fixed, side-effect-free default for the hot resolution
 # path. The *interactive* default (GUI onboarding / ``hermes model``) uses the
 # richer free/paid-tier-aware resolver — see ``get_recommended_default_model``
-# in hermes_cli/web_server.py and ``partition_nous_models_by_tier`` — which can
+# in lliam_cli/web_server.py and ``partition_nous_models_by_tier`` — which can
 # hit the Portal; this fallback must stay cheap and network-free.
 _PROVIDER_SILENT_DEFAULT_OVERRIDES: dict[str, str] = {
     "nous": "deepseek/deepseek-v4-flash",
@@ -1351,7 +1351,7 @@ def fetch_openrouter_models(
     # drive the picker; the OpenRouter live /v1/models filter (tool support,
     # free pricing) is applied on top either way.
     try:
-        from hermes_cli.model_catalog import get_curated_openrouter_models
+        from lliam_cli.model_catalog import get_curated_openrouter_models
         remote = get_curated_openrouter_models()
     except Exception:
         remote = None
@@ -1417,7 +1417,7 @@ def get_curated_nous_model_ids() -> list[str]:
     unreachable. Always returns a list (never None).
     """
     try:
-        from hermes_cli.model_catalog import get_curated_nous_models
+        from lliam_cli.model_catalog import get_curated_nous_models
         remote = get_curated_nous_models()
     except Exception:
         remote = None
@@ -1530,7 +1530,7 @@ def _resolve_nous_pricing_credentials() -> tuple[str, str]:
     look broken ("No free models currently available").
     """
     try:
-        from hermes_cli.auth import resolve_nous_runtime_credentials
+        from lliam_cli.auth import resolve_nous_runtime_credentials
         creds = resolve_nous_runtime_credentials()
         if creds:
             return (creds.get("api_key", ""), creds.get("base_url", ""))
@@ -1656,7 +1656,7 @@ def list_available_providers() -> list[dict[str, str]]:
         # Check if this provider has credentials available
         has_creds = False
         try:
-            from hermes_cli.auth import get_auth_status, has_usable_secret
+            from lliam_cli.auth import get_auth_status, has_usable_secret
             if pid == "custom":
                 custom_base_url = _get_custom_base_url() or ""
                 has_creds = bool(custom_base_url.strip())
@@ -1721,7 +1721,7 @@ def _get_custom_base_url() -> str:
 def _get_model_config_dict() -> dict[str, Any]:
     """Return the main model config mapping, or an empty dict."""
     try:
-        from hermes_cli.config import load_config
+        from lliam_cli.config import load_config
         config = load_config()
         model_cfg = config.get("model", {})
         if isinstance(model_cfg, dict):
@@ -1813,7 +1813,7 @@ def _resolve_static_model_alias(
 ) -> Optional[tuple[str, str]]:
     """Resolve short aliases (e.g. sonnet/opus) using static catalogs only."""
     try:
-        from hermes_cli.model_switch import MODEL_ALIASES
+        from lliam_cli.model_switch import MODEL_ALIASES
     except Exception:
         return None
 
@@ -2009,7 +2009,7 @@ def normalize_provider(provider: Optional[str]) -> str:
     """Normalize provider aliases to Hermes' canonical provider ids.
 
     Note: ``"auto"`` passes through unchanged — use
-    ``hermes_cli.auth.resolve_provider()`` to resolve it to a concrete
+    ``lliam_cli.auth.resolve_provider()`` to resolve it to a concrete
     provider based on credentials and environment.
     """
     normalized = (provider or "openrouter").strip().lower()
@@ -2136,7 +2136,7 @@ def _resolve_copilot_catalog_api_key() -> str:
     later valid entry is reachable when an earlier one is unsupported.
     """
     try:
-        from hermes_cli.auth import resolve_api_key_provider_credentials
+        from lliam_cli.auth import resolve_api_key_provider_credentials
 
         creds = resolve_api_key_provider_credentials("copilot")
         api_key = str(creds.get("api_key") or "").strip()
@@ -2146,8 +2146,8 @@ def _resolve_copilot_catalog_api_key() -> str:
         pass
 
     try:
-        from hermes_cli.auth import read_credential_pool
-        from hermes_cli.copilot_auth import (
+        from lliam_cli.auth import read_credential_pool
+        from lliam_cli.copilot_auth import (
             exchange_copilot_token,
             validate_copilot_token,
         )
@@ -2256,7 +2256,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
     if normalized == "openrouter":
         return model_ids(force_refresh=force_refresh)
     if normalized == "openai-codex":
-        from hermes_cli.codex_models import get_codex_model_ids
+        from lliam_cli.codex_models import get_codex_model_ids
 
         # Pass the live OAuth access token so the picker matches whatever
         # ChatGPT lists for this account right now (new models appear without
@@ -2264,7 +2264,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
         # or the endpoint is unreachable.
         access_token = None
         try:
-            from hermes_cli.auth import resolve_codex_runtime_credentials
+            from lliam_cli.auth import resolve_codex_runtime_credentials
 
             creds = resolve_codex_runtime_credentials(refresh_if_expiring=True)
             access_token = creds.get("api_key")
@@ -2285,7 +2285,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
     if normalized == "nous":
         # Try live Nous Portal /models endpoint
         try:
-            from hermes_cli.auth import fetch_nous_models, resolve_nous_runtime_credentials
+            from lliam_cli.auth import fetch_nous_models, resolve_nous_runtime_credentials
             creds = resolve_nous_runtime_credentials()
             if creds:
                 live = fetch_nous_models(api_key=creds.get("api_key", ""), inference_base_url=creds.get("base_url", ""))
@@ -2301,7 +2301,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
             return manifest_ids
     if normalized == "stepfun":
         try:
-            from hermes_cli.auth import resolve_api_key_provider_credentials
+            from lliam_cli.auth import resolve_api_key_provider_credentials
 
             creds = resolve_api_key_provider_credentials("stepfun")
             api_key = str(creds.get("api_key") or "").strip()
@@ -2382,7 +2382,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
                 pass
     if normalized == "gmi":
         try:
-            from hermes_cli.auth import resolve_api_key_provider_credentials
+            from lliam_cli.auth import resolve_api_key_provider_credentials
 
             creds = resolve_api_key_provider_credentials("gmi")
             api_key = str(creds.get("api_key") or "").strip()
@@ -2426,7 +2426,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
     # Replaces per-provider copy-paste blocks (stepfun, gmi, zai, etc.).
     try:
         from providers import get_provider_profile
-        from hermes_cli.auth import resolve_api_key_provider_credentials
+        from lliam_cli.auth import resolve_api_key_provider_credentials
 
         _p = get_provider_profile(normalized)
         if _p and _p.auth_type == "api_key" and _p.base_url:
@@ -2502,7 +2502,7 @@ _PROVIDER_MODELS_CACHE_TTL = 3600  # 1h
 
 
 def _provider_models_cache_path() -> Path:
-    from hermes_constants import get_hermes_home
+    from lliam_constants import get_hermes_home
     return get_hermes_home() / "provider_models_cache.json"
 
 
@@ -2526,7 +2526,7 @@ def _credential_fingerprint(provider: str) -> str:
 
     # Env vars from PROVIDER_REGISTRY for this slug
     try:
-        from hermes_cli.auth import PROVIDER_REGISTRY
+        from lliam_cli.auth import PROVIDER_REGISTRY
         pcfg = PROVIDER_REGISTRY.get(provider)
         if pcfg is not None:
             for ev in getattr(pcfg, "api_key_env_vars", ()) or ():
@@ -2539,7 +2539,7 @@ def _credential_fingerprint(provider: str) -> str:
 
     # OAuth / external-file mtimes that change on re-auth
     try:
-        from hermes_constants import get_hermes_home
+        from lliam_constants import get_hermes_home
         for rel in ("auth.json", "credentials.json"):
             p = get_hermes_home() / rel
             try:
@@ -2772,7 +2772,7 @@ def copilot_default_headers() -> dict[str, str]:
     Copilot CLI send on every request.
     """
     try:
-        from hermes_cli.copilot_auth import copilot_request_headers
+        from lliam_cli.copilot_auth import copilot_request_headers
         return copilot_request_headers(is_agent_turn=True)
     except ImportError:
         return {
@@ -2942,7 +2942,7 @@ def _lmstudio_fetch_raw_models(
             payload = json.loads(resp.read().decode())
     except urllib.error.HTTPError as exc:
         if exc.code in {401, 403}:
-            from hermes_cli.auth import AuthError
+            from lliam_cli.auth import AuthError
             raise AuthError(
                 f"LM Studio rejected the request with HTTP {exc.code}.",
                 provider="lmstudio",
@@ -3548,7 +3548,7 @@ def _strip_ollama_cloud_suffix(model_id: str) -> str:
 
 def _ollama_cloud_cache_path() -> Path:
     """Return the path for the Ollama Cloud model cache."""
-    from hermes_constants import get_hermes_home
+    from lliam_constants import get_hermes_home
     return get_hermes_home() / "ollama_cloud_models_cache.json"
 
 
@@ -3698,8 +3698,8 @@ def validate_requested_model(
 
     if normalized == "moa":
         try:
-            from hermes_cli.config import load_config
-            from hermes_cli.moa_config import normalize_moa_config
+            from lliam_cli.config import load_config
+            from lliam_cli.moa_config import normalize_moa_config
 
             cfg = normalize_moa_config(load_config().get("moa") or {})
             if requested in cfg["presets"]:
@@ -3723,7 +3723,7 @@ def validate_requested_model(
         }
 
     if normalized == "lmstudio":
-        from hermes_cli.auth import AuthError
+        from lliam_cli.auth import AuthError
         # Use probe_lmstudio_models so we can distinguish None (unreachable
         # / malformed response) from [] (reachable, but no chat-capable models
         # are loaded). fetch_lmstudio_models collapses both to [].

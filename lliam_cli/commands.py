@@ -414,7 +414,7 @@ def _resolve_config_gates() -> set[str]:
     if not gated:
         return set()
     try:
-        from hermes_cli.config import read_raw_config
+        from lliam_cli.config import read_raw_config
         cfg = read_raw_config()
     except Exception:
         return set()
@@ -476,7 +476,7 @@ def _iter_plugin_command_entries() -> list[tuple[str, str, str]]:
     """Yield (name, description, args_hint) tuples for all plugin slash commands.
 
     Plugin commands are registered via
-    :func:`hermes_cli.plugins.PluginContext.register_command`. They behave
+    :func:`lliam_cli.plugins.PluginContext.register_command`. They behave
     like ``CommandDef`` entries for gateway surfacing: they appear in the
     Telegram command menu, in Slack's ``/hermes`` subcommand mapping, and
     (via :func:`plugins.platforms.discord.adapter._register_slash_commands`) in
@@ -487,7 +487,7 @@ def _iter_plugin_command_entries() -> list[tuple[str, str, str]]:
     behavior).
     """
     try:
-        from hermes_cli.plugins import get_plugin_commands
+        from lliam_cli.plugins import get_plugin_commands
     except Exception:
         return []
     try:
@@ -599,7 +599,7 @@ def _telegram_command_menu_config() -> dict[str, Any]:
     ``platforms.telegram.extra.command_menu``.
     """
     try:
-        from hermes_cli.config import read_raw_config
+        from lliam_cli.config import read_raw_config
         raw_cfg = read_raw_config() or {}
     except Exception:
         raw_cfg = {}
@@ -801,7 +801,7 @@ def _collect_gateway_skill_entries(
     # --- Tier 1: Plugin slash commands (never trimmed) ---------------------
     plugin_pairs: list[tuple[str, str]] = []
     try:
-        from hermes_cli.plugins import get_plugin_commands
+        from lliam_cli.plugins import get_plugin_commands
         plugin_cmds = get_plugin_commands()
         for cmd_name in sorted(plugin_cmds):
             name = sanitize_name(cmd_name) if sanitize_name else cmd_name
@@ -1694,7 +1694,7 @@ class SlashCommandCompleter(Completer):
     def _skin_completions(sub_text: str, sub_lower: str):
         """Yield completions for /skin from available skins."""
         try:
-            from hermes_cli.skin_engine import list_skins
+            from lliam_cli.skin_engine import list_skins
             for s in list_skins():
                 name = s["name"]
                 if name.startswith(sub_lower) and name != sub_lower:
@@ -1737,8 +1737,8 @@ class SlashCommandCompleter(Completer):
         already = set(parts[1:] if trailing_space else parts[1:-1])
 
         try:
-            from hermes_cli.config import load_config
-            from hermes_cli.tools_config import (
+            from lliam_cli.config import load_config
+            from lliam_cli.tools_config import (
                 CONFIGURABLE_TOOLSETS,
                 _get_platform_tools,
                 _get_plugin_toolset_keys,
@@ -1956,7 +1956,7 @@ class SlashCommandCompleter(Completer):
 
         # Plugin-registered slash commands
         try:
-            from hermes_cli.plugins import get_plugin_commands
+            from lliam_cli.plugins import get_plugin_commands
             for cmd_name, cmd_info in get_plugin_commands().items():
                 if cmd_name.startswith(word):
                     desc = str(cmd_info.get("description", "Plugin command"))

@@ -66,7 +66,7 @@ def reconcile_profile_gateways(
 
     Always registers a ``gateway-default`` slot for the root profile
     (the implicit profile that lives at the top of ``$HERMES_HOME``,
-    not under ``profiles/``). The dispatcher in ``hermes_cli.gateway``
+    not under ``profiles/``). The dispatcher in ``lliam_cli.gateway``
     maps an empty profile suffix to ``gateway-default``, so this slot
     is what ``hermes gateway start`` (no ``-p``) targets. Without it,
     bare ``hermes gateway start`` inside the container would land on
@@ -371,7 +371,7 @@ def _register_service(scandir: Path, profile: str, *, start: bool) -> None:
     """
     import shutil
 
-    from hermes_cli.service_manager import (
+    from lliam_cli.service_manager import (
         S6ServiceManager,
         _seed_supervise_skeleton,
         validate_profile_name,

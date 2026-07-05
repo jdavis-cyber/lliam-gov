@@ -6,7 +6,7 @@ default) and "codex_app_server" (= hand turns to a codex subprocess).
 Both CLI (cli.py) and gateway (gateway/run.py) call into this module so the
 behavior stays identical across surfaces.
 
-The actual runtime resolution happens in hermes_cli.runtime_provider's
+The actual runtime resolution happens in lliam_cli.runtime_provider's
 _maybe_apply_codex_app_server_runtime() helper, which reads the persisted
 config value. This module just persists the value and reports the change.
 """
@@ -198,7 +198,7 @@ def apply(
         # browser/web/delegate_task/vision/memory tools (#7 fix).
         # Failures are non-fatal — the runtime change still proceeds.
         try:
-            from hermes_cli.codex_runtime_plugin_migration import migrate
+            from lliam_cli.codex_runtime_plugin_migration import migrate
             mig_report = migrate(config)
             # Tools/MCP servers (excluding the hermes-tools callback,
             # which is internal plumbing — surface separately).

@@ -2,8 +2,8 @@
 
 import argparse
 
-from hermes_cli.slack_cli import _build_full_manifest
-from hermes_cli.subcommands.slack import build_slack_parser
+from lliam_cli.slack_cli import _build_full_manifest
+from lliam_cli.subcommands.slack import build_slack_parser
 
 
 def _parse_slack_args(argv):

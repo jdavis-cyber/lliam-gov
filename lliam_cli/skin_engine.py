@@ -86,7 +86,7 @@ USAGE
 
 .. code-block:: python
 
-    from hermes_cli.skin_engine import get_active_skin, list_skins, set_active_skin
+    from lliam_cli.skin_engine import get_active_skin, list_skins, set_active_skin
 
     skin = get_active_skin()
     print(skin.colors["banner_title"])    # "#FFD700"
@@ -117,7 +117,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from hermes_constants import get_hermes_home
+from lliam_constants import get_hermes_home
 
 logger = logging.getLogger(__name__)
 

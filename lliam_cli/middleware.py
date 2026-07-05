@@ -220,19 +220,19 @@ def run_api_execution_middleware(
 
 
 def _invoke_middleware(kind: str, **kwargs: Any) -> List[Any]:
-    from hermes_cli.plugins import invoke_middleware
+    from lliam_cli.plugins import invoke_middleware
 
     return invoke_middleware(kind, **middleware_payload(**kwargs))
 
 
 def _has_middleware(kind: str) -> bool:
-    from hermes_cli.plugins import has_middleware
+    from lliam_cli.plugins import has_middleware
 
     return has_middleware(kind)
 
 
 def _get_middleware_callbacks(kind: str) -> List[Callable]:
-    from hermes_cli.plugins import get_plugin_manager
+    from lliam_cli.plugins import get_plugin_manager
 
     return list(get_plugin_manager()._middleware.get(kind, []))
 

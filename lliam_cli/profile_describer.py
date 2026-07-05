@@ -12,7 +12,7 @@ badge. User can edit afterward to confirm.
 
 Design notes
 ------------
-- Mirrors the shape of ``hermes_cli/kanban_specify.py``: lazy aux
+- Mirrors the shape of ``lliam_cli/kanban_specify.py``: lazy aux
   client import inside the function, lenient response parse, never
   raises on expected failure modes.
 - Reads at most ``MAX_SKILLS_FOR_PROMPT`` skill names to keep the
@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from hermes_cli import profiles as profiles_mod
+from lliam_cli import profiles as profiles_mod
 from agent.skill_utils import is_excluded_skill_path
 
 logger = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ def describe_profile(
 
     try:
         if canon == "default":
-            from hermes_constants import get_hermes_home  # type: ignore
+            from lliam_constants import get_hermes_home  # type: ignore
             profile_dir = Path(get_hermes_home())
         else:
             profile_dir = profiles_mod.get_profile_dir(canon)

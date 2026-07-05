@@ -11,7 +11,7 @@ env helper is exercised via monkeypatched ``os.environ`` only.
 
 from pathlib import Path
 
-from hermes_cli import env_compat, migrate_home  # becomes lliam_cli.* after R.2
+from lliam_cli import env_compat, migrate_home  # becomes lliam_cli.* after R.2
 
 
 # ─── migrate_if_needed ────────────────────────────────────────────────────────

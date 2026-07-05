@@ -44,7 +44,7 @@ def _ensure_utf8():
     stream change and no environment mutation.
 
     Note: this is intentionally the earliest, platform-agnostic guard.
-    hermes_cli/stdio.py::configure_windows_stdio() runs later from the entry
+    lliam_cli/stdio.py::configure_windows_stdio() runs later from the entry
     points and layers on the Windows-only extras (console code-page flip,
     EDITOR default, PATH augmentation); its stream reconfiguration is a
     harmless idempotent no-op once we have already repaired the streams here.

@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 
 from agent.memory_manager import sanitize_context
-from hermes_constants import get_hermes_home
+from lliam_constants import get_hermes_home
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
 
 logger = logging.getLogger(__name__)
@@ -155,7 +155,7 @@ _last_init_error_lock = threading.Lock()
 
 # Paths for which we've already logged a WAL-fallback WARNING.  Without
 # this, kanban_db.connect() (called on every kanban operation — see
-# hermes_cli/kanban_db.py for ~30 call sites) would re-log the same
+# lliam_cli/kanban_db.py for ~30 call sites) would re-log the same
 # filesystem-incompat warning on every connection, filling errors.log.
 _wal_fallback_warned_paths: set[str] = set()
 _wal_fallback_warned_lock = threading.Lock()
@@ -297,7 +297,7 @@ def apply_wal_with_fallback(
     Different db_labels log independently, so state.db and kanban.db
     each get one warning on the same NFS mount.
 
-    Shared by :class:`SessionDB` and ``hermes_cli.kanban_db.connect`` so
+    Shared by :class:`SessionDB` and ``lliam_cli.kanban_db.connect`` so
     both databases get identical fallback behavior.
 
     Never downgrades to DELETE if the on-disk DB header reports WAL — see _on_disk_journal_mode.
@@ -334,7 +334,7 @@ def _log_wal_fallback_once(db_label: str, exc: Exception) -> None:
     """Log a single WARNING per (process, db_label) about WAL fallback.
 
     Without this dedup, NFS users running kanban (which opens a fresh
-    connection on every operation — see hermes_cli/kanban_db.py) would
+    connection on every operation — see lliam_cli/kanban_db.py) would
     fill errors.log with hundreds of identical warnings per hour.
     """
     with _wal_fallback_warned_lock:
@@ -892,7 +892,7 @@ class SessionDB:
             # successful open racing past this failure would erase the
             # cause that another thread's /resume is about to format.
             # Tests that need to reset the state can call
-            # ``hermes_state._set_last_init_error(None)`` explicitly.
+            # ``lliam_state._set_last_init_error(None)`` explicitly.
             _set_last_init_error(f"{type(exc).__name__}: {exc}")
             raise
 

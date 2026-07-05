@@ -468,7 +468,7 @@ class TestResolveModelOverride:
     """
 
     def test_keeps_bare_custom_when_a_named_entry_exists(self, monkeypatch):
-        import hermes_cli.runtime_provider as rp_mod
+        import lliam_cli.runtime_provider as rp_mod
 
         monkeypatch.setattr(rp_mod, "has_named_custom_provider", lambda name: True)
         provider, model = _resolve_model_override(
@@ -478,8 +478,8 @@ class TestResolveModelOverride:
         assert model == "gpt-5.4"
 
     def test_pins_main_provider_when_bare_custom_unresolvable(self, monkeypatch):
-        import hermes_cli.config as cfg_mod
-        import hermes_cli.runtime_provider as rp_mod
+        import lliam_cli.config as cfg_mod
+        import lliam_cli.runtime_provider as rp_mod
 
         monkeypatch.setattr(rp_mod, "has_named_custom_provider", lambda name: False)
         monkeypatch.setattr(
@@ -493,7 +493,7 @@ class TestResolveModelOverride:
         assert model == "gpt-5.4"
 
     def test_keeps_explicit_custom_name_unchanged(self, monkeypatch):
-        import hermes_cli.runtime_provider as rp_mod
+        import lliam_cli.runtime_provider as rp_mod
 
         # Even if the resolver claims no entry, the canonical "custom:<name>"
         # form is never stripped or pinned.

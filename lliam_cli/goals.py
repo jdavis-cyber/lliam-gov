@@ -503,8 +503,8 @@ def _get_session_db() -> Optional[Any]:
     non-standard launchers can still use the GoalManager.
     """
     try:
-        from hermes_constants import get_hermes_home
-        from hermes_state import SessionDB
+        from lliam_constants import get_hermes_home
+        from lliam_state import SessionDB
 
         home = str(get_hermes_home())
     except Exception as exc:  # pragma: no cover
@@ -674,7 +674,7 @@ def _goal_judge_max_tokens() -> int:
     back to the default rather than crashing the goal loop.
     """
     try:
-        from hermes_cli.config import load_config
+        from lliam_cli.config import load_config
 
         cfg = load_config()
         value = (

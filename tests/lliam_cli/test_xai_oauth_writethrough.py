@@ -17,7 +17,7 @@ import json
 
 import pytest
 
-from hermes_cli import auth
+from lliam_cli import auth
 
 
 def _write_store(path, store):

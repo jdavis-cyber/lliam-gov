@@ -29,7 +29,7 @@ import contextlib
 
 import pytest
 
-from hermes_cli import auth as auth_mod
+from lliam_cli import auth as auth_mod
 
 
 # ---------------------------------------------------------------------------

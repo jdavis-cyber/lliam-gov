@@ -414,7 +414,7 @@ class TestHistoryDisplay:
 
     def test_resume_updates_hermes_session_id_env_and_context(self, tmp_path):
         from gateway.session_context import _UNSET, _VAR_MAP, get_session_env
-        from hermes_state import SessionDB
+        from lliam_state import SessionDB
 
         cli = _make_cli()
         cli.session_id = "current_session"
@@ -624,7 +624,7 @@ class TestRootLevelProviderOverride:
 
     def test_normalize_root_model_keys_moves_to_model(self):
         """_normalize_root_model_keys migrates root keys into model section."""
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         config = {
             "provider": "opencode-go",
@@ -643,7 +643,7 @@ class TestRootLevelProviderOverride:
 
     def test_normalize_root_model_keys_does_not_override_existing(self):
         """Existing model.provider is never overridden by root-level key."""
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         config = {
             "provider": "stale-provider",
@@ -658,7 +658,7 @@ class TestRootLevelProviderOverride:
 
     def test_normalize_model_api_base_aliases_to_base_url(self):
         """model.api_base is migrated to model.base_url (issue #8919)."""
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         config = {
             "model": {
@@ -674,7 +674,7 @@ class TestRootLevelProviderOverride:
 
     def test_normalize_api_base_does_not_override_base_url(self):
         """An explicit model.base_url is never overridden by api_base."""
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         config = {
             "model": {
@@ -690,7 +690,7 @@ class TestRootLevelProviderOverride:
 
     def test_normalize_root_context_length_migrates_to_model(self):
         """Root-level context_length is migrated into the model section."""
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         config = {
             "context_length": 128000,
@@ -704,7 +704,7 @@ class TestRootLevelProviderOverride:
 
     def test_normalize_root_context_length_does_not_override_existing(self):
         """Existing model.context_length is not overridden by root-level key."""
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         config = {
             "context_length": 256000,
@@ -719,7 +719,7 @@ class TestRootLevelProviderOverride:
 
     def test_normalize_root_context_length_with_string_model(self):
         """Root-level context_length is migrated even when model is a string."""
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         config = {
             "context_length": 128000,
@@ -738,7 +738,7 @@ class TestRootLevelProviderOverride:
 
     def test_normalize_model_name_aliases_to_default(self):
         """model.name (custom-provider repro) becomes model.default (#34500)."""
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         config = {
             "model": {"name": "claude-sonnet-4-20250514", "provider": "my-litellm"},
@@ -749,7 +749,7 @@ class TestRootLevelProviderOverride:
 
     def test_normalize_model_alias_to_default(self):
         """model.model becomes model.default."""
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         result = _normalize_root_model_keys({"model": {"model": "via-model-key"}})
         assert result["model"]["default"] == "via-model-key"
@@ -757,7 +757,7 @@ class TestRootLevelProviderOverride:
 
     def test_normalize_explicit_default_wins_over_name(self):
         """An explicit model.default is never overridden, and a stale alias is dropped."""
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         result = _normalize_root_model_keys(
             {"model": {"default": "real-model", "name": "ignored"}}
@@ -766,7 +766,7 @@ class TestRootLevelProviderOverride:
         assert "name" not in result["model"]
 
     def test_normalize_explicit_default_wins_over_model(self):
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         result = _normalize_root_model_keys(
             {"model": {"default": "real-model", "model": "ignored"}}
@@ -776,7 +776,7 @@ class TestRootLevelProviderOverride:
 
     def test_normalize_model_wins_over_name(self):
         """Precedence: model > name when both are aliases and default is empty."""
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         result = _normalize_root_model_keys({"model": {"model": "m-key", "name": "n-key"}})
         assert result["model"]["default"] == "m-key"
@@ -784,14 +784,14 @@ class TestRootLevelProviderOverride:
 
     def test_normalize_empty_model_dict_stays_empty(self):
         """No id key anywhere → default stays empty (no fabricated value)."""
-        from hermes_cli.config import _normalize_root_model_keys
+        from lliam_cli.config import _normalize_root_model_keys
 
         result = _normalize_root_model_keys({"model": {"provider": "my-litellm"}})
         assert (result["model"].get("default") or "") == ""
 
     def test_normalize_model_name_save_roundtrip_migrates_key(self, tmp_path, monkeypatch):
         """A model.name config is permanently migrated to model.default on save."""
-        import hermes_cli.config as cfgmod
+        import lliam_cli.config as cfgmod
 
         home = tmp_path / ".hermes"
         home.mkdir()

@@ -17,8 +17,8 @@ secrets are never written to disk.
 Component separation:
     gateway.log only receives records from ``gateway.*`` loggers —
     platform adapters, session management, slash commands, delivery.
-    gui.log receives dashboard-side records from ``hermes_cli.web_server``,
-    ``hermes_cli.pty_bridge``, ``tui_gateway.*``, and ``uvicorn.*``.
+    gui.log receives dashboard-side records from ``lliam_cli.web_server``,
+    ``lliam_cli.pty_bridge``, ``tui_gateway.*``, and ``uvicorn.*``.
     agent.log remains the catch-all (everything goes there).
 
 Session context:
@@ -65,7 +65,7 @@ else:
     from logging.handlers import RotatingFileHandler  # noqa: E402
 
 
-from hermes_constants import get_config_path, get_hermes_home
+from lliam_constants import get_config_path, get_hermes_home
 
 # Sentinel to track whether setup_logging() has already run.  The function
 # is idempotent — calling it twice is safe but the second call is a no-op
@@ -217,11 +217,11 @@ COMPONENT_PREFIXES = {
     "gateway": ("gateway", "hermes_plugins", "plugins.platforms"),
     "agent": ("agent", "run_agent", "model_tools", "batch_runner"),
     "tools": ("tools",),
-    "cli": ("hermes_cli", "cli"),
+    "cli": ("lliam_cli", "cli"),
     "cron": ("cron",),
     "gui": (
-        "hermes_cli.web_server",
-        "hermes_cli.pty_bridge",
+        "lliam_cli.web_server",
+        "lliam_cli.pty_bridge",
         "tui_gateway",
         "uvicorn",
     ),
@@ -414,7 +414,7 @@ class _ManagedRotatingFileHandler(RotatingFileHandler):
     """
 
     def __init__(self, *args, **kwargs):
-        from hermes_cli.config import is_managed
+        from lliam_cli.config import is_managed
         self._managed = is_managed()
         super().__init__(*args, **kwargs)
         # Snapshot the inode of the currently open stream so emit() can
@@ -560,7 +560,7 @@ def _read_logging_config():
             # Managed scope: an administrator can pin logging.* too. Overlay via
             # the shared helper (fail-open) since this reads config.yaml directly.
             try:
-                from hermes_cli import managed_scope
+                from lliam_cli import managed_scope
                 cfg = managed_scope.apply_managed_overlay(cfg)
             except Exception:
                 pass

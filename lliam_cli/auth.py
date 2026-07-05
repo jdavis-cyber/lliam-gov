@@ -43,8 +43,8 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 
-from hermes_cli.config import get_hermes_home, get_config_path, read_raw_config
-from hermes_constants import OPENROUTER_BASE_URL, secure_parent_dir
+from lliam_cli.config import get_hermes_home, get_config_path, read_raw_config
+from lliam_constants import OPENROUTER_BASE_URL, secure_parent_dir
 from agent.credential_persistence import sanitize_borrowed_credential_payload
 from utils import atomic_replace, atomic_yaml_write, env_float, is_truthy_value
 
@@ -485,7 +485,7 @@ def get_anthropic_key() -> str:
 
         ANTHROPIC_API_KEY -> ANTHROPIC_TOKEN -> CLAUDE_CODE_OAUTH_TOKEN
     """
-    from hermes_cli.config import get_env_value
+    from lliam_cli.config import get_env_value
 
     for var in PROVIDER_REGISTRY["anthropic"].api_key_env_vars:
         value = get_env_value(var) or os.getenv(var, "")
@@ -563,7 +563,7 @@ def _resolve_api_key_provider_secret(
     if provider_id == "copilot":
         # Use the dedicated copilot auth module for proper token validation
         try:
-            from hermes_cli.copilot_auth import resolve_copilot_token, get_copilot_api_token
+            from lliam_cli.copilot_auth import resolve_copilot_token, get_copilot_api_token
             token, source = resolve_copilot_token()
             if token:
                 return get_copilot_api_token(token), source
@@ -573,7 +573,7 @@ def _resolve_api_key_provider_secret(
             pass
         return "", ""
 
-    from hermes_cli.config import get_env_value
+    from lliam_cli.config import get_env_value
     for env_var in pconfig.api_key_env_vars:
         # Check both os.environ and ~/.hermes/.env file
         val = (get_env_value(env_var) or "").strip()
@@ -802,7 +802,7 @@ def format_auth_error(error: Exception) -> str:
 
 def _format_nous_entitlement_auth_error(error: AuthError) -> str:
     try:
-        from hermes_cli.nous_account import (
+        from lliam_cli.nous_account import (
             format_nous_portal_entitlement_message,
             get_nous_portal_account_info,
         )
@@ -881,7 +881,7 @@ def _global_auth_file_path() -> Optional[Path]:
     See issue #18594 follow-up (credential_pool shadowing).
     """
     try:
-        from hermes_constants import get_default_hermes_root
+        from lliam_constants import get_default_hermes_root
         global_root = get_default_hermes_root()
     except Exception:
         return None
@@ -1403,7 +1403,7 @@ def is_provider_explicitly_configured(provider_id: str) -> bool:
 
     # 2. Check config.yaml model.provider
     try:
-        from hermes_cli.config import load_config
+        from lliam_cli.config import load_config
         cfg = load_config()
         model_cfg = cfg.get("model")
         if isinstance(model_cfg, dict):
@@ -1492,7 +1492,7 @@ def _get_config_hint_for_unknown_provider(provider_name: str) -> str:
     and returns a human-readable diagnostic, or empty string if nothing found.
     """
     try:
-        from hermes_cli.config import validate_config_structure
+        from lliam_cli.config import validate_config_structure
         issues = validate_config_structure()
         if not issues:
             return ""
@@ -1611,7 +1611,7 @@ def resolve_provider(
     # ("auto")) and any future bypass of that stage.
     _model_cfg: Any = None
     try:
-        from hermes_cli.config import load_config
+        from lliam_cli.config import load_config
 
         _model_cfg = (load_config() or {}).get("model")
         if isinstance(_model_cfg, dict):
@@ -2267,7 +2267,7 @@ def _spotify_client_id(
     explicit: Optional[str] = None,
     state: Optional[Dict[str, Any]] = None,
 ) -> str:
-    from hermes_cli.config import get_env_value
+    from lliam_cli.config import get_env_value
 
     candidates = (
         explicit,
@@ -2290,7 +2290,7 @@ def _spotify_redirect_uri(
     explicit: Optional[str] = None,
     state: Optional[Dict[str, Any]] = None,
 ) -> str:
-    from hermes_cli.config import get_env_value
+    from lliam_cli.config import get_env_value
 
     candidates = (
         explicit,
@@ -2307,7 +2307,7 @@ def _spotify_redirect_uri(
 
 
 def _spotify_api_base_url(state: Optional[Dict[str, Any]] = None) -> str:
-    from hermes_cli.config import get_env_value
+    from lliam_cli.config import get_env_value
 
     candidates = (
         get_env_value("HERMES_SPOTIFY_API_BASE_URL"),
@@ -2322,7 +2322,7 @@ def _spotify_api_base_url(state: Optional[Dict[str, Any]] = None) -> str:
 
 
 def _spotify_accounts_base_url(state: Optional[Dict[str, Any]] = None) -> str:
-    from hermes_cli.config import get_env_value
+    from lliam_cli.config import get_env_value
 
     candidates = (
         get_env_value("HERMES_SPOTIFY_ACCOUNTS_BASE_URL"),
@@ -2970,7 +2970,7 @@ def _spotify_interactive_setup(redirect_uri_hint: str) -> str:
 
     Raises SystemExit if the user aborts or submits an empty value.
     """
-    from hermes_cli.config import save_env_value
+    from lliam_cli.config import save_env_value
 
     print()
     print("=" * 70)
@@ -4737,7 +4737,7 @@ def _nous_shared_auth_dir() -> Path:
     Honors ``HERMES_SHARED_AUTH_DIR`` so tests can redirect it to a tmp
     path without touching the real user's home. Defaults to
     ``<hermes-root>/shared/``, where ``<hermes-root>`` is what
-    :func:`hermes_constants.get_default_hermes_root` returns — so
+    :func:`lliam_constants.get_default_hermes_root` returns — so
     Linux/macOS classic installs land at ``~/.hermes/shared/``, native
     Windows installs at ``%LOCALAPPDATA%\\hermes\\shared\\``, and
     Docker / custom ``HERMES_HOME`` deployments at
@@ -4747,7 +4747,7 @@ def _nous_shared_auth_dir() -> Path:
     override = os.getenv("HERMES_SHARED_AUTH_DIR", "").strip()
     if override:
         return Path(override).expanduser()
-    from hermes_constants import get_default_hermes_root
+    from lliam_constants import get_default_hermes_root
     return get_default_hermes_root() / "shared"
 
 
@@ -4760,7 +4760,7 @@ def _nous_shared_store_path() -> Path:
     # so forgetting to set it fails loudly instead of writing to the real
     # shared store).
     if os.environ.get("PYTEST_CURRENT_TEST"):
-        from hermes_constants import get_default_hermes_root
+        from lliam_constants import get_default_hermes_root
         real_home_shared = (
             get_default_hermes_root() / "shared" / NOUS_SHARED_STORE_FILENAME
         ).resolve(strict=False)
@@ -6244,7 +6244,7 @@ def _get_azure_foundry_auth_status() -> Dict[str, Any]:
     """
     info: Dict[str, Any] = {"provider": "azure-foundry"}
     try:
-        from hermes_cli.config import load_config, get_env_value
+        from lliam_cli.config import load_config, get_env_value
         cfg = load_config()
     except Exception:
         cfg = {}
@@ -6437,7 +6437,7 @@ def _update_config_for_provider(
     # Clear stale endpoint credentials left over from a previous custom provider.
     # Built-in providers resolve credentials from env/auth state, not inline
     # model.api_key.
-    from hermes_cli.config import clear_model_endpoint_credentials
+    from lliam_cli.config import clear_model_endpoint_credentials
 
     clear_model_endpoint_credentials(model_cfg)
 
@@ -6531,7 +6531,7 @@ def _confirm_expensive_model_selection(
 ) -> bool:
     """Prompt before saving a model whose known pricing exceeds guardrails."""
     try:
-        from hermes_cli.model_cost_guard import expensive_model_warning
+        from lliam_cli.model_cost_guard import expensive_model_warning
 
         warning = expensive_model_warning(
             model_id,
@@ -6575,7 +6575,7 @@ def _prompt_model_selection(
     If *unavailable_models* is provided, those models are shown grayed out
     and unselectable, with an upgrade link to *portal_url*.
     """
-    from hermes_cli.models import _format_price_per_mtok
+    from lliam_cli.models import _format_price_per_mtok
 
     _unavailable = unavailable_models or []
 
@@ -6667,7 +6667,7 @@ def _prompt_model_selection(
     # of simple_term_menu, which conflicts with /dev/tty and left ESC/arrow
     # keys unreliable in the setup model picker.
     try:
-        from hermes_cli.curses_ui import curses_radiolist
+        from lliam_cli.curses_ui import curses_radiolist
 
         choices = [_label(mid) for mid in ordered]
         choices.append("Enter custom model name")
@@ -6763,7 +6763,7 @@ def _save_model_choice(model_id: str) -> None:
     The model is stored in config.yaml only — NOT in .env.  This avoids
     conflicts in multi-agent setups where env vars would stomp each other.
     """
-    from hermes_cli.config import save_config, load_config
+    from lliam_cli.config import save_config, load_config
 
     config = load_config()
     # Always use dict format so provider/base_url can be stored alongside
@@ -6851,7 +6851,7 @@ def _login_openai_codex(
     config_path = _update_config_for_provider("openai-codex", creds.get("base_url", DEFAULT_CODEX_BASE_URL))
     print()
     print("Login successful!")
-    from hermes_constants import display_hermes_home as _dhh
+    from lliam_constants import display_hermes_home as _dhh
     print(f"  Auth state: {_dhh()}/auth.json")
     print(f"  Config updated: {config_path} (model.provider=openai-codex)")
 
@@ -6911,7 +6911,7 @@ def _login_xai_oauth(
     config_path = _update_config_for_provider("xai-oauth", creds.get("base_url", DEFAULT_XAI_OAUTH_BASE_URL))
     print()
     print("Login successful!")
-    from hermes_constants import display_hermes_home as _dhh
+    from lliam_constants import display_hermes_home as _dhh
     print(f"  Auth state: {_dhh()}/auth.json")
     print(f"  Config updated: {config_path} (model.provider=xai-oauth)")
 
@@ -8215,7 +8215,7 @@ def _login_nous(args, pconfig: ProviderConfig) -> None:
                     code="invalid_token",
                 )
 
-            from hermes_cli.models import (
+            from lliam_cli.models import (
                 get_curated_nous_model_ids, get_pricing_for_provider,
                 check_nous_free_tier, partition_nous_models_by_tier,
                 union_with_portal_free_recommendations,
@@ -8234,7 +8234,7 @@ def _login_nous(args, pconfig: ProviderConfig) -> None:
                 _portal_for_recs = auth_state.get("portal_base_url", "")
                 if free_tier:
                     try:
-                        from hermes_cli.nous_account import (
+                        from lliam_cli.nous_account import (
                             format_nous_portal_entitlement_message,
                             get_nous_portal_account_info,
                         )

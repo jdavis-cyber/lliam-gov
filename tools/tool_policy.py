@@ -95,8 +95,8 @@ def _as_set(values: Any) -> Set[str]:
 def _is_strict() -> bool:
     """True when the effective gov config posture is strict (no-op otherwise)."""
     try:
-        from hermes_cli import config as _cfg
-        from hermes_cli import posture_resolver as _pr
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
         return _pr.is_strict(_cfg.load_config())
     except Exception:
         return False
@@ -154,7 +154,7 @@ def load_skill_policy() -> Dict[str, Any]:
 def _effective_config_disabled() -> Set[str]:
     """skills.disabled from the OVERLAY-aware effective config (load_config)."""
     try:
-        from hermes_cli import config as _cfg
+        from lliam_cli import config as _cfg
         cfg = _cfg.load_config()
         return _as_set((cfg.get("skills") or {}).get("disabled"))
     except Exception:
@@ -414,7 +414,7 @@ def tool_denied(tool_name: str) -> bool:
     if not _is_strict():
         return False
     try:
-        from hermes_cli import config as _cfg
+        from lliam_cli import config as _cfg
         sec = (_cfg.load_config().get("security") or {})
         return (tool_name or "").strip() in _as_set(sec.get("tool_denylist"))
     except Exception:

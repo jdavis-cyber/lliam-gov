@@ -15,7 +15,7 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from hermes_cli.config import (
+from lliam_cli.config import (
     cfg_get,
     load_config,
     save_config,
@@ -23,9 +23,9 @@ from hermes_cli.config import (
     save_env_value,
     get_hermes_home,  # noqa: F401 — used by test mocks
 )
-from hermes_cli.colors import Colors, color
-from hermes_constants import display_hermes_home
-from hermes_cli.mcp_security import validate_mcp_server_entry
+from lliam_cli.colors import Colors, color
+from lliam_constants import display_hermes_home
+from lliam_cli.mcp_security import validate_mcp_server_entry
 from tools.mcp_tool import _ENV_VAR_PATTERN
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ def _confirm(question: str, default: bool = True) -> bool:
 
 
 def _prompt(question: str, *, password: bool = False, default: str = "") -> str:
-    from hermes_cli.cli_output import prompt as _shared_prompt
+    from lliam_cli.cli_output import prompt as _shared_prompt
     return _shared_prompt(question, default=default, password=password)
 
 
@@ -206,7 +206,7 @@ def _resolve_mcp_server_config(config: dict) -> dict:
     from tools.mcp_tool import _interpolate_env_vars
 
     try:
-        from hermes_cli.env_loader import load_hermes_dotenv
+        from lliam_cli.env_loader import load_hermes_dotenv
         load_hermes_dotenv()
     except Exception:  # pragma: no cover — defensive
         pass
@@ -302,7 +302,7 @@ def cmd_mcp_add(args):
     url = getattr(args, "url", None)
     # Read from `mcp_command` (set by --command via explicit dest) — see
     # mcp_add_p.add_argument("--command", dest="mcp_command", ...) in
-    # hermes_cli/main.py for why the dest is renamed.
+    # lliam_cli/main.py for why the dest is renamed.
     command = getattr(args, "mcp_command", None)
     cmd_args = getattr(args, "args", None) or []
     if cmd_args and cmd_args[0] == "--":
@@ -464,7 +464,7 @@ def cmd_mcp_add(args):
 
     if choice in {"s", "select"}:
         # Interactive tool selection
-        from hermes_cli.curses_ui import curses_checklist
+        from lliam_cli.curses_ui import curses_checklist
 
         labels = [f"{t[0]}  —  {t[1]}" for t in tools]
         pre_selected = set(range(len(tools)))
@@ -875,7 +875,7 @@ def cmd_mcp_configure(args):
     print()
 
     # Interactive checklist
-    from hermes_cli.curses_ui import curses_checklist
+    from lliam_cli.curses_ui import curses_checklist
 
     labels = [f"{t[0]}  —  {t[1]}" for t in all_tools]
 
@@ -924,15 +924,15 @@ def mcp_command(args):
     # Catalog subcommands live in mcp_picker / mcp_catalog. Import lazily so
     # the original `mcp_config` module stays import-cheap.
     if action == "picker":
-        from hermes_cli.mcp_picker import run_picker
+        from lliam_cli.mcp_picker import run_picker
         run_picker()
         return
     if action == "catalog":
-        from hermes_cli.mcp_picker import show_catalog
+        from lliam_cli.mcp_picker import show_catalog
         show_catalog()
         return
     if action == "install":
-        from hermes_cli.mcp_picker import install_by_name
+        from lliam_cli.mcp_picker import install_by_name
         import sys as _sys
         rc = install_by_name(getattr(args, "identifier", "") or "")
         if rc:
@@ -958,7 +958,7 @@ def mcp_command(args):
     else:
         # No subcommand — drop the user into the catalog picker. This is the
         # "try enabling and it flows you into setup" UX matching `hermes plugin`.
-        from hermes_cli.mcp_picker import run_picker
+        from lliam_cli.mcp_picker import run_picker
         run_picker()
         print(color("  Commands:", Colors.CYAN))
         _info("hermes mcp                                    Open the catalog picker (default)")

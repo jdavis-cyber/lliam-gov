@@ -27,7 +27,7 @@ import sys
 from contextlib import redirect_stderr, redirect_stdout
 from typing import Optional
 
-from hermes_cli.fallback_config import get_fallback_chain
+from lliam_cli.fallback_config import get_fallback_chain
 
 
 def _normalize_toolsets(toolsets: object = None) -> list[str] | None:
@@ -63,7 +63,7 @@ def _validate_explicit_toolsets(toolsets: object = None) -> tuple[list[str] | No
 
     if unresolved:
         try:
-            from hermes_cli.plugins import discover_plugins
+            from lliam_cli.plugins import discover_plugins
 
             discover_plugins()
             plugin_valid = [name for name in unresolved if validate_toolset(name)]
@@ -87,8 +87,8 @@ def _validate_explicit_toolsets(toolsets: object = None) -> tuple[list[str] | No
     mcp_disabled: set[str] = set()
     if unresolved:
         try:
-            from hermes_cli.config import read_raw_config
-            from hermes_cli.tools_config import _parse_enabled_flag
+            from lliam_cli.config import read_raw_config
+            from lliam_cli.tools_config import _parse_enabled_flag
 
             cfg = read_raw_config()
             mcp_servers = cfg.get("mcp_servers") if isinstance(cfg.get("mcp_servers"), dict) else {}
@@ -239,7 +239,7 @@ def _create_session_db_for_oneshot():
     advertised but every call returns "Session database not available.".
     """
     try:
-        from hermes_state import SessionDB
+        from lliam_state import SessionDB
 
         return SessionDB()
     except Exception as exc:
@@ -258,10 +258,10 @@ def _run_agent(
     run a single conversation.  Returns ``(final_response, run_result)``."""
     # Imports are local so they don't run when hermes is invoked for
     # other commands (keeps top-level CLI startup cheap).
-    from hermes_cli.config import load_config
-    from hermes_cli.models import detect_provider_for_model
-    from hermes_cli.runtime_provider import resolve_runtime_provider
-    from hermes_cli.tools_config import _get_platform_tools
+    from lliam_cli.config import load_config
+    from lliam_cli.models import detect_provider_for_model
+    from lliam_cli.runtime_provider import resolve_runtime_provider
+    from lliam_cli.tools_config import _get_platform_tools
     from run_agent import AIAgent
 
     cfg = load_config()
@@ -296,7 +296,7 @@ def _run_agent(
             # These map a user-defined alias to (model, provider, base_url) for
             # endpoints not in any catalog (local servers, custom proxies, etc.).
             try:
-                from hermes_cli import model_switch as _ms
+                from lliam_cli import model_switch as _ms
                 _ms._ensure_direct_aliases()
                 direct = _ms.DIRECT_ALIASES.get(explicit_model.strip().lower())
             except Exception:

@@ -89,7 +89,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from hermes_cli.sqlite_util import add_column_if_missing as _add_column_if_missing
+from lliam_cli.sqlite_util import add_column_if_missing as _add_column_if_missing
 from toolsets import get_toolset_names
 
 _log = logging.getLogger(__name__)
@@ -151,8 +151,8 @@ def _fire_kanban_lifecycle_hook(event: str, task_id: str, **fields: Any) -> None
     it through.
     """
     try:
-        from hermes_cli.plugins import invoke_hook
-        from hermes_cli.profiles import get_active_profile_name
+        from lliam_cli.plugins import invoke_hook
+        from lliam_cli.profiles import get_active_profile_name
         try:
             profile_name = get_active_profile_name()
         except Exception:
@@ -386,7 +386,7 @@ def kanban_home() -> Path:
     override = os.environ.get("HERMES_KANBAN_HOME", "").strip()
     if override:
         return Path(override).expanduser()
-    from hermes_constants import get_default_hermes_root
+    from lliam_constants import get_default_hermes_root
     return get_default_hermes_root()
 
 
@@ -1107,7 +1107,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     workspace_kind       TEXT NOT NULL DEFAULT 'scratch',
     workspace_path       TEXT,
     branch_name          TEXT,
-    -- Optional link to a first-class Project (hermes_cli/projects_db). When set,
+    -- Optional link to a first-class Project (lliam_cli/projects_db). When set,
     -- the task's worktree is anchored under the project's primary repo with a
     -- deterministic branch name instead of a random wt/<task-id> fallback.
     project_id           TEXT,
@@ -1723,7 +1723,7 @@ def connect(
         try:
             conn.row_factory = sqlite3.Row
             with _INIT_LOCK:
-                from hermes_state import apply_wal_with_fallback
+                from lliam_state import apply_wal_with_fallback
                 apply_wal_with_fallback(conn, db_label=f"kanban.db ({path.name})")
                 conn.execute("PRAGMA synchronous=FULL")
                 conn.execute("PRAGMA wal_autocheckpoint=100")
@@ -1754,8 +1754,8 @@ def connect(
                 # startup threads do not race before _INITIALIZED_PATHS is populated.
                 # WAL doesn't work on network filesystems (NFS/SMB/FUSE). Shared helper
                 # falls back to DELETE with one WARNING so kanban stays usable there.
-                # See hermes_state._WAL_INCOMPAT_MARKERS for detection logic.
-                from hermes_state import apply_wal_with_fallback
+                # See lliam_state._WAL_INCOMPAT_MARKERS for detection logic.
+                from lliam_state import apply_wal_with_fallback
                 apply_wal_with_fallback(conn, db_label=f"kanban.db ({path.name})")
                 # FULL (was NORMAL): fsync before each checkpoint to narrow the
                 # crash window that can leave a b-tree page header torn.
@@ -2378,7 +2378,7 @@ def _canonical_assignee(assignee: Optional[str]) -> Optional[str]:
     """Lowercase-assignee normalization for Kanban rows (dashboard/CLI parity)."""
     if assignee is None:
         return None
-    from hermes_cli.profiles import normalize_profile_name
+    from lliam_cli.profiles import normalize_profile_name
 
     return normalize_profile_name(assignee)
 
@@ -2463,7 +2463,7 @@ def create_task(
         project_id = str(project_id).strip() or None
     if project_id:
         try:
-            from hermes_cli import projects_db as _pdb
+            from lliam_cli import projects_db as _pdb
 
             with _pdb.connect_closing() as _pconn:
                 project_obj = _pdb.get_project(_pconn, project_id)
@@ -6894,7 +6894,7 @@ def has_spawnable_ready(conn: sqlite3.Connection) -> bool:
     if not rows:
         return False
     try:
-        from hermes_cli.profiles import profile_exists  # local import: avoids cycle
+        from lliam_cli.profiles import profile_exists  # local import: avoids cycle
     except Exception:
         # Can't introspect — assume spawnable, preserve legacy behavior.
         return True
@@ -6920,7 +6920,7 @@ def has_spawnable_review(conn: sqlite3.Connection) -> bool:
     if not rows:
         return False
     try:
-        from hermes_cli.profiles import profile_exists  # local import: avoids cycle
+        from lliam_cli.profiles import profile_exists  # local import: avoids cycle
     except Exception:
         return True
     for row in rows:
@@ -7128,7 +7128,7 @@ def _dispatch_once_locked(
     _default_assignee_resolved = False
     if _default_assignee:
         try:
-            from hermes_cli.profiles import profile_exists as _pe
+            from lliam_cli.profiles import profile_exists as _pe
             _default_assignee_resolved = bool(_pe(_default_assignee))
         except Exception:
             # Profiles module not importable (test stubs, exotic envs).
@@ -7195,7 +7195,7 @@ def _dispatch_once_locked(
         # the task would loop back to ``ready`` on next tick, and we'd
         # burn CPU forever (#kanban-dispatcher-crash-loop 2026-05-05).
         try:
-            from hermes_cli.profiles import profile_exists  # local import: avoids cycle
+            from lliam_cli.profiles import profile_exists  # local import: avoids cycle
         except Exception:
             profile_exists = None  # type: ignore[assignment]
         if profile_exists is not None and not profile_exists(row_assignee):
@@ -7335,7 +7335,7 @@ def _dispatch_once_locked(
             result.skipped_unassigned.append(row["id"])
             continue
         try:
-            from hermes_cli.profiles import profile_exists
+            from lliam_cli.profiles import profile_exists
         except Exception:
             profile_exists = None  # type: ignore[assignment]
         if profile_exists is not None and not profile_exists(row["assignee"]):
@@ -7414,7 +7414,7 @@ def worker_log_rotation_config(kanban_cfg: Optional[dict] = None) -> tuple[int, 
     """
     if kanban_cfg is None:
         try:
-            from hermes_cli.config import load_config
+            from lliam_cli.config import load_config
 
             kanban_cfg = (load_config().get("kanban") or {})
         except Exception:
@@ -7481,10 +7481,10 @@ def _rotate_worker_log(
 
 def _module_hermes_argv() -> list[str]:
     """Return the interpreter-bound Hermes CLI invocation."""
-    # ``hermes_cli.main`` is the console-script target declared in
+    # ``lliam_cli.main`` is the console-script target declared in
     # pyproject.toml, NOT a top-level ``hermes`` package — there is no
     # ``hermes`` package to import.
-    return [sys.executable, "-m", "hermes_cli.main"]
+    return [sys.executable, "-m", "lliam_cli.main"]
 
 
 def _absolute_hermes_path(path: str) -> str:
@@ -7568,14 +7568,14 @@ def _resolve_hermes_argv() -> list[str]:
        launching batch shims is also unsafe with task-derived argv. The
        dispatcher therefore falls back to the interpreter-bound module form
        for implicit ``.cmd`` / ``.bat`` shims.
-    3. ``sys.executable -m hermes_cli.main`` — fallback for setups where
+    3. ``sys.executable -m lliam_cli.main`` — fallback for setups where
        Hermes is launched from a venv and the ``hermes`` shim is not on
        the dispatcher's ``$PATH`` (cron, systemd ``User=`` services,
        launchd jobs, detached processes, etc.). Goes through the running
        interpreter so the result is independent of ``$PATH``.
 
     Mirrors ``gateway.run._resolve_hermes_bin`` for the same reason. Kept
-    local (not imported from gateway) because ``hermes_cli`` sits below
+    local (not imported from gateway) because ``lliam_cli`` sits below
     ``gateway`` in the dependency order.
     """
     import shutil
@@ -7639,9 +7639,9 @@ def _resolve_worker_cli_toolsets(hermes_home: Optional[str]) -> Optional[list[st
     if not hermes_home:
         return None
     try:
-        from hermes_constants import reset_hermes_home_override, set_hermes_home_override
-        from hermes_cli.config import load_config
-        from hermes_cli.tools_config import _get_platform_tools
+        from lliam_constants import reset_hermes_home_override, set_hermes_home_override
+        from lliam_cli.config import load_config
+        from lliam_cli.tools_config import _get_platform_tools
 
         token = set_hermes_home_override(hermes_home)
         try:
@@ -7681,7 +7681,7 @@ def _default_spawn(
     if not task.assignee:
         raise ValueError(f"task {task.id} has no assignee")
 
-    from hermes_cli.profiles import normalize_profile_name
+    from lliam_cli.profiles import normalize_profile_name
 
     profile_arg = normalize_profile_name(task.assignee)
 
@@ -7692,12 +7692,12 @@ def _default_spawn(
     # (fallback_providers, toolsets, agent settings, etc.) instead of the root
     # config.  Without this, `env = dict(os.environ)` copies only the parent's
     # env, and when the child process starts `hermes -p <name>` the
-    # _apply_profile_override() runs *before* hermes_constants is imported.
+    # _apply_profile_override() runs *before* lliam_constants is imported.
     # If HERMES_HOME is absent from the child's env, get_hermes_home() falls
     # back to Path.home() / ".hermes" (the DEFAULT profile root), ignoring the
     # profile-specific config entirely.  Fixes profile-scoped fallback_providers
     # being invisible to kanban workers.
-    from hermes_cli.profiles import resolve_profile_env
+    from lliam_cli.profiles import resolve_profile_env
     try:
         env["HERMES_HOME"] = resolve_profile_env(profile_arg)
     except FileNotFoundError:
@@ -8547,11 +8547,11 @@ def list_profiles_on_disk() -> list[str]:
     - the implicit ``default`` profile when the default Hermes root exists
 
     Reads profile paths directly so this module has no import dependency on
-    ``hermes_cli.profiles`` (which pulls in a large chunk of the CLI startup
+    ``lliam_cli.profiles`` (which pulls in a large chunk of the CLI startup
     path).
     """
     try:
-        from hermes_constants import get_default_hermes_root
+        from lliam_constants import get_default_hermes_root
         default_root = get_default_hermes_root()
         profiles_dir = default_root / "profiles"
     except Exception:

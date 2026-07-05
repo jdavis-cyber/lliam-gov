@@ -29,7 +29,7 @@ def _run_apply_profile_override(
     """
     # When HERMES_HOME is unset the profile store lives under the platform
     # default home. Post-rename that default is ``~/.lliam`` (see
-    # hermes_constants.get_default_hermes_root); when HERMES_HOME is provided it
+    # lliam_constants.get_default_hermes_root); when HERMES_HOME is provided it
     # IS the store root. Create active_profile/profiles where the production
     # code will actually read them.
     hermes_root = Path(hermes_home) if hermes_home is not None else tmp_path / ".lliam"
@@ -50,7 +50,7 @@ def _run_apply_profile_override(
 
     monkeypatch.setattr(sys, "argv", argv or ["hermes", "gateway", "start"])
 
-    from hermes_cli.main import _apply_profile_override
+    from lliam_cli.main import _apply_profile_override
     _apply_profile_override()
 
     return os.environ.get("HERMES_HOME")
@@ -110,7 +110,7 @@ class TestApplyProfileOverrideHermesHomeGuard:
         monkeypatch.setenv("HERMES_HOME", str(profile_dir))
         monkeypatch.setattr(sys, "argv", ["hermes", "gateway", "start"])
 
-        from hermes_cli.main import _apply_profile_override
+        from lliam_cli.main import _apply_profile_override
         _apply_profile_override()
 
         assert os.environ.get("HERMES_HOME") == str(profile_dir), (
@@ -149,7 +149,7 @@ class TestApplyProfileOverrideHermesHomeGuard:
 
         monkeypatch.setattr(pwd, "getpwnam", lambda name: SimpleNamespace(pw_dir=str(user_home)))
 
-        from hermes_cli.main import _apply_profile_override
+        from lliam_cli.main import _apply_profile_override
         _apply_profile_override()
 
         assert os.environ.get("HERMES_HOME") == str(profile_dir)
@@ -165,7 +165,7 @@ class TestApplyProfileOverrideHermesHomeGuard:
         monkeypatch.setattr(sys, "argv", ["hermes", "gateway", "start"])
         (hermes_root / "active_profile").write_text("default")
 
-        from hermes_cli.main import _apply_profile_override
+        from lliam_cli.main import _apply_profile_override
         _apply_profile_override()
 
         assert os.environ.get("HERMES_HOME") is None
@@ -199,7 +199,7 @@ class TestApplyProfileOverrideHermesHomeGuard:
         monkeypatch.delenv("HERMES_HOME", raising=False)
         monkeypatch.setattr(sys, "argv", list(argv))
 
-        from hermes_cli.main import _apply_profile_override
+        from lliam_cli.main import _apply_profile_override
         _apply_profile_override()
 
         assert os.environ.get("HERMES_HOME") is None
@@ -283,7 +283,7 @@ class TestSupervisedChildIgnoresStickyProfile:
         monkeypatch.setenv("HERMES_S6_SUPERVISED_CHILD", "1")
         monkeypatch.setattr(sys, "argv", ["hermes", "gateway", "run"])
 
-        from hermes_cli.main import _apply_profile_override
+        from lliam_cli.main import _apply_profile_override
         _apply_profile_override()
 
         assert os.environ.get("HERMES_HOME") == str(hermes_root), (
@@ -325,7 +325,7 @@ class TestSupervisedChildIgnoresStickyProfile:
         monkeypatch.setenv("HERMES_S6_SUPERVISED_CHILD", "1")
         monkeypatch.setattr(sys, "argv", ["hermes", "-p", "coder", "gateway", "run"])
 
-        from hermes_cli.main import _apply_profile_override
+        from lliam_cli.main import _apply_profile_override
         _apply_profile_override()
 
         result = os.environ.get("HERMES_HOME")

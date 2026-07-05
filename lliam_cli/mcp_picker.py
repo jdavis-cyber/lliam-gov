@@ -22,10 +22,10 @@ import sys
 from dataclasses import dataclass
 from typing import List, Optional
 
-from hermes_cli.colors import Colors, color
-from hermes_cli.cli_output import prompt_yes_no
-from hermes_cli.curses_ui import curses_single_select
-from hermes_cli.mcp_catalog import (
+from lliam_cli.colors import Colors, color
+from lliam_cli.cli_output import prompt_yes_no
+from lliam_cli.curses_ui import curses_single_select
+from lliam_cli.mcp_catalog import (
     CatalogEntry,
     CatalogError,
     catalog_diagnostics,
@@ -36,7 +36,7 @@ from hermes_cli.mcp_catalog import (
     installed_servers,
     uninstall_entry,
 )
-from hermes_cli.config import load_config, save_config
+from lliam_cli.config import load_config, save_config
 
 
 # ─── Status badges ────────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ def _configure_tools(name: str) -> None:
     server, displays a checklist, and writes ``tools.include``.
     """
     import argparse
-    from hermes_cli.mcp_config import cmd_mcp_configure
+    from lliam_cli.mcp_config import cmd_mcp_configure
 
     cmd_mcp_configure(argparse.Namespace(name=name))
 
@@ -304,7 +304,7 @@ def install_by_name(identifier: str) -> int:
     Returns 0 on success, non-zero on failure (so the CLI can propagate
     exit codes).
     """
-    from hermes_cli.mcp_catalog import get_entry
+    from lliam_cli.mcp_catalog import get_entry
 
     entry = get_entry(identifier)
     if entry is None:

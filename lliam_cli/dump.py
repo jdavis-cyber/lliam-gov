@@ -13,9 +13,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from hermes_cli.config import get_hermes_home, get_env_path, get_project_root, load_config
-from hermes_cli.env_loader import load_hermes_dotenv
-from hermes_constants import display_hermes_home
+from lliam_cli.config import get_hermes_home, get_env_path, get_project_root, load_config
+from lliam_cli.env_loader import load_hermes_dotenv
+from lliam_constants import display_hermes_home
 from agent.skill_utils import is_excluded_skill_path
 
 
@@ -26,7 +26,7 @@ def _get_git_commit(project_root: Path) -> str:
     The published Docker image excludes ``.git`` from the build context, so
     that lookup always fails — we fall back to the baked-in build SHA written
     to ``<project_root>/.hermes_build_sha`` by the Dockerfile's
-    ``HERMES_GIT_SHA`` build-arg (see ``hermes_cli/build_info.py``).
+    ``HERMES_GIT_SHA`` build-arg (see ``lliam_cli/build_info.py``).
     The output format is identical regardless of source.
     """
     try:
@@ -46,7 +46,7 @@ def _get_git_commit(project_root: Path) -> str:
     # images, absent otherwise).  Defers the import so the dump module
     # stays cheap on non-dump code paths.
     try:
-        from hermes_cli.build_info import get_build_sha
+        from lliam_cli.build_info import get_build_sha
         baked = get_build_sha(short=8)
         if baked:
             return baked
@@ -94,7 +94,7 @@ def _redact(value: str) -> str:
 def _gateway_status() -> str:
     """Return a short gateway status string."""
     try:
-        from hermes_cli.gateway import get_gateway_runtime_snapshot
+        from lliam_cli.gateway import get_gateway_runtime_snapshot
 
         snapshot = get_gateway_runtime_snapshot()
         if snapshot.running:
@@ -194,7 +194,7 @@ def _config_overrides(config: dict) -> dict[str, str]:
     
     Returns a flat dict of dotpath -> value for interesting overrides.
     """
-    from hermes_cli.config import DEFAULT_CONFIG
+    from lliam_cli.config import DEFAULT_CONFIG
 
     overrides = {}
 
@@ -255,7 +255,7 @@ def run_dump(args):
     hermes_home = get_hermes_home()
 
     try:
-        from hermes_cli import __version__
+        from lliam_cli import __version__
     except ImportError:
         __version__ = "(unknown)"
 
@@ -271,7 +271,7 @@ def run_dump(args):
 
     # Profile
     try:
-        from hermes_cli.profiles import get_active_profile_name
+        from lliam_cli.profiles import get_active_profile_name
         profile = get_active_profile_name() or "(default)"
     except Exception:
         profile = "(default)"

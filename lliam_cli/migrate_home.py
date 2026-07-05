@@ -6,7 +6,7 @@ LLIAM_HOME / HERMES_HOME / active profile), so isolated and profile homes migrat
 correctly and the operator's real ~/.hermes is never touched during isolated runs.
 
 Never invoked at import time — only from an explicit startup call site (see
-``hermes_cli/main.py:main``). Importing this module must not touch the filesystem.
+``lliam_cli/main.py:main``). Importing this module must not touch the filesystem.
 """
 
 import shutil

@@ -51,8 +51,8 @@ _SCHEMA_REJECT_LOGGED: set = set()
 
 def _is_strict() -> bool:
     try:
-        from hermes_cli import config as _cfg
-        from hermes_cli import posture_resolver as _pr
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
         return _pr.is_strict(_cfg.load_config())
     except Exception:
         return False
@@ -60,7 +60,7 @@ def _is_strict() -> bool:
 
 def _security_cfg() -> Dict[str, Any]:
     try:
-        from hermes_cli import config as _cfg
+        from lliam_cli import config as _cfg
         return (_cfg.load_config().get("security") or {})
     except Exception:
         return {}

@@ -19,7 +19,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from hermes_constants import get_hermes_home
+from lliam_constants import get_hermes_home
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class _UvResult(str):
 
     ``ensure_uv()``'s arity has flipped between a single path string and a
     ``(path, fresh_bootstrap)`` tuple across releases. ``hermes update`` runs
-    the call site from the *old*, already-imported ``hermes_cli.main`` against
+    the call site from the *old*, already-imported ``lliam_cli.main`` against
     this *freshly pulled* module, so the two can disagree on how many values
     ``ensure_uv()`` returns. An install parked on a 2-tuple release runs
     ``uv_bin, fresh_bootstrap = ensure_uv()`` against the single-value module

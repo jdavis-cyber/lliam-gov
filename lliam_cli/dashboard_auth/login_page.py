@@ -17,13 +17,13 @@ bundle loaded.
 Test-stable class names: the existing test suite extracts the
 ``class="provider-btn"`` anchor href to walk the OAuth flow. That
 class name MUST NOT change without updating
-``tests/hermes_cli/test_dashboard_auth_401_reauth.py``.
+``tests/lliam_cli/test_dashboard_auth_401_reauth.py``.
 """
 from __future__ import annotations
 
 import html
 
-from hermes_cli.dashboard_auth import list_session_providers
+from lliam_cli.dashboard_auth import list_session_providers
 
 # Inline minimal CSS. The dashboard's full skin lives in the React
 # bundle, which we deliberately do NOT load here — the login page must

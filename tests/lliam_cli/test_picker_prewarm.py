@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import hermes_cli.model_switch as ms
+import lliam_cli.model_switch as ms
 
 
 def _reset_guard():

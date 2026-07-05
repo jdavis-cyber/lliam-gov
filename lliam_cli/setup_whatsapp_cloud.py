@@ -2,7 +2,7 @@
 Interactive setup wizard for the WhatsApp Cloud API adapter.
 
 Entry point: ``hermes whatsapp-cloud`` (dispatched from
-``cmd_whatsapp_cloud`` in ``hermes_cli/main.py``).
+``cmd_whatsapp_cloud`` in ``lliam_cli/main.py``).
 
 Walks the user through the 6 credentials Meta requires + recipient
 allowlist, auto-generates the verify token, and prints exact follow-up
@@ -235,7 +235,7 @@ def run_whatsapp_cloud_setup() -> int:
     Returns 0 on full success, 1 on user abort, 2 on partial completion
     (some fields written but the user bailed before finishing).
     """
-    from hermes_cli.config import get_env_value, save_env_value
+    from lliam_cli.config import get_env_value, save_env_value
 
     print()
     print("⚕ WhatsApp Business Cloud API Setup")

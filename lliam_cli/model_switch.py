@@ -10,8 +10,8 @@ share the same core pipeline:
 This module ties together the foundation layers:
 
 - ``agent.models_dev``            -- models.dev catalog, ModelInfo, ProviderInfo
-- ``hermes_cli.providers``        -- canonical provider identity + overlays
-- ``hermes_cli.model_normalize``  -- per-provider name formatting
+- ``lliam_cli.providers``        -- canonical provider identity + overlays
+- ``lliam_cli.model_normalize``  -- per-provider name formatting
 
 Provider switching uses the ``--provider`` flag exclusively.
 No colon-based ``provider:model`` syntax — colons are reserved for
@@ -25,7 +25,7 @@ import re
 from dataclasses import dataclass
 from typing import List, NamedTuple, Optional
 
-from hermes_cli.providers import (
+from lliam_cli.providers import (
     ProviderDef,
     custom_provider_slug,
     determine_api_mode,
@@ -33,7 +33,7 @@ from hermes_cli.providers import (
     is_aggregator,
     resolve_provider_full,
 )
-from hermes_cli.model_normalize import (
+from lliam_cli.model_normalize import (
     normalize_model_for_provider,
 )
 from agent.models_dev import (
@@ -221,7 +221,7 @@ def _load_direct_aliases() -> dict[str, DirectAlias]:
     """
     merged = dict(_BUILTIN_DIRECT_ALIASES)
     try:
-        from hermes_cli.config import load_config
+        from lliam_cli.config import load_config
         cfg = load_config()
 
         # --- model_aliases (dict-based format) ---
@@ -270,7 +270,7 @@ def _ensure_direct_aliases() -> None:
     """Lazy-load direct aliases on first use.
 
     Mutates the existing DIRECT_ALIASES dict in place rather than rebinding
-    the module attribute. This keeps `from hermes_cli.model_switch import
+    the module attribute. This keeps `from lliam_cli.model_switch import
     DIRECT_ALIASES` references valid in callers — rebinding would leave them
     pointing at a stale empty dict.
     """
@@ -385,7 +385,7 @@ def resolve_persist_behavior(is_global: bool, is_session: bool) -> bool:
     if is_global:
         return True
     try:
-        from hermes_cli.config import load_config
+        from lliam_cli.config import load_config
 
         model_cfg = load_config().get("model")
         if isinstance(model_cfg, dict):
@@ -548,7 +548,7 @@ def resolve_alias(
     # yet synced to the registry).
     catalog = list_provider_models(current_provider)
     try:
-        from hermes_cli.models import _PROVIDER_MODELS
+        from lliam_cli.models import _PROVIDER_MODELS
         static = _PROVIDER_MODELS.get(current_provider, [])
         if static:
             seen = {m.lower() for m in catalog}
@@ -801,13 +801,13 @@ def switch_model(
     Returns:
         ModelSwitchResult with all information the caller needs.
     """
-    from hermes_cli.models import (
+    from lliam_cli.models import (
         copilot_model_api_mode,
         detect_provider_for_model,
         validate_requested_model,
         opencode_model_api_mode,
     )
-    from hermes_cli.runtime_provider import resolve_runtime_provider
+    from lliam_cli.runtime_provider import resolve_runtime_provider
 
     resolved_alias = ""
     new_model = raw_input.strip()
@@ -834,7 +834,7 @@ def switch_model(
             )
             # Check for common config issues that cause provider resolution failures
             try:
-                from hermes_cli.config import validate_config_structure
+                from lliam_cli.config import validate_config_structure
                 _cfg_issues = validate_config_structure()
                 if _cfg_issues:
                     _switch_err += "\n\nRun 'hermes doctor' — config issues detected:"
@@ -851,8 +851,8 @@ def switch_model(
         target_provider = pdef.id
         if target_provider == "moa" and not new_model:
             try:
-                from hermes_cli.config import load_config
-                from hermes_cli.moa_config import normalize_moa_config
+                from lliam_cli.config import load_config
+                from lliam_cli.moa_config import normalize_moa_config
 
                 new_model = normalize_moa_config(load_config().get("moa") or {})["default_preset"]
             except Exception:
@@ -864,8 +864,8 @@ def switch_model(
         # routes to has no credentials, do NOT silently switch them onto an
         # unauthed endpoint (the classic HTTP 401 "Missing Authentication
         # header"). Point them at the real direct provider instead.
-        from hermes_cli.models import _AGGREGATOR_PROVIDERS as _AGG_PROVIDERS
-        from hermes_cli.providers import ALIASES as _PROVIDER_ALIAS_TABLE
+        from lliam_cli.models import _AGGREGATOR_PROVIDERS as _AGG_PROVIDERS
+        from lliam_cli.providers import ALIASES as _PROVIDER_ALIAS_TABLE
         _explicit_norm = explicit_provider.strip().lower()
         _alias_target = _PROVIDER_ALIAS_TABLE.get(_explicit_norm)
         if (
@@ -903,7 +903,7 @@ def switch_model(
         # If no model specified, try auto-detect from endpoint
         if not new_model:
             if pdef.base_url:
-                from hermes_cli.runtime_provider import _auto_detect_local_model
+                from lliam_cli.runtime_provider import _auto_detect_local_model
                 detected = _auto_detect_local_model(pdef.base_url)
                 if detected:
                     new_model = detected
@@ -940,8 +940,8 @@ def switch_model(
     # =================================================================
     else:
         try:
-            from hermes_cli.config import load_config
-            from hermes_cli.moa_config import exact_moa_preset_name, normalize_moa_config
+            from lliam_cli.config import load_config
+            from lliam_cli.moa_config import exact_moa_preset_name, normalize_moa_config
 
             _moa_cfg = normalize_moa_config(load_config().get("moa") or {})
             _moa_match = exact_moa_preset_name(_moa_cfg, raw_input)
@@ -1137,7 +1137,7 @@ def switch_model(
         # or hop to an aggregator. Use the pdef's endpoint directly instead.
         _user_pdef = None
         if explicit_provider and user_providers:
-            from hermes_cli.providers import resolve_user_provider as _ruser
+            from lliam_cli.providers import resolve_user_provider as _ruser
             _user_pdef = _ruser(explicit_provider.strip().lower(), user_providers)
             if _user_pdef is None:
                 _user_pdef = _ruser(target_provider, user_providers)
@@ -1306,7 +1306,7 @@ def switch_model(
     # Anthropic SDK prepends its own /v1/messages to the base_url.  Strip the
     # trailing /v1 so the SDK constructs the correct path (e.g.
     # https://opencode.ai/zen/go/v1/messages instead of .../v1/v1/messages).
-    # Mirrors the same logic in hermes_cli.runtime_provider.resolve_runtime_provider;
+    # Mirrors the same logic in lliam_cli.runtime_provider.resolve_runtime_provider;
     # without it, /model switches into an anthropic_messages-routed OpenCode
     # model (e.g. `/model minimax-m2.7` on opencode-go, `/model claude-sonnet-4-6`
     # on opencode-zen) hit a double /v1 and returned OpenCode's website 404 page.
@@ -1387,7 +1387,7 @@ def prewarm_picker_cache_async() -> Optional["_threading.Thread"]:
 
     def _warm() -> None:
         try:
-            from hermes_cli.inventory import load_picker_context
+            from lliam_cli.inventory import load_picker_context
 
             ctx = load_picker_context()
             # Calling this is what populates cached_provider_model_ids() ->
@@ -1422,7 +1422,7 @@ def list_authenticated_providers(
 ) -> List[dict]:
     """Detect which providers have credentials and list their curated models.
 
-    Uses the curated model lists from hermes_cli/models.py (OPENROUTER_MODELS,
+    Uses the curated model lists from lliam_cli/models.py (OPENROUTER_MODELS,
     _PROVIDER_MODELS) — NOT the full models.dev catalog.  These are hand-picked
     agentic models that work well as agent backends.
 
@@ -1452,8 +1452,8 @@ def list_authenticated_providers(
         fetch_models_dev,
         get_provider_info as _mdev_pinfo,
     )
-    from hermes_cli.auth import PROVIDER_REGISTRY
-    from hermes_cli.models import (
+    from lliam_cli.auth import PROVIDER_REGISTRY
+    from lliam_cli.models import (
         OPENROUTER_MODELS, _PROVIDER_MODELS,
         _MODELS_DEV_PREFERRED, _merge_with_models_dev, cached_provider_model_ids,
         clear_provider_models_cache, get_curated_nous_model_ids,
@@ -1491,7 +1491,7 @@ def list_authenticated_providers(
         static inference_base_url so the dedup matches what a user typing
         that URL into custom_providers would actually hit."""
         try:
-            from hermes_cli.auth import PROVIDER_REGISTRY as _reg
+            from lliam_cli.auth import PROVIDER_REGISTRY as _reg
         except Exception:
             return
         pcfg = _reg.get(slug)
@@ -1558,7 +1558,7 @@ def list_authenticated_providers(
     curated["nous"] = get_curated_nous_model_ids()
     # Ollama Cloud uses dynamic discovery (no static curated list)
     if "ollama-cloud" not in curated:
-        from hermes_cli.models import fetch_ollama_cloud_models
+        from lliam_cli.models import fetch_ollama_cloud_models
         curated["ollama-cloud"] = fetch_ollama_cloud_models()
     # LM Studio has no static catalog — probe its native /api/v1/models
     # endpoint live so the picker reflects whatever the user has loaded.
@@ -1569,8 +1569,8 @@ def list_authenticated_providers(
     if "lmstudio" not in curated and (
         os.environ.get("LM_API_KEY") or os.environ.get("LM_BASE_URL") or current_provider.strip().lower() == "lmstudio"
     ):
-        from hermes_cli.models import fetch_lmstudio_models
-        from hermes_cli.auth import AuthError
+        from lliam_cli.models import fetch_lmstudio_models
+        from lliam_cli.auth import AuthError
         is_current_lmstudio = current_provider.strip().lower() == "lmstudio"
         lm_base = (
             os.environ.get("LM_BASE_URL")
@@ -1590,8 +1590,8 @@ def list_authenticated_providers(
         curated["lmstudio"] = live
 
     # --- 1. Check Hermes-mapped providers ---
-    from hermes_cli.models import _AGGREGATOR_PROVIDERS as _AGG_PROVIDERS
-    from hermes_cli.providers import ALIASES as _PROVIDER_ALIAS_TABLE
+    from lliam_cli.models import _AGGREGATOR_PROVIDERS as _AGG_PROVIDERS
+    from lliam_cli.providers import ALIASES as _PROVIDER_ALIAS_TABLE
     for hermes_id, mdev_id in PROVIDER_TO_MODELS_DEV.items():
         # Skip vendor names that are merely aliases routing through an
         # aggregator (e.g. bare "openai" → "openrouter"). These are NOT
@@ -1636,7 +1636,7 @@ def list_authenticated_providers(
         has_creds = any(os.environ.get(ev) for ev in env_vars)
         if not has_creds:
             try:
-                from hermes_cli.auth import _load_auth_store
+                from lliam_cli.auth import _load_auth_store
                 store = _load_auth_store()
                 if store and store.get("credential_pool", {}).get(hermes_id):
                     has_creds = True
@@ -1678,8 +1678,8 @@ def list_authenticated_providers(
         _record_builtin_endpoint(slug)
 
     # --- 2. Check Hermes-only providers (nous, openai-codex, copilot, opencode-go) ---
-    from hermes_cli.providers import HERMES_OVERLAYS
-    from hermes_cli.auth import PROVIDER_REGISTRY as _auth_registry
+    from lliam_cli.providers import HERMES_OVERLAYS
+    from lliam_cli.auth import PROVIDER_REGISTRY as _auth_registry
 
     # Build reverse mapping: models.dev ID → Hermes provider ID.
     # HERMES_OVERLAYS keys may be models.dev IDs (e.g. "github-copilot")
@@ -1715,7 +1715,7 @@ def list_authenticated_providers(
         # OAuth via external credential files).
         if not has_creds:
             try:
-                from hermes_cli.auth import _load_auth_store
+                from lliam_cli.auth import _load_auth_store
                 store = _load_auth_store()
                 providers_store = store.get("providers", {})
                 if store and (pid in providers_store or hermes_slug in providers_store):
@@ -1787,13 +1787,13 @@ def list_authenticated_providers(
             # recommendations (e.g. stepfun/step-3.7-flash:free).
             model_ids = curated.get("nous", [])
             try:
-                from hermes_cli.models import (
+                from lliam_cli.models import (
                     get_pricing_for_provider as _nous_pricing,
                     check_nous_free_tier as _nous_free,
                     union_with_portal_free_recommendations as _union_free,
                     union_with_portal_paid_recommendations as _union_paid,
                 )
-                from hermes_cli.auth import get_provider_auth_state as _nous_state
+                from lliam_cli.auth import get_provider_auth_state as _nous_state
 
                 _pricing = _nous_pricing("nous") or {}
                 _portal = ""
@@ -1844,7 +1844,7 @@ def list_authenticated_providers(
     # in PROVIDER_TO_MODELS_DEV or HERMES_OVERLAYS (keeps /model in sync
     # with `hermes model`).
     try:
-        from hermes_cli.models import CANONICAL_PROVIDERS as _canon_provs
+        from lliam_cli.models import CANONICAL_PROVIDERS as _canon_provs
     except ImportError:
         _canon_provs = []
 
@@ -1860,7 +1860,7 @@ def list_authenticated_providers(
         # Also check auth store and credential pool
         if not _cp_has_creds:
             try:
-                from hermes_cli.auth import _load_auth_store
+                from lliam_cli.auth import _load_auth_store
                 _cp_store = _load_auth_store()
                 _cp_providers_store = _cp_store.get("providers", {})
                 if _cp_store and _cp.slug in _cp_providers_store:
@@ -1949,7 +1949,7 @@ def list_authenticated_providers(
                 models_list.append(default_model)
             # Also include the full models list from config.
             # Hermes writes ``models:`` as a dict keyed by model id
-            # (see hermes_cli/main.py::_save_custom_provider); older
+            # (see lliam_cli/main.py::_save_custom_provider); older
             # configs or hand-edited files may still use a list.
             cfg_models = ep_cfg.get("models", [])
             if isinstance(cfg_models, dict):
@@ -1992,7 +1992,7 @@ def list_authenticated_providers(
             )
             if should_probe:
                 try:
-                    from hermes_cli.models import fetch_api_models
+                    from lliam_cli.models import fetch_api_models
                     live_models = fetch_api_models(api_key, api_url)
                     if live_models:
                         models_list = live_models
@@ -2143,7 +2143,7 @@ def list_authenticated_providers(
             # active model. Hermes's own writer (main.py::_save_custom_provider)
             # stores every configured model as a dict under ``models:``;
             # downstream readers (agent/models_dev.py, gateway/run.py,
-            # run_agent.py, hermes_cli/config.py) already consume that dict.
+            # run_agent.py, lliam_cli/config.py) already consume that dict.
             default_model = (entry.get("model") or "").strip()
             if default_model and default_model not in groups[group_key]["models"]:
                 groups[group_key]["models"].append(default_model)
@@ -2238,7 +2238,7 @@ def list_authenticated_providers(
             )
             if should_probe:
                 try:
-                    from hermes_cli.models import fetch_api_models
+                    from lliam_cli.models import fetch_api_models
 
                     live_models = fetch_api_models(api_key, api_url)
                     if live_models:
@@ -2298,7 +2298,7 @@ def _prepend_moa_picker_provider(providers: List[dict], current_provider: str = 
     builder so the row shape stays defined in one place.
     """
     try:
-        from hermes_cli.inventory import _moa_provider_row
+        from lliam_cli.inventory import _moa_provider_row
 
         moa_row = _moa_provider_row(current_provider)
         if moa_row is None:
@@ -2324,7 +2324,7 @@ def list_picker_providers(
     current install:
 
     - OpenRouter's model list is replaced with the output of
-      :func:`hermes_cli.models.fetch_openrouter_models`, which filters the
+      :func:`lliam_cli.models.fetch_openrouter_models`, which filters the
       curated ``OPENROUTER_MODELS`` snapshot against the live OpenRouter
       catalog.  IDs the live catalog no longer carries drop out, so the
       picker never offers a model the user can't call.
@@ -2336,7 +2336,7 @@ def list_picker_providers(
     The typed ``/model <name>`` path is unaffected -- only the interactive
     picker payload is narrowed.
     """
-    from hermes_cli.models import fetch_openrouter_models
+    from lliam_cli.models import fetch_openrouter_models
 
     providers = list_authenticated_providers(
         current_provider=current_provider,

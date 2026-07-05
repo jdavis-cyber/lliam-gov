@@ -962,7 +962,7 @@ class TestLoadGatewayConfig:
 
         monkeypatch.setenv("HERMES_HOME", str(hermes_home))
 
-        from hermes_cli.config import load_config
+        from lliam_cli.config import load_config
 
         config = load_config()
 

@@ -156,7 +156,7 @@ def _load_dashboard_section() -> dict:
     ``.get(...)`` access.
     """
     try:
-        from hermes_cli.config import load_config
+        from lliam_cli.config import load_config
     except Exception:
         return {}
     try:

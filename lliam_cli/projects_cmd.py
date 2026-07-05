@@ -4,7 +4,7 @@ A Project is a human-named workspace spanning one or more folders, with one
 designated primary repo. Projects anchor desktop session grouping and (when
 bound to a kanban board) give kanban tasks a deterministic worktree + branch
 convention. State lives in the per-profile ``$HERMES_HOME/projects.db`` store
-(see :mod:`hermes_cli.projects_db`).
+(see :mod:`lliam_cli.projects_db`).
 
 This is a footprint-ladder rung-2 capability: a CLI command + gateway RPC,
 with zero model-tool schema cost.
@@ -16,7 +16,7 @@ import argparse
 import functools
 import sys
 
-from hermes_cli import projects_db as pdb
+from lliam_cli import projects_db as pdb
 
 
 def build_parser(
@@ -323,7 +323,7 @@ def _sync_board_default_workdir(proj, board_slug: str) -> None:
     if not proj.primary_path:
         return
     try:
-        from hermes_cli import kanban_db as kb
+        from lliam_cli import kanban_db as kb
 
         slug = kb._normalize_board_slug(board_slug)
         if not slug:

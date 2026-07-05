@@ -1,6 +1,6 @@
 """``hermes cron`` subcommand parser.
 
-Extracted verbatim from ``hermes_cli/main.py:main()`` — same arguments, same
+Extracted verbatim from ``lliam_cli/main.py:main()`` — same arguments, same
 ``func=cmd_cron`` dispatch. The handler is injected so this module does not
 import ``main`` (cycle avoidance).
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from hermes_cli.subcommands._shared import add_accept_hooks_flag
+from lliam_cli.subcommands._shared import add_accept_hooks_flag
 
 
 def build_cron_parser(subparsers, *, cmd_cron: Callable) -> None:

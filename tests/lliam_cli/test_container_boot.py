@@ -1,4 +1,4 @@
-"""Tests for hermes_cli.container_boot — the cont-init.d-time
+"""Tests for lliam_cli.container_boot — the cont-init.d-time
 reconciliation that recreates per-profile gateway s6 service slots
 from the persistent profiles directory.
 
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from hermes_cli.container_boot import (
+from lliam_cli.container_boot import (
     ReconcileAction,
     reconcile_profile_gateways,
 )
@@ -43,7 +43,7 @@ def _hermetic_container_argv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch ``_read_container_argv`` themselves (both override this).
     """
     monkeypatch.setattr(
-        "hermes_cli.container_boot._read_container_argv",
+        "lliam_cli.container_boot._read_container_argv",
         lambda: (),
     )
 
@@ -314,7 +314,7 @@ def test_reconcile_log_rotates_when_size_exceeded(
 ) -> None:
     """When container-boot.log exceeds _LOG_ROTATE_BYTES, the existing
     file is rotated to .1 before the new entries are appended."""
-    from hermes_cli import container_boot
+    from lliam_cli import container_boot
 
     # Tighten the threshold so we don't have to write 256 KiB.
     monkeypatch.setattr(container_boot, "_LOG_ROTATE_BYTES", 200)
@@ -344,7 +344,7 @@ def test_reconcile_log_does_not_rotate_below_threshold(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A small existing log is appended to in place; no .1 is created."""
-    from hermes_cli import container_boot
+    from lliam_cli import container_boot
     monkeypatch.setattr(container_boot, "_LOG_ROTATE_BYTES", 10_000_000)
 
     log_path = tmp_path / "logs" / "container-boot.log"
@@ -370,7 +370,7 @@ def test_reconcile_log_rotation_overwrites_existing_dot1(
 ) -> None:
     """Rotating again replaces the prior .1 — we keep at most one
     rotated file (soft cap of ~2 × threshold)."""
-    from hermes_cli import container_boot
+    from lliam_cli import container_boot
     monkeypatch.setattr(container_boot, "_LOG_ROTATE_BYTES", 200)
 
     log_dir = tmp_path / "logs"; log_dir.mkdir()
@@ -798,7 +798,7 @@ def test_is_dashboard_container_true_for_dashboard_argv(
     container_argv: tuple[str, ...],
 ) -> None:
     """A dashboard command is detected across every wrapper prefix shape."""
-    from hermes_cli.container_boot import _is_dashboard_container
+    from lliam_cli.container_boot import _is_dashboard_container
 
     assert _is_dashboard_container(container_argv) is True
 
@@ -832,7 +832,7 @@ def test_is_dashboard_container_false_for_non_dashboard_argv(
     container_argv: tuple[str, ...],
 ) -> None:
     """Gateway / other commands (and empty argv) are not the dashboard."""
-    from hermes_cli.container_boot import _is_dashboard_container
+    from lliam_cli.container_boot import _is_dashboard_container
 
     assert _is_dashboard_container(container_argv) is False
 
@@ -848,7 +848,7 @@ def test_main_skips_reconcile_in_dashboard_container(
     the gateway-<profile> slot. Asserting the slot is absent proves the
     skip is real, not just a log line.
     """
-    from hermes_cli import container_boot
+    from lliam_cli import container_boot
 
     scandir = tmp_path / "run-service"; scandir.mkdir()
     _make_profile(tmp_path, "worker", state="running")
@@ -883,7 +883,7 @@ def test_main_skips_reconcile_in_dashboard_container_s6v3(
     reconciled, and it started its own gateway-default (dual Telegram
     getUpdates 409). Asserting the slot is absent proves the skip fires.
     """
-    from hermes_cli import container_boot
+    from lliam_cli import container_boot
 
     scandir = tmp_path / "run-service"; scandir.mkdir()
     _make_profile(tmp_path, "worker", state="running")
@@ -922,7 +922,7 @@ def test_main_reconciles_in_gateway_container(
 ) -> None:
     """main() reconciles normally when PID 1 argv is the gateway command —
     the dashboard skip is scoped strictly to the dashboard role."""
-    from hermes_cli import container_boot
+    from lliam_cli import container_boot
 
     scandir = tmp_path / "run-service"; scandir.mkdir()
     _make_profile(tmp_path, "worker", state="running")
@@ -949,7 +949,7 @@ def test_main_ignores_removed_skip_reconcile_env_var(
     """The legacy HERMES_SKIP_PROFILE_RECONCILE flag is gone: setting it on a
     gateway container must NOT suppress reconciliation. Role is decided by
     PID 1 argv alone, so a stale flag in someone's manifest is inert."""
-    from hermes_cli import container_boot
+    from lliam_cli import container_boot
 
     scandir = tmp_path / "run-service"; scandir.mkdir()
     _make_profile(tmp_path, "worker", state="running")

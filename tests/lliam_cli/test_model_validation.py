@@ -1,8 +1,8 @@
-"""Tests for provider-aware `/model` validation in hermes_cli.models."""
+"""Tests for provider-aware `/model` validation in lliam_cli.models."""
 
 from unittest.mock import MagicMock, patch
 
-from hermes_cli.models import (
+from lliam_cli.models import (
     azure_foundry_model_api_mode,
     copilot_model_api_mode,
     fetch_github_model_catalog,
@@ -42,8 +42,8 @@ def _validate(model, provider="openrouter", api_models=FAKE_API_MODELS, **kw):
         "suggested_base_url": None,
         "used_fallback": False,
     }
-    with patch("hermes_cli.models.fetch_api_models", return_value=api_models), \
-         patch("hermes_cli.models.probe_api_models", return_value=probe_payload):
+    with patch("lliam_cli.models.fetch_api_models", return_value=api_models), \
+         patch("lliam_cli.models.probe_api_models", return_value=probe_payload):
         return validate_requested_model(model, provider, **kw)
 
 
@@ -132,7 +132,7 @@ class TestParseModelInput:
 class TestCuratedModelsForProvider:
     def test_openrouter_returns_curated_list(self):
         with patch(
-            "hermes_cli.models.fetch_openrouter_models",
+            "lliam_cli.models.fetch_openrouter_models",
             return_value=[
                 ("anthropic/claude-opus-4.6", "recommended"),
                 ("qwen/qwen3.6-plus", ""),
@@ -182,7 +182,7 @@ class TestProviderLabel:
 class TestProviderModelIds:
     def test_openrouter_returns_curated_list(self):
         with patch(
-            "hermes_cli.models.fetch_openrouter_models",
+            "lliam_cli.models.fetch_openrouter_models",
             return_value=[
                 ("anthropic/claude-opus-4.6", "recommended"),
                 ("qwen/qwen3.6-plus", ""),
@@ -197,22 +197,22 @@ class TestProviderModelIds:
 
     def test_stepfun_prefers_live_catalog(self):
         with patch(
-            "hermes_cli.auth.resolve_api_key_provider_credentials",
+            "lliam_cli.auth.resolve_api_key_provider_credentials",
             return_value={"api_key": "***", "base_url": "https://api.stepfun.com/step_plan/v1"},
         ), patch(
-            "hermes_cli.models.fetch_api_models",
+            "lliam_cli.models.fetch_api_models",
             return_value=["step-3.5-flash", "step-3-agent-lite"],
         ):
             assert provider_model_ids("stepfun") == ["step-3.5-flash", "step-3-agent-lite"]
 
     def test_copilot_prefers_live_catalog(self):
-        with patch("hermes_cli.auth.resolve_api_key_provider_credentials", return_value={"api_key": "gh-token"}), \
-             patch("hermes_cli.models._fetch_github_models", return_value=["gpt-5.4", "claude-sonnet-4.6"]):
+        with patch("lliam_cli.auth.resolve_api_key_provider_credentials", return_value={"api_key": "gh-token"}), \
+             patch("lliam_cli.models._fetch_github_models", return_value=["gpt-5.4", "claude-sonnet-4.6"]):
             assert provider_model_ids("copilot") == ["gpt-5.4", "claude-sonnet-4.6"]
 
     def test_copilot_acp_reuses_copilot_catalog(self):
-        with patch("hermes_cli.auth.resolve_api_key_provider_credentials", return_value={"api_key": "gh-token"}), \
-             patch("hermes_cli.models._fetch_github_models", return_value=["gpt-5.4", "claude-sonnet-4.6"]):
+        with patch("lliam_cli.auth.resolve_api_key_provider_credentials", return_value={"api_key": "gh-token"}), \
+             patch("lliam_cli.models._fetch_github_models", return_value=["gpt-5.4", "claude-sonnet-4.6"]):
             assert provider_model_ids("copilot-acp") == ["gpt-5.4", "claude-sonnet-4.6"]
 
     def test_anthropic_provider_uses_configured_base_url_for_live_catalog(self):
@@ -227,7 +227,7 @@ class TestProviderModelIds:
                 return b'{"data": [{"id": "enterprise-claude"}]}'
 
         with patch(
-            "hermes_cli.config.load_config",
+            "lliam_cli.config.load_config",
             return_value={
                 "model": {
                     "provider": "anthropic",
@@ -236,7 +236,7 @@ class TestProviderModelIds:
                 }
             },
         ), patch(
-            "hermes_cli.models.urllib.request.urlopen",
+            "lliam_cli.models.urllib.request.urlopen",
             return_value=_Resp(),
         ) as mock_urlopen:
             assert provider_model_ids("anthropic") == ["enterprise-claude"]
@@ -247,7 +247,7 @@ class TestProviderModelIds:
 
     def test_custom_provider_passes_anthropic_mode_for_versioned_proxy_catalog(self):
         with patch(
-            "hermes_cli.config.load_config",
+            "lliam_cli.config.load_config",
             return_value={
                 "model": {
                     "provider": "custom",
@@ -256,7 +256,7 @@ class TestProviderModelIds:
                 }
             },
         ), patch(
-            "hermes_cli.models.fetch_api_models",
+            "lliam_cli.models.fetch_api_models",
             return_value=["enterprise-claude"],
         ) as mock_fetch:
             assert provider_model_ids("custom") == ["enterprise-claude"]
@@ -275,7 +275,7 @@ class TestFetchApiModels:
         assert fetch_api_models("key", None) is None
 
     def test_returns_none_on_network_error(self):
-        with patch("hermes_cli.models.urllib.request.urlopen", side_effect=Exception("timeout")):
+        with patch("lliam_cli.models.urllib.request.urlopen", side_effect=Exception("timeout")):
             assert fetch_api_models("key", "https://example.com/v1") is None
 
     def test_probe_api_models_tries_v1_fallback(self):
@@ -297,7 +297,7 @@ class TestFetchApiModels:
                 return _Resp()
             raise Exception("404")
 
-        with patch("hermes_cli.models.urllib.request.urlopen", side_effect=_fake_urlopen):
+        with patch("lliam_cli.models.urllib.request.urlopen", side_effect=_fake_urlopen):
             probe = probe_api_models("key", "http://localhost:8000")
 
         assert calls == ["http://localhost:8000/models", "http://localhost:8000/v1/models"]
@@ -316,7 +316,7 @@ class TestFetchApiModels:
             def read(self):
                 return b'{"data": [{"id": "gpt-5.4", "model_picker_enabled": true, "supported_endpoints": ["/responses"], "capabilities": {"type": "chat", "supports": {"reasoning_effort": ["low", "medium", "high"]}}}, {"id": "claude-sonnet-4.6", "model_picker_enabled": true, "supported_endpoints": ["/chat/completions"], "capabilities": {"type": "chat", "supports": {"reasoning_effort": ["low", "medium", "high"]}}}, {"id": "text-embedding-3-small", "model_picker_enabled": true, "capabilities": {"type": "embedding"}}]}'
 
-        with patch("hermes_cli.models.urllib.request.urlopen", return_value=_Resp()) as mock_urlopen:
+        with patch("lliam_cli.models.urllib.request.urlopen", return_value=_Resp()) as mock_urlopen:
             probe = probe_api_models("gh-token", "https://api.githubcopilot.com")
 
         assert mock_urlopen.call_args[0][0].full_url == "https://api.githubcopilot.com/models"
@@ -335,7 +335,7 @@ class TestFetchApiModels:
             def read(self):
                 return b'{"data": [{"id": "gpt-5.4", "model_picker_enabled": true, "supported_endpoints": ["/responses"], "capabilities": {"type": "chat", "supports": {"reasoning_effort": ["low", "medium", "high"]}}}, {"id": "text-embedding-3-small", "model_picker_enabled": true, "capabilities": {"type": "embedding"}}]}'
 
-        with patch("hermes_cli.models.urllib.request.urlopen", return_value=_Resp()):
+        with patch("lliam_cli.models.urllib.request.urlopen", return_value=_Resp()):
             catalog = fetch_github_model_catalog("gh-token")
 
         assert catalog is not None
@@ -599,7 +599,7 @@ class TestValidateApiFallback:
     def test_known_model_accepted_via_catalog_when_api_down(self):
         # Force the openrouter catalog lookup to return a deterministic list.
         with patch(
-            "hermes_cli.models.provider_model_ids",
+            "lliam_cli.models.provider_model_ids",
             return_value=["anthropic/claude-opus-4.6", "openai/gpt-5.4"],
         ):
             result = _validate("anthropic/claude-opus-4.6", api_models=None)
@@ -609,7 +609,7 @@ class TestValidateApiFallback:
 
     def test_unknown_model_accepted_with_note_when_api_down(self):
         with patch(
-            "hermes_cli.models.provider_model_ids",
+            "lliam_cli.models.provider_model_ids",
             return_value=["anthropic/claude-opus-4.6", "openai/gpt-5.4"],
         ):
             result = _validate("anthropic/claude-next-gen", api_models=None)
@@ -628,7 +628,7 @@ class TestValidateApiFallback:
 
     def test_unknown_provider_soft_accepted_when_api_down(self):
         # No catalog for unknown providers — soft-accept with a Note.
-        with patch("hermes_cli.models.provider_model_ids", return_value=[]):
+        with patch("lliam_cli.models.provider_model_ids", return_value=[]):
             result = _validate("some-model", provider="totally-unknown", api_models=None)
         assert result["accepted"] is True
         assert result["persist"] is True
@@ -637,7 +637,7 @@ class TestValidateApiFallback:
 
     def test_custom_endpoint_warns_with_probed_url_and_v1_hint(self):
         with patch(
-            "hermes_cli.models.probe_api_models",
+            "lliam_cli.models.probe_api_models",
             return_value={
                 "models": None,
                 "probed_url": "http://localhost:8000/v1/models",
@@ -672,7 +672,7 @@ class TestValidateApiFallback:
             b']}'
         )
 
-        with patch("hermes_cli.models.urllib.request.urlopen", return_value=mock_resp):
+        with patch("lliam_cli.models.urllib.request.urlopen", return_value=mock_resp):
             models = fetch_lmstudio_models(base_url="http://localhost:1234/v1")
 
         assert models == ["publisher/chat-model"]
@@ -688,7 +688,7 @@ class TestValidateApiFallback:
             b']}'
         )
 
-        with patch("hermes_cli.models.urllib.request.urlopen", return_value=mock_resp):
+        with patch("lliam_cli.models.urllib.request.urlopen", return_value=mock_resp):
             result = validate_requested_model(
                 "publisher/embed-model",
                 "lmstudio",
@@ -701,7 +701,7 @@ class TestValidateApiFallback:
 
     def test_fetch_lmstudio_models_raises_auth_error_on_401(self):
         import urllib.error
-        from hermes_cli.auth import AuthError
+        from lliam_cli.auth import AuthError
         import pytest
 
         http_error = urllib.error.HTTPError(
@@ -712,7 +712,7 @@ class TestValidateApiFallback:
             fp=None,
         )
 
-        with patch("hermes_cli.models.urllib.request.urlopen", side_effect=http_error):
+        with patch("lliam_cli.models.urllib.request.urlopen", side_effect=http_error):
             with pytest.raises(AuthError) as excinfo:
                 fetch_lmstudio_models(base_url="http://localhost:1234/v1")
 
@@ -722,7 +722,7 @@ class TestValidateApiFallback:
 
     def test_fetch_lmstudio_models_returns_empty_on_network_error(self):
         with patch(
-            "hermes_cli.models.urllib.request.urlopen",
+            "lliam_cli.models.urllib.request.urlopen",
             side_effect=ConnectionRefusedError(),
         ):
             models = fetch_lmstudio_models(base_url="http://localhost:1234/v1")
@@ -740,7 +740,7 @@ class TestValidateApiFallback:
             fp=None,
         )
 
-        with patch("hermes_cli.models.urllib.request.urlopen", side_effect=http_error):
+        with patch("lliam_cli.models.urllib.request.urlopen", side_effect=http_error):
             result = validate_requested_model(
                 "publisher/chat-model",
                 "lmstudio",
@@ -753,7 +753,7 @@ class TestValidateApiFallback:
 
     def test_validate_lmstudio_distinguishes_unreachable(self):
         with patch(
-            "hermes_cli.models.urllib.request.urlopen",
+            "lliam_cli.models.urllib.request.urlopen",
             side_effect=ConnectionRefusedError(),
         ):
             result = validate_requested_model(
@@ -775,7 +775,7 @@ class TestValidateCodexAutoCorrection:
         """gpt5.3-codex (missing dash) auto-corrects to gpt-5.3-codex."""
         codex_models = ["gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex",
                         "gpt-5.2-codex", "gpt-5.1-codex-max"]
-        with patch("hermes_cli.models.provider_model_ids", return_value=codex_models):
+        with patch("lliam_cli.models.provider_model_ids", return_value=codex_models):
             result = validate_requested_model("gpt5.3-codex", "openai-codex")
         assert result["accepted"] is True
         assert result["recognized"] is True
@@ -785,7 +785,7 @@ class TestValidateCodexAutoCorrection:
     def test_exact_match_no_correction(self):
         """Exact model name does not trigger auto-correction."""
         codex_models = ["gpt-5.4-mini", "gpt-5.4", "gpt-5.3-codex"]
-        with patch("hermes_cli.models.provider_model_ids", return_value=codex_models):
+        with patch("lliam_cli.models.provider_model_ids", return_value=codex_models):
             result = validate_requested_model("gpt-5.3-codex", "openai-codex")
         assert result["accepted"] is True
         assert result["recognized"] is True
@@ -820,7 +820,7 @@ class TestProbeApiModelsUserAgent:
 
         body = b'{"data":[{"id":"claude-opus-4.7"}]}'
         with patch(
-            "hermes_cli.models.urllib.request.urlopen",
+            "lliam_cli.models.urllib.request.urlopen",
             return_value=self._make_mock_response(body),
         ) as mock_urlopen:
             result = probe_api_models("sk-test", "https://example.com/v1")
@@ -842,7 +842,7 @@ class TestProbeApiModelsUserAgent:
 
         body = b'{"data":[]}'
         with patch(
-            "hermes_cli.models.urllib.request.urlopen",
+            "lliam_cli.models.urllib.request.urlopen",
             return_value=self._make_mock_response(body),
         ) as mock_urlopen:
             probe_api_models(None, "https://example.com/v1")

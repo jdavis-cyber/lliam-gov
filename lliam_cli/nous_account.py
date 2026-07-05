@@ -130,7 +130,7 @@ class NousPortalAccountInfo:
 def nous_portal_billing_url(account_info: Optional[NousPortalAccountInfo] = None) -> str:
     """Return the billing URL for a normalized Nous account snapshot."""
     try:
-        from hermes_cli.auth import DEFAULT_NOUS_PORTAL_URL
+        from lliam_cli.auth import DEFAULT_NOUS_PORTAL_URL
     except Exception:
         DEFAULT_NOUS_PORTAL_URL = "https://portal.nousresearch.com"
 
@@ -332,7 +332,7 @@ def get_nous_portal_account_info(
     decoded locally for UX gating only; server APIs remain authoritative.
     """
     try:
-        from hermes_cli.auth import get_provider_auth_state
+        from lliam_cli.auth import get_provider_auth_state
 
         state = get_provider_auth_state("nous") or {}
     except Exception as exc:
@@ -384,7 +384,7 @@ def _fresh_account_info(
     global _account_info_cache
 
     try:
-        from hermes_cli.auth import get_provider_auth_state, resolve_nous_access_token
+        from lliam_cli.auth import get_provider_auth_state, resolve_nous_access_token
 
         access_token = resolve_nous_access_token()
         refreshed_state = get_provider_auth_state("nous") or state
@@ -584,7 +584,7 @@ def _info_from_valid_jwt(
     min_jwt_ttl_seconds: int,
 ) -> Optional[NousPortalAccountInfo]:
     try:
-        from hermes_cli.auth import _decode_jwt_claims
+        from lliam_cli.auth import _decode_jwt_claims
     except Exception:
         return None
 

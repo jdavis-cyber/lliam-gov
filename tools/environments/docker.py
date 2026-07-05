@@ -93,7 +93,7 @@ def _normalize_env_dict(env: dict | None) -> dict[str, str]:
 def _load_hermes_env_vars() -> dict[str, str]:
     """Load ~/.hermes/.env values without failing Docker command execution."""
     try:
-        from hermes_cli.config import load_env
+        from lliam_cli.config import load_env
 
         return load_env() or {}
     except Exception:
@@ -128,7 +128,7 @@ def _get_active_profile_name() -> str:
     same process don't retroactively relabel running containers.
     """
     try:
-        from hermes_cli.profiles import get_active_profile_name
+        from lliam_cli.profiles import get_active_profile_name
 
         return get_active_profile_name() or "default"
     except Exception:

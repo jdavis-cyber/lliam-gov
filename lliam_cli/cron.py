@@ -14,7 +14,7 @@ from typing import Iterable, List, Optional
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from hermes_cli.colors import Colors, color
+from lliam_cli.colors import Colors, color
 
 # Patterns that indicate a cron job targets the gateway lifecycle.
 # Matches commands that restart/stop the gateway or its service manager.
@@ -67,7 +67,7 @@ def _warn_if_gateway_not_running() -> None:
     at create/list time, when the user is right there, prevents it.
     """
     try:
-        from hermes_cli.gateway import find_gateway_pids
+        from lliam_cli.gateway import find_gateway_pids
 
         if find_gateway_pids():
             return
@@ -173,7 +173,7 @@ def cron_tick():
 def cron_status():
     """Show cron execution status."""
     from cron.jobs import list_jobs
-    from hermes_cli.gateway import find_gateway_pids
+    from lliam_cli.gateway import find_gateway_pids
 
     print()
 

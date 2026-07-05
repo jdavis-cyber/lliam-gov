@@ -7,7 +7,7 @@ logged, not blocking. No-op (exit 0) when the effective profile is not strict, s
 non-gov branches are unaffected (capability-preserving).
 
 Effective config resolution (most-faithful first):
-  1. hermes_cli.config.load_config() with HERMES_CONFIG=overlay — the real merged
+  1. lliam_cli.config.load_config() with HERMES_CONFIG=overlay — the real merged
      + posture-coerced config (DEFAULT + home + overlay + posture_resolver).
   2. Fallback: parse the overlay YAML directly (every critical key is set
      explicitly in cli-config.gov.yaml, so this is sufficient when the package
@@ -47,12 +47,12 @@ def _load_effective(overlay_path: str) -> tuple[dict, str]:
     """Return (config, source). Try the real loader, else parse the overlay."""
     os.environ["HERMES_CONFIG"] = overlay_path
     try:
-        from hermes_cli.config import load_config  # type: ignore
+        from lliam_cli.config import load_config  # type: ignore
         return load_config(), "effective (load_config: DEFAULT+home+overlay+posture_resolver)"
     except Exception:
         try:
             with open(overlay_path, encoding="utf-8") as f:
-                return (yaml.safe_load(f) or {}), "overlay-yaml (fallback; hermes_cli not importable)"
+                return (yaml.safe_load(f) or {}), "overlay-yaml (fallback; lliam_cli not importable)"
         except Exception as e:  # pragma: no cover
             print(f"::error::cannot read overlay {overlay_path}: {e}")
             sys.exit(2)

@@ -13,9 +13,9 @@ Config stored in ~/.hermes/config.yaml under:
 """
 from typing import List, Optional, Set
 
-from hermes_cli.config import cfg_get, load_config, save_config
-from hermes_cli.colors import Colors, color
-from hermes_cli.platforms import PLATFORMS as _PLATFORMS
+from lliam_cli.config import cfg_get, load_config, save_config
+from lliam_cli.colors import Colors, color
+from lliam_cli.platforms import PLATFORMS as _PLATFORMS
 
 # Backward-compatible view: {key: label_string} so existing code that
 # iterates ``PLATFORMS.items()`` or calls ``PLATFORMS.get(key)`` keeps
@@ -99,7 +99,7 @@ def _select_platform() -> Optional[str]:
 
 def _toggle_by_category(skills: List[dict], disabled: Set[str]) -> Set[str]:
     """Toggle all skills in a category at once."""
-    from hermes_cli.curses_ui import curses_checklist
+    from lliam_cli.curses_ui import curses_checklist
 
     categories = _get_categories(skills)
     cat_labels = []
@@ -130,7 +130,7 @@ def _toggle_by_category(skills: List[dict], disabled: Set[str]) -> Set[str]:
 
 def skills_command(args=None):
     """Entry point for `hermes skills`."""
-    from hermes_cli.curses_ui import curses_checklist
+    from lliam_cli.curses_ui import curses_checklist
 
     config = load_config()
     skills = _list_all_skills()

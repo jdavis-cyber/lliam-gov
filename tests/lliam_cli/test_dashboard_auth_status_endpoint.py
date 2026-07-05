@@ -16,9 +16,9 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from hermes_cli import web_server
-from hermes_cli.dashboard_auth import clear_providers, register_provider
-from tests.hermes_cli.conftest_dashboard_auth import StubAuthProvider
+from lliam_cli import web_server
+from lliam_cli.dashboard_auth import clear_providers, register_provider
+from tests.lliam_cli.conftest_dashboard_auth import StubAuthProvider
 
 
 @pytest.fixture

@@ -31,7 +31,7 @@ _SECRET_SOURCES: dict[str, str] = {}
 
 # HERMES_HOME paths we've already pulled external secrets for during this
 # process.  ``load_hermes_dotenv()`` is called at module-import time from
-# several hot modules (cli.py, hermes_cli/main.py, run_agent.py,
+# several hot modules (cli.py, lliam_cli/main.py, run_agent.py,
 # trajectory_compressor.py, gateway/run.py, ...), so without this guard the
 # Bitwarden status line gets printed 3-5x per startup.  Bitwarden's own
 # in-process cache prevents redundant network calls, but the print, the
@@ -168,14 +168,14 @@ def _sanitize_env_file_if_needed(path: Path) -> None:
     with ``ValueError: embedded null byte`` — typically introduced by
     copy-pasting API keys from terminals or rich-text editors.
 
-    We delegate to ``hermes_cli.config._sanitize_env_lines`` which
+    We delegate to ``lliam_cli.config._sanitize_env_lines`` which
     already knows all valid Hermes env-var names and can split
     concatenated lines correctly.
     """
     if not path.exists():
         return
     try:
-        from hermes_cli.config import _sanitize_env_lines
+        from lliam_cli.config import _sanitize_env_lines
     except ImportError:
         return  # early bootstrap — config module not available yet
 
@@ -266,7 +266,7 @@ def _apply_managed_env() -> None:
     error here is swallowed so managed scope can never block startup.
     """
     try:
-        from hermes_cli import managed_scope
+        from lliam_cli import managed_scope
 
         managed_dir = managed_scope.get_managed_dir()
     except Exception:  # noqa: BLE001 — managed scope must never block startup
@@ -290,7 +290,7 @@ def _apply_external_secret_sources(home_path: Path) -> None:
 
     Idempotent within a process: subsequent calls for the same
     ``home_path`` are no-ops.  ``load_hermes_dotenv()`` runs at import
-    time from several hot modules (cli.py, hermes_cli/main.py,
+    time from several hot modules (cli.py, lliam_cli/main.py,
     run_agent.py, trajectory_compressor.py, ...), so without this guard
     the Bitwarden status line would print 3-5x per CLI startup.  Use
     ``reset_secret_source_cache()`` if you need to force a re-pull

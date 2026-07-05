@@ -72,7 +72,7 @@ def get_default_home_leaf() -> str:
 
     Public accessor for callers that need to construct the default home under a
     *different* base directory (e.g. remapping a sudo install to the target
-    user's home in ``hermes_cli/gateway.py``) without hardcoding the leaf or
+    user's home in ``lliam_cli/gateway.py``) without hardcoding the leaf or
     reaching into the private platform helper.
     """
     return _get_platform_default_hermes_home().name
@@ -91,8 +91,8 @@ def get_hermes_home() -> Path:
     the platform-native default — because raising here would brick 30+ module-level
     callers that import this at load time.  Subprocess spawners are
     expected to propagate ``HERMES_HOME`` explicitly (see the systemd
-    template in ``hermes_cli/gateway.py`` and the kanban dispatcher in
-    ``hermes_cli/kanban_db.py``).  See https://github.com/NousResearch/hermes-agent/issues/18594.
+    template in ``lliam_cli/gateway.py`` and the kanban dispatcher in
+    ``lliam_cli/kanban_db.py``).  See https://github.com/NousResearch/hermes-agent/issues/18594.
     """
     override = get_hermes_home_override()
     if override:
@@ -101,8 +101,8 @@ def get_hermes_home() -> Path:
     # Effective home: LLIAM_HOME wins, then legacy HERMES_HOME (an explicitly
     # set legacy var must keep working — the entire existing test suite isolates
     # via HERMES_HOME), then the new platform default (~/.lliam). Lazy import
-    # keeps this module import-safe (no top-level hermes_cli dependency).
-    from hermes_cli.env_compat import getenv_compat
+    # keeps this module import-safe (no top-level lliam_cli dependency).
+    from lliam_cli.env_compat import getenv_compat
 
     val = (getenv_compat("HOME") or "").strip()
     if val:
@@ -175,9 +175,9 @@ def run_startup_migration() -> None:
     import time. Resolves the SAME old/new homes the rest of the process uses
     (:func:`get_legacy_home_for_migration` and :func:`get_hermes_home`) and
     delegates the copy-once / idempotent / old==new-guard logic to
-    :func:`hermes_cli.migrate_home.migrate_if_needed`.
+    :func:`lliam_cli.migrate_home.migrate_if_needed`.
     """
-    from hermes_cli import migrate_home
+    from lliam_cli import migrate_home
 
     migrate_home.migrate_if_needed(get_legacy_home_for_migration(), get_hermes_home())
 
@@ -201,7 +201,7 @@ def get_default_hermes_root() -> Path:
     :func:`get_hermes_home`), so a custom/Docker root set via either var
     resolves consistently.
     """
-    from hermes_cli.env_compat import getenv_compat
+    from lliam_cli.env_compat import getenv_compat
 
     native_home = _get_platform_default_hermes_home()
     env_home = getenv_compat("HOME") or ""
@@ -977,7 +977,7 @@ def get_config_path() -> Path:
     """Return the path to ``config.yaml`` under HERMES_HOME.
 
     Replaces the ``get_hermes_home() / "config.yaml"`` pattern repeated
-    in 7+ files (skill_utils.py, hermes_logging.py, hermes_time.py, etc.).
+    in 7+ files (skill_utils.py, lliam_logging.py, lliam_time.py, etc.).
     """
     return get_hermes_home() / "config.yaml"
 

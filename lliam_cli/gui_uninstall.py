@@ -40,9 +40,9 @@ import shutil
 import sys
 from pathlib import Path
 
-from hermes_constants import get_hermes_home
+from lliam_constants import get_hermes_home
 
-from hermes_cli.colors import Colors, color
+from lliam_cli.colors import Colors, color
 
 
 def log_info(msg: str):
@@ -161,7 +161,7 @@ def agent_is_installed(hermes_home: Path) -> bool:
     agent_root = _agent_root(hermes_home)
     # A real install has the package source + a venv. Either signal alone is
     # enough — a source checkout without a venv is still "the agent is here".
-    if (agent_root / "hermes_cli").is_dir():
+    if (agent_root / "lliam_cli").is_dir():
         return True
     if (agent_root / "venv").is_dir() or (agent_root / ".venv").is_dir():
         return True
@@ -234,7 +234,7 @@ def uninstall_gui(hermes_home: "Path | None" = None, *, remove_userdata: bool = 
         system package manager and are reported, not force-removed)
       - the Electron ``userData`` directory (unless ``remove_userdata=False``)
 
-    Never touches ``hermes-agent/hermes_cli`` (agent source), ``venv/``, or any
+    Never touches ``hermes-agent/lliam_cli`` (agent source), ``venv/``, or any
     config / sessions / .env under ``$HERMES_HOME``.
 
     Returns the list of paths actually removed.

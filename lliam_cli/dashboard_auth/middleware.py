@@ -22,11 +22,11 @@ from typing import Awaitable, Callable
 from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from hermes_cli.dashboard_auth import list_session_providers
-from hermes_cli.dashboard_auth.audit import AuditEvent, audit_log
-from hermes_cli.dashboard_auth.base import ProviderError, RefreshExpiredError
-from hermes_cli.dashboard_auth.cookies import read_session_cookies
-from hermes_cli.dashboard_auth.public_paths import PUBLIC_API_PATHS
+from lliam_cli.dashboard_auth import list_session_providers
+from lliam_cli.dashboard_auth.audit import AuditEvent, audit_log
+from lliam_cli.dashboard_auth.base import ProviderError, RefreshExpiredError
+from lliam_cli.dashboard_auth.cookies import read_session_cookies
+from lliam_cli.dashboard_auth.public_paths import PUBLIC_API_PATHS
 
 _log = logging.getLogger(__name__)
 
@@ -100,7 +100,7 @@ def _unauth_response(request: Request, *, reason: str) -> Response:
     proxied login page rather than the bare ``/login`` (which the
     proxy doesn't route to the dashboard).
     """
-    from hermes_cli.dashboard_auth.prefix import prefix_from_request
+    from lliam_cli.dashboard_auth.prefix import prefix_from_request
 
     path = request.url.path
     next_param = _safe_next_target(request)
@@ -274,11 +274,11 @@ async def gated_auth_middleware(
             # back is mandatory: a stale RT cookie would replay a rotated
             # token on the next refresh and (outside Portal's grace) revoke
             # the whole session. Bind cookie Secure/Path to the request shape.
-            from hermes_cli.dashboard_auth.cookies import (
+            from lliam_cli.dashboard_auth.cookies import (
                 detect_https,
                 set_session_cookies,
             )
-            from hermes_cli.dashboard_auth.prefix import prefix_from_request
+            from lliam_cli.dashboard_auth.prefix import prefix_from_request
 
             set_session_cookies(
                 response,
@@ -308,8 +308,8 @@ async def gated_auth_middleware(
         # cycle with cookies → middleware at module load. Pass the active
         # prefix so the deletion's Path matches the set-Path (otherwise
         # the browser ignores it).
-        from hermes_cli.dashboard_auth.cookies import clear_session_cookies
-        from hermes_cli.dashboard_auth.prefix import prefix_from_request
+        from lliam_cli.dashboard_auth.cookies import clear_session_cookies
+        from lliam_cli.dashboard_auth.prefix import prefix_from_request
         clear_session_cookies(response, prefix=prefix_from_request(request))
         return response
 

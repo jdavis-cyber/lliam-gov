@@ -46,10 +46,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
-from hermes_constants import get_hermes_home
+from lliam_constants import get_hermes_home
 from utils import env_var_enabled
-from hermes_cli.config import cfg_get
-from hermes_cli.middleware import OBSERVER_SCHEMA_VERSION, VALID_MIDDLEWARE
+from lliam_cli.config import cfg_get
+from lliam_cli.middleware import OBSERVER_SCHEMA_VERSION, VALID_MIDDLEWARE
 
 
 def get_bundled_plugins_dir() -> Path:
@@ -167,7 +167,7 @@ VALID_HOOKS: Set[str] = {
     #   choice: "once" | "session" | "always" | "deny" | "timeout"
     "pre_approval_request",
     "post_approval_response",
-    # Kanban task lifecycle hooks. Fired by hermes_cli.kanban_db when a task
+    # Kanban task lifecycle hooks. Fired by lliam_cli.kanban_db when a task
     # transitions state, AFTER the change is committed to the board DB (so the
     # hook always sees durable state and a slow plugin can never hold the
     # SQLite write lock). Observers only: return values are ignored.
@@ -212,7 +212,7 @@ def _get_disabled_plugins() -> set:
     ``plugins.enabled``.
     """
     try:
-        from hermes_cli.config import load_config
+        from lliam_cli.config import load_config
         config = load_config()
         disabled = cfg_get(config, "plugins", "disabled", default=[])
         return set(disabled) if isinstance(disabled, list) else set()
@@ -235,7 +235,7 @@ def _get_enabled_plugins() -> Optional[set]:
     * ``set(...)`` — the concrete allow-list.
     """
     try:
-        from hermes_cli.config import load_config
+        from lliam_cli.config import load_config
         config = load_config()
         plugins_cfg = config.get("plugins")
         if not isinstance(plugins_cfg, dict):
@@ -347,7 +347,7 @@ class PluginContext:
         """Return the active Hermes profile name (e.g. ``"default"``).
 
         Derived from ``HERMES_HOME`` via
-        :func:`hermes_cli.profiles.get_active_profile_name`, so it works in
+        :func:`lliam_cli.profiles.get_active_profile_name`, so it works in
         every execution context — interactive CLI, gateway, and
         kanban-spawned worker sessions alike — without depending on
         ``_cli_ref`` (which is ``None`` outside an interactive CLI run).
@@ -357,7 +357,7 @@ class PluginContext:
         ``HERMES_HOME`` points somewhere unrecognized.
         """
         try:
-            from hermes_cli.profiles import get_active_profile_name
+            from lliam_cli.profiles import get_active_profile_name
             return get_active_profile_name()
         except Exception:
             return "default"
@@ -494,7 +494,7 @@ class PluginContext:
 
         # Reject if it conflicts with a built-in command
         try:
-            from hermes_cli.commands import resolve_command
+            from lliam_cli.commands import resolve_command
             if resolve_command(clean) is not None:
                 logger.warning(
                     "Plugin '%s' tried to register command '/%s' which conflicts "
@@ -609,7 +609,7 @@ class PluginContext:
         """Register a dashboard authentication provider.
 
         ``provider`` must be an instance of
-        :class:`hermes_cli.dashboard_auth.DashboardAuthProvider`. Used by
+        :class:`lliam_cli.dashboard_auth.DashboardAuthProvider`. Used by
         the dashboard OAuth auth gate, which engages when the dashboard
         binds to a non-loopback host without ``--insecure``.
 
@@ -618,7 +618,7 @@ class PluginContext:
         cannot crash the host. Same convention as
         ``register_image_gen_provider``.
         """
-        from hermes_cli.dashboard_auth import (
+        from lliam_cli.dashboard_auth import (
             DashboardAuthProvider, register_provider,
         )
 
@@ -993,8 +993,8 @@ class PluginContext:
                 f"must contain only alphanumeric characters and underscores"
             )
 
-        # Lazy import to avoid circular: hermes_cli.main imports plugins indirectly
-        from hermes_cli.main import _AUX_TASKS as _BUILTIN_AUX_TASKS
+        # Lazy import to avoid circular: lliam_cli.main imports plugins indirectly
+        from lliam_cli.main import _AUX_TASKS as _BUILTIN_AUX_TASKS
 
         builtin_keys = {k for k, _name, _desc in _BUILTIN_AUX_TASKS}
         if key in builtin_keys:
@@ -1210,7 +1210,7 @@ class PluginManager:
 
         # 1. Bundled plugins (<repo>/plugins/<name>/)
         #
-        # Repo-shipped plugins live next to hermes_cli/. Two layouts are
+        # Repo-shipped plugins live next to lliam_cli/. Two layouts are
         # supported (see ``_scan_directory`` for details):
         #
         #   - flat: ``plugins/disk-cleanup/plugin.yaml`` (standalone)

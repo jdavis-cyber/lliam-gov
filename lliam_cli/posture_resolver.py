@@ -1,4 +1,4 @@
-"""hermes_cli/posture_resolver.py — Lliam-GOV strict-posture coherence.
+"""lliam_cli/posture_resolver.py — Lliam-GOV strict-posture coherence.
 
 ADDITIVE OVERLAY MODULE — no existing Hermes/Lliam module, file, CLI command, or
 identifier is renamed, moved, or refactored by anything in here. (PATH-FREEZE.)
@@ -13,7 +13,7 @@ Realizes:
 
 How it is wired (capability-preserving, additive):
   ``resolve(config)`` is called at config-load post-processing inside
-  ``hermes_cli/config._load_config_impl`` — AFTER the user + governance-overlay +
+  ``lliam_cli/config._load_config_impl`` — AFTER the user + governance-overlay +
   managed merge and env expansion — so its coercions win over every config source.
   Permissive (non-gov) deployments never set ``security.posture``; the resolver is
   a strict no-op for them (returns the config unchanged, applies nothing). Only the

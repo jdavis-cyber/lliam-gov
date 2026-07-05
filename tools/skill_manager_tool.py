@@ -39,11 +39,11 @@ import re
 import shutil
 import tempfile
 from pathlib import Path
-from hermes_constants import get_hermes_home, display_hermes_home
+from lliam_constants import get_hermes_home, display_hermes_home
 from typing import Dict, Any, List, Optional, Tuple
 
 from utils import atomic_replace, is_truthy_value
-from hermes_cli.config import cfg_get
+from lliam_cli.config import cfg_get
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def _guard_agent_created_enabled() -> bool:
     on via `hermes config set skills.guard_agent_created true`.
     """
     try:
-        from hermes_cli.config import load_config
+        from lliam_cli.config import load_config
         cfg = load_config()
         return is_truthy_value(
             cfg_get(cfg, "skills", "guard_agent_created"),
@@ -524,7 +524,7 @@ def _find_skill_in_other_profiles(name: str) -> List[Tuple[str, Path]]:
     """
     matches: List[Tuple[str, Path]] = []
     try:
-        from hermes_constants import get_default_hermes_root
+        from lliam_constants import get_default_hermes_root
         from agent.skill_utils import is_excluded_skill_path
     except Exception:
         return matches

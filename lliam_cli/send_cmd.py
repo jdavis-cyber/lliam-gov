@@ -234,7 +234,7 @@ def _load_hermes_env() -> None:
         load_dotenv = None  # type: ignore[assignment]
 
     try:
-        from hermes_cli.config import get_hermes_home
+        from lliam_cli.config import get_hermes_home
         home = get_hermes_home()
     except Exception:
         return
@@ -271,7 +271,7 @@ def _load_hermes_env() -> None:
         return
 
     try:
-        from hermes_cli.config import _expand_env_vars
+        from lliam_cli.config import _expand_env_vars
         raw = _expand_env_vars(raw)
     except Exception:
         pass
@@ -279,7 +279,7 @@ def _load_hermes_env() -> None:
     # Managed scope: overlay administrator-pinned values before bridging to env,
     # so a managed top-level scalar wins here too. Fail-open via the helper.
     try:
-        from hermes_cli import managed_scope
+        from lliam_cli import managed_scope
         raw = managed_scope.apply_managed_overlay(raw if isinstance(raw, dict) else {})
     except Exception:
         pass

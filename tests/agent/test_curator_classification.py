@@ -30,8 +30,8 @@ def curator_env(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     import importlib
-    import hermes_constants
-    importlib.reload(hermes_constants)
+    import lliam_constants
+    importlib.reload(lliam_constants)
     from agent import curator
     importlib.reload(curator)
     yield curator

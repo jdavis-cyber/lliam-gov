@@ -21,10 +21,10 @@ import copy
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from hermes_cli.nous_subscription import get_nous_subscription_features
+from lliam_cli.nous_subscription import get_nous_subscription_features
 from tools.tool_backend_helpers import managed_nous_tools_enabled
 from utils import base_url_hostname
-from hermes_constants import get_optional_skills_dir
+from lliam_constants import get_optional_skills_dir
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def _supports_same_provider_pool_setup(provider: str) -> bool:
         return False
     if provider == "openrouter":
         return True
-    from hermes_cli.auth import PROVIDER_REGISTRY
+    from lliam_cli.auth import PROVIDER_REGISTRY
 
     pconfig = PROVIDER_REGISTRY.get(provider)
     if not pconfig:
@@ -129,7 +129,7 @@ def _set_reasoning_effort(config: Dict[str, Any], effort: str) -> None:
 
 
 # Import config helpers
-from hermes_cli.config import (
+from lliam_cli.config import (
     cfg_get,
     DEFAULT_CONFIG,
     get_hermes_home,
@@ -144,7 +144,7 @@ from hermes_cli.config import (
 )
 # display_hermes_home imported lazily at call sites (stale-module safety during hermes update)
 
-from hermes_cli.colors import Colors, color
+from lliam_cli.colors import Colors, color
 
 
 def print_header(title: str):
@@ -153,13 +153,13 @@ def print_header(title: str):
     print(color(f"◆ {title}", Colors.CYAN, Colors.BOLD))
 
 
-from hermes_cli.cli_output import (  # noqa: E402
+from lliam_cli.cli_output import (  # noqa: E402
     print_error,
     print_info,
     print_success,
     print_warning,
 )
-from hermes_cli.secret_prompt import masked_secret_prompt  # noqa: E402
+from lliam_cli.secret_prompt import masked_secret_prompt  # noqa: E402
 
 
 def is_interactive_stdin() -> bool:
@@ -224,7 +224,7 @@ def _sanitize_pasted_input(value: str) -> str:
 
 def _curses_prompt_choice(question: str, choices: list, default: int = 0, description: str | None = None) -> int:
     """Single-select menu using curses. Delegates to curses_radiolist."""
-    from hermes_cli.curses_ui import curses_radiolist
+    from lliam_cli.curses_ui import curses_radiolist
     return curses_radiolist(question, choices, selected=default, cancel_returns=-1, description=description)
 
 
@@ -276,7 +276,7 @@ def is_noninteractive() -> bool:
     """True when no human is available to answer a prompt.
 
     The dashboard/desktop spawn CLI actions with ``stdin=DEVNULL`` and
-    ``HERMES_NONINTERACTIVE=1`` (see ``hermes_cli/web_server.py``). In that
+    ``HERMES_NONINTERACTIVE=1`` (see ``lliam_cli/web_server.py``). In that
     context an ``input()`` raises ``EOFError`` immediately, so a prompt that
     aborts on EOF kills the spawned action — this is what made the desktop
     "restart gateway" fail when the Windows gateway service was not yet
@@ -347,7 +347,7 @@ def prompt_checklist(title: str, items: list, pre_selected: list = None) -> list
     if pre_selected is None:
         pre_selected = []
 
-    from hermes_cli.curses_ui import curses_checklist
+    from lliam_cli.curses_ui import curses_checklist
 
     chosen = curses_checklist(
         title,
@@ -462,7 +462,7 @@ def _print_setup_summary(config: dict, hermes_home):
         _img_backend = None
         try:
             from agent.image_gen_registry import list_providers
-            from hermes_cli.plugins import _ensure_plugins_discovered
+            from lliam_cli.plugins import _ensure_plugins_discovered
 
             _ensure_plugins_discovered()
             for _p in list_providers():
@@ -489,7 +489,7 @@ def _print_setup_summary(config: dict, hermes_home):
     else:
         try:
             from agent.video_gen_registry import list_providers as _list_video_providers
-            from hermes_cli.plugins import _ensure_plugins_discovered as _ensure_plugins
+            from lliam_cli.plugins import _ensure_plugins_discovered as _ensure_plugins
             _ensure_plugins()
             _video_backend = None
             for _vp in _list_video_providers():
@@ -557,7 +557,7 @@ def _print_setup_summary(config: dict, hermes_home):
 
     # Spotify (OAuth via hermes auth spotify — check auth.json, not env vars)
     try:
-        from hermes_cli.auth import get_provider_auth_state
+        from lliam_cli.auth import get_provider_auth_state
         _spotify_state = get_provider_auth_state("spotify") or {}
         if _spotify_state.get("access_token") or _spotify_state.get("refresh_token"):
             tool_status.append(("Spotify (PKCE OAuth)", True, None))
@@ -601,7 +601,7 @@ def _print_setup_summary(config: dict, hermes_home):
         print_warning(
             "Some tools are disabled. Run 'hermes setup tools' to configure them,"
         )
-        from hermes_constants import display_hermes_home as _dhh
+        from lliam_constants import display_hermes_home as _dhh
         print_warning(f"or edit {_dhh()}/.env directly to add the missing API keys.")
         print()
 
@@ -625,7 +625,7 @@ def _print_setup_summary(config: dict, hermes_home):
     print()
 
     # Show file locations prominently
-    from hermes_constants import display_hermes_home as _dhh
+    from lliam_constants import display_hermes_home as _dhh
     print(color(f"📁 All your files are in {_dhh()}/:", Colors.CYAN, Colors.BOLD))
     print()
     print(f"   {color('Settings:', Colors.YELLOW)}  {get_config_path()}")
@@ -730,7 +730,7 @@ def setup_model_provider(config: dict, *, quick: bool = False):
     When *quick* is True, skips credential rotation, vision, and TTS
     configuration — used by the streamlined first-time quick setup.
     """
-    from hermes_cli.config import load_config, save_config
+    from lliam_cli.config import load_config, save_config
 
     print_header("Inference Provider")
     print_info("Choose how to connect to your main chat model.")
@@ -739,7 +739,7 @@ def setup_model_provider(config: dict, *, quick: bool = False):
 
     # Delegate to the shared hermes model flow — handles provider picker,
     # credential prompting, model selection, and config persistence.
-    from hermes_cli.main import select_provider_and_model
+    from lliam_cli.main import select_provider_and_model
     try:
         select_provider_and_model()
     except (SystemExit, KeyboardInterrupt):
@@ -868,7 +868,7 @@ def _xai_oauth_logged_in_for_setup() -> bool:
     through ``hermes model`` -> xAI Grok OAuth (SuperGrok / Premium+).
     """
     try:
-        from hermes_cli.auth import get_xai_oauth_auth_status
+        from lliam_cli.auth import get_xai_oauth_auth_status
 
         return bool(get_xai_oauth_auth_status().get("logged_in"))
     except Exception:
@@ -882,7 +882,7 @@ def _run_xai_oauth_login_from_setup() -> bool:
     to whatever the user picked next, e.g. Edge TTS).
     """
     try:
-        from hermes_cli.auth import (
+        from lliam_cli.auth import (
             DEFAULT_XAI_OAUTH_BASE_URL,
             _is_remote_session,
             _save_xai_oauth_tokens,
@@ -1063,7 +1063,7 @@ def _setup_tts_provider(config: dict):
                     save_env_value("XAI_API_KEY", api_key)
                     print_success("xAI TTS API key saved")
                 else:
-                    from hermes_constants import display_hermes_home as _dhh
+                    from lliam_constants import display_hermes_home as _dhh
                     print_warning(
                         "No xAI API key provided for TTS. Configure XAI_API_KEY "
                         f"via hermes setup model or {_dhh()}/.env to use xAI TTS. "
@@ -1677,7 +1677,7 @@ def _is_valid_telegram_bot_token(token: str) -> bool:
 def _setup_telegram_auto_result():
     """Attempt automatic Telegram bot creation via managed QR onboarding."""
     try:
-        from hermes_cli.telegram_managed_bot import auto_setup_telegram_bot_result
+        from lliam_cli.telegram_managed_bot import auto_setup_telegram_bot_result
     except ImportError:
         return None
 
@@ -1904,7 +1904,7 @@ def _setup_bluebubbles():
 
 def _setup_qqbot():
     """Configure QQ Bot (Official API v2) via gateway setup."""
-    from hermes_cli.gateway import _setup_qqbot as _gateway_setup_qqbot
+    from lliam_cli.gateway import _setup_qqbot as _gateway_setup_qqbot
     _gateway_setup_qqbot()
 
 
@@ -1943,7 +1943,7 @@ def _setup_webhooks():
     save_env_value("WEBHOOK_ENABLED", "true")
     print()
     print_success("Webhooks enabled! Next steps:")
-    from hermes_constants import display_hermes_home as _dhh
+    from lliam_constants import display_hermes_home as _dhh
     print_info(f"   1. Define webhook routes in {_dhh()}/config.yaml")
     print_info("   2. Point your service (GitHub, GitLab, etc.) at:")
     print_info("      http://your-server:8644/webhooks/<route-name>")
@@ -1957,7 +1957,7 @@ def _setup_webhooks():
 
 def setup_gateway(config: dict):
     """Configure messaging platform integrations."""
-    from hermes_cli.gateway import _all_platforms, _platform_status, _configure_platform
+    from lliam_cli.gateway import _all_platforms, _platform_status, _configure_platform
 
     print_header("Messaging Platforms")
     print_info("Connect to messaging platforms to chat with Hermes from anywhere.")
@@ -2041,7 +2041,7 @@ def setup_gateway(config: dict):
         _is_macos = _platform.system() == "Darwin"
         _is_windows = _platform.system() == "Windows"
 
-        from hermes_cli.gateway import (
+        from lliam_cli.gateway import (
             _is_service_installed,
             _is_service_running,
             supports_systemd_services,
@@ -2085,7 +2085,7 @@ def setup_gateway(config: dict):
                     elif _is_macos:
                         launchd_restart()
                     elif _is_windows:
-                        from hermes_cli import gateway_windows
+                        from lliam_cli import gateway_windows
                         gateway_windows.restart()
                 except UserSystemdUnavailableError as e:
                     print_error("  Restart failed — user systemd not reachable:")
@@ -2110,7 +2110,7 @@ def setup_gateway(config: dict):
                     elif _is_macos:
                         launchd_start()
                     elif _is_windows:
-                        from hermes_cli import gateway_windows
+                        from lliam_cli import gateway_windows
                         gateway_windows.start()
                 except UserSystemdUnavailableError as e:
                     print_error("  Start failed — user systemd not reachable:")
@@ -2146,7 +2146,7 @@ def setup_gateway(config: dict):
                         # Task AND starts it immediately (via schtasks /Run
                         # or a direct spawn fallback), so no separate start
                         # prompt is needed here.
-                        from hermes_cli import gateway_windows
+                        from lliam_cli import gateway_windows
                         gateway_windows.install(force=False)
                         did_install = True
                         started_inline = True
@@ -2175,7 +2175,7 @@ def setup_gateway(config: dict):
                     print_info("  Or as a boot-time service: hermes gateway install --system")
                 print_info("  Or run in foreground:  hermes gateway")
         else:
-            from hermes_constants import is_container
+            from lliam_constants import is_container
             if is_container():
                 print_info("Start the gateway to bring your bots online:")
                 print_info("   hermes gateway run          # Run as container main process")
@@ -2205,7 +2205,7 @@ def setup_tools(config: dict, first_install: bool = False):
         first_install: When True, uses the simplified first-install flow
             (no platform menu, prompts for all unconfigured API keys).
     """
-    from hermes_cli.tools_config import tools_command
+    from lliam_cli.tools_config import tools_command
 
     tools_command(first_install=first_install, config=config)
 
@@ -2219,7 +2219,7 @@ def _model_section_has_credentials(config: dict) -> bool:
     """Return True when any known inference provider has usable credentials.
 
     Sources of truth:
-      * ``PROVIDER_REGISTRY`` in ``hermes_cli.auth`` — lists every supported
+      * ``PROVIDER_REGISTRY`` in ``lliam_cli.auth`` — lists every supported
         provider along with its ``api_key_env_vars``.
       * ``active_provider`` in the auth store — covers OAuth device-code /
         external-OAuth providers (Nous, Codex, Qwen, Gemini CLI, ...).
@@ -2227,14 +2227,14 @@ def _model_section_has_credentials(config: dict) -> bool:
         ``OPENAI_API_KEY`` / ``OPENROUTER_API_KEY`` values through OpenRouter.
     """
     try:
-        from hermes_cli.auth import get_active_provider
+        from lliam_cli.auth import get_active_provider
         if get_active_provider():
             return True
     except Exception:
         pass
 
     try:
-        from hermes_cli.auth import PROVIDER_REGISTRY
+        from lliam_cli.auth import PROVIDER_REGISTRY
     except Exception:
         PROVIDER_REGISTRY = {}  # type: ignore[assignment]
 
@@ -2287,7 +2287,7 @@ def _get_section_config_summary(config: dict, section_key: str) -> Optional[str]
     """Return a short summary if a setup section is already configured, else None.
 
     Used after OpenClaw migration to detect which sections can be skipped.
-    ``get_env_value`` is the module-level import from hermes_cli.config
+    ``get_env_value`` is the module-level import from lliam_cli.config
     so that test patches on ``setup_mod.get_env_value`` take effect.
     """
     if section_key == "model":
@@ -2309,7 +2309,7 @@ def _get_section_config_summary(config: dict, section_key: str) -> Optional[str]
         return f"max turns: {max_turns}"
 
     elif section_key == "gateway":
-        from hermes_cli.gateway import _all_platforms, _platform_status
+        from lliam_cli.gateway import _all_platforms, _platform_status
         # Count any non-empty status other than the "not configured" sentinel —
         # platforms like WhatsApp ("enabled, not paired"), Matrix ("configured
         # + E2EE"), and Signal ("partially configured") all indicate the user
@@ -2639,7 +2639,7 @@ def _run_portal_one_shot(config: dict) -> None:
     provider write here) means ``hermes portal`` always offers a model picker,
     and there is a single source of truth for the Nous onboarding steps.
     """
-    from hermes_cli.config import load_config
+    from lliam_cli.config import load_config
 
     print()
     print(
@@ -2669,7 +2669,7 @@ def _run_portal_one_shot(config: dict) -> None:
     # provider=nous via the login/model save. This is the same routine quick
     # setup calls, so `hermes portal` == quick setup's Nous step.
     try:
-        from hermes_cli.main import _model_flow_nous
+        from lliam_cli.main import _model_flow_nous
 
         _model_flow_nous(config)
     except (KeyboardInterrupt, EOFError, SystemExit):
@@ -2718,7 +2718,7 @@ def run_setup_wizard(args):
       hermes setup tools     — just tool configuration
       hermes setup agent     — just agent settings
     """
-    from hermes_cli.config import is_managed, managed_error
+    from lliam_cli.config import is_managed, managed_error
     if is_managed():
         managed_error("run setup wizard")
         return
@@ -2796,7 +2796,7 @@ def run_setup_wizard(args):
         return
 
     # Check if this is an existing installation with a provider configured
-    from hermes_cli.auth import get_active_provider
+    from lliam_cli.auth import get_active_provider
 
     active_provider = get_active_provider()
     is_existing = (
@@ -2950,7 +2950,7 @@ def _run_first_time_quick_setup(config: dict, hermes_home, is_existing: bool):
     settings, tools); the user can customize later via ``hermes setup <section>``
     or switch providers with ``hermes model``.
     """
-    from hermes_cli.config import load_config
+    from lliam_cli.config import load_config
 
     # Step 1: Nous Portal — OAuth login + model selection.
     # _model_flow_nous() handles both the logged-out path (device-code OAuth,
@@ -2963,7 +2963,7 @@ def _run_first_time_quick_setup(config: dict, hermes_home, is_existing: bool):
     print_info("Sign up: https://portal.nousresearch.com/manage-subscription")
     print()
     try:
-        from hermes_cli.main import _model_flow_nous
+        from lliam_cli.main import _model_flow_nous
         _model_flow_nous(config)
     except (KeyboardInterrupt, EOFError):
         print()
@@ -3035,7 +3035,7 @@ def _blank_slate_minimal_toolsets(config: dict):
 
     try:
         from toolsets import TOOLSETS
-        from hermes_cli.tools_config import CONFIGURABLE_TOOLSETS, _get_plugin_toolset_keys
+        from lliam_cli.tools_config import CONFIGURABLE_TOOLSETS, _get_plugin_toolset_keys
 
         all_keys = set()
         all_keys.update(k for k, _, _ in CONFIGURABLE_TOOLSETS)
@@ -3094,7 +3094,7 @@ def _run_blank_slate_setup(config: dict, hermes_home, is_existing: bool):
 
     Either way nothing is enabled that the user did not explicitly choose.
     """
-    from hermes_cli.config import load_config
+    from lliam_cli.config import load_config
 
     print()
     print_header("Blank Slate Setup")
@@ -3164,7 +3164,7 @@ def _run_blank_slate_setup(config: dict, hermes_home, is_existing: bool):
 
 def _blank_slate_walkthrough(config: dict, hermes_home):
     """Opt-in walkthrough for Blank Slate: skills, tools, plugins, MCP, gateway."""
-    from hermes_cli.config import load_config
+    from lliam_cli.config import load_config
 
     # ── Bundled skills — default to NONE, offer to seed all ──
     print()
@@ -3199,7 +3199,7 @@ def _blank_slate_walkthrough(config: dict, hermes_home):
     print_info(" the most minimal agent.)")
     if prompt_yes_no("Open the tool selector to enable more tools?", default=False):
         try:
-            from hermes_cli.tools_config import tools_command
+            from lliam_cli.tools_config import tools_command
             tools_command(first_install=False, config=config)
             # tools_command saves via its own load/save cycle — re-sync.
             _refreshed = load_config()
@@ -3247,7 +3247,7 @@ def _blank_slate_walkthrough(config: dict, hermes_home):
 
 def _run_quick_setup(config: dict, hermes_home):
     """Quick setup — only configure items that are missing."""
-    from hermes_cli.config import (
+    from lliam_cli.config import (
         get_missing_env_vars,
         get_missing_config_fields,
         check_config_version,

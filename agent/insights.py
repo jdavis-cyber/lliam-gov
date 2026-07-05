@@ -94,7 +94,7 @@ class InsightsEngine:
         Initialize with a SessionDB instance.
 
         Args:
-            db: A SessionDB instance (from hermes_state.py)
+            db: A SessionDB instance (from lliam_state.py)
         """
         self.db = db
         self._conn = db._conn

@@ -14,8 +14,8 @@ import json
 
 import pytest
 
-import hermes_cli.auth as auth
-from hermes_cli.auth import AuthError, _refresh_codex_auth_tokens, resolve_codex_runtime_credentials
+import lliam_cli.auth as auth
+from lliam_cli.auth import AuthError, _refresh_codex_auth_tokens, resolve_codex_runtime_credentials
 
 STALE = {"access_token": "stale-access", "refresh_token": "stale-refresh"}
 

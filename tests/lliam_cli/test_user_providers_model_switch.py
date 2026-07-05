@@ -6,8 +6,8 @@ are exposed in the model picker.
 """
 
 import pytest
-from hermes_cli.model_switch import list_authenticated_providers, switch_model
-from hermes_cli import runtime_provider as rp
+from lliam_cli.model_switch import list_authenticated_providers, switch_model
+from lliam_cli import runtime_provider as rp
 
 
 # =============================================================================
@@ -20,7 +20,7 @@ def test_list_authenticated_providers_includes_full_models_list_from_user_provid
     Regression test: previously only default_model was shown in /model picker.
     """
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
     
     user_providers = {
         "local-ollama": {
@@ -60,7 +60,7 @@ def test_list_authenticated_providers_includes_full_models_list_from_user_provid
 def test_list_authenticated_providers_dedupes_models_when_default_in_list(monkeypatch):
     """When default_model is also in models list, don't duplicate."""
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
     
     user_providers = {
         "my-provider": {
@@ -95,7 +95,7 @@ def test_list_authenticated_providers_enumerates_dict_format_models(monkeypatch)
     even though Hermes's own writer and downstream readers use dict format.
     """
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     user_providers = {
         "local-ollama": {
@@ -139,7 +139,7 @@ def test_list_authenticated_providers_uses_live_models_for_user_provider(monkeyp
     /v1/models endpoint exposed newly added models.
     """
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
     monkeypatch.setenv("CRS_TEST_KEY", "sk-test")
 
     calls = []
@@ -148,7 +148,7 @@ def test_list_authenticated_providers_uses_live_models_for_user_provider(monkeyp
         calls.append((api_key, base_url))
         return ["old-configured-model", "new-live-model"]
 
-    monkeypatch.setattr("hermes_cli.models.fetch_api_models", fake_fetch_api_models)
+    monkeypatch.setattr("lliam_cli.models.fetch_api_models", fake_fetch_api_models)
 
     user_providers = {
         "crs-henkee": {
@@ -184,7 +184,7 @@ def test_list_authenticated_providers_dict_models_without_default_model(monkeypa
     """Dict-format ``models:`` without a ``default_model`` must still expose
     every dict key, not collapse to an empty list."""
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     user_providers = {
         "multimodel": {
@@ -216,7 +216,7 @@ def test_list_authenticated_providers_dict_models_dedupe_with_default(monkeypatc
     """When ``default_model`` is also a key in the ``models:`` dict, it must
     appear exactly once (list already had this for list-format models)."""
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     user_providers = {
         "my-provider": {
@@ -248,7 +248,7 @@ def test_list_authenticated_providers_dict_models_dedupe_with_default(monkeypatc
 
 def test_openai_native_curated_catalog_is_non_empty():
     """Regression: built-in openai must have a static catalog for picker totals."""
-    from hermes_cli.models import _PROVIDER_MODELS
+    from lliam_cli.models import _PROVIDER_MODELS
 
     assert _PROVIDER_MODELS.get("openai")
     assert len(_PROVIDER_MODELS["openai"]) >= 4
@@ -266,7 +266,7 @@ def test_list_authenticated_providers_openai_alias_not_emitted_as_phantom(monkey
         "agent.models_dev.fetch_models_dev",
         lambda: {"openai": {"env": ["OPENAI_API_KEY"]}},
     )
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     providers = list_authenticated_providers(
         current_provider="",
@@ -287,7 +287,7 @@ def test_resolve_provider_full_user_config_openai_beats_alias():
     'openai' → 'openrouter' alias. Regression for the model-picker bug
     where users with provider=openai-api + a providers.openai config block
     had their OpenAI selection silently routed to OpenRouter (HTTP 401)."""
-    from hermes_cli.providers import resolve_provider_full
+    from lliam_cli.providers import resolve_provider_full
 
     user_providers = {
         "openai": {
@@ -338,7 +338,7 @@ def test_switch_model_user_config_openai_does_not_hop_to_openrouter(monkeypatch)
 def test_list_authenticated_providers_user_openai_official_url_fallback(monkeypatch):
     """User providers: api.openai.com with no models list uses native curated fallback."""
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     user_providers = {
         "openai-direct": {
@@ -361,7 +361,7 @@ def test_list_authenticated_providers_user_openai_official_url_fallback(monkeypa
 def test_list_authenticated_providers_fallback_to_default_only(monkeypatch):
     """When no models array is provided, should fall back to default_model."""
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
     
     user_providers = {
         "simple-provider": {
@@ -398,7 +398,7 @@ def test_list_authenticated_providers_accepts_base_url_and_singular_model(monkey
     surfaced with empty ``api_url`` and no default.
     """
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     user_providers = {
         "custom": {
@@ -435,7 +435,7 @@ def test_list_authenticated_providers_dedupes_when_user_and_custom_overlap(monke
     overlapping entries produced two picker rows for the same provider.
     """
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     providers = list_authenticated_providers(
         current_provider="custom",
@@ -475,7 +475,7 @@ def test_list_authenticated_providers_no_duplicate_labels_across_schemas(monkeyp
     identically, bypassing ``seen_slugs`` dedup because the slug shapes differ.
     """
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     shared_entries = [
         ("endpoint-a", "http://a.local/v1"),
@@ -533,7 +533,7 @@ def test_list_authenticated_providers_hides_custom_shadowing_builtin_endpoint(mo
             }
         },
     )
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     custom_providers = [
         {
@@ -579,7 +579,7 @@ def test_list_authenticated_providers_keeps_custom_with_distinct_endpoint(monkey
             }
         },
     )
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     custom_providers = [
         {
@@ -623,7 +623,7 @@ def test_list_authenticated_providers_dedup_honors_base_url_env_override(monkeyp
             }
         },
     )
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     custom_providers = [
         {
@@ -796,7 +796,7 @@ def test_switch_model_resolves_user_provider_credentials(monkeypatch, tmp_path):
     
     # Mock validation to pass
     monkeypatch.setattr(
-        "hermes_cli.models.validate_requested_model",
+        "lliam_cli.models.validate_requested_model",
         lambda *a, **k: {"accepted": True, "persist": True, "recognized": True, "message": None}
     )
     
@@ -939,14 +939,14 @@ def _run_user_provider_override_case(
         }
     }
 
-    with patch("hermes_cli.model_switch.resolve_alias", return_value=None), \
-         patch("hermes_cli.model_switch.list_provider_models", return_value=[]), \
-         patch("hermes_cli.model_switch.normalize_model_for_provider", side_effect=lambda model, provider: model), \
-         patch("hermes_cli.models.validate_requested_model", return_value=_REJECTED_VALIDATION), \
-         patch("hermes_cli.models.detect_provider_for_model", return_value=None), \
-         patch("hermes_cli.model_switch.get_model_info", return_value=None), \
-         patch("hermes_cli.model_switch.get_model_capabilities", return_value=None), \
-         patch("hermes_cli.runtime_provider.resolve_runtime_provider", return_value={"api_key": "***", "base_url": base_url, "api_mode": "anthropic_messages"}):
+    with patch("lliam_cli.model_switch.resolve_alias", return_value=None), \
+         patch("lliam_cli.model_switch.list_provider_models", return_value=[]), \
+         patch("lliam_cli.model_switch.normalize_model_for_provider", side_effect=lambda model, provider: model), \
+         patch("lliam_cli.models.validate_requested_model", return_value=_REJECTED_VALIDATION), \
+         patch("lliam_cli.models.detect_provider_for_model", return_value=None), \
+         patch("lliam_cli.model_switch.get_model_info", return_value=None), \
+         patch("lliam_cli.model_switch.get_model_capabilities", return_value=None), \
+         patch("lliam_cli.runtime_provider.resolve_runtime_provider", return_value={"api_key": "***", "base_url": base_url, "api_mode": "anthropic_messages"}):
         return switch_model(
             raw_input=raw_input,
             current_provider=slug,
@@ -1059,7 +1059,7 @@ def test_section3_probes_no_key_endpoint_without_explicit_models(monkeypatch):
     list because section 3 gated probing on ``api_url and api_key``.
     """
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     probed = {}
 
@@ -1069,7 +1069,7 @@ def test_section3_probes_no_key_endpoint_without_explicit_models(monkeypatch):
         probed["api_url"] = api_url
         return ["live-model-1", "live-model-2", "live-model-3"]
 
-    monkeypatch.setattr("hermes_cli.models.fetch_api_models", _fake_fetch)
+    monkeypatch.setattr("lliam_cli.models.fetch_api_models", _fake_fetch)
 
     user_providers = {
         "local-llamacpp": {
@@ -1097,12 +1097,12 @@ def test_section3_skips_probe_when_no_key_but_explicit_models(monkeypatch):
     """A no-key endpoint WITH an explicit models: list is the user narrowing a
     public endpoint to a subset — skip live discovery and keep the list."""
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
 
     def _fail_fetch(api_key, api_url):
         raise AssertionError("should not probe when explicit models are set")
 
-    monkeypatch.setattr("hermes_cli.models.fetch_api_models", _fail_fetch)
+    monkeypatch.setattr("lliam_cli.models.fetch_api_models", _fail_fetch)
 
     user_providers = {
         "public-subset": {
@@ -1135,11 +1135,11 @@ def test_current_custom_model_is_surfaced_in_builtin_provider_row(monkeypatch):
     current provider's list.
     """
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
     # Pin a small curated catalog so the assertion is deterministic.
     monkeypatch.setattr(
-        "hermes_cli.models.cached_provider_model_ids",
+        "lliam_cli.models.cached_provider_model_ids",
         lambda slug, **kw: ["anthropic/claude-opus-4.8", "openai/gpt-5.5"]
         if slug == "openrouter"
         else [],
@@ -1163,11 +1163,11 @@ def test_current_custom_model_not_leaked_into_other_provider_rows(monkeypatch):
     """The current model is only injected into the CURRENT provider's row,
     never into other providers (which can't serve it)."""
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
-    monkeypatch.setattr("hermes_cli.providers.HERMES_OVERLAYS", {})
+    monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
     monkeypatch.setenv("NOUS_API_KEY", "sk-test")
     monkeypatch.setattr(
-        "hermes_cli.models.cached_provider_model_ids",
+        "lliam_cli.models.cached_provider_model_ids",
         lambda slug, **kw: ["curated/one"],
     )
 

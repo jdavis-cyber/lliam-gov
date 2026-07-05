@@ -26,7 +26,7 @@ from unittest.mock import patch
 
 class TestInstallCuaDriverUpgrade:
     def test_upgrade_on_unsupported_platform_is_silent_noop(self):
-        from hermes_cli import tools_config
+        from lliam_cli import tools_config
 
         with patch.object(tools_config, "_print_warning") as warn, \
              patch("platform.system", return_value="FreeBSD"):
@@ -34,7 +34,7 @@ class TestInstallCuaDriverUpgrade:
             warn.assert_not_called()
 
     def test_non_upgrade_on_unsupported_platform_warns(self):
-        from hermes_cli import tools_config
+        from lliam_cli import tools_config
 
         with patch.object(tools_config, "_print_warning") as warn, \
              patch("platform.system", return_value="FreeBSD"):
@@ -42,7 +42,7 @@ class TestInstallCuaDriverUpgrade:
             warn.assert_called()
 
     def test_upgrade_on_macos_with_binary_runs_installer(self):
-        from hermes_cli import tools_config
+        from lliam_cli import tools_config
 
         with patch("platform.system", return_value="Darwin"), \
              patch.object(tools_config.shutil, "which",
@@ -57,7 +57,7 @@ class TestInstallCuaDriverUpgrade:
             assert kwargs.get("verbose") is False
 
     def test_upgrade_on_macos_without_binary_runs_installer(self):
-        from hermes_cli import tools_config
+        from lliam_cli import tools_config
 
         with patch("platform.system", return_value="Darwin"), \
              patch.object(tools_config.shutil, "which",
@@ -68,7 +68,7 @@ class TestInstallCuaDriverUpgrade:
             runner.assert_called_once()
 
     def test_non_upgrade_on_macos_with_binary_skips_install(self):
-        from hermes_cli import tools_config
+        from lliam_cli import tools_config
 
         with patch("platform.system", return_value="Darwin"), \
              patch.object(tools_config.shutil, "which",
@@ -80,7 +80,7 @@ class TestInstallCuaDriverUpgrade:
             runner.assert_not_called()
 
     def test_non_upgrade_on_macos_without_binary_runs_installer(self):
-        from hermes_cli import tools_config
+        from lliam_cli import tools_config
 
         with patch("platform.system", return_value="Darwin"), \
              patch.object(tools_config.shutil, "which",
@@ -113,7 +113,7 @@ class TestArchProbeRemoval:
     """
 
     def test_probe_function_is_gone(self):
-        from hermes_cli import tools_config
+        from lliam_cli import tools_config
         assert not hasattr(tools_config, "_check_cua_driver_asset_for_arch")
         assert not hasattr(tools_config, "_latest_cua_driver_rs_release")
 
@@ -123,7 +123,7 @@ class TestArchProbeRemoval:
         line. install.sh errors cleanly when the arch has no asset, so the
         probe was duplicate gatekeeping.
         """
-        from hermes_cli import tools_config
+        from lliam_cli import tools_config
 
         with patch("platform.system", return_value="Darwin"), \
              patch.object(tools_config.shutil, "which",
@@ -143,7 +143,7 @@ class TestArchProbeRemoval:
         short-circuits the network re-install via the binary's native
         ``check-update --json`` verb.
         """
-        from hermes_cli import tools_config
+        from lliam_cli import tools_config
 
         with patch("platform.system", return_value="Darwin"), \
              patch.object(tools_config.shutil, "which",

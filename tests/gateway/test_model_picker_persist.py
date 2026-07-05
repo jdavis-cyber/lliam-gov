@@ -65,7 +65,7 @@ def _make_event(text):
 
 def _fake_switch_result():
     """A successful ModelSwitchResult that bypasses real provider resolution."""
-    from hermes_cli.model_switch import ModelSwitchResult
+    from lliam_cli.model_switch import ModelSwitchResult
 
     return ModelSwitchResult(
         success=True,
@@ -100,14 +100,14 @@ def _setup_isolated_home(tmp_path, monkeypatch, model_yaml_value):
     # picker contents. The handler imports it as a local alias at call time, so
     # patching the source-module attribute takes effect.
     monkeypatch.setattr(
-        "hermes_cli.model_switch.list_picker_providers",
+        "lliam_cli.model_switch.list_picker_providers",
         lambda **kw: [{"slug": "openrouter", "name": "OpenRouter", "models": ["gpt-5.5"]}],
     )
     # switch_model is imported as a local alias inside the handler
-    # (`from hermes_cli.model_switch import switch_model as _switch_model`),
+    # (`from lliam_cli.model_switch import switch_model as _switch_model`),
     # so patching the source-module attribute takes effect at call time.
     monkeypatch.setattr(
-        "hermes_cli.model_switch.switch_model",
+        "lliam_cli.model_switch.switch_model",
         lambda **kw: _fake_switch_result(),
     )
     # The confirmation builder resolves context length for display, which
@@ -115,12 +115,12 @@ def _setup_isolated_home(tmp_path, monkeypatch, model_yaml_value):
     # OpenRouter models catalog). Stub it — these tests don't assert on the
     # displayed context, and the closure imports it lazily from this module.
     monkeypatch.setattr(
-        "hermes_cli.model_switch.resolve_display_context_length",
+        "lliam_cli.model_switch.resolve_display_context_length",
         lambda *a, **k: 272000,
     )
     # save_config writes to ``get_hermes_home() / config.yaml`` — point it here.
-    monkeypatch.setattr("hermes_constants.get_hermes_home", lambda: hermes_home)
-    monkeypatch.setattr("hermes_cli.config.get_hermes_home", lambda: hermes_home)
+    monkeypatch.setattr("lliam_constants.get_hermes_home", lambda: hermes_home)
+    monkeypatch.setattr("lliam_cli.config.get_hermes_home", lambda: hermes_home)
     return cfg_path
 
 

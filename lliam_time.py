@@ -16,7 +16,7 @@ crashes due to a bad timezone string.
 import logging
 import os
 from datetime import datetime
-from hermes_constants import get_config_path
+from lliam_constants import get_config_path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def _resolve_timezone_name() -> str:
             # Managed scope: an administrator can pin ``timezone`` too. Overlay
             # via the shared helper (fail-open) since this reads config.yaml directly.
             try:
-                from hermes_cli import managed_scope
+                from lliam_cli import managed_scope
                 cfg = managed_scope.apply_managed_overlay(cfg)
             except Exception:
                 pass
