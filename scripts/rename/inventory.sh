@@ -16,5 +16,9 @@ source "${SCRIPT_DIR}/exclude_globs.sh"
 
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+# Run FROM the repo root and search "." — rg resolves relative exclusion globs like
+# 'docs/governance/plans/**' against the cwd, not the path argument; invoking this
+# script from elsewhere would silently leak excluded paths into the report.
+cd "${REPO_ROOT}"
 # rg exits 1 on zero matches — at R.8 that is SUCCESS, not failure; only 2+ is an error.
-rg -i --stats hermes "${HERMES_EXCLUDES[@]}" "${REPO_ROOT}" || [[ $? -eq 1 ]]
+rg -i --stats hermes "${HERMES_EXCLUDES[@]}" . || [[ $? -eq 1 ]]
