@@ -96,6 +96,65 @@ def test_idempotent_second_call_is_noop(tmp_path):
     assert (new / "config.yaml").read_text() == "first"  # untouched by 2nd run
 
 
+def test_interrupted_copy_leaves_new_home_absent_and_retry_succeeds(
+    tmp_path, monkeypatch
+):
+    """Crash safety: a copy that dies mid-way must NOT create ``new_home``.
+
+    If the interrupted copy landed directly at ``new_home``, the
+    ``new_home.exists()`` guard would latch onto the half-populated home forever
+    and the complete legacy data would silently never be consulted again. The
+    staging-then-rename pattern guarantees ``new_home`` only appears complete.
+    """
+    old = tmp_path / ".hermes"
+    new = tmp_path / ".lliam"
+    old.mkdir()
+    (old / "config.yaml").write_text("k: v")
+
+    real_copytree = migrate_home.shutil.copytree
+
+    def _dying_copytree(src, dst, **kwargs):
+        # Simulate an interruption AFTER partial content landed on disk.
+        Path(dst).mkdir()
+        (Path(dst) / "config.yaml").write_text("half")
+        raise OSError("disk full")
+
+    monkeypatch.setattr(migrate_home.shutil, "copytree", _dying_copytree)
+    try:
+        migrate_home.migrate_if_needed(old, new)
+    except OSError:
+        pass
+
+    # new_home absent, no half-populated home, no leftover staging dir.
+    assert not new.exists()
+    assert not (tmp_path / ".lliam.migrating").exists()
+
+    # Next launch retries cleanly and completes.
+    monkeypatch.setattr(migrate_home.shutil, "copytree", real_copytree)
+    migrate_home.migrate_if_needed(old, new)
+    assert (new / "config.yaml").read_text() == "k: v"
+    assert (new / ".migrated_from_hermes").exists()
+
+
+def test_stale_staging_dir_from_prior_crash_is_discarded(tmp_path):
+    """A leftover ``<new>.migrating`` dir (crash before cleanup ran) must not
+    block or corrupt the retry — it is discarded and replaced by a fresh copy."""
+    old = tmp_path / ".hermes"
+    new = tmp_path / ".lliam"
+    old.mkdir()
+    (old / "config.yaml").write_text("fresh")
+
+    stale = tmp_path / ".lliam.migrating"
+    stale.mkdir()
+    (stale / "config.yaml").write_text("stale-partial")
+
+    migrate_home.migrate_if_needed(old, new)
+
+    assert (new / "config.yaml").read_text() == "fresh"
+    assert (new / ".migrated_from_hermes").exists()
+    assert not stale.exists()
+
+
 # ─── getenv_compat precedence ─────────────────────────────────────────────────
 
 

@@ -12294,13 +12294,19 @@ def main():
     # One-time migration of on-disk data from the pre-rename home (~/.hermes ->
     # ~/.lliam). Runs here — the earliest startup chokepoint, before any home
     # access (fast-launch paths below read the home) — and NEVER at import time.
-    # Resolves the same old/new homes the rest of the process uses. Never fatal:
-    # a migration failure must not stop hermes from starting.
+    # Resolves the same old/new homes the rest of the process uses. Best-effort:
+    # a failed migration must not block startup (the process runs against a
+    # fresh new home; legacy data stays intact for a retry next launch) — but
+    # unlike the cosmetic swallows around it, a failed DATA migration must not
+    # be silent, so warn on stderr for diagnosability.
     try:
         from hermes_constants import run_startup_migration
         run_startup_migration()
-    except Exception:
-        pass
+    except Exception as e:
+        print(
+            f"warning: lliam home migration from legacy hermes home failed: {e}",
+            file=sys.stderr,
+        )
 
     # Force UTF-8 stdio on Windows before anything prints.  No-op elsewhere.
     try:

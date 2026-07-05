@@ -1725,10 +1725,10 @@ def _profile_arg(hermes_home: str | None = None, default_root: str | Path | None
 
 def _profile_arg_for_target_user(hermes_home: str, target_home_dir: str) -> str:
     """Return the profile arg for a system service running as another user."""
-    from hermes_constants import _get_platform_default_hermes_home
+    from hermes_constants import get_default_home_leaf
 
     # Post-rename default leaf is ``.lliam``; derive it instead of hardcoding.
-    target_root = Path(target_home_dir) / _get_platform_default_hermes_home().name
+    target_root = Path(target_home_dir) / get_default_home_leaf()
     try:
         Path(hermes_home).resolve().relative_to(target_root.resolve())
         return _profile_arg(hermes_home, default_root=target_root)
@@ -2567,11 +2567,11 @@ def _hermes_home_for_target_user(target_home_dir: str) -> str:
       /root/.lliam/profiles/coder      → /home/alice/.lliam/profiles/coder
       /opt/custom-hermes               → /opt/custom-hermes  (kept as-is)
     """
-    from hermes_constants import _get_platform_default_hermes_home
+    from hermes_constants import get_default_home_leaf
 
     # Derive the default-home leaf (``.lliam``) from the constants module so this
     # stays correct through the rename instead of hardcoding the old ``.hermes``.
-    default_leaf = _get_platform_default_hermes_home().name
+    default_leaf = get_default_home_leaf()
     current_hermes = get_hermes_home().resolve()
     current_default = (Path.home() / default_leaf).resolve()
     target_default = Path(target_home_dir) / default_leaf

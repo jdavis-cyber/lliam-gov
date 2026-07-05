@@ -66,6 +66,18 @@ def _get_platform_default_hermes_home() -> Path:
     return _get_platform_default_home("lliam")
 
 
+def get_default_home_leaf() -> str:
+    """Return the default home directory's leaf name (``".lliam"`` on POSIX,
+    ``"lliam"`` on native Windows).
+
+    Public accessor for callers that need to construct the default home under a
+    *different* base directory (e.g. remapping a sudo install to the target
+    user's home in ``hermes_cli/gateway.py``) without hardcoding the leaf or
+    reaching into the private platform helper.
+    """
+    return _get_platform_default_hermes_home().name
+
+
 def get_hermes_home() -> Path:
     """Return the Hermes home directory (default: platform-native path).
 
