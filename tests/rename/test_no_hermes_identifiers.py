@@ -70,6 +70,9 @@ def test_no_lliam_owned_hermes_refs():
         f"rg failed to run (exit {result.returncode}): {result.stderr}"
     )
 
-    out = result.stdout.split()
+    out = result.stdout.splitlines()   # one path per line; .split() would shred spaced filenames
     offenders = [f for f in out if not _is_allowed(f)]
-    assert not offenders, f"Lliam-owned hermes identifiers remain: {offenders}"
+    assert not offenders, (
+        f"{len(offenders)} Lliam-owned hermes files remain; "
+        f"first 20: {offenders[:20]} (run scripts/rename/inventory.sh for the full list)"
+    )

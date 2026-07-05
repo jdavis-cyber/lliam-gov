@@ -7,7 +7,7 @@
 #           (c) historical evidence/audit logs — frozen, editing them is tampering;
 #           (d) these planning docs — they quote the OLD name on purpose (history);
 #               renaming their hermes mentions would corrupt the record.
-# These exclusion globs MUST match the guard test below exactly.
+# These exclusion globs MUST match tests/rename/test_no_hermes_identifiers.py exactly.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,4 +16,5 @@ source "${SCRIPT_DIR}/exclude_globs.sh"
 
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-rg -i --stats hermes "${HERMES_EXCLUDES[@]}" "${REPO_ROOT}"
+# rg exits 1 on zero matches — at R.8 that is SUCCESS, not failure; only 2+ is an error.
+rg -i --stats hermes "${HERMES_EXCLUDES[@]}" "${REPO_ROOT}" || [[ $? -eq 1 ]]
