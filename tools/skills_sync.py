@@ -601,7 +601,7 @@ def sync_skills(quiet: bool = False) -> dict:
                         print(
                             f"  ⚠ {skill_name}: bundled version shipped but you "
                             f"already have a local skill by this name — yours "
-                            f"was kept. Run `hermes skills reset {skill_name}` "
+                            f"was kept. Run `lliam-gov skills reset {skill_name}` "
                             f"to replace it with the bundled version."
                         )
                 else:
@@ -807,7 +807,7 @@ def reset_bundled_skill(name: str, restore: bool = False) -> dict:
             "action": "not_in_manifest",
             "message": (
                 f"'{name}' is not a tracked bundled skill. Nothing to reset. "
-                f"(Hub-installed skills use `hermes skills uninstall`.)"
+                f"(Hub-installed skills use `lliam-gov skills uninstall`.)"
             ),
             "synced": None,
         }
@@ -963,7 +963,7 @@ def diff_bundled_skill(name: str) -> dict:
             "diffs": [],
             "message": (
                 f"'{name}' is not a tracked bundled skill (no stock version to "
-                f"diff against). Hub-installed skills use `hermes skills inspect`."
+                f"diff against). Hub-installed skills use `lliam-gov skills inspect`."
             ),
         }
     dest = _compute_relative_dest(bundled_src, bundled_dir)

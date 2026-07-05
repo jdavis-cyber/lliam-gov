@@ -109,7 +109,7 @@ def openclaw_residue_hint_cli() -> str:
         "To port your config, memory, and skills over to Hermes, run "
         "`hermes claw migrate`.\n"
         "If you've already migrated and want to archive the old directory, "
-        "run `hermes claw cleanup` (renames it to ~/.openclaw.pre-migration — "
+        "run `lliam-gov claw cleanup` (renames it to ~/.openclaw.pre-migration — "
         "OpenClaw will stop working after this).\n"
         "This tip only shows once."
     )

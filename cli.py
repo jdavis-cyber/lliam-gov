@@ -1338,7 +1338,7 @@ def _setup_worktree(repo_root: str = None, sync_base: bool = True) -> Optional[D
     repo_root = repo_root or _git_repo_root()
     if not repo_root:
         print("\033[31m✗ --worktree requires being inside a git repository.\033[0m")
-        print("  cd into your project repo first, then run hermes -w")
+        print("  cd into your project repo first, then run lliam-gov -w")
         return None
 
     short_id = uuid.uuid4().hex[:8]
@@ -6203,7 +6203,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                     if len(item["tools"]) > 2:
                         tools_str += f", +{len(item['tools'])-2} more"
                     self._console_print(f"   [dim]• {item['name']}[/] [dim italic]({', '.join(item['missing_vars'])})[/]")
-                self._console_print("[dim]   Run 'hermes setup' to configure[/]")
+                self._console_print("[dim]   Run 'lliam-gov setup' to configure[/]")
         except Exception:
             pass  # Don't crash on import errors
     
@@ -9312,7 +9312,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         if not view.logged_in:
             print()
             _cprint(f"  💳 {_d('Not logged into Nous Portal.')}")
-            print("  Run `hermes portal` to log in, then /credits.")
+            print("  Run `lliam-gov portal` to log in, then /credits.")
             return
 
         print()
@@ -9401,7 +9401,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                 _cprint(f"  💳 {_d(_msg)}")
             else:
                 _cprint(f"  💳 {_d('Not logged into Nous Portal.')}")
-                print("  Run `hermes portal` to log in, then /billing.")
+                print("  Run `lliam-gov portal` to log in, then /billing.")
             return
 
         # Any sub-arg is intentionally ignored — always open the menu.
@@ -9765,7 +9765,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         )
         _cprint(f"  {_d(_scope_msg)}")
         if not getattr(self, "_app", None):
-            print("  Run `hermes portal` and approve terminal billing, then retry.")
+            print("  Run `lliam-gov portal` and approve terminal billing, then retry.")
             return
         confirm_choices = [
             ("yes", "Re-authorize now", "open the portal to grant billing access"),
@@ -12330,9 +12330,9 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             profile_flag = (
                 "" if _active_profile in ("default", "custom") else f" -p {_active_profile}"
             )
-            print(f"  hermes --resume {self.session_id}{profile_flag}")
+            print(f"  lliam-gov --resume {self.session_id}{profile_flag}")
             if session_title:
-                print(f"  hermes -c \"{session_title}\"{profile_flag}")
+                print(f"  lliam-gov -c \"{session_title}\"{profile_flag}")
             print()
             print(f"Session:        {self.session_id}")
             if session_title:
@@ -14921,7 +14921,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             print(
                 "Error: stdin (fd 0) is not available.\n"
                 "This can happen with certain Python installations (e.g. uv-managed cPython on macOS).\n"
-                "Try reinstalling Python via pyenv or Homebrew, then re-run: hermes setup"
+                "Try reinstalling Python via pyenv or Homebrew, then re-run: lliam-gov setup"
             )
             _run_cleanup()
             self._print_exit_summary()
@@ -14990,7 +14990,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                     f"\nError: stdin is not usable ({_stdin_err}).\n"
                     "This can happen with certain Python installations (e.g. uv-managed cPython on macOS)\n"
                     "where kqueue cannot register fd 0.\n"
-                    "Try reinstalling Python via pyenv or Homebrew, then re-run: hermes setup"
+                    "Try reinstalling Python via pyenv or Homebrew, then re-run: lliam-gov setup"
                 )
             else:
                 raise

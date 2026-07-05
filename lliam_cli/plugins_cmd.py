@@ -525,7 +525,7 @@ def _install_plugin_core(identifier: str, *, force: bool) -> tuple[Path, dict, s
             if not force:
                 raise PluginOperationError(
                     f"Plugin '{plugin_name}' already exists. Use force reinstall "
-                    f"or run `hermes plugins update {plugin_name}`.",
+                    f"or run `lliam-gov plugins update {plugin_name}`.",
                 )
             shutil.rmtree(target)
 
@@ -624,7 +624,7 @@ def cmd_install(
     else:
         console.print(
             f"[dim]Plugin installed but not enabled. "
-            f"Run `hermes plugins enable {installed_name}` to activate.[/dim]",
+            f"Run `lliam-gov plugins enable {installed_name}` to activate.[/dim]",
         )
 
     console.print("[dim]Restart the gateway for the plugin to take effect:[/dim]")

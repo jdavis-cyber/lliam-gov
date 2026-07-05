@@ -196,7 +196,7 @@ def get_consolidate() -> bool:
     no aux-model cost. Set ``curator.consolidate: true`` to opt back into the
     LLM pass that merges overlapping skills into class-level umbrellas.
 
-    The explicit ``hermes curator run --consolidate`` flag overrides this for
+    The explicit ``lliam-gov curator run --consolidate`` flag overrides this for
     a single invocation regardless of the config value.
     """
     cfg = _load_config()
@@ -230,7 +230,7 @@ def should_run_now(now: Optional[datetime] = None) -> bool:
     default) of skill activity, not on the first background tick after
     ``hermes update``. On first observation we seed ``last_run_at`` to "now"
     and defer the first real pass by one full interval. Users who want to
-    run it sooner can always invoke ``hermes curator run`` (with or without
+    run it sooner can always invoke ``lliam-gov curator run`` (with or without
     ``--dry-run``) explicitly — that path bypasses this gate.
 
     The idle check (min_idle_hours) is applied at the call site where we know
@@ -254,7 +254,7 @@ def should_run_now(now: Optional[datetime] = None) -> bool:
             state["last_run_at"] = now.isoformat()
             state["last_run_summary"] = (
                 "deferred first run — curator seeded, will run after one "
-                "interval; use `hermes curator run --dry-run` to preview now"
+                "interval; use `lliam-gov curator run --dry-run` to preview now"
             )
             save_state(state)
         except Exception as e:  # pragma: no cover — best-effort persistence
@@ -354,7 +354,7 @@ CURATOR_DRY_RUN_BANNER = (
     "produce on a live run — but describe the actions you WOULD take, "
     "not actions you took. A downstream reviewer will read the report "
     "and decide whether to approve a live run with "
-    "`hermes curator run` (no flag).\n"
+    "`lliam-gov curator run` (no flag).\n"
     "\n"
     "If you accidentally take a mutating action, say so explicitly in "
     "the summary so the reviewer can revert it.\n"
@@ -960,8 +960,8 @@ def _build_rename_summary(
           • docx-extraction → document-tools
           • flaky-thing — pruned (stale)
           • old-utility → spreadsheet-ops
-        full report: hermes curator status
-        keep an umbrella stable: hermes curator pin document-tools
+        full report: lliam-gov curator status
+        keep an umbrella stable: lliam-gov curator pin document-tools
 
     Cap is 10 entries so a 50-skill consolidation doesn't blow up
     agent.log; the full list is always in REPORT.md. The pin hint only
@@ -1014,7 +1014,7 @@ def _build_rename_summary(
         shown += 1
     if total > SHOW:
         lines.append(f"  … and {total - SHOW} more")
-    lines.append("full report: hermes curator status")
+    lines.append("full report: lliam-gov curator status")
     # Pin hint — only surface it when there's actually a destination skill
     # worth pinning. The umbrella skills that absorbed content are the natural
     # candidates: pinning one tells future curator runs to leave it alone.
@@ -1024,7 +1024,7 @@ def _build_rename_summary(
         if umbrellas:
             example = umbrellas[0]
             lines.append(
-                f"keep an umbrella stable: hermes curator pin {example}"
+                f"keep an umbrella stable: lliam-gov curator pin {example}"
             )
     return "\n".join(lines)
 
@@ -1275,7 +1275,7 @@ def _render_report_markdown(p: Dict[str, Any]) -> str:
             "_These skills were **absorbed into another skill** during this run — "
             "their content still lives, just under a different name. "
             "The original directory was moved to `~/.hermes/skills/.archive/` for "
-            "safety and can be restored via `hermes curator restore <name>` if the "
+            "safety and can be restored via `lliam-gov curator restore <name>` if the "
             "consolidation was wrong._\n"
         )
         SHOW = 50
@@ -1311,7 +1311,7 @@ def _render_report_markdown(p: Dict[str, Any]) -> str:
             "_These skills were archived without being merged into an umbrella "
             "(e.g. stale, unused, or judged irrelevant). "
             "Directories live under `~/.hermes/skills/.archive/`. "
-            "Restore any via `hermes curator restore <name>`._\n"
+            "Restore any via `lliam-gov curator restore <name>`._\n"
         )
         SHOW = 50
         for entry in pruned[:SHOW]:
@@ -1450,7 +1450,7 @@ def run_curator_review(
     *consolidate* gates the LLM umbrella-building pass. ``None`` (the default)
     reads ``curator.consolidate`` from config (OFF by default). Passing
     ``True``/``False`` overrides the config for this invocation — used by the
-    ``hermes curator run --consolidate`` flag. When consolidation is off, only
+    ``lliam-gov curator run --consolidate`` flag. When consolidation is off, only
     the deterministic inactivity prune runs and the forked aux-model review is
     skipped entirely (no aux-model cost).
 

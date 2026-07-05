@@ -204,7 +204,7 @@ def portal_command(args) -> int:
     if sub == "tools":
         return _cmd_tools(args)
     print(f"Unknown portal subcommand: {sub}", file=sys.stderr)
-    print("Run `hermes portal -h` for usage.", file=sys.stderr)
+    print("Run `lliam-gov portal -h` for usage.", file=sys.stderr)
     return 1
 
 
@@ -214,7 +214,7 @@ def add_parser(subparsers) -> None:
         "portal",
         help="Set up Nous Portal (login, model pick, Tool Gateway); see also `portal info`",
         description=(
-            "Run `hermes portal` with no subcommand to log in to Nous Portal "
+            "Run `lliam-gov portal` with no subcommand to log in to Nous Portal "
             "and set it up — pick a model, set Nous as your provider, and offer "
             "the Tool Gateway (the human-readable alias for `hermes auth add "
             "nous --type oauth`, identical to `hermes setup --portal`). "

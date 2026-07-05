@@ -221,7 +221,7 @@ def cmd_fallback_add(args) -> None:
     print(f"  Added fallback: {_format_entry(new_entry)}")
     print(f"  Chain is now {len(chain)} {'entry' if len(chain) == 1 else 'entries'} long.")
     print()
-    print("  Run `hermes fallback list` to view, or `hermes fallback remove` to delete.")
+    print("  Run `lliam-gov fallback list` to view, or `lliam-gov fallback remove` to delete.")
 
 
 def _restore_model_cfg(model_before: Any) -> None:

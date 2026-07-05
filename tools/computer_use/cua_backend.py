@@ -14,7 +14,7 @@ Linux is the most recent runtime (X11 today, Wayland via XWayland; pure-
 Wayland progress tracked upstream). It is enabled in
 `check_computer_use_requirements` alongside macOS and Windows. The plumbing
 in this file is OS-agnostic; per-host gaps (no DISPLAY, missing AT-SPI,
-etc.) surface as specific blocked checks via `hermes computer-use doctor`
+etc.) surface as specific blocked checks via `lliam-gov computer-use doctor`
 rather than failing silently.
 
 Install:
@@ -308,10 +308,10 @@ def cua_driver_install_hint() -> str:
         )
     return (
         "cua-driver is not installed. Install with one of:\n"
-        "  hermes computer-use install\n"
+        "  lliam-gov computer-use install\n"
         "Or run the upstream installer directly:\n"
         f"{installer}\n"
-        "Or run `hermes tools` and enable the Computer Use toolset to install it automatically."
+        "Or run `lliam-gov tools` and enable the Computer Use toolset to install it automatically."
     )
 
 

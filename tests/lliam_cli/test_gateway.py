@@ -149,7 +149,7 @@ def test_run_gateway_refuses_when_service_supervising(monkeypatch, capsys):
     assert calls == []  # dispatcher never started
     out = capsys.readouterr().out
     assert "already running under systemd (user)" in out
-    assert "hermes gateway restart" in out
+    assert "lliam-gov gateway restart" in out
     assert "--force" in out
 
 
@@ -233,7 +233,7 @@ def test_run_gateway_refuses_existing_process_before_importing_gateway_run(monke
     assert calls == []
     out = capsys.readouterr().out
     assert "Another gateway instance is already running (PID 17907)" in out
-    assert "hermes gateway run --replace" in out
+    assert "lliam-gov gateway run --replace" in out
 
 
 def test_run_gateway_replace_skips_existing_process_preflight(monkeypatch):
@@ -717,7 +717,7 @@ def test_conflicting_systemd_units_warning(monkeypatch, tmp_path, capsys):
 
     out = capsys.readouterr().out
     assert "Both user and system gateway services are installed" in out
-    assert "hermes gateway uninstall" in out
+    assert "lliam-gov gateway uninstall" in out
     assert "--system" in out
 
 
@@ -739,7 +739,7 @@ def test_install_linux_gateway_from_setup_non_root_never_offers_system(monkeypat
 
     assert scope == "user"
     assert not any("System service" in opt for opt in captured["options"])
-    assert "sudo hermes" not in out
+    assert "sudo lliam-gov" not in out
 
 
 def test_install_linux_gateway_from_setup_system_choice_without_root_no_sudo_recipe(monkeypatch, capsys):
@@ -754,7 +754,7 @@ def test_install_linux_gateway_from_setup_system_choice_without_root_no_sudo_rec
 
     out = capsys.readouterr().out
     assert (scope, did_install) == ("system", False)
-    assert "sudo hermes" not in out
+    assert "sudo lliam-gov" not in out
     assert "requires root" in out
 
 

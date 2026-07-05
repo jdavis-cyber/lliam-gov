@@ -26,7 +26,7 @@ For the ``/events`` WebSocket we still require the session token as a
 header on an upgrade request), matching the established pattern used by
 the in-browser PTY bridge in ``lliam_cli/web_server.py``.
 
-This means ``hermes dashboard --host 0.0.0.0`` is safe to run on a LAN:
+This means ``lliam-gov dashboard --host 0.0.0.0`` is safe to run on a LAN:
 plugin routes are no longer an unauthenticated exception. The auth still
 isn't multi-user — anyone who can read the printed URL+token gets full
 dashboard access — but they can't ride along just because they can reach

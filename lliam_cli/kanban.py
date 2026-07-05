@@ -179,7 +179,7 @@ def _check_dispatcher_presence() -> tuple[bool, str]:
         False,
         "No gateway is running — the task will sit in 'ready' until you "
         "start it. Run:\n"
-        "    hermes gateway start\n"
+        "    lliam-gov gateway start\n"
         "The gateway hosts an embedded dispatcher (tick interval 60s by "
         "default); your task will be picked up on the next tick after "
         "the gateway comes up."
@@ -217,8 +217,8 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
         metavar="<slug>",
         help=(
             "Board slug to operate on. Defaults to the current board "
-            "(set via `hermes kanban boards switch <slug>` or the "
-            "HERMES_KANBAN_BOARD env var). Use `hermes kanban boards list` "
+            "(set via `lliam-gov kanban boards switch <slug>` or the "
+            "HERMES_KANBAN_BOARD env var). Use `lliam-gov kanban boards list` "
             "to see all boards."
         ),
     )
@@ -651,7 +651,7 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
     # --- daemon (deprecated) ---
     p_daemon = sub.add_parser(
         "daemon",
-        help="DEPRECATED — dispatcher now runs in the gateway. Use `hermes gateway start`.",
+        help="DEPRECATED — dispatcher now runs in the gateway. Use `lliam-gov gateway start`.",
     )
     p_daemon.add_argument("--interval", type=float, default=60.0,
                           help="Seconds between dispatch ticks (default: 60)")
@@ -880,8 +880,8 @@ def kanban_command(args: argparse.Namespace) -> int:
             parser.print_help()
         else:
             print(
-                "usage: hermes kanban <action> [options]\n"
-                "Run 'hermes kanban --help' for the full list of actions.",
+                "usage: lliam-gov kanban <action> [options]\n"
+                "Run 'lliam-gov kanban --help' for the full list of actions.",
                 file=sys.stderr,
             )
         return 0
@@ -1111,7 +1111,7 @@ def _cmd_boards_create(args: argparse.Namespace) -> int:
         kb.set_current_board(meta["slug"])
         print(f"  Switched to {meta['slug']!r}.")
     else:
-        print(f"  Use `hermes kanban boards switch {meta['slug']}` to make it current.")
+        print(f"  Use `lliam-gov kanban boards switch {meta['slug']}` to make it current.")
     return 0
 
 
@@ -1258,7 +1258,7 @@ def _cmd_init(args: argparse.Namespace) -> int:
         print("Create one with `hermes -p <name> setup` before assigning tasks.")
     print()
     print("Next step: start the gateway so ready tasks actually get picked up.")
-    print("  hermes gateway start")
+    print("  lliam-gov gateway start")
     print()
     print(
         "The gateway hosts an embedded dispatcher that ticks every 60 seconds\n"
@@ -2241,7 +2241,7 @@ def _cmd_daemon(args: argparse.Namespace) -> int:
             "hermes kanban daemon: DEPRECATED — the dispatcher now runs\n"
             "inside the gateway. To use kanban:\n"
             "\n"
-            "    hermes gateway start       # starts the gateway + embedded dispatcher\n"
+            "    lliam-gov gateway start       # starts the gateway + embedded dispatcher\n"
             "\n"
             "Ready tasks will be picked up on the next dispatcher tick\n"
             "(default: every 60 seconds). Configure via config.yaml:\n"

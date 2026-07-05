@@ -32,7 +32,7 @@ def build_login_parser(subparsers, *, cmd_login: Callable) -> None:
     login_parser = subparsers.add_parser(
         "login",
         description=(
-            "Deprecated. Use `hermes auth` to manage credentials, "
+            "Deprecated. Use `lliam-gov auth` to manage credentials, "
             "`hermes model` to select a provider, or `hermes setup` for full setup."
         ),
     )

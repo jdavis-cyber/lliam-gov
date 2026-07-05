@@ -334,9 +334,9 @@ def cmd_mcp_add(args):
     if not url and not command:
         _error("Must specify --url <endpoint>, --command <cmd>, or --preset <name>")
         _info("Examples:")
-        _info('  hermes mcp add ink --url "https://mcp.ml.ink/mcp"')
-        _info('  hermes mcp add github --command npx --args @modelcontextprotocol/server-github')
-        _info('  hermes mcp add myserver --preset mypreset')
+        _info('  lliam-gov mcp add ink --url "https://mcp.ml.ink/mcp"')
+        _info('  lliam-gov mcp add github --command npx --args @modelcontextprotocol/server-github')
+        _info('  lliam-gov mcp add myserver --preset mypreset')
         return
 
     # Check if server already exists
@@ -541,8 +541,8 @@ def cmd_mcp_list(args=None):
         _info("No MCP servers configured.")
         print()
         _info("Add one with:")
-        _info('  hermes mcp add <name> --url <endpoint>')
-        _info('  hermes mcp add <name> --command <cmd> --args <args...>')
+        _info('  lliam-gov mcp add <name> --url <endpoint>')
+        _info('  lliam-gov mcp add <name> --command <cmd> --args <args...>')
         print()
         return
 
@@ -679,7 +679,7 @@ def _reauth_oauth_server(name: str, server_config: dict) -> bool:
         return False
     if server_config.get("auth") != "oauth":
         _error(f"Server '{name}' is not configured for OAuth (auth={server_config.get('auth')})")
-        _info("Use `hermes mcp remove` + `hermes mcp add` to reconfigure auth.")
+        _info("Use `lliam-gov mcp remove` + `lliam-gov mcp add` to reconfigure auth.")
         return False
 
     # Wipe both disk and in-memory cache so the next probe forces a fresh
@@ -724,7 +724,7 @@ def _reauth_oauth_server(name: str, server_config: dict) -> bool:
             print(color(f"          client_id: \"<your-oauth-client-id>\"", Colors.DIM))
             print(color(f"          client_secret: \"<your-oauth-client-secret>\"", Colors.DIM))
             print()
-            _info("Then re-run `hermes mcp login " + name + "`.")
+            _info("Then re-run `lliam-gov mcp login " + name + "`.")
             return False
         if tools:
             _success(f"Authenticated — {len(tools)} tool(s) available")
@@ -800,7 +800,7 @@ def cmd_mcp_reauth(args):
 
     if not name:
         _error("Specify a server name, or use --all to re-auth every OAuth server.")
-        _info("Usage: hermes mcp reauth <name>   |   hermes mcp reauth --all")
+        _info("Usage: lliam-gov mcp reauth <name>   |   lliam-gov mcp reauth --all")
         return
     if name not in servers:
         _error(f"Server '{name}' not found in config.")
@@ -964,7 +964,7 @@ def mcp_command(args):
         _info("hermes mcp                                    Open the catalog picker (default)")
         _info("hermes mcp catalog                            List Nous-approved MCPs")
         _info("hermes mcp install <name>                     Install a catalog MCP")
-        _info("hermes mcp serve                              Run as MCP server")
+        _info("lliam-gov mcp serve                              Run as MCP server")
         _info("hermes mcp add <name> --url <endpoint>        Add a custom MCP server")
         _info("hermes mcp add <name> --command <cmd>         Add a stdio server")
         _info("hermes mcp add <name> --preset <preset>       Add from a known preset")

@@ -9,7 +9,7 @@ kanban tools in its schema unless configured.
 Why tools instead of just shelling out to ``hermes kanban``?
 
 1. **Backend portability.** A worker whose terminal tool points at Docker
-   / Modal / Singularity / SSH would run ``hermes kanban complete …``
+   / Modal / Singularity / SSH would run ``lliam-gov kanban complete …``
    inside the container, where ``hermes`` isn't installed and the DB
    isn't mounted. Tools run in the agent's Python process, so they
    always reach ``~/.hermes/kanban.db`` regardless of terminal backend.

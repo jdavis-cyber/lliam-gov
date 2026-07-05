@@ -2699,7 +2699,7 @@ class QQAdapter(BasePlatformAdapter):
         """Send a Yes/No update-confirmation prompt with inline buttons.
 
         Matches the cross-adapter contract used by
-        ``gateway/run.py``'s ``hermes update --gateway`` watcher. Button
+        ``gateway/run.py``'s ``lliam-gov update --gateway`` watcher. Button
         clicks surface as ``INTERACTION_CREATE`` with
         ``button_data = 'update_prompt:y'`` or ``'update_prompt:n'``;
         the adapter's interaction callback writes the answer to

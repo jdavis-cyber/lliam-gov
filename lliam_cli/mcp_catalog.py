@@ -11,7 +11,7 @@ Catalog policy:
   ``optional-mcps/`` directory = Nous approval. No community tier, no trust
   signals beyond "it's in the catalog".
 - Manifests pin transport details (commands, args, refs). MCPs are never
-  auto-updated; users explicitly re-run ``hermes mcp install <name>`` to
+  auto-updated; users explicitly re-run ``lliam-gov mcp install <name>`` to
   pull a new manifest version after a repo update.
 - Secrets prompted at install time go to ``~/.hermes/.env`` (the
   .env-is-for-secrets rule). Non-secret env vars also go to .env to keep
@@ -568,7 +568,7 @@ def _apply_tool_selection(
             print(color(
                 f"  Couldn\'t probe server. Applied manifest default "
                 f"({len(manifest_default)} tools). "
-                f"Run `hermes mcp configure {entry.name}` after the server "
+                f"Run `lliam-gov mcp configure {entry.name}` after the server "
                 "is reachable to refine.",
                 Colors.YELLOW,
             ))
@@ -577,7 +577,7 @@ def _apply_tool_selection(
             print(color(
                 f"  Couldn\'t probe server; installed with no tool filter "
                 "(all tools enabled when reachable). "
-                f"Run `hermes mcp configure {entry.name}` after first "
+                f"Run `lliam-gov mcp configure {entry.name}` after first "
                 "connect to prune.",
                 Colors.YELLOW,
             ))
@@ -638,7 +638,7 @@ def _apply_tool_selection(
         # so the server is installed but contributes nothing until reconfigured.
         _write_tools_include(entry.name, [])
         print(color(
-            f"  No tools selected. Run `hermes mcp configure {entry.name}` "
+            f"  No tools selected. Run `lliam-gov mcp configure {entry.name}` "
             "to change.",
             Colors.YELLOW,
         ))

@@ -625,7 +625,7 @@ def install_distribution(
         if plan.existing and not force:
             raise DistributionError(
                 f"Profile '{plan.manifest.name}' already exists at {plan.target_dir}. "
-                "Use `hermes profile update` to upgrade in place, "
+                "Use `lliam-gov profile update` to upgrade in place, "
                 "or pass --force to overwrite."
             )
 
@@ -673,7 +673,7 @@ def update_distribution(
     if existing_manifest is None:
         raise DistributionError(
             f"Profile '{canon}' is not a distribution (no {MANIFEST_FILENAME}). "
-            "Only profiles installed via `hermes profile install` can be updated."
+            "Only profiles installed via `lliam-gov profile install` can be updated."
         )
     if not existing_manifest.source:
         raise DistributionError(

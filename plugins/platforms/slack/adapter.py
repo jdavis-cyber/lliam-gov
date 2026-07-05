@@ -4129,7 +4129,7 @@ def interactive_setup() -> None:
                 "reinstall if scopes or slash commands changed."
             )
             print_info(
-                "   Re-run `hermes slack manifest --write` anytime to refresh after "
+                "   Re-run `lliam-gov slack manifest --write` anytime to refresh after "
                 "Hermes adds new commands."
             )
         except Exception as e:
@@ -4265,7 +4265,7 @@ def register(ctx) -> None:
         check_fn=check_slack_requirements,
         is_connected=_is_connected,
         required_env=["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN"],
-        install_hint="pip install 'hermes-agent[slack]'",
+        install_hint="pip install 'lliam-gov-agent[slack]'",
         # Interactive setup wizard — replaces lliam_cli/setup.py::_setup_slack
         # and the static _PLATFORMS["slack"] dict in lliam_cli/gateway.py.
         setup_fn=interactive_setup,

@@ -342,7 +342,7 @@ class KreaImageGenProvider(ImageGenProvider):
             if not auth_token:
                 return error_response(
                     error=(
-                        "KREA_API_KEY not set. Run `hermes tools` → Image "
+                        "KREA_API_KEY not set. Run `lliam-gov tools` → Image "
                         "Generation → Krea to configure, get a key at "
                         "https://www.krea.ai/settings/api-tokens, or sign in to "
                         "a Nous account with the managed Krea gateway enabled "

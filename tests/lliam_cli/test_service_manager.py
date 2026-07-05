@@ -548,7 +548,7 @@ def test_s6_register_creates_service_dir_and_triggers_scan(
     assert run_path.stat().st_mode & 0o111  # executable
     run_text = run_path.read_text()
     assert "export HOME=/opt/data" in run_text
-    assert "hermes -p coder gateway run" in run_text
+    assert "lliam-gov -p coder gateway run" in run_text
     assert "s6-setuidgid hermes" in run_text
     # Sentinel marking this as the supervised-child invocation. Without
     # it, the supervised `gateway run` would re-enter the s6 redirect
@@ -631,7 +631,7 @@ def test_render_run_script_resets_home_before_exec() -> None:
     run_text = S6ServiceManager._render_run_script("coder", {})
 
     assert "export HOME=/opt/data" in run_text
-    assert "exec s6-setuidgid hermes hermes -p coder gateway run --replace" in run_text
+    assert "exec s6-setuidgid hermes lliam-gov -p coder gateway run --replace" in run_text
 
 
 def test_render_run_script_uses_replace_to_take_over_stale_holder() -> None:
@@ -650,7 +650,7 @@ def test_render_run_script_uses_replace_to_take_over_stale_holder() -> None:
     """
     default_text = S6ServiceManager._render_run_script("default", {})
     # Root profile: bare `hermes gateway run --replace` (no -p flag).
-    assert "hermes gateway run --replace" in default_text
+    assert "lliam-gov gateway run --replace" in default_text
     assert "hermes -p default" not in default_text
     # Every exec line that launches the gateway must carry --replace, so
     # neither the non-root nor the privilege-drop branch can spin.

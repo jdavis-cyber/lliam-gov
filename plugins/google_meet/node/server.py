@@ -5,7 +5,7 @@ Mac laptop with a signed-in Chrome). Exposes a WebSocket endpoint that
 accepts signed RPC requests and dispatches them to the existing
 ``plugins.google_meet.process_manager`` module.
 
-Launched by ``hermes meet node run``.
+Launched by ``lliam-gov meet node run``.
 
 Token handling
 --------------

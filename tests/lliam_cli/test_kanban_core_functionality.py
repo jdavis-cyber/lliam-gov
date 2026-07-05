@@ -3458,7 +3458,7 @@ def test_check_dispatcher_presence_warns_when_no_gateway(monkeypatch):
     )
     running, msg = kb_cli._check_dispatcher_presence()
     assert running is False
-    assert "hermes gateway start" in msg
+    assert "lliam-gov gateway start" in msg
 
 
 def test_check_dispatcher_presence_warns_when_flag_off(monkeypatch):
@@ -3511,7 +3511,7 @@ def test_cli_create_warns_when_no_gateway(kanban_home, monkeypatch, capsys):
     assert kb_cli._cmd_create(ns) == 0
     captured = capsys.readouterr()
     # Stderr has the warning prefix + guidance.
-    assert "hermes gateway start" in captured.err
+    assert "lliam-gov gateway start" in captured.err
 
 
 def test_cli_create_silent_when_gateway_up(kanban_home, monkeypatch, capsys):
@@ -3525,7 +3525,7 @@ def test_cli_create_silent_when_gateway_up(kanban_home, monkeypatch, capsys):
     ns = _make_create_ns(title="silent", assignee="worker")
     assert kb_cli._cmd_create(ns) == 0
     captured = capsys.readouterr()
-    assert "hermes gateway start" not in captured.err
+    assert "lliam-gov gateway start" not in captured.err
 
 
 def test_cli_create_no_warn_on_triage(kanban_home, monkeypatch, capsys):
@@ -3539,7 +3539,7 @@ def test_cli_create_no_warn_on_triage(kanban_home, monkeypatch, capsys):
     ns = _make_create_ns(title="triage-task", assignee=None, triage=True)
     assert kb_cli._cmd_create(ns) == 0
     err = capsys.readouterr().err
-    assert "hermes gateway start" not in err
+    assert "lliam-gov gateway start" not in err
 
 
 def test_cli_create_no_warn_unassigned(kanban_home, monkeypatch, capsys):
@@ -3553,7 +3553,7 @@ def test_cli_create_no_warn_unassigned(kanban_home, monkeypatch, capsys):
     ns = _make_create_ns(title="nobody", assignee=None)
     assert kb_cli._cmd_create(ns) == 0
     err = capsys.readouterr().err
-    assert "hermes gateway start" not in err
+    assert "lliam-gov gateway start" not in err
 
 
 def test_cli_daemon_without_force_prints_deprecation_exits_2(kanban_home, capsys):
@@ -3567,7 +3567,7 @@ def test_cli_daemon_without_force_prints_deprecation_exits_2(kanban_home, capsys
     assert rc == 2
     err = capsys.readouterr().err
     assert "DEPRECATED" in err
-    assert "hermes gateway start" in err
+    assert "lliam-gov gateway start" in err
 
 
 def test_cli_daemon_help_marks_deprecated():

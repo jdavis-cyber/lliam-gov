@@ -375,7 +375,7 @@ def _rule_triage_aux_unavailable(task, events, runs, now, cfg) -> list[Diagnosti
     With the auto-decompose dispatcher (kanban.auto_decompose, default True),
     triage tasks fan out via ``auxiliary.kanban_decomposer`` and fall back to
     ``auxiliary.triage_specifier`` when the decomposer returns ``fanout=false``.
-    With auto-decompose off, the user must run ``hermes kanban specify``,
+    With auto-decompose off, the user must run ``lliam-gov kanban specify``,
     which only needs ``auxiliary.triage_specifier``.
 
     The default slot is ``provider: auto`` → auto-falls back to the main model,

@@ -328,7 +328,7 @@ TIPS = [
     "GPT-5 and Codex use 'developer' role instead of 'system' in the message format.",
     "Per-task auxiliary overrides: auxiliary.vision.provider, auxiliary.compression.model, etc. in config.yaml.",
     "The auxiliary client treats 'main' as a provider alias — resolves to your actual primary provider + model.",
-    "hermes claw migrate --dry-run previews OpenClaw migration without writing anything.",
+    "lliam-gov claw migrate --dry-run previews OpenClaw migration without writing anything.",
     "File paths pasted with quotes or escaped spaces are handled automatically — no manual cleanup needed.",
     "Slash commands never trigger the large-paste collapse — /command with big arguments works correctly.",
     "In interrupt mode, slash commands typed during agent execution bypass interrupt logic and run immediately.",
@@ -364,9 +364,9 @@ TIPS = [
     'Drop a ~/.hermes/BOOT.md checklist and a gateway:startup hook runs it as a one-shot agent every boot.',
 
     # --- Curator ---
-    'hermes curator run --dry-run previews what the curator would archive or consolidate without mutating anything.',
+    'lliam-gov curator run --dry-run previews what the curator would archive or consolidate without mutating anything.',
     "hermes curator pin <skill> hard-fences a skill against both auto-archival and the agent's skill_manage tool.",
-    'hermes curator rollback restores skills from a pre-run snapshot — backups live under skills/.curator_backups/.',
+    'lliam-gov curator rollback restores skills from a pre-run snapshot — backups live under skills/.curator_backups/.',
 
     # --- Credential Pools & Routing ---
     'hermes auth reset <provider> clears all cooldowns and exhaustion flags on a credential pool.',

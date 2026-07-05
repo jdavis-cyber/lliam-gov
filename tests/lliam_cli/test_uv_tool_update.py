@@ -128,7 +128,7 @@ class TestRecommendedUpdateCommandForUvTool:
         with patch("shutil.which", return_value="/usr/local/bin/uv"), \
              patch.object(config, "is_uv_tool_install", return_value=True):
             cmd = config.recommended_update_command_for_method("pip")
-            assert cmd == "uv tool upgrade hermes-agent"
+            assert cmd == "uv tool upgrade lliam-gov-agent"
 
     def test_uv_tool_install_recommends_uv_tool_upgrade_even_without_uv_on_path(self):
         """Recommendation reflects the *install method*, not whether ``uv`` is
@@ -138,7 +138,7 @@ class TestRecommendedUpdateCommandForUvTool:
         with patch("shutil.which", return_value=None), \
              patch.object(config, "is_uv_tool_install", return_value=True):
             cmd = config.recommended_update_command_for_method("pip")
-            assert cmd == "uv tool upgrade hermes-agent"
+            assert cmd == "uv tool upgrade lliam-gov-agent"
 
     def test_uv_pip_install_keeps_legacy_recommendation(self):
         """Existing behavior: uv is on PATH but Hermes is a regular pip install."""
@@ -147,7 +147,7 @@ class TestRecommendedUpdateCommandForUvTool:
         with patch("shutil.which", return_value="/usr/local/bin/uv"), \
              patch.object(config, "is_uv_tool_install", return_value=False):
             cmd = config.recommended_update_command_for_method("pip")
-            assert cmd == "uv pip install --upgrade hermes-agent"
+            assert cmd == "uv pip install --upgrade lliam-gov-agent"
 
     def test_no_uv_falls_back_to_plain_pip(self):
         from lliam_cli import config
@@ -155,7 +155,7 @@ class TestRecommendedUpdateCommandForUvTool:
         with patch("shutil.which", return_value=None), \
              patch.object(config, "is_uv_tool_install", return_value=False):
             cmd = config.recommended_update_command_for_method("pip")
-            assert cmd == "pip install --upgrade hermes-agent"
+            assert cmd == "pip install --upgrade lliam-gov-agent"
 
     def test_recommendation_does_not_spawn_subprocess(self):
         """Computing the recommendation string must be cheap — no ``uv tool list``
@@ -170,7 +170,7 @@ class TestRecommendedUpdateCommandForUvTool:
              patch("subprocess.run") as mock_run:
             cmd = config.recommended_update_command_for_method("pip")
             mock_run.assert_not_called()
-            assert cmd == "uv pip install --upgrade hermes-agent"
+            assert cmd == "uv pip install --upgrade lliam-gov-agent"
 
 
 # ---------------------------------------------------------------------------

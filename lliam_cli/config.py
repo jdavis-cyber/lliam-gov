@@ -9,7 +9,7 @@ This module provides:
 - hermes config          - Show current configuration
 - hermes config edit     - Open config in editor
 - hermes config set      - Set a specific value
-- hermes config wizard   - Re-run setup wizard
+- lliam-gov config wizard   - Re-run setup wizard
 """
 
 import copy
@@ -45,7 +45,7 @@ def _backup_corrupt_config(config_path: Path) -> Optional[Path]:
     When the YAML can't be parsed, ``load_config()`` silently falls back to
     ``DEFAULT_CONFIG`` and the user's broken file stays on disk untouched.
     That file is still the user's only copy of their intended overrides — if
-    they re-run the setup wizard or ``hermes config set`` (which rewrites
+    they re-run the setup wizard or ``lliam-gov config set`` (which rewrites
     ``config.yaml``), the broken-but-recoverable content is gone for good.
 
     This snapshots the corrupted file to ``config.yaml.corrupt.<ts>.bak`` so
@@ -390,7 +390,7 @@ def detect_install_method(project_root: Optional[Path] = None) -> str:
     containerised gateway and a host install share one ``$HERMES_HOME``, a
     home-scoped stamp is a single slot describing two different installs:
     the container stamps ``docker`` on every boot, the host install then reads
-    ``docker`` and ``hermes update`` refuses to run ("doesn't apply inside the
+    ``docker`` and ``lliam-gov update`` refuses to run ("doesn't apply inside the
     Docker container") even though the host binary is a perfectly updatable
     git/pip install. Scoping the stamp to the install tree gives each install
     its own truthful marker.
@@ -514,12 +514,12 @@ def recommended_update_command_for_method(method: str) -> str:
         return "docker pull nousresearch/hermes-agent:latest"
     if method == "pip":
         if is_uv_tool_install():
-            return "uv tool upgrade hermes-agent"
+            return "uv tool upgrade lliam-gov-agent"
         import shutil
         if shutil.which("uv"):
-            return "uv pip install --upgrade hermes-agent"
-        return "pip install --upgrade hermes-agent"
-    return "hermes update"
+            return "uv pip install --upgrade lliam-gov-agent"
+        return "pip install --upgrade lliam-gov-agent"
+    return "lliam-gov update"
 
 
 def recommended_update_command() -> str:
@@ -3432,7 +3432,7 @@ OPTIONAL_ENV_VARS = {
         "category": "provider",
     },
     "AZURE_FOUNDRY_BASE_URL": {
-        "description": "Azure Foundry base URL (set via 'hermes model' for endpoint-specific config)",
+        "description": "Azure Foundry base URL (set via 'lliam-gov model' for endpoint-specific config)",
         "prompt": "Azure Foundry base URL",
         "url": None,
         "password": False,
@@ -4680,7 +4680,7 @@ def validate_config_structure(config: Optional[Dict[str, Any]] = None) -> List["
         try:
             config = load_config()
         except Exception:
-            return [ConfigIssue("error", "Could not load config.yaml", "Run 'hermes setup' to create a valid config")]
+            return [ConfigIssue("error", "Could not load config.yaml", "Run 'lliam-gov setup' to create a valid config")]
 
     issues: List[ConfigIssue] = []
 
@@ -4830,7 +4830,7 @@ def print_config_warnings(config: Optional[Dict[str, Any]] = None) -> None:
     for ci in issues:
         marker = "\033[31m✗\033[0m" if ci.severity == "error" else "\033[33m⚠\033[0m"
         lines.append(f"  {marker} {ci.message}")
-    lines.append("  \033[2mRun 'hermes doctor' for fix suggestions.\033[0m")
+    lines.append("  \033[2mRun 'lliam-gov doctor' for fix suggestions.\033[0m")
     sys.stderr.write("\n".join(lines) + "\n\n")
 
 
@@ -5220,7 +5220,7 @@ def migrate_config(interactive: bool = True, quiet: bool = False) -> Dict[str, A
                 else:
                     print(
                         "  ✓ Plugins now opt-in: no existing plugins to grandfather. "
-                        "Use `hermes plugins enable <name>` to activate."
+                        "Use `lliam-gov plugins enable <name>` to activate."
                     )
 
     # ── Version 22 → 23: seed curator defaults + create logs/curator/ ──
@@ -7124,7 +7124,7 @@ def show_config():
         if _env_ghost is not None and str(_env_ghost).strip() != str(_cfg_max_turns).strip():
             print(color(
                 f"                ⚠ .env has stale HERMES_MAX_ITERATIONS={_env_ghost} "
-                f"(run 'hermes doctor --fix' to remove)",
+                f"(run 'lliam-gov doctor --fix' to remove)",
                 Colors.YELLOW,
             ))
     except Exception:
@@ -7246,9 +7246,9 @@ def show_config():
 
     print()
     print(color("─" * 60, Colors.DIM))
-    print(color("  hermes config edit     # Edit config file", Colors.DIM))
-    print(color("  hermes config set <key> <value>", Colors.DIM))
-    print(color("  hermes setup           # Run setup wizard", Colors.DIM))
+    print(color("  lliam-gov config edit     # Edit config file", Colors.DIM))
+    print(color("  lliam-gov config set <key> <value>", Colors.DIM))
+    print(color("  lliam-gov setup           # Run setup wizard", Colors.DIM))
     print()
 
 
@@ -7410,12 +7410,12 @@ def config_command(args):
         key = getattr(args, 'key', None)
         value = getattr(args, 'value', None)
         if not key or value is None:
-            print("Usage: hermes config set <key> <value>")
+            print("Usage: lliam-gov config set <key> <value>")
             print()
             print("Examples:")
-            print("  hermes config set model anthropic/claude-sonnet-4")
-            print("  hermes config set terminal.backend docker")
-            print("  hermes config set OPENROUTER_API_KEY sk-or-...")
+            print("  lliam-gov config set model anthropic/claude-sonnet-4")
+            print("  lliam-gov config set terminal.backend docker")
+            print("  lliam-gov config set OPENROUTER_API_KEY sk-or-...")
             sys.exit(1)
         set_config_value(key, value)
     
@@ -7515,7 +7515,7 @@ def config_command(args):
         if missing_config:
             print()
             print(color(f"  {len(missing_config)} new config option(s) available", Colors.YELLOW))
-            print("    Run 'hermes config migrate' to add them")
+            print("    Run 'lliam-gov config migrate' to add them")
         
         print()
     
@@ -7523,13 +7523,13 @@ def config_command(args):
         print(f"Unknown config command: {subcmd}")
         print()
         print("Available commands:")
-        print("  hermes config           Show current configuration")
-        print("  hermes config edit      Open config in editor")
-        print("  hermes config set <key> <value>   Set a config value")
-        print("  hermes config check     Check for missing/outdated config")
-        print("  hermes config migrate   Update config with new options")
-        print("  hermes config path      Show config file path")
-        print("  hermes config env-path  Show .env file path")
+        print("  lliam-gov config           Show current configuration")
+        print("  lliam-gov config edit      Open config in editor")
+        print("  lliam-gov config set <key> <value>   Set a config value")
+        print("  lliam-gov config check     Check for missing/outdated config")
+        print("  lliam-gov config migrate   Update config with new options")
+        print("  lliam-gov config path      Show config file path")
+        print("  lliam-gov config env-path  Show .env file path")
         sys.exit(1)
 
 

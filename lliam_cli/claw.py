@@ -2,12 +2,12 @@
 
 Usage:
     hermes claw migrate              # Preview then migrate (always shows preview first)
-    hermes claw migrate --dry-run    # Preview only, no changes
+    lliam-gov claw migrate --dry-run    # Preview only, no changes
     hermes claw migrate --yes        # Skip confirmation prompt
-    hermes claw migrate --preset full --overwrite --migrate-secrets  # Full run w/ secrets
+    lliam-gov claw migrate --preset full --overwrite --migrate-secrets  # Full run w/ secrets
     hermes claw migrate --no-backup  # Skip pre-migration snapshot
     hermes claw cleanup              # Archive leftover OpenClaw directories
-    hermes claw cleanup --dry-run    # Preview what would be archived
+    lliam-gov claw cleanup --dry-run    # Preview what would be archived
 """
 
 import importlib.util
@@ -301,13 +301,13 @@ def claw_command(args):
     elif action in {"cleanup", "clean"}:
         _cmd_cleanup(args)
     else:
-        print("Usage: hermes claw <command> [options]")
+        print("Usage: lliam-gov claw <command> [options]")
         print()
         print("Commands:")
         print("  migrate          Migrate settings from OpenClaw to Hermes")
         print("  cleanup          Archive leftover OpenClaw directories after migration")
         print()
-        print("Run 'hermes claw <command> --help' for options.")
+        print("Run 'lliam-gov claw <command> --help' for options.")
 
 
 def _cmd_migrate(args):
@@ -492,7 +492,7 @@ def _cmd_migrate(args):
     if not auto_yes:
         if not sys.stdin.isatty():
             print_info("Non-interactive session — preview only.")
-            print_info("To execute, re-run with: hermes claw migrate --yes")
+            print_info("To execute, re-run with: lliam-gov claw migrate --yes")
             return
         if not prompt_yes_no("Proceed with migration?", default=True):
             print_info("Migration cancelled.")
@@ -615,7 +615,7 @@ def _cmd_cleanup(args):
                 print_info("Non-interactive session — aborting. Stop OpenClaw and re-run.")
                 return
             if not prompt_yes_no("Proceed anyway?", default=False):
-                print_info("Aborted. Stop OpenClaw first, then re-run: hermes claw cleanup")
+                print_info("Aborted. Stop OpenClaw first, then re-run: lliam-gov claw cleanup")
                 return
 
     total_archived = 0
@@ -669,7 +669,7 @@ def _cmd_cleanup(args):
             print_info(f"Would archive: {source_dir} → {archive_path}")
         elif not auto_yes and not sys.stdin.isatty():
             print_info(f"Non-interactive session — would archive: {source_dir}")
-            print_info("To execute, re-run with: hermes claw cleanup --yes")
+            print_info("To execute, re-run with: lliam-gov claw cleanup --yes")
         elif auto_yes or prompt_yes_no(f"Archive {source_dir}?", default=True):
             try:
                 archive_path = _archive_directory(source_dir)
@@ -788,7 +788,7 @@ def _print_migration_report(report: dict, dry_run: bool):
     if dry_run:
         print()
         print_info("To execute the migration, run without --dry-run:")
-        print_info(f"  hermes claw migrate --preset {report.get('preset', 'full')}")
+        print_info(f"  lliam-gov claw migrate --preset {report.get('preset', 'full')}")
     elif migrated:
         print()
         print_success("Migration complete!")
@@ -803,7 +803,7 @@ def _print_migration_report(report: dict, dry_run: bool):
             print(color("  Your OPENROUTER_API_KEY and other provider keys must be added manually.", Colors.YELLOW))
             print()
             print_info("To migrate API keys, re-run with:")
-            print_info("  hermes claw migrate --migrate-secrets")
+            print_info("  lliam-gov claw migrate --migrate-secrets")
             print()
             print_info("Or add your key manually:")
-            print_info("  hermes config set OPENROUTER_API_KEY sk-or-v1-...")
+            print_info("  lliam-gov config set OPENROUTER_API_KEY sk-or-v1-...")

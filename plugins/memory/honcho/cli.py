@@ -173,7 +173,7 @@ def cmd_sync(args) -> None:
 
     cfg = _read_config()
     if not cfg:
-        print("  No Honcho config found. Run 'hermes honcho setup' first.\n")
+        print("  No Honcho config found. Run 'lliam-gov honcho setup' first.\n")
         return
 
     hosts = cfg.get("hosts", {})
@@ -181,7 +181,7 @@ def cmd_sync(args) -> None:
     has_key = bool(cfg.get("apiKey") or os.environ.get("HONCHO_API_KEY"))
 
     if not default_block and not has_key:
-        print("  Honcho not configured on default profile. Run 'hermes honcho setup' first.\n")
+        print("  Honcho not configured on default profile. Run 'lliam-gov honcho setup' first.\n")
         return
 
     created = 0
@@ -663,7 +663,7 @@ def cmd_setup(args) -> None:
                 )
             except Exception as e:
                 print(f"  OAuth sign-in failed: {e}")
-                print("  Re-run 'hermes honcho setup' to retry, or choose an API key instead.\n")
+                print("  Re-run 'lliam-gov honcho setup' to retry, or choose an API key instead.\n")
                 return
             hermes_host["apiKey"] = cred.access_token
             hermes_host["oauth"] = cred.oauth_block()
@@ -681,7 +681,7 @@ def cmd_setup(args) -> None:
 
             if not cfg.get("apiKey"):
                 print("\n  No API key configured. Get yours at https://app.honcho.dev")
-                print("  Run 'hermes honcho setup' again once you have a key.\n")
+                print("  Run 'lliam-gov honcho setup' again once you have a key.\n")
                 return
 
     # --- 3. Identity ---
@@ -941,7 +941,7 @@ def cmd_setup(args) -> None:
         print("  Memory provider set to 'honcho' in config.yaml")
     except Exception as e:
         print(f"  Could not auto-enable in config.yaml: {e}")
-        print("  Run: hermes config set memory.provider honcho")
+        print("  Run: lliam-gov config set memory.provider honcho")
 
     # --- Test connection ---
     print("  Testing connection... ", end="", flush=True)
@@ -971,11 +971,11 @@ def cmd_setup(args) -> None:
     print("    honcho_reasoning -- ask Honcho a question, synthesized answer")
     print("    honcho_conclude  -- persist a user fact to memory")
     print("\n  Other commands:")
-    print("    hermes honcho status     -- show full config")
-    print("    hermes honcho mode       -- change recall/observation mode")
-    print("    hermes honcho tokens     -- tune context and dialectic budgets")
-    print("    hermes honcho peer       -- update peer names")
-    print("    hermes honcho map <name> -- map this directory to a session name\n")
+    print("    lliam-gov honcho status     -- show full config")
+    print("    lliam-gov honcho mode       -- change recall/observation mode")
+    print("    lliam-gov honcho tokens     -- tune context and dialectic budgets")
+    print("    lliam-gov honcho peer       -- update peer names")
+    print("    lliam-gov honcho map <name> -- map this directory to a session name\n")
 
 
 def _active_profile_name() -> str:
@@ -1028,7 +1028,7 @@ def cmd_status(args) -> None:
     try:
         import honcho  # noqa: F401
     except ImportError:
-        print("  honcho-ai is not installed. Run: hermes honcho setup\n")
+        print("  honcho-ai is not installed. Run: lliam-gov honcho setup\n")
         return
 
     cfg = _read_config()
@@ -1046,11 +1046,11 @@ def cmd_status(args) -> None:
                 cfg = {"apiKey": _env_cfg.api_key, "enabled": _env_cfg.enabled}
             else:
                 print(f"  No Honcho config found at {active_path}")
-                print("  Run 'hermes honcho setup' to configure.\n")
+                print("  Run 'lliam-gov honcho setup' to configure.\n")
                 return
         except Exception:
             print(f"  No Honcho config found at {active_path}")
-            print("  Run 'hermes honcho setup' to configure.\n")
+            print("  Run 'lliam-gov honcho setup' to configure.\n")
             return
 
     try:
@@ -1423,7 +1423,7 @@ def cmd_identity(args) -> None:
     """Seed AI peer identity or show both peer representations."""
     cfg = _read_config()
     if not _resolve_api_key(cfg):
-        print("  No API key configured. Run 'hermes honcho setup' first.\n")
+        print("  No API key configured. Run 'lliam-gov honcho setup' first.\n")
         return
 
     file_path = getattr(args, "file", None)
@@ -1460,7 +1460,7 @@ def cmd_identity(args) -> None:
             print(ai_rep["card"])
         else:
             print("  No representation built yet.")
-            print("  Run 'hermes honcho identity <file>' to seed one.")
+            print("  Run 'lliam-gov honcho identity <file>' to seed one.")
         print()
         return
 
@@ -1469,8 +1469,8 @@ def cmd_identity(args) -> None:
         print(f"  User peer: {hcfg.peer_name or 'not set'}")
         print(f"  AI peer:   {hcfg.ai_peer}")
         print()
-        print("    hermes honcho identity --show        — show both peer representations")
-        print("    hermes honcho identity <file>        — seed AI peer from SOUL.md or any .md/.txt\n")
+        print("    lliam-gov honcho identity --show        — show both peer representations")
+        print("    lliam-gov honcho identity <file>        — seed AI peer from SOUL.md or any .md/.txt\n")
         return
 
     from pathlib import Path
@@ -1543,17 +1543,17 @@ def cmd_migrate(args) -> None:
         print("  across sessions. You need an API key to use it.")
         print()
         print("  1. Get your API key at https://app.honcho.dev")
-        print("  2. Run:  hermes honcho setup")
+        print("  2. Run:  lliam-gov honcho setup")
         print("     Paste the key when prompted.")
         print()
-        answer = _prompt("  Run 'hermes honcho setup' now?", default="y")
+        answer = _prompt("  Run 'lliam-gov honcho setup' now?", default="y")
         if answer.lower() in {"y", "yes"}:
             cmd_setup(args)
             cfg = _read_config()
             has_key = bool(cfg.get("apiKey", ""))
         else:
             print()
-            print("  Run 'hermes honcho setup' when ready, then re-run this walkthrough.")
+            print("  Run 'lliam-gov honcho setup' when ready, then re-run this walkthrough.")
 
     # ── Step 2: Detected files ────────────────────────────────────────────────
     print()
@@ -1584,13 +1584,13 @@ def cmd_migrate(args) -> None:
     if user_files:
         print(f"  Found: {', '.join(f.name for f in user_files)}")
         print()
-        print("  These are picked up automatically the first time you run 'hermes'")
+        print("  These are picked up automatically the first time you run 'lliam-gov'")
         print("  with Honcho configured and no prior session history.")
         print("  (Hermes calls migrate_memory_files() on first session init.)")
         print()
         print("  If you want to migrate them now without starting a session:")
         for f in user_files:
-            print("    hermes honcho migrate  — this step handles it interactively")
+            print("    lliam-gov honcho migrate  — this step handles it interactively")
         if has_key:
             answer = _prompt("  Upload user memory files to Honcho now?", default="y")
             if answer.lower() in {"y", "yes"}:
@@ -1621,7 +1621,7 @@ def cmd_migrate(args) -> None:
                 except Exception as e:
                     print(f"  Failed: {e}")
         else:
-            print("  Run 'hermes honcho setup' first, then re-run this step.")
+            print("  Run 'lliam-gov honcho setup' first, then re-run this step.")
     else:
         print("  No user memory files detected. Nothing to migrate here.")
 
@@ -1667,9 +1667,9 @@ def cmd_migrate(args) -> None:
                 except Exception as e:
                     print(f"  Failed: {e}")
         else:
-            print("  Run 'hermes honcho setup' first, then seed manually:")
+            print("  Run 'lliam-gov honcho setup' first, then seed manually:")
             for f in agent_files:
-                print(f"    hermes honcho identity {f}")
+                print(f"    lliam-gov honcho identity {f}")
     else:
         print("  No agent identity files detected.")
         print("  To seed manually:  hermes honcho identity <path/to/SOUL.md>")
@@ -1711,7 +1711,7 @@ def cmd_migrate(args) -> None:
     print()
     if not has_key:
         print("  1. hermes honcho setup              — configure API key (required)")
-        print("  2. hermes honcho migrate            — re-run this walkthrough")
+        print("  2. lliam-gov honcho migrate            — re-run this walkthrough")
     else:
         print("  1. hermes honcho status             — verify Honcho connection")
         print("  2. hermes                           — start a session")

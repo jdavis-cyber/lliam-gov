@@ -202,7 +202,7 @@ Pastes auto-delete after 6 hours.
 _GATEWAY_PRIVACY_NOTICE = (
     "⚠️ **Privacy notice:** This uploads system info + recent log tails "
     "(may contain conversation fragments) to a public paste service. "
-    "Full logs are NOT included from the gateway — use `hermes debug share` "
+    "Full logs are NOT included from the gateway — use `lliam-gov debug share` "
     "from the CLI for full log uploads.\n"
     "Pastes auto-delete after 6 hours."
 )
@@ -517,7 +517,7 @@ def _capture_default_log_snapshots(
 # ---------------------------------------------------------------------------
 
 def _capture_dump() -> str:
-    """Run ``hermes dump`` and return its stdout as a string."""
+    """Run ``lliam-gov dump`` and return its stdout as a string."""
     from lliam_cli.dump import run_dump
 
     class _FakeArgs:
@@ -548,7 +548,7 @@ def collect_debug_report(
     log_lines
         Number of recent lines to include per log file.
     dump_text
-        Pre-captured dump output.  If empty, ``hermes dump`` is run
+        Pre-captured dump output.  If empty, ``lliam-gov dump`` is run
         internally.
 
     Returns the report as a plain-text string ready for upload.
@@ -771,7 +771,7 @@ def run_debug_share(args):
         )
     except RuntimeError as exc:
         print(f"\nUpload failed: {exc}", file=sys.stderr)
-        print("\nRun `hermes debug share --local` to print the report instead.\n")
+        print("\nRun `lliam-gov debug share --local` to print the report instead.\n")
         sys.exit(1)
 
     # Print results
@@ -796,7 +796,7 @@ def run_debug_delete(args):
     """Delete one or more paste URLs uploaded by /debug."""
     urls = getattr(args, "urls", [])
     if not urls:
-        print("Usage: hermes debug delete <url> [<url> ...]")
+        print("Usage: lliam-gov debug delete <url> [<url> ...]")
         print("  Deletes paste.rs pastes uploaded by 'hermes debug share'.")
         return
 
@@ -832,7 +832,7 @@ def run_debug(args):
         run_debug_delete(args)
     else:
         # Default: show help
-        print("Usage: hermes debug <command>")
+        print("Usage: lliam-gov debug <command>")
         print()
         print("Commands:")
         print("  share    Upload debug report to a paste service and print URL")

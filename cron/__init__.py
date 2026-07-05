@@ -8,8 +8,8 @@ This module provides scheduled task execution, allowing the agent to:
 
 Cron jobs are executed automatically by the gateway daemon:
     hermes gateway install    # Install as a user service
-    sudo hermes gateway install --system  # Linux servers: boot-time system service
-    hermes gateway            # Or run in foreground
+    sudo lliam-gov gateway install --system  # Linux servers: boot-time system service
+    lliam-gov gateway            # Or run in foreground
 
 The gateway ticks the scheduler every 60 seconds. A file lock prevents
 duplicate execution if multiple processes overlap.

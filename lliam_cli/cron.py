@@ -77,8 +77,8 @@ def _warn_if_gateway_not_running() -> None:
 
     print(color("  ⚠  Gateway is not running — jobs won't fire automatically.", Colors.YELLOW))
     print(color("     Start it with: hermes gateway install", Colors.DIM))
-    print(color("                    sudo hermes gateway install --system  # Linux servers", Colors.DIM))
-    print(color("     Check status:  hermes cron status", Colors.DIM))
+    print(color("                    sudo lliam-gov gateway install --system  # Linux servers", Colors.DIM))
+    print(color("     Check status:  lliam-gov cron status", Colors.DIM))
 
 
 def cron_list(show_all: bool = False):
@@ -225,9 +225,9 @@ def cron_status():
         print(color("✗ Gateway is not running — cron jobs will NOT fire", Colors.RED))
         print()
         print("  To enable automatic execution:")
-        print("    hermes gateway install    # Install as a user service")
-        print("    sudo hermes gateway install --system  # Linux servers: boot-time system service")
-        print("    hermes gateway            # Or run in foreground")
+        print("    lliam-gov gateway install    # Install as a user service")
+        print("    sudo lliam-gov gateway install --system  # Linux servers: boot-time system service")
+        print("    lliam-gov gateway            # Or run in foreground")
 
     print()
 
@@ -261,7 +261,7 @@ def cron_create(args):
             "Blocked: cron job contains a gateway lifecycle command "
             "(restart/stop/kill).\n"
             "This is blocked to prevent restart loops (#30719).\n"
-            "Use `hermes gateway restart` from a shell outside the gateway.",
+            "Use `lliam-gov gateway restart` from a shell outside the gateway.",
             Colors.RED,
         ))
         return 1
@@ -420,5 +420,5 @@ def cron_command(args):
         return _job_action("remove", args.job_id, "Removed")
 
     print(f"Unknown cron command: {subcmd}")
-    print("Usage: hermes cron [list|create|edit|pause|resume|run|remove|status|tick]")
+    print("Usage: lliam-gov cron [list|create|edit|pause|resume|run|remove|status|tick]")
     sys.exit(1)

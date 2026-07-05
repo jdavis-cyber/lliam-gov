@@ -114,8 +114,8 @@ def projects_command(args: argparse.Namespace) -> int:
             parser.print_help()
         else:
             print(
-                "usage: hermes project <action> [options]\n"
-                "Run 'hermes project --help' for the full list.",
+                "usage: lliam-gov project <action> [options]\n"
+                "Run 'lliam-gov project --help' for the full list.",
                 file=sys.stderr,
             )
         return 0

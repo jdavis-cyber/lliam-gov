@@ -146,7 +146,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
                 f"  [red]Non-interactive mode (no TTY) requires all setup flags.[/red]\n"
                 f"  Missing: {', '.join(missing)}\n\n"
                 "  Usage:\n"
-                "    hermes secrets bitwarden setup \\\n"
+                "    lliam-gov secrets bitwarden setup \\\n"
                 "      --access-token '0.xxx' \\\n"
                 "      --server-url 'https://vault.bitwarden.com' \\\n"
                 "      --project-id 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'"
@@ -281,7 +281,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
         "Secrets will be pulled at the start of every Hermes process."
     )
     console.print(
-        "  Status:  [cyan]hermes secrets bitwarden status[/cyan]\n"
+        "  Status:  [cyan]lliam-gov secrets bitwarden status[/cyan]\n"
         "  Refresh: [cyan]hermes secrets bitwarden sync[/cyan]\n"
         "  Disable: [cyan]hermes secrets bitwarden disable[/cyan]"
     )
@@ -323,7 +323,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     console.print(Panel(table, title="Bitwarden Secrets Manager", border_style="cyan"))
 
     if not enabled:
-        console.print("\n  Run [cyan]hermes secrets bitwarden setup[/cyan] to enable.")
+        console.print("\n  Run [cyan]lliam-gov secrets bitwarden setup[/cyan] to enable.")
         return 0
     if not token_set:
         console.print(

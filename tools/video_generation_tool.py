@@ -149,7 +149,7 @@ VIDEO_GENERATE_SCHEMA: Dict[str, Any] = {
                 "type": "string",
                 "description": (
                     "Optional model override. If omitted, the user's "
-                    "configured ``video_gen.model`` (set via `hermes tools` "
+                    "configured ``video_gen.model`` (set via `lliam-gov tools` "
                     "→ Video Generation) is used. Models that the active "
                     "provider does not know are rejected."
                 ),
@@ -248,7 +248,7 @@ def _missing_provider_error(configured: Optional[str]) -> str:
     if configured:
         msg = (
             f"video_gen.provider='{configured}' is set but no plugin "
-            f"registered that name. Run `hermes plugins list` to see "
+            f"registered that name. Run `lliam-gov plugins list` to see "
             f"installed video gen backends, or `hermes tools` → Video "
             f"Generation to pick one."
         )
@@ -257,7 +257,7 @@ def _missing_provider_error(configured: Optional[str]) -> str:
             provider=configured,
         ))
     msg = (
-        "No video generation backend is configured. Run `hermes tools` → "
+        "No video generation backend is configured. Run `lliam-gov tools` → "
         "Video Generation to enable one (xAI, FAL, or Google Veo)."
     )
     return json.dumps(error_response(
@@ -472,7 +472,7 @@ def _build_dynamic_video_schema() -> Dict[str, Any]:
     if not configured:
         parts.append(
             "\nNo video backend is configured. Calls will return an error "
-            "until the user picks one via `hermes tools` → Video Generation."
+            "until the user picks one via `lliam-gov tools` → Video Generation."
         )
         return {"description": "\n".join(parts)}
 

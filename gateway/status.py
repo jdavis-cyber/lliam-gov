@@ -265,7 +265,7 @@ def _gateway_command_subcommand(command: str | None) -> str | None:
         if token != "gateway":
             continue
         if i + 1 >= len(filtered):
-            return "run"  # bare `hermes gateway` defaults to `run`
+            return "run"  # bare `lliam-gov gateway` defaults to `run`
         return filtered[i + 1]
     return None
 

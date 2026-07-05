@@ -5,7 +5,7 @@ Preserves critical flags (--tui, --dev, --profile, --model, etc.) across
 process replacement so that ``hermes sessions browse`` or post-setup relaunch
 doesn't silently drop the user's UI mode or other preferences.
 
-Also works when ``hermes`` is not on PATH (e.g. ``nix run`` or ``python -m``).
+Also works when ``lliam-gov`` is not on PATH (e.g. ``nix run`` or ``python -m``).
 """
 
 import os
@@ -162,7 +162,7 @@ def relaunch(
 
     On POSIX we use ``os.execvp`` which replaces the running process with
     the new one in place — same PID, no double-fork.  That's what the
-    relaunch contract wants: "run hermes again as if the user had typed
+    relaunch contract wants: "run lliam-gov again as if the user had typed
     the new argv".
 
     Windows has no native exec semantics — ``os.execvp`` on Windows

@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 def _print_aiohttp_missing() -> None:
     print(
-        "hermes proxy requires aiohttp. Install one of:\n"
-        "  pip install 'hermes-agent[messaging]'\n"
+        "lliam-gov proxy requires aiohttp. Install one of:\n"
+        "  pip install 'lliam-gov-agent[messaging]'\n"
         "  pip install aiohttp",
         file=sys.stderr,
     )
@@ -44,7 +44,7 @@ def cmd_proxy_start(args: Any) -> int:
         return 2
 
     if not adapter.is_authenticated():
-        auth_hint = getattr(adapter, "auth_hint", f"hermes auth add {adapter.name}")
+        auth_hint = getattr(adapter, "auth_hint", f"lliam-gov auth add {adapter.name}")
         print(
             f"Not logged into {adapter.display_name}. "
             f"Run `{auth_hint}` first.",
@@ -94,7 +94,7 @@ def cmd_proxy_status(args: Any) -> int:
         expires = f" (bearer expires {cred.expires_at})" if cred.expires_at else ""
         print(f"  [{name:8s}] {adapter.display_name} — ready{expires}")
     print(
-        "\nStart the proxy with: hermes proxy start [--provider <name>]"
+        "\nStart the proxy with: lliam-gov proxy start [--provider <name>]"
     )
     return 0
 
@@ -119,15 +119,15 @@ def cmd_proxy(args: Any) -> int:
         return cmd_proxy_list_providers(args)
     # No subcommand → print short help.
     print(
-        "hermes proxy — local OpenAI-compatible proxy that attaches your\n"
+        "lliam-gov proxy — local OpenAI-compatible proxy that attaches your\n"
         "OAuth-authenticated provider credentials to outbound requests.\n"
         "\n"
         "Subcommands:\n"
-        "  hermes proxy start [--provider nous|xai] [--host 127.0.0.1] [--port 8645]\n"
+        "  lliam-gov proxy start [--provider nous|xai] [--host 127.0.0.1] [--port 8645]\n"
         "      Run the proxy in the foreground.\n"
-        "  hermes proxy status\n"
+        "  lliam-gov proxy status\n"
         "      Show which upstream adapters are ready.\n"
-        "  hermes proxy providers\n"
+        "  lliam-gov proxy providers\n"
         "      List available upstream providers.\n",
         file=sys.stderr,
     )

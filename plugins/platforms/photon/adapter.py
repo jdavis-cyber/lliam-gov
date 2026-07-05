@@ -344,7 +344,7 @@ class PhotonAdapter(BasePlatformAdapter):
             self._set_fatal_error(
                 "MISSING_CREDENTIALS",
                 "PHOTON_PROJECT_ID and PHOTON_PROJECT_SECRET are required. "
-                "Run: hermes photon setup",
+                "Run: lliam-gov photon setup",
                 retryable=False,
             )
             return False
@@ -1667,7 +1667,7 @@ def register(ctx) -> None:
         is_connected=is_connected,
         required_env=["PHOTON_PROJECT_ID", "PHOTON_PROJECT_SECRET"],
         install_hint=(
-            "Run: hermes photon setup  (logs in via device flow, creates a "
+            "Run: lliam-gov photon setup  (logs in via device flow, creates a "
             "Spectrum project, links your phone number, installs the "
             "spectrum-ts sidecar)."
         ),
