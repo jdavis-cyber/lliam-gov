@@ -12291,6 +12291,17 @@ def main():
     # in ps/top/htop.  Non-fatal — just a nicer UX.
     _set_process_title()
 
+    # One-time migration of on-disk data from the pre-rename home (~/.hermes ->
+    # ~/.lliam). Runs here — the earliest startup chokepoint, before any home
+    # access (fast-launch paths below read the home) — and NEVER at import time.
+    # Resolves the same old/new homes the rest of the process uses. Never fatal:
+    # a migration failure must not stop hermes from starting.
+    try:
+        from hermes_constants import run_startup_migration
+        run_startup_migration()
+    except Exception:
+        pass
+
     # Force UTF-8 stdio on Windows before anything prints.  No-op elsewhere.
     try:
         from hermes_cli.stdio import configure_windows_stdio

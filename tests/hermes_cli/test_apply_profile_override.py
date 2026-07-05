@@ -27,7 +27,12 @@ def _run_apply_profile_override(
     Returns the value of os.environ["HERMES_HOME"] after the call,
     or None if unset.
     """
-    hermes_root = tmp_path / ".hermes"
+    # When HERMES_HOME is unset the profile store lives under the platform
+    # default home. Post-rename that default is ``~/.lliam`` (see
+    # hermes_constants.get_default_hermes_root); when HERMES_HOME is provided it
+    # IS the store root. Create active_profile/profiles where the production
+    # code will actually read them.
+    hermes_root = Path(hermes_home) if hermes_home is not None else tmp_path / ".lliam"
     hermes_root.mkdir(parents=True, exist_ok=True)
 
     if active_profile is not None:
@@ -41,6 +46,7 @@ def _run_apply_profile_override(
         monkeypatch.setenv("HERMES_HOME", hermes_home)
     else:
         monkeypatch.delenv("HERMES_HOME", raising=False)
+    monkeypatch.delenv("LLIAM_HOME", raising=False)
 
     monkeypatch.setattr(sys, "argv", argv or ["hermes", "gateway", "start"])
 
@@ -305,7 +311,9 @@ class TestSupervisedChildIgnoresStickyProfile:
         """A supervised named-profile slot passes ``-p <name>`` explicitly;
         that must still resolve (the sentinel guard only skips the sticky
         active_profile fallback, never an explicit flag)."""
-        hermes_root = tmp_path / ".hermes"
+        # HERMES_HOME unset -> profile store lives under the platform default
+        # home, which post-rename is ~/.lliam.
+        hermes_root = tmp_path / ".lliam"
         hermes_root.mkdir(parents=True, exist_ok=True)
         (hermes_root / "active_profile").write_text("briefer")
         (hermes_root / "profiles" / "briefer").mkdir(parents=True, exist_ok=True)
@@ -313,6 +321,7 @@ class TestSupervisedChildIgnoresStickyProfile:
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.delenv("HERMES_HOME", raising=False)
+        monkeypatch.delenv("LLIAM_HOME", raising=False)
         monkeypatch.setenv("HERMES_S6_SUPERVISED_CHILD", "1")
         monkeypatch.setattr(sys, "argv", ["hermes", "-p", "coder", "gateway", "run"])
 

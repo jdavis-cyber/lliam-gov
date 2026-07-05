@@ -1725,7 +1725,10 @@ def _profile_arg(hermes_home: str | None = None, default_root: str | Path | None
 
 def _profile_arg_for_target_user(hermes_home: str, target_home_dir: str) -> str:
     """Return the profile arg for a system service running as another user."""
-    target_root = Path(target_home_dir) / ".hermes"
+    from hermes_constants import _get_platform_default_hermes_home
+
+    # Post-rename default leaf is ``.lliam``; derive it instead of hardcoding.
+    target_root = Path(target_home_dir) / _get_platform_default_hermes_home().name
     try:
         Path(hermes_home).resolve().relative_to(target_root.resolve())
         return _profile_arg(hermes_home, default_root=target_root)
@@ -2558,14 +2561,20 @@ def _hermes_home_for_target_user(target_home_dir: str) -> str:
     """Remap the current HERMES_HOME to the equivalent under a target user's home.
 
     When installing a system service via sudo, get_hermes_home() resolves to
-    root's home.  This translates it to the target user's equivalent path:
-      /root/.hermes                    → /home/alice/.hermes
-      /root/.hermes/profiles/coder     → /home/alice/.hermes/profiles/coder
+    root's home.  This translates it to the target user's equivalent path
+    (post-rename default leaf is ``.lliam``):
+      /root/.lliam                     → /home/alice/.lliam
+      /root/.lliam/profiles/coder      → /home/alice/.lliam/profiles/coder
       /opt/custom-hermes               → /opt/custom-hermes  (kept as-is)
     """
+    from hermes_constants import _get_platform_default_hermes_home
+
+    # Derive the default-home leaf (``.lliam``) from the constants module so this
+    # stays correct through the rename instead of hardcoding the old ``.hermes``.
+    default_leaf = _get_platform_default_hermes_home().name
     current_hermes = get_hermes_home().resolve()
-    current_default = (Path.home() / ".hermes").resolve()
-    target_default = Path(target_home_dir) / ".hermes"
+    current_default = (Path.home() / default_leaf).resolve()
+    target_default = Path(target_home_dir) / default_leaf
 
     # Default ~/.hermes → remap to target user's default
     if current_hermes == current_default:

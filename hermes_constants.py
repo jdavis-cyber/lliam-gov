@@ -43,13 +43,27 @@ def get_hermes_home_override() -> str | None:
     return str(override)
 
 
-def _get_platform_default_hermes_home() -> Path:
-    """Return the platform-native default Hermes home path."""
+def _get_platform_default_home(name: str) -> Path:
+    """Return the platform-native default home path for *name*.
+
+    ``name`` is the leaf identifier: ``"lliam"`` for the post-rename default,
+    ``"hermes"`` for the legacy home consulted only by the one-time migration.
+    """
     if sys.platform == "win32":
         local_appdata = os.environ.get("LOCALAPPDATA", "").strip()
         base = Path(local_appdata) if local_appdata else Path.home() / "AppData" / "Local"
-        return base / "hermes"
-    return Path.home() / ".hermes"
+        return base / name
+    return Path.home() / f".{name}"
+
+
+def _get_platform_default_hermes_home() -> Path:
+    """Return the platform-native default home path (post-rename: ``~/.lliam``).
+
+    The name is historical (kept until the R.2 file rename); the returned path
+    is the NEW default. The legacy ``~/.hermes`` location is reached only via
+    :func:`get_legacy_home_for_migration`.
+    """
+    return _get_platform_default_home("lliam")
 
 
 def get_hermes_home() -> Path:
@@ -72,7 +86,13 @@ def get_hermes_home() -> Path:
     if override:
         return Path(override)
 
-    val = os.environ.get("HERMES_HOME", "").strip()
+    # Effective home: LLIAM_HOME wins, then legacy HERMES_HOME (an explicitly
+    # set legacy var must keep working — the entire existing test suite isolates
+    # via HERMES_HOME), then the new platform default (~/.lliam). Lazy import
+    # keeps this module import-safe (no top-level hermes_cli dependency).
+    from hermes_cli.env_compat import getenv_compat
+
+    val = (getenv_compat("HOME") or "").strip()
     if val:
         return Path(val)
 
@@ -110,6 +130,46 @@ def get_hermes_home() -> Path:
     return _get_platform_default_hermes_home()
 
 
+def get_legacy_home_for_migration() -> Path:
+    """Return the pre-rename home to migrate FROM (never as the live home).
+
+    Resolution mirrors :func:`get_hermes_home`'s base-home derivation so the
+    one-time migration copies from the correct legacy location:
+
+    * ``HERMES_HOME`` if explicitly set — the effective home already IS this
+      path (when ``LLIAM_HOME`` is unset), so old == new and the migration
+      is a guarded no-op; when ``LLIAM_HOME`` IS set, this is the real legacy
+      home to copy from.
+    * otherwise the legacy platform default (``~/.hermes`` /
+      ``%LOCALAPPDATA%\\hermes``).
+
+    A context-local override (``set_hermes_home_override``) takes precedence,
+    matching :func:`get_hermes_home`, so isolated in-process scopes migrate to
+    the same isolated home they read from.
+    """
+    override = get_hermes_home_override()
+    if override:
+        return Path(override)
+    val = os.environ.get("HERMES_HOME", "").strip()
+    if val:
+        return Path(val)
+    return _get_platform_default_home("hermes")
+
+
+def run_startup_migration() -> None:
+    """Perform the one-time legacy-home migration, if needed.
+
+    Call this ONCE at CLI/app startup, before any home access — never at module
+    import time. Resolves the SAME old/new homes the rest of the process uses
+    (:func:`get_legacy_home_for_migration` and :func:`get_hermes_home`) and
+    delegates the copy-once / idempotent / old==new-guard logic to
+    :func:`hermes_cli.migrate_home.migrate_if_needed`.
+    """
+    from hermes_cli import migrate_home
+
+    migrate_home.migrate_if_needed(get_legacy_home_for_migration(), get_hermes_home())
+
+
 def get_default_hermes_root() -> Path:
     """Return the root Hermes directory for profile-level operations.
 
@@ -125,10 +185,14 @@ def get_default_hermes_root() -> Path:
     Works both for standard (``~/.hermes/profiles/coder``) and Docker
     (``/opt/data/profiles/coder``) layouts.
 
-    Import-safe — no dependencies beyond stdlib.
+    Honors LLIAM_HOME first, then legacy HERMES_HOME (same precedence as
+    :func:`get_hermes_home`), so a custom/Docker root set via either var
+    resolves consistently.
     """
+    from hermes_cli.env_compat import getenv_compat
+
     native_home = _get_platform_default_hermes_home()
-    env_home = os.environ.get("HERMES_HOME", "")
+    env_home = getenv_compat("HOME") or ""
     if not env_home:
         return native_home
     env_path = Path(env_home)
