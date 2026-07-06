@@ -1,6 +1,15 @@
-"""Hermes Achievements dashboard plugin backend.
+"""Lliam Achievements dashboard plugin backend.
 
-Mounted at /api/plugins/hermes-achievements/ by Hermes dashboard.
+Mounted at /api/plugins/lliam-achievements/ by the Lliam-GOV dashboard.
+
+Persisted-state note (hermes -> lliam rename): unlock history lives on disk at
+``<home>/plugins/<plugin-id>/state.json``. Renaming the plugin id from
+``hermes-achievements`` to ``lliam-achievements`` would orphan the history of
+any operator who unlocked achievements under the old id, so ``_state_dir()``
+performs a one-time, best-effort migration of the old plugin directory to the
+new one (see below). The home directory itself is migrated separately by
+``lliam_cli.migrate_home`` (~/.hermes -> ~/.lliam); this handles only the
+plugin-id leaf within whichever home is active.
 """
 from __future__ import annotations
 
@@ -142,16 +151,44 @@ ACHIEVEMENTS: List[Dict[str, Any]] = [
 ]
 
 
+_PLUGIN_ID = "lliam-achievements"
+_LEGACY_PLUGIN_ID = "hermes-achievements"
+
+
+def _state_dir() -> Path:
+    """Return the plugin's on-disk state directory, migrating the legacy id once.
+
+    Persisted-contract preservation for the hermes -> lliam rename: if the new
+    ``<home>/plugins/lliam-achievements/`` directory does not yet exist but the
+    legacy ``<home>/plugins/hermes-achievements/`` one does, rename it in place
+    so an operator's unlock history (state.json), scan snapshot, and checkpoint
+    all carry over untouched. Best-effort: any failure falls through to the new
+    path and simply starts fresh — achievement state is derived/cosmetic, never
+    load-bearing, so we never crash the dashboard over it.
+    """
+    home = get_hermes_home()
+    new_dir = home / "plugins" / _PLUGIN_ID
+    if not new_dir.exists():
+        legacy_dir = home / "plugins" / _LEGACY_PLUGIN_ID
+        if legacy_dir.is_dir():
+            try:
+                new_dir.parent.mkdir(parents=True, exist_ok=True)
+                legacy_dir.rename(new_dir)
+            except OSError:
+                pass
+    return new_dir
+
+
 def state_path() -> Path:
-    return get_hermes_home() / "plugins" / "hermes-achievements" / "state.json"
+    return _state_dir() / "state.json"
 
 
 def snapshot_path() -> Path:
-    return get_hermes_home() / "plugins" / "hermes-achievements" / "scan_snapshot.json"
+    return _state_dir() / "scan_snapshot.json"
 
 
 def checkpoint_path() -> Path:
-    return get_hermes_home() / "plugins" / "hermes-achievements" / "scan_checkpoint.json"
+    return _state_dir() / "scan_checkpoint.json"
 
 
 def load_state() -> Dict[str, Any]:
@@ -934,7 +971,7 @@ def _start_background_scan() -> None:
         thread = threading.Thread(
             target=_run_scan_and_update_cache,
             kwargs={"publish_partial_snapshots": True},
-            name="hermes-achievements-scan",
+            name="lliam-achievements-scan",
             daemon=True,
         )
         _BACKGROUND_SCAN_THREAD = thread

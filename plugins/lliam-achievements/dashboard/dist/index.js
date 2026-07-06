@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  // hermes-achievements dashboard plugin
+  // lliam-achievements dashboard plugin
   // Originally authored by @PCinkusz — https://github.com/PCinkusz/hermes-achievements (MIT).
   // Bundled into hermes-agent. Upstream repo remains the staging ground for new
   // badges and UI iteration; the in-progress scan banner below is a small addition
@@ -56,7 +56,7 @@
     // 401s in gated mode (the token isn't injected there). fetchJSON throws
     // Error("<status>: <body>") on non-2xx — the call sites' .catch() relies
     // on that to surface errors, so we let it propagate (don't swallow).
-    const url = "/api/plugins/hermes-achievements" + path;
+    const url = "/api/plugins/lliam-achievements" + path;
     return SDK.fetchJSON(url, options);
   }
 
@@ -722,5 +722,5 @@
     );
   }
 
-  window.__HERMES_PLUGINS__.register("hermes-achievements", AchievementsPage);
+  window.__HERMES_PLUGINS__.register("lliam-achievements", AchievementsPage);
 })();
