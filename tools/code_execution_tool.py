@@ -33,6 +33,7 @@ import functools
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import platform
 import shlex
 import socket
@@ -95,6 +96,14 @@ _SECRET_SUBSTRINGS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL",
 # runtime location) that repo-root modules a sandbox script imports may read at
 # import time.  None match _SECRET_SUBSTRINGS.
 _HERMES_CHILD_ALLOWED = frozenset({
+    # New LLIAM_ names (rename R.8a) and legacy HERMES_ names both pass —
+    # producers now set the LLIAM_ names; the HERMES_ names stay allowlisted
+    # for the transition window so an externally-exported legacy var still
+    # reaches the child.
+    "LLIAM_HOME",
+    "LLIAM_PROFILE",
+    "LLIAM_CONFIG",
+    "LLIAM_ENV",
     "HERMES_HOME",
     "HERMES_PROFILE",
     "HERMES_CONFIG",
@@ -181,9 +190,9 @@ def _scrub_child_env(source_env, is_passthrough=None, is_windows=None):
         if is_windows and k.upper() in _WINDOWS_ESSENTIAL_ENV_VARS:
             scrubbed[k] = v
             continue
-        if k.startswith("HERMES_"):
+        if k.startswith(("LLIAM_", "HERMES_")):
             # Non-secret (secrets were already dropped above) and not in any
-            # allowlist — a deliberately-dropped HERMES_* var.
+            # allowlist — a deliberately-dropped LLIAM_*/HERMES_* var.
             _dropped_hermes.append(k)
     if _dropped_hermes:
         logger.debug(
@@ -356,7 +365,11 @@ def _connect():
     """
     global _sock
     if _sock is None:
-        endpoint = os.environ["HERMES_RPC_SOCKET"]
+        # rename R.8a: parent sets LLIAM_RPC_SOCKET; fall back to legacy
+        # HERMES_RPC_SOCKET during the transition window. This runs inside the
+        # sandbox stub (which cannot import lliam_cli), so use an inline
+        # two-name lookup. Fail loud (KeyError) if neither is present.
+        endpoint = os.environ.get("LLIAM_RPC_SOCKET") or os.environ["HERMES_RPC_SOCKET"]
         if endpoint.startswith("tcp://"):
             # tcp://host:port  (host is always 127.0.0.1 in practice — we
             # only bind loopback server-side)
@@ -401,7 +414,7 @@ _FILE_TRANSPORT_HEADER = '''\
 """Auto-generated Hermes tools RPC stubs (file-based transport)."""
 import json, os, shlex, tempfile, threading, time
 
-_RPC_DIR = os.environ.get("HERMES_RPC_DIR") or os.path.join(tempfile.gettempdir(), "hermes_rpc")
+_RPC_DIR = (os.environ.get("LLIAM_RPC_DIR") or os.environ.get("HERMES_RPC_DIR")) or os.path.join(tempfile.gettempdir(), "hermes_rpc")
 _seq = 0
 # `_seq += 1` is not atomic (read-modify-write), so concurrent _call()
 # invocations from multiple threads could allocate the same sequence number
@@ -959,7 +972,7 @@ def _execute_remote(
             f"HERMES_RPC_DIR={shlex.quote(f'{sandbox_dir}/rpc')} "
             f"PYTHONDONTWRITEBYTECODE=1"
         )
-        tz = os.getenv("HERMES_TIMEZONE", "").strip()
+        tz = getenv_compat("TIMEZONE", "").strip()
         if tz:
             env_prefix += f" TZ={shlex.quote(tz)}"
 
@@ -1232,7 +1245,7 @@ def execute_code(
         # passed through — without those, the child can't create a socket
         # or spawn a subprocess.  See ``_scrub_child_env`` for the rules.
         child_env = _scrub_child_env(os.environ)
-        child_env["HERMES_RPC_SOCKET"] = rpc_endpoint
+        child_env["LLIAM_RPC_SOCKET"] = rpc_endpoint
         child_env["PYTHONDONTWRITEBYTECODE"] = "1"
         # Force UTF-8 for the child's stdio and default file encoding.
         #
@@ -1267,7 +1280,7 @@ def execute_code(
         # code reflects the correct wall-clock time.  Only TZ is set —
         # HERMES_TIMEZONE is an internal Hermes setting and must not leak
         # into child processes.
-        _tz_name = os.getenv("HERMES_TIMEZONE", "").strip()
+        _tz_name = getenv_compat("TIMEZONE", "").strip()
         if _tz_name:
             child_env["TZ"] = _tz_name
         child_env.pop("HERMES_TIMEZONE", None)

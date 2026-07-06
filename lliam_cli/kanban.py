@@ -18,6 +18,7 @@ import argparse
 import contextlib
 import json
 import os
+from lliam_cli.env_compat import getenv_compat
 import shlex
 import sys
 import time
@@ -1852,9 +1853,9 @@ def _cmd_comment(args: argparse.Namespace) -> int:
 
 
 def _worker_run_id_for(task_id: str) -> Optional[int]:
-    if os.environ.get("HERMES_KANBAN_TASK") != task_id:
+    if getenv_compat("KANBAN_TASK") != task_id:
         return None
-    raw = os.environ.get("HERMES_KANBAN_RUN_ID")
+    raw = getenv_compat("KANBAN_RUN_ID")
     if not raw:
         return None
     try:

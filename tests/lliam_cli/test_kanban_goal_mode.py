@@ -145,8 +145,8 @@ def test_spawn_sets_goal_env_only_when_enabled(kanban_home, monkeypatch):
 
     kb._default_spawn(task, str(kanban_home))
     env = captured["env"]
-    assert env.get("HERMES_KANBAN_GOAL_MODE") == "1"
-    assert env.get("HERMES_KANBAN_GOAL_MAX_TURNS") == "5"
+    assert env.get("LLIAM_KANBAN_GOAL_MODE") == "1"
+    assert env.get("LLIAM_KANBAN_GOAL_MAX_TURNS") == "5"
 
 
 def test_spawn_no_goal_env_for_plain_task(kanban_home, monkeypatch):
@@ -167,8 +167,10 @@ def test_spawn_no_goal_env_for_plain_task(kanban_home, monkeypatch):
 
     kb._default_spawn(task, str(kanban_home))
     env = captured["env"]
-    assert "HERMES_KANBAN_GOAL_MODE" not in env
-    assert "HERMES_KANBAN_GOAL_MAX_TURNS" not in env
+    # rename R.8a: producer writes the LLIAM_ names; assert the new names
+    # are absent when goal mode is off (legacy names were never written).
+    assert "LLIAM_KANBAN_GOAL_MODE" not in env
+    assert "LLIAM_KANBAN_GOAL_MAX_TURNS" not in env
 
 
 # ---------------------------------------------------------------------------

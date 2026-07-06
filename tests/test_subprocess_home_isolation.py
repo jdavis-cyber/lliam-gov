@@ -193,7 +193,7 @@ class TestMakeRunEnvHomeInjection:
         result = _make_run_env({})
 
         assert result["HOME"] == str(real_home)
-        assert result["HERMES_REAL_HOME"] == str(real_home)
+        assert result["LLIAM_REAL_HOME"] == str(real_home)
 
     def test_profile_mode_injects_profile_home_when_profile_home_exists(self, tmp_path, monkeypatch):
         hermes_home = tmp_path / "hermes"
@@ -211,7 +211,7 @@ class TestMakeRunEnvHomeInjection:
         result = _make_run_env({})
 
         assert result["HOME"] == str(hermes_home / "home")
-        assert result["HERMES_REAL_HOME"] == str(real_home)
+        assert result["LLIAM_REAL_HOME"] == str(real_home)
 
     def test_no_injection_when_home_dir_missing(self, tmp_path, monkeypatch):
         hermes_home = tmp_path / "hermes"
@@ -281,7 +281,7 @@ class TestSanitizeSubprocessEnvHomeInjection:
         result = _sanitize_subprocess_env(base_env)
 
         assert result["HOME"] == str(real_home)
-        assert result["HERMES_REAL_HOME"] == str(real_home)
+        assert result["LLIAM_REAL_HOME"] == str(real_home)
 
     def test_profile_mode_injects_profile_home_when_profile_home_exists(self, tmp_path, monkeypatch):
         hermes_home = tmp_path / "hermes"
@@ -298,7 +298,7 @@ class TestSanitizeSubprocessEnvHomeInjection:
         result = _sanitize_subprocess_env(base_env)
 
         assert result["HOME"] == str(hermes_home / "home")
-        assert result["HERMES_REAL_HOME"] == str(real_home)
+        assert result["LLIAM_REAL_HOME"] == str(real_home)
 
     def test_no_injection_when_home_dir_missing(self, tmp_path, monkeypatch):
         hermes_home = tmp_path / "hermes"

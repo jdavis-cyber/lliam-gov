@@ -425,17 +425,20 @@ class TestHistoryDisplay:
         cli._session_db.create_session("target_session", "cli")
         cli._session_db.append_message("target_session", "user", "hello from resumed session")
 
-        os.environ["HERMES_SESSION_ID"] = "current_session"
+        # rename R.8a: producer writes LLIAM_SESSION_ID; _VAR_MAP is keyed by
+        # the legacy name (contextvar map, unchanged).
+        os.environ["LLIAM_SESSION_ID"] = "current_session"
         _VAR_MAP["HERMES_SESSION_ID"].set("current_session")
 
         try:
             cli._handle_resume_command("/resume target_session")
 
             assert cli.session_id == "target_session"
-            assert os.environ["HERMES_SESSION_ID"] == "target_session"
+            assert os.environ["LLIAM_SESSION_ID"] == "target_session"
             assert get_session_env("HERMES_SESSION_ID") == "target_session"
         finally:
             cli._session_db.close()
+            os.environ.pop("LLIAM_SESSION_ID", None)
             os.environ.pop("HERMES_SESSION_ID", None)
             _VAR_MAP["HERMES_SESSION_ID"].set(_UNSET)
 

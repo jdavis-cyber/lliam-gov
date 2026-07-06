@@ -47,6 +47,11 @@ def fresh_home(tmp_path, monkeypatch):
     home.mkdir()
     monkeypatch.setenv("HERMES_HOME", str(home))
     for var in (
+        # rename R.8a: clear both names — consumers read LLIAM_ first.
+        "LLIAM_KANBAN_DB",
+        "LLIAM_KANBAN_WORKSPACES_ROOT",
+        "LLIAM_KANBAN_HOME",
+        "LLIAM_KANBAN_BOARD",
         "HERMES_KANBAN_DB",
         "HERMES_KANBAN_WORKSPACES_ROOT",
         "HERMES_KANBAN_HOME",
@@ -421,13 +426,13 @@ class TestWorkerSpawnEnv:
         kb._default_spawn(task, str(fresh_home / "ws"), board="spawntest")
 
         env = captured["env"]
-        assert env["HERMES_KANBAN_BOARD"] == "spawntest"
-        assert env["HERMES_KANBAN_TASK"] == "t_abc"
+        assert env["LLIAM_KANBAN_BOARD"] == "spawntest"
+        assert env["LLIAM_KANBAN_TASK"] == "t_abc"
         # DB path should match the per-board DB, not the legacy default.
         expected_db = fresh_home / "kanban" / "boards" / "spawntest" / "kanban.db"
-        assert env["HERMES_KANBAN_DB"] == str(expected_db)
+        assert env["LLIAM_KANBAN_DB"] == str(expected_db)
         expected_ws = fresh_home / "kanban" / "boards" / "spawntest" / "workspaces"
-        assert env["HERMES_KANBAN_WORKSPACES_ROOT"] == str(expected_ws)
+        assert env["LLIAM_KANBAN_WORKSPACES_ROOT"] == str(expected_ws)
 
     def test_default_board_spawn_keeps_legacy_paths(self, fresh_home, monkeypatch):
         captured = {}
@@ -459,8 +464,8 @@ class TestWorkerSpawnEnv:
         )
         kb._default_spawn(task, str(fresh_home / "ws"), board=None)
         env = captured["env"]
-        assert env["HERMES_KANBAN_BOARD"] == "default"
-        assert env["HERMES_KANBAN_DB"] == str(fresh_home / "kanban.db")
+        assert env["LLIAM_KANBAN_BOARD"] == "default"
+        assert env["LLIAM_KANBAN_DB"] == str(fresh_home / "kanban.db")
 
 
 # ---------------------------------------------------------------------------

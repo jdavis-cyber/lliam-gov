@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import sys
 import threading
 from typing import Any, Callable, Optional
@@ -236,7 +237,7 @@ def _debug(msg: str) -> None:
     broken stderr pipe must not kill the whole gateway — the main
     command pipe (stdin+stdout) is what actually matters.
     """
-    if os.environ.get("HERMES_VOICE_DEBUG", "").strip() != "1":
+    if getenv_compat("VOICE_DEBUG", "").strip() != "1":
         return
     try:
         print(f"[voice] {msg}", file=sys.stderr, flush=True)

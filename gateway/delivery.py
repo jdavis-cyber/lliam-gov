@@ -10,6 +10,7 @@ Routes messages to the appropriate destination based on:
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 from pathlib import Path
 from datetime import datetime
@@ -301,7 +302,7 @@ class DeliveryRouter:
         otherwise the ``gateway.filter_silence_narration`` config flag wins
         (default True).
         """
-        env = os.getenv("HERMES_FILTER_SILENCE_NARRATION")
+        env = getenv_compat("FILTER_SILENCE_NARRATION")
         if env is not None:
             return env.strip().lower() in ("1", "true", "yes", "on")
         return bool(getattr(self.config, "filter_silence_narration", True))

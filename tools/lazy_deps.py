@@ -69,6 +69,7 @@ from __future__ import annotations
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import shutil
 import site
@@ -422,7 +423,7 @@ def _allow_lazy_installs() -> bool:
     # (2) Sealed-venv env var: blocks ONLY when there is no safe durable
     # target to redirect into. With a target set, the install goes to the
     # data volume (append-only on sys.path), so the seal is preserved.
-    if os.environ.get("HERMES_DISABLE_LAZY_INSTALLS") == "1":
+    if getenv_compat("DISABLE_LAZY_INSTALLS") == "1":
         return _lazy_install_target() is not None
 
     return True

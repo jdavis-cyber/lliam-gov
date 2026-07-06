@@ -36,7 +36,7 @@ def kanban_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(home))
     # Existing crash-detection tests pre-date the grace window; pin to 0
     # so they keep their immediate-reclaim semantics.
-    monkeypatch.setenv("HERMES_KANBAN_CRASH_GRACE_SECONDS", "0")
+    monkeypatch.setenv("LLIAM_KANBAN_CRASH_GRACE_SECONDS", "0")
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     # Disable the detect_crashed_workers grace period for legacy tests in
     # this file that claim a task and immediately expect
@@ -46,7 +46,7 @@ def kanban_home(tmp_path, monkeypatch):
     # restores the pre-fix instant-reclaim semantics these tests were
     # written against. The grace-period itself is covered by dedicated
     # tests in tests/lliam_cli/test_kanban_db.py.
-    monkeypatch.setenv("HERMES_KANBAN_CRASH_GRACE_SECONDS", "0")
+    monkeypatch.setenv("LLIAM_KANBAN_CRASH_GRACE_SECONDS", "0")
     kb.init_db()
     return home
 
@@ -2813,8 +2813,8 @@ def test_default_spawn_does_not_auto_load_any_skill(kanban_home, monkeypatch):
     # Assignee + task env are still present
     assert "some-profile" in cmd
     env = captured["env"]
-    assert env.get("HERMES_KANBAN_TASK") == tid
-    assert env.get("HERMES_PROFILE") == "some-profile"
+    assert env.get("LLIAM_KANBAN_TASK") == tid
+    assert env.get("LLIAM_PROFILE") == "some-profile"
 
 
 def test_default_spawn_raises_terminal_timeout_to_task_runtime(kanban_home, monkeypatch):
@@ -3633,7 +3633,7 @@ def test_gateway_dispatcher_watcher_respects_env_override(monkeypatch):
     """HERMES_KANBAN_DISPATCH_IN_GATEWAY=0 disables without touching config."""
     import asyncio
     from gateway.run import GatewayRunner
-    monkeypatch.setenv("HERMES_KANBAN_DISPATCH_IN_GATEWAY", "0")
+    monkeypatch.setenv("LLIAM_KANBAN_DISPATCH_IN_GATEWAY", "0")
 
     runner = object.__new__(GatewayRunner)
     runner._running = True
@@ -3653,7 +3653,7 @@ def test_gateway_dispatcher_watcher_env_truthy_uses_config(monkeypatch):
     from gateway.run import GatewayRunner
     import lliam_cli.config as _cfg_mod
 
-    monkeypatch.setenv("HERMES_KANBAN_DISPATCH_IN_GATEWAY", "yes")
+    monkeypatch.setenv("LLIAM_KANBAN_DISPATCH_IN_GATEWAY", "yes")
     monkeypatch.setattr(
         _cfg_mod, "load_config",
         lambda: {"kanban": {"dispatch_in_gateway": False}},

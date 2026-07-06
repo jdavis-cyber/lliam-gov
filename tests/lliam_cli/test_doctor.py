@@ -199,12 +199,14 @@ def test_run_doctor_sets_interactive_env_for_tool_checks(monkeypatch, tmp_path):
 
     monkeypatch.setattr(doctor_mod, "PROJECT_ROOT", project_root)
     monkeypatch.setattr(doctor_mod, "HERMES_HOME", hermes_home)
+    # rename R.8a: doctor now sets LLIAM_INTERACTIVE; clear both first.
+    monkeypatch.delenv("LLIAM_INTERACTIVE", raising=False)
     monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
 
     seen = {}
 
     def fake_check_tool_availability(*args, **kwargs):
-        seen["interactive"] = os.getenv("HERMES_INTERACTIVE")
+        seen["interactive"] = os.getenv("LLIAM_INTERACTIVE")
         raise SystemExit(0)
 
     fake_model_tools = types.SimpleNamespace(

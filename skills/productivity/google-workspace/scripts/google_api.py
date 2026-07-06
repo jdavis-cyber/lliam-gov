@@ -24,6 +24,7 @@ import argparse
 import base64
 import json
 import os
+from lliam_cli.env_compat import getenv_compat
 import shutil
 import subprocess
 import sys
@@ -80,7 +81,7 @@ def _stored_token_scopes() -> list[str]:
 
 
 def _gws_binary() -> str | None:
-    override = os.getenv("HERMES_GWS_BIN")
+    override = getenv_compat("GWS_BIN")
     if override:
         return override
     return shutil.which("gws")

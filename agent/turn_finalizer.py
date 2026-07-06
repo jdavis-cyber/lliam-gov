@@ -23,6 +23,7 @@ keep the exact logger name (``"agent.conversation_loop"``).
 from __future__ import annotations
 
 import os
+from lliam_cli.env_compat import getenv_compat
 
 from agent.codex_responses_adapter import _summarize_user_message_for_log
 
@@ -82,7 +83,7 @@ def finalize_turn(
         # a task whose worker keeps exhausting its budget would block
         # silently each run, get auto-promoted by the operator (or never
         # surface), and re-block in an endless loop with no signal.
-        _kanban_task = os.environ.get("HERMES_KANBAN_TASK")
+        _kanban_task = getenv_compat("KANBAN_TASK")
         if _kanban_task:
             try:
                 from lliam_cli import kanban_db as _kb

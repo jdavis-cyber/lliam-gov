@@ -7,6 +7,7 @@ tool registration or provider resolution.
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import sys
 from pathlib import Path
@@ -236,7 +237,7 @@ def _detect_environment(env: str) -> bool:
         # kanban toolset. Mirror the same signals the kanban tools themselves
         # gate on (``tools/kanban_tools.py``) so the offer filter agrees with
         # tool availability.
-        if os.getenv("HERMES_KANBAN_TASK") or os.getenv("HERMES_KANBAN_BOARD"):
+        if getenv_compat("KANBAN_TASK") or getenv_compat("KANBAN_BOARD"):
             result = True
         else:
             try:
@@ -367,7 +368,7 @@ def get_disabled_skill_names(platform: str | None = None) -> Set[str]:
     from gateway.session_context import get_session_env
     resolved_platform = (
         platform
-        or os.getenv("HERMES_PLATFORM")
+        or getenv_compat("PLATFORM")
         or get_session_env("HERMES_SESSION_PLATFORM")
     )
 

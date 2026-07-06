@@ -1375,7 +1375,9 @@ def _cleanup_gateway_service(name: str, profile_dir: Path) -> None:
     import platform as _platform
 
     # Derive service name for this profile
-    # Temporarily set HERMES_HOME so _profile_suffix resolves correctly
+    # Temporarily set HERMES_HOME so _profile_suffix resolves correctly.
+    # (HERMES_HOME remains the internal home-producer name under R.1; the home
+    # resolver's LLIAM_-first precedence is reserved for external opt-in.)
     old_home = os.environ.get("HERMES_HOME")
     try:
         os.environ["HERMES_HOME"] = str(profile_dir)

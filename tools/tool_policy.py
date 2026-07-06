@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
@@ -104,13 +105,13 @@ def _is_strict() -> bool:
 
 def _candidate_policy_paths() -> List[Path]:
     paths: List[Path] = []
-    env = os.environ.get("HERMES_SKILL_POLICY")
+    env = getenv_compat("SKILL_POLICY")
     if env and env.strip():
         paths.append(Path(env).expanduser())
-    home = os.environ.get("HERMES_HOME")
+    home = getenv_compat("HOME")
     if home:
         paths.append(Path(home).expanduser() / "policy" / _POLICY_FILENAME)
-    overlay = os.environ.get("HERMES_CONFIG")
+    overlay = getenv_compat("CONFIG")
     if overlay:
         paths.append(Path(overlay).expanduser().parent / "policy" / _POLICY_FILENAME)
     # Repo-relative fallback (clone layout: <repo>/policy/skills-allowlist.yaml)
@@ -230,10 +231,12 @@ def _tag_denied_installed_names() -> Set[str]:
     if cached is not None:
         return cached
     denied: Set[str] = set()
+    iter_skills = None
     try:
-        from agent.skill_utils import iter_skill_index_files as _iter_skills
+        from agent.skill_utils import iter_skill_index_files
+        iter_skills = iter_skill_index_files
     except Exception:
-        _iter_skills = None
+        pass
     for d in dirs:
         try:
             # Match the loader's nested-aware traversal (category/name/SKILL.md),
@@ -242,7 +245,7 @@ def _tag_denied_installed_names() -> Set[str]:
             # skill placed under a supported nested category is still registered
             # — the deny-tag backstop must cover the same paths or it is bypassed
             # under strict posture. (LG-SC-01/02)
-            index = _iter_skills(d, "SKILL.md") if _iter_skills else d.glob("*/SKILL.md")
+            index = iter_skills(d, "SKILL.md") if iter_skills else d.glob("*/SKILL.md")
             for md in index:
                 meta = _skill_meta(md.parent)
                 if not meta:

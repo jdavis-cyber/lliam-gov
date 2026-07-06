@@ -41,6 +41,15 @@ def _run_gateway_import(hermes_home: Path, initial_env: dict[str, str]) -> dict[
             sys.exit(2)
 
         for k in (
+            # rename R.8a: the config->env bridge now writes the LLIAM_ names.
+            "LLIAM_MAX_ITERATIONS",
+            "LLIAM_AGENT_TIMEOUT",
+            "LLIAM_AGENT_TIMEOUT_WARNING",
+            "LLIAM_GATEWAY_BUSY_INPUT_MODE",
+            "LLIAM_GATEWAY_BUSY_TEXT_MODE",
+            "LLIAM_TIMEZONE",
+            # Also capture the legacy names so a stale-.env test can observe
+            # that config authority holds even when the old name lingers.
             "HERMES_MAX_ITERATIONS",
             "HERMES_AGENT_TIMEOUT",
             "HERMES_AGENT_TIMEOUT_WARNING",
@@ -112,8 +121,8 @@ def test_config_max_turns_wins_over_stale_env(hermes_home: Path) -> None:
 
     env = _run_gateway_import(hermes_home, initial_env={})
 
-    assert env.get("HERMES_MAX_ITERATIONS") == "500", (
-        f"expected config.yaml max_turns=500 to win; got {env.get('HERMES_MAX_ITERATIONS')!r}. "
+    assert env.get("LLIAM_MAX_ITERATIONS") == "500", (
+        f"expected config.yaml max_turns=500 to win; got {env.get('LLIAM_MAX_ITERATIONS')!r}. "
         "Stale .env value is shadowing config — the bridge lost its override."
     )
 
@@ -131,8 +140,8 @@ def test_config_gateway_timeout_wins_over_stale_env(hermes_home: Path) -> None:
 
     env = _run_gateway_import(hermes_home, initial_env={})
 
-    assert env.get("HERMES_AGENT_TIMEOUT") == "1800"
-    assert env.get("HERMES_AGENT_TIMEOUT_WARNING") == "900"
+    assert env.get("LLIAM_AGENT_TIMEOUT") == "1800"
+    assert env.get("LLIAM_AGENT_TIMEOUT_WARNING") == "900"
 
 
 def test_config_display_busy_input_mode_wins_over_stale_env(hermes_home: Path) -> None:
@@ -141,7 +150,7 @@ def test_config_display_busy_input_mode_wins_over_stale_env(hermes_home: Path) -
 
     env = _run_gateway_import(hermes_home, initial_env={})
 
-    assert env.get("HERMES_GATEWAY_BUSY_INPUT_MODE") == "interrupt"
+    assert env.get("LLIAM_GATEWAY_BUSY_INPUT_MODE") == "interrupt"
 
 
 def test_config_display_busy_text_mode_wins_over_stale_env(hermes_home: Path) -> None:
@@ -150,7 +159,7 @@ def test_config_display_busy_text_mode_wins_over_stale_env(hermes_home: Path) ->
 
     env = _run_gateway_import(hermes_home, initial_env={})
 
-    assert env.get("HERMES_GATEWAY_BUSY_TEXT_MODE") == "queue"
+    assert env.get("LLIAM_GATEWAY_BUSY_TEXT_MODE") == "queue"
 
 
 def test_config_timezone_wins_over_stale_env(hermes_home: Path) -> None:
@@ -159,7 +168,7 @@ def test_config_timezone_wins_over_stale_env(hermes_home: Path) -> None:
 
     env = _run_gateway_import(hermes_home, initial_env={})
 
-    assert env.get("HERMES_TIMEZONE") == "America/Los_Angeles"
+    assert env.get("LLIAM_TIMEZONE") == "America/Los_Angeles"
 
 
 def test_env_value_survives_when_config_omits_key(hermes_home: Path) -> None:

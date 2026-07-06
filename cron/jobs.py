@@ -14,6 +14,7 @@ import tempfile
 import threading
 import time
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import uuid
 
@@ -1335,7 +1336,7 @@ def _machine_id() -> str:
     Uses ``HERMES_MACHINE_ID`` if set, else hostname + pid. The CAS correctness
     comes from the file lock + the fresh-claim check, not from this value.
     """
-    explicit = os.getenv("HERMES_MACHINE_ID", "").strip()
+    explicit = getenv_compat("MACHINE_ID", "").strip()
     if explicit:
         return explicit
     try:

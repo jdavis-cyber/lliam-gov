@@ -172,16 +172,19 @@ class TestBranchCommandCLI:
         from gateway.session_context import _UNSET, _VAR_MAP, get_session_env
 
         old_session_id = cli_instance.session_id
-        os.environ["HERMES_SESSION_ID"] = old_session_id
+        # rename R.8a: producer writes LLIAM_SESSION_ID; _VAR_MAP is keyed by
+        # the legacy name (contextvar map, unchanged).
+        os.environ["LLIAM_SESSION_ID"] = old_session_id
         _VAR_MAP["HERMES_SESSION_ID"].set(old_session_id)
 
         try:
             HermesCLI._handle_branch_command(cli_instance, "/branch")
 
             assert cli_instance.session_id != old_session_id
-            assert os.environ["HERMES_SESSION_ID"] == cli_instance.session_id
+            assert os.environ["LLIAM_SESSION_ID"] == cli_instance.session_id
             assert get_session_env("HERMES_SESSION_ID") == cli_instance.session_id
         finally:
+            os.environ.pop("LLIAM_SESSION_ID", None)
             os.environ.pop("HERMES_SESSION_ID", None)
             _VAR_MAP["HERMES_SESSION_ID"].set(_UNSET)
 

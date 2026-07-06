@@ -35,6 +35,7 @@ import importlib.util
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import platform
 import re
 import time
@@ -207,7 +208,7 @@ def _get_sudo_password_cache_scope() -> str:
 
         session_key = get_session_env("HERMES_SESSION_KEY", "")
     except Exception:
-        session_key = os.getenv("HERMES_SESSION_KEY", "")
+        session_key = getenv_compat("SESSION_KEY", "")
     if session_key:
         return f"session:{session_key}"
 
@@ -430,7 +431,7 @@ def _prompt_for_sudo_password(timeout_seconds: int = 45) -> str:
             result["done"] = True
     
     try:
-        os.environ["HERMES_SPINNER_PAUSE"] = "1"
+        os.environ["LLIAM_SPINNER_PAUSE"] = "1"
         time.sleep(0.2)
         
         print()
@@ -476,8 +477,9 @@ def _prompt_for_sudo_password(timeout_seconds: int = 45) -> str:
         sys.stdout.flush()
         return ""
     finally:
-        if "HERMES_SPINNER_PAUSE" in os.environ:
-            del os.environ["HERMES_SPINNER_PAUSE"]
+        # rename R.8a: clear the LLIAM_ name we set above.
+        if "LLIAM_SPINNER_PAUSE" in os.environ:
+            del os.environ["LLIAM_SPINNER_PAUSE"]
 
 def _safe_command_preview(command: Any, limit: int = 200) -> str:
     """Return a log-safe preview for possibly-invalid command values."""

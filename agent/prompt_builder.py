@@ -7,6 +7,7 @@ assemble pieces, then combines them with memory and ephemeral prompts.
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import threading
 import contextvars
 from collections import OrderedDict
@@ -1152,7 +1153,7 @@ def build_environment_hints() -> str:
     # it's part of the stable, cache-safe system prompt. The env var is the
     # build-time/embedder mechanism (set in a container ENV); config.yaml
     # ``agent.environment_hint`` is the user-facing surface. Env var wins.
-    extra = (os.getenv("HERMES_ENVIRONMENT_HINT") or "").strip()
+    extra = (getenv_compat("ENVIRONMENT_HINT") or "").strip()
     if not extra:
         try:
             from lliam_cli.config import load_config
@@ -1449,7 +1450,7 @@ def build_skills_system_prompt(
     # produce distinct cache entries (gateway serves multiple platforms).
     from gateway.session_context import get_session_env
     _platform_hint = (
-        os.environ.get("HERMES_PLATFORM")
+        getenv_compat("PLATFORM")
         or get_session_env("HERMES_SESSION_PLATFORM")
         or ""
     )

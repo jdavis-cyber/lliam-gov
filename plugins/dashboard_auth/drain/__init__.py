@@ -57,6 +57,7 @@ import hmac
 import logging
 import math
 import os
+from lliam_cli.env_compat import getenv_compat
 from collections import Counter
 from typing import Optional
 
@@ -236,7 +237,7 @@ def register(ctx) -> None:
     global LAST_SKIP_REASON
     LAST_SKIP_REASON = ""
 
-    secret = os.environ.get("HERMES_DASHBOARD_DRAIN_SECRET", "").strip()
+    secret = getenv_compat("DASHBOARD_DRAIN_SECRET", "").strip()
     if not secret:
         LAST_SKIP_REASON = (
             "HERMES_DASHBOARD_DRAIN_SECRET is not set. Set a per-agent "

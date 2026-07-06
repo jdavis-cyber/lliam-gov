@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import shlex
 import shutil
 import signal
@@ -1644,7 +1645,7 @@ def _windows_gateway_should_absorb_console_controls() -> bool:
     if not is_windows():
         return False
 
-    detached = os.getenv("HERMES_GATEWAY_DETACHED", "").strip().lower()
+    detached = getenv_compat("GATEWAY_DETACHED", "").strip().lower()
     if detached in {"1", "true", "yes", "on"}:
         return True
 
@@ -3054,7 +3055,7 @@ def _print_system_scope_remediation(action: str) -> None:
 
 def _get_restart_drain_timeout() -> float:
     """Return the configured gateway restart drain timeout in seconds."""
-    raw = os.getenv("HERMES_RESTART_DRAIN_TIMEOUT", "").strip()
+    raw = getenv_compat("RESTART_DRAIN_TIMEOUT", "").strip()
     if not raw:
         cfg = read_raw_config()
         agent_cfg = cfg.get("agent", {}) if isinstance(cfg, dict) else {}
@@ -4386,7 +4387,7 @@ def _running_under_gateway_supervisor() -> bool:
     """
     if os.environ.get("INVOCATION_ID"):
         return True
-    if os.environ.get("HERMES_S6_SUPERVISED_CHILD"):
+    if getenv_compat("S6_SUPERVISED_CHILD"):
         return True
     xpc_service = os.environ.get("XPC_SERVICE_NAME", "")
     if xpc_service and xpc_service != "0":
@@ -4550,7 +4551,7 @@ def _guard_official_docker_root_gateway() -> None:
     """Refuse gateway startup when the official Docker privilege drop was bypassed."""
     if not hasattr(os, "geteuid") or os.geteuid() != 0:
         return
-    if _truthy_env(os.getenv("HERMES_ALLOW_ROOT_GATEWAY")):
+    if _truthy_env(getenv_compat("ALLOW_ROOT_GATEWAY")):
         return
     if not _is_official_docker_checkout():
         return
@@ -4674,7 +4675,7 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False, fo
     from datetime import datetime as _dt, timezone as _tz
 
     def _exit_diag(tag: str, **extra: object) -> None:
-        if os.environ.get("HERMES_GATEWAY_EXIT_DIAG", "1") != "1":
+        if getenv_compat("GATEWAY_EXIT_DIAG", "1") != "1":
             return
         try:
             from lliam_constants import get_hermes_home as _ghh
@@ -6321,10 +6322,10 @@ def _maybe_redirect_run_to_s6_supervision(args) -> bool:
     Returns True iff dispatched (caller should ``return``).
     """
     no_supervise = getattr(args, "no_supervise", False) or \
-        os.environ.get("HERMES_GATEWAY_NO_SUPERVISE", "").lower() in ("1", "true", "yes")
+        getenv_compat("GATEWAY_NO_SUPERVISE", "").lower() in ("1", "true", "yes")
     if no_supervise:
         return False
-    if os.environ.get("HERMES_S6_SUPERVISED_CHILD"):
+    if getenv_compat("S6_SUPERVISED_CHILD"):
         # We ARE the supervised child s6-supervise is running. Fall
         # through to the foreground code path so the gateway actually
         # starts.

@@ -22,6 +22,7 @@ import json
 import logging
 import mimetypes
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import secrets
 import shutil
@@ -113,7 +114,8 @@ except ImportError:
             f"Install with: {sys.executable} -m pip install 'fastapi' 'uvicorn[standard]'"
         )
 
-WEB_DIST = Path(os.environ["HERMES_WEB_DIST"]) if "HERMES_WEB_DIST" in os.environ else Path(__file__).parent / "web_dist"
+_web_dist_env = getenv_compat("WEB_DIST")  # rename R.8a: LLIAM_ first, HERMES_ fallback
+WEB_DIST = Path(_web_dist_env) if _web_dist_env else Path(__file__).parent / "web_dist"
 _log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -263,7 +265,7 @@ app.include_router(_memory_oauth_router)
 # on every server start. Either way it dies when the process exits and is
 # injected into the SPA HTML so only the legitimate web UI can use it.
 # ---------------------------------------------------------------------------
-_SESSION_TOKEN = os.environ.get("HERMES_DASHBOARD_SESSION_TOKEN") or secrets.token_urlsafe(32)
+_SESSION_TOKEN = getenv_compat("DASHBOARD_SESSION_TOKEN") or secrets.token_urlsafe(32)
 _SESSION_HEADER_NAME = "X-Hermes-Session-Token"
 
 # In-browser Chat tab (/chat, /api/pty, /api/ws, …).  Always enabled: the
@@ -6738,7 +6740,7 @@ async def _start_device_code_flow(
         import httpx
         pconfig = PROVIDER_REGISTRY["nous"]
         portal_base_url = (
-            os.getenv("HERMES_PORTAL_BASE_URL")
+            getenv_compat("PORTAL_BASE_URL")
             or os.getenv("NOUS_PORTAL_BASE_URL")
             or pconfig.portal_base_url
         ).rstrip("/")
@@ -7033,7 +7035,7 @@ def _xai_loopback_worker(session_id: str) -> None:
             _fail("xAI token exchange did not return the expected tokens.")
             return
         base_url = hauth._xai_validate_inference_base_url(
-            os.getenv("HERMES_XAI_BASE_URL", "").strip().rstrip("/")
+            getenv_compat("XAI_BASE_URL", "").strip().rstrip("/")
             or os.getenv("XAI_BASE_URL", "").strip().rstrip("/"),
             fallback=hauth.DEFAULT_XAI_OAUTH_BASE_URL,
         )
@@ -11884,6 +11886,8 @@ def _resolve_chat_argv(
     # makes browser-side transcript scrolling feel broken. Keep the terminal
     # build unchanged for native CLI usage; only disable mouse tracking for
     # the dashboard PTY path.
+    # TUI-subprocess env is a cross-language contract read by the (still
+    # HERMES_-named) node TUI; deferred to R.8b, so keep the legacy names here.
     env.setdefault("HERMES_TUI_DISABLE_MOUSE", "1")
     env.setdefault("HERMES_TUI_INLINE", "1")
     env["HERMES_TUI_DASHBOARD"] = "1"

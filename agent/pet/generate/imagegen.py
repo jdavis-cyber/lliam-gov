@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,7 +45,7 @@ def _forced_provider_from_env() -> str | None:
     active/default provider resolution for pet generation only. Unknown values are
     ignored so existing users are unaffected.
     """
-    forced = os.environ.get("HERMES_PET_IMAGE_PROVIDER", "").strip().lower()
+    forced = getenv_compat("PET_IMAGE_PROVIDER", "").strip().lower()
     return forced if forced in _REF_CAPABLE else None
 
 

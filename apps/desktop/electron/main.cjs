@@ -5263,11 +5263,13 @@ async function spawnPoolBackend(profile, entry) {
         // the child process. Inherited TERMINAL_CWD (or a stale config bridge)
         // can still point at the install dir even when spawn cwd is home.
         TERMINAL_CWD: hermesCwd,
-        HERMES_DASHBOARD_SESSION_TOKEN: token,
+        // rename R.8a: set the new LLIAM_ names (the Python readers resolve
+        // LLIAM_ first, legacy HERMES_ as a transition fallback).
+        LLIAM_DASHBOARD_SESSION_TOKEN: token,
         // Marks this dashboard backend as desktop-spawned so it runs the cron
         // scheduler tick loop (the gateway isn't running under the app).
         LLIAM_DESKTOP: '1',
-        HERMES_WEB_DIST: webDist,
+        LLIAM_WEB_DIST: webDist,
         ...(readyFile ? { LLIAM_DESKTOP_READY_FILE: readyFile } : {})
       },
       shell: backend.shell,
@@ -5496,11 +5498,13 @@ async function startHermes() {
           HERMES_HOME,
           ...backend.env,
           TERMINAL_CWD: hermesCwd,
-          HERMES_DASHBOARD_SESSION_TOKEN: token,
+          // rename R.8a: set the new LLIAM_ names (Python readers resolve
+          // LLIAM_ first, legacy HERMES_ as a transition fallback).
+          LLIAM_DASHBOARD_SESSION_TOKEN: token,
           // Marks this dashboard backend as desktop-spawned so it runs the cron
           // scheduler tick loop (the gateway isn't running under the app).
           LLIAM_DESKTOP: '1',
-          HERMES_WEB_DIST: webDist,
+          LLIAM_WEB_DIST: webDist,
           ...(readyFile ? { LLIAM_DESKTOP_READY_FILE: readyFile } : {})
         },
         shell: backend.shell,

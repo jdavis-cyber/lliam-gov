@@ -20,6 +20,7 @@ from __future__ import annotations
 import copy
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import threading
 from pathlib import Path
 from typing import Dict, Optional
@@ -62,7 +63,7 @@ def get_managed_dir() -> Optional[Path]:
     A non-existent directory at either tier resolves to None (no managed scope),
     which is the common case and must be cheap + side-effect-free.
     """
-    override = os.environ.get("HERMES_MANAGED_DIR", "").strip()
+    override = getenv_compat("MANAGED_DIR", "").strip()
     if override:
         p = Path(override)
         return p if p.is_dir() else None

@@ -26,6 +26,7 @@ Limitations (documented, not fixable at pre-flight level):
 import ipaddress
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import socket
 import asyncio
 from urllib.parse import quote, urlparse, urlsplit, urlunsplit
@@ -148,7 +149,7 @@ def _global_allow_private_urls() -> bool:
     _cached_allow_private = False  # safe default
 
     # 1. Env var override (highest priority)
-    env_val = os.getenv("HERMES_ALLOW_PRIVATE_URLS", "").strip().lower()
+    env_val = getenv_compat("ALLOW_PRIVATE_URLS", "").strip().lower()
     if env_val in {"true", "1", "yes"}:
         _cached_allow_private = True
         return _cached_allow_private

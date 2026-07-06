@@ -50,6 +50,7 @@ against double-reconfigure.
 from __future__ import annotations
 
 import os
+from lliam_cli.env_compat import getenv_compat
 import sys
 
 _IS_WINDOWS = sys.platform == "win32"
@@ -147,7 +148,7 @@ def harden_import_path(src_root: str | None = None) -> None:
     repository root for every shipped entry point, so the guard is
     self-sufficient and does not depend on the spawner exporting an env var.
     """
-    root = src_root or os.environ.get("HERMES_PYTHON_SRC_ROOT") or os.path.dirname(
+    root = src_root or getenv_compat("PYTHON_SRC_ROOT") or os.path.dirname(
         os.path.abspath(__file__)
     )
 
@@ -172,7 +173,7 @@ def activate_durable_lazy_target() -> None:
     always wins name collisions (see ``tools.lazy_deps`` for the full
     security rationale). Never raises; a missing/empty target is a no-op.
     """
-    if not os.environ.get("HERMES_LAZY_INSTALL_TARGET", "").strip():
+    if not getenv_compat("LAZY_INSTALL_TARGET", "").strip():
         return
     try:
         from tools import lazy_deps

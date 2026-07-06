@@ -319,6 +319,9 @@ def test_termux_fast_cli_launch_bare_defers_agent_startup(monkeypatch, main_mod)
 
     monkeypatch.setenv("TERMUX_VERSION", "1")
     monkeypatch.delenv("HERMES_TUI", raising=False)
+    # rename R.8a: DEFER/FAST are Python-only; clear both names for isolation.
+    monkeypatch.delenv("LLIAM_DEFER_AGENT_STARTUP", raising=False)
+    monkeypatch.delenv("LLIAM_FAST_STARTUP_BANNER", raising=False)
     monkeypatch.delenv("HERMES_DEFER_AGENT_STARTUP", raising=False)
     monkeypatch.delenv("HERMES_FAST_STARTUP_BANNER", raising=False)
     monkeypatch.setattr(sys, "argv", ["hermes"])
@@ -340,8 +343,8 @@ def test_termux_fast_cli_launch_bare_defers_agent_startup(monkeypatch, main_mod)
     assert main_mod._try_termux_fast_cli_launch() is True
     assert prepared == []
     assert captured == {"query": None, "command": None, "compact": True}
-    assert os.environ["HERMES_DEFER_AGENT_STARTUP"] == "1"
-    assert os.environ["HERMES_FAST_STARTUP_BANNER"] == "1"
+    assert os.environ["LLIAM_DEFER_AGENT_STARTUP"] == "1"
+    assert os.environ["LLIAM_FAST_STARTUP_BANNER"] == "1"
 
 
 def test_termux_fast_cli_launch_oneshot_uses_light_parser(monkeypatch, main_mod):
@@ -909,10 +912,10 @@ def test_launch_tui_exports_model_provider_and_toolsets(monkeypatch, main_mod):
         )
 
     env = captured["env"]
-    assert env["HERMES_MODEL"] == "nous/hermes-test"
-    assert env["HERMES_INFERENCE_MODEL"] == "nous/hermes-test"
+    assert env["LLIAM_MODEL"] == "nous/hermes-test"
+    assert env["LLIAM_INFERENCE_MODEL"] == "nous/hermes-test"
     assert env["HERMES_TUI_PROVIDER"] == "nous"
-    assert env["HERMES_INFERENCE_PROVIDER"] == "nous"
+    assert env["LLIAM_INFERENCE_PROVIDER"] == "nous"
     assert env["HERMES_TUI_TOOLSETS"] == "web,terminal"
     active_path = Path(env["HERMES_TUI_ACTIVE_SESSION_FILE"])
     assert active_path.name.startswith("hermes-tui-active-session-")

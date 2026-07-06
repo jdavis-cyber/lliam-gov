@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 from urllib.parse import urlparse
 from typing import Any, Dict, Optional
@@ -768,7 +769,7 @@ def canonical_custom_identity(
         except Exception:
             candidate = ""
     if not candidate:
-        candidate = os.environ.get("HERMES_INFERENCE_PROVIDER", "").strip()
+        candidate = getenv_compat("INFERENCE_PROVIDER", "").strip()
 
     candidate_norm = _normalize_custom_provider_name(candidate)
     # A bare/non-routable candidate cannot heal a bare custom override.

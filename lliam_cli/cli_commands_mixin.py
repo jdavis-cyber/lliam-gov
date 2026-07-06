@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+from lliam_cli.env_compat import getenv_compat
 import sys
 import threading
 import time
@@ -865,7 +866,7 @@ class CLICommandsMixin:
         try:
             self._session_db.create_session(
                 session_id=new_session_id,
-                source=os.environ.get("HERMES_SESSION_SOURCE", "cli"),
+                source=getenv_compat("SESSION_SOURCE", "cli"),
                 model=self.model,
                 model_config={
                     "max_iterations": self.max_turns,

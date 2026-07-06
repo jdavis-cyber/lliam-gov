@@ -14,6 +14,7 @@ import hashlib
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import struct
 import subprocess
@@ -7252,11 +7253,11 @@ def _apply_yaml_config(yaml_cfg: dict, discord_cfg: dict) -> dict | None:
     # __init__; set either to 0 to disable.  config.yaml is the user-facing
     # surface — these env vars are an internal mechanism only.
     lis = discord_cfg.get("liveness_interval_seconds")
-    if lis is not None and not os.getenv("HERMES_DISCORD_LIVENESS_INTERVAL_SECONDS"):
-        os.environ["HERMES_DISCORD_LIVENESS_INTERVAL_SECONDS"] = str(lis)
+    if lis is not None and not getenv_compat("DISCORD_LIVENESS_INTERVAL_SECONDS"):
+        os.environ["LLIAM_DISCORD_LIVENESS_INTERVAL_SECONDS"] = str(lis)
     lft = discord_cfg.get("liveness_failure_threshold")
-    if lft is not None and not os.getenv("HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD"):
-        os.environ["HERMES_DISCORD_LIVENESS_FAILURE_THRESHOLD"] = str(lft)
+    if lft is not None and not getenv_compat("DISCORD_LIVENESS_FAILURE_THRESHOLD"):
+        os.environ["LLIAM_DISCORD_LIVENESS_FAILURE_THRESHOLD"] = str(lft)
     return None  # all settings flow through env; nothing to merge into extras
 
 

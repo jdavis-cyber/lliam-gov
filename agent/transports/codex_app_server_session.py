@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import threading
 import time
 from dataclasses import dataclass, field
@@ -214,7 +215,7 @@ class CodexAppServerSession:
         self._codex_home = codex_home
         self._permission_profile = (
             permission_profile or _HERMES_TO_CODEX_PERMISSION_PROFILE.get(
-                os.environ.get("HERMES_TERMINAL_SECURITY_MODE", "auto"),
+                getenv_compat("TERMINAL_SECURITY_MODE", "auto"),
                 "workspace-write",
             )
         )

@@ -14,6 +14,7 @@ Config files are stored in ~/.hermes/ for easy access.
 import importlib.util
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import shutil
 import sys
@@ -283,7 +284,7 @@ def is_noninteractive() -> bool:
     installed (the start path asks "Install it now?" with no one to answer).
     Honour the explicit env flag here so callers fall back to their default.
     """
-    return os.environ.get("HERMES_NONINTERACTIVE", "").strip().lower() in {
+    return getenv_compat("NONINTERACTIVE", "").strip().lower() in {
         "1",
         "true",
         "yes",

@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -69,7 +70,7 @@ def _bundles_dir() -> Path:
     Honors ``HERMES_BUNDLES_DIR`` for tests; falls back to
     ``<HERMES_HOME>/skill-bundles``.
     """
-    override = os.environ.get("HERMES_BUNDLES_DIR")
+    override = getenv_compat("BUNDLES_DIR")
     if override:
         return Path(override).expanduser()
     return get_hermes_home() / "skill-bundles"

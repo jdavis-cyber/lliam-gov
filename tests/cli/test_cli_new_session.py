@@ -145,6 +145,8 @@ def _reset_session_id_context():
     from gateway.session_context import _UNSET, _VAR_MAP
 
     yield
+    # rename R.8a: producers write LLIAM_SESSION_ID; clear both for isolation.
+    os.environ.pop("LLIAM_SESSION_ID", None)
     os.environ.pop("HERMES_SESSION_ID", None)
     _VAR_MAP["HERMES_SESSION_ID"].set(_UNSET)
 
@@ -186,7 +188,9 @@ def test_new_command_rotates_hermes_session_id_env_and_context(tmp_path):
     cli.process_command("/new")
 
     assert cli.session_id != old_session_id
-    assert os.environ["HERMES_SESSION_ID"] == cli.session_id
+    # rename R.8a: set_current_session_id writes the new LLIAM_ name; the
+    # legacy-named get_session_env() call still resolves via the fallback.
+    assert os.environ["LLIAM_SESSION_ID"] == cli.session_id
     assert get_session_env("HERMES_SESSION_ID") == cli.session_id
 
 

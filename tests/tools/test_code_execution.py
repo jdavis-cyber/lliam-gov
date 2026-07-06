@@ -789,8 +789,9 @@ class TestEnvVarFiltering(unittest.TestCase):
         self.assertIn("HOME", child_env)
 
     def test_hermes_rpc_socket_injected(self):
+        # rename R.8a: the parent now injects the new LLIAM_ name.
         child_env = self._get_child_env()
-        self.assertIn("HERMES_RPC_SOCKET", child_env)
+        self.assertIn("LLIAM_RPC_SOCKET", child_env)
 
     def test_pythondontwritebytecode_set(self):
         child_env = self._get_child_env()

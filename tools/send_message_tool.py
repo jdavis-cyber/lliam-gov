@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import ssl
 import time
@@ -1654,7 +1655,7 @@ def _check_send_message():
     reply with more than the ~200-char first-line truncation the kanban
     notifier applies.
     """
-    if os.environ.get("HERMES_KANBAN_TASK"):
+    if getenv_compat("KANBAN_TASK"):
         return True
     from gateway.session_context import get_session_env
     platform = get_session_env("HERMES_SESSION_PLATFORM", "")

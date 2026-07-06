@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import time
 from dataclasses import dataclass
@@ -654,9 +655,9 @@ def dev_fixture_credits_state() -> Optional[CreditsState]:
     container env, a launch plist, …) can never surface fabricated balances/notices
     on a real account.
     """
-    if not is_truthy_value(os.environ.get("HERMES_DEV_CREDITS")):
+    if not is_truthy_value(getenv_compat("DEV_CREDITS")):
         return None
-    raw = os.environ.get("HERMES_DEV_CREDITS_FIXTURE", "").strip()
+    raw = getenv_compat("DEV_CREDITS_FIXTURE", "").strip()
     if not raw:
         return None
     name = raw

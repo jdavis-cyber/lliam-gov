@@ -39,6 +39,8 @@ SESSION_KEY = "test-cli-yolo-session"
 @pytest.fixture(autouse=True)
 def _clear_approval_state(monkeypatch):
     """Clear the YOLO bypass + env var around every test so cases are independent."""
+    # rename R.8a: clear both names — consumers read LLIAM_ first (getenv_compat).
+    monkeypatch.delenv("LLIAM_YOLO_MODE", raising=False)
     monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
     approval_module.clear_session(SESSION_KEY)
     approval_module.clear_session("default")

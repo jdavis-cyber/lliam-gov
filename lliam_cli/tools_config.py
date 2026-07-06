@@ -12,6 +12,7 @@ the `platform_toolsets` key.
 import json as _json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import shutil
 import subprocess
 import sys
@@ -590,7 +591,7 @@ TOOLSET_ENV_REQUIREMENTS = {
 
 def _cua_driver_cmd() -> str:
     """Return the cua-driver executable name/path, honoring non-empty overrides."""
-    return os.environ.get("HERMES_CUA_DRIVER_CMD", "").strip() or "cua-driver"
+    return getenv_compat("CUA_DRIVER_CMD", "").strip() or "cua-driver"
 
 
 def _cua_driver_env() -> dict:

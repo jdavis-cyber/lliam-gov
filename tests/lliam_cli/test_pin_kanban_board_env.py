@@ -22,15 +22,20 @@ def _isolate_kanban_board_env():
     leaks into subsequent tests and breaks anything that resolves a kanban
     path from the env (e.g. ``TestSharedBoardPaths`` in test_kanban_db.py).
     """
-    prev = os.environ.get("HERMES_KANBAN_BOARD")
+    # rename R.8a: the producer now writes LLIAM_KANBAN_BOARD; snapshot/clear
+    # both names so neither leaks into other tests.
+    prev_lliam = os.environ.get("LLIAM_KANBAN_BOARD")
+    prev_hermes = os.environ.get("HERMES_KANBAN_BOARD")
+    os.environ.pop("LLIAM_KANBAN_BOARD", None)
     os.environ.pop("HERMES_KANBAN_BOARD", None)
     try:
         yield
     finally:
-        if prev is None:
-            os.environ.pop("HERMES_KANBAN_BOARD", None)
-        else:
-            os.environ["HERMES_KANBAN_BOARD"] = prev
+        for name, prev in (("LLIAM_KANBAN_BOARD", prev_lliam), ("HERMES_KANBAN_BOARD", prev_hermes)):
+            if prev is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = prev
 
 
 def test_pin_writes_resolved_board_when_env_unset(monkeypatch):
@@ -41,11 +46,11 @@ def test_pin_writes_resolved_board_when_env_unset(monkeypatch):
 
     main_mod._pin_kanban_board_env()
 
-    assert main_mod.os.environ.get("HERMES_KANBAN_BOARD") == "space"
+    assert main_mod.os.environ.get("LLIAM_KANBAN_BOARD") == "space"
 
 
 def test_pin_does_not_overwrite_existing_env(monkeypatch):
-    monkeypatch.setenv("HERMES_KANBAN_BOARD", "preset")
+    monkeypatch.setenv("LLIAM_KANBAN_BOARD", "preset")
     main_mod = importlib.import_module("lliam_cli.main")
 
     import lliam_cli.kanban_db as kdb
@@ -57,7 +62,7 @@ def test_pin_does_not_overwrite_existing_env(monkeypatch):
 
     main_mod._pin_kanban_board_env()
 
-    assert main_mod.os.environ.get("HERMES_KANBAN_BOARD") == "preset"
+    assert main_mod.os.environ.get("LLIAM_KANBAN_BOARD") == "preset"
 
 
 def test_pin_swallows_resolution_failures(monkeypatch):
@@ -72,4 +77,4 @@ def test_pin_swallows_resolution_failures(monkeypatch):
 
     main_mod._pin_kanban_board_env()
 
-    assert "HERMES_KANBAN_BOARD" not in main_mod.os.environ
+    assert "LLIAM_KANBAN_BOARD" not in main_mod.os.environ

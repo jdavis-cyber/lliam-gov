@@ -7,6 +7,7 @@ can invoke skills via /skill-name commands.
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -128,11 +129,11 @@ def _resolve_skill_commands_platform() -> Optional[str]:
         from gateway.session_context import get_session_env
 
         resolved_platform = (
-            os.getenv("HERMES_PLATFORM")
+            getenv_compat("PLATFORM")
             or get_session_env("HERMES_SESSION_PLATFORM")
         )
     except Exception:
-        resolved_platform = os.getenv("HERMES_PLATFORM")
+        resolved_platform = getenv_compat("PLATFORM")
     return resolved_platform or None
 
 def _load_skill_payload(skill_identifier: str, task_id: str | None = None) -> tuple[dict[str, Any], Path | None, str] | None:

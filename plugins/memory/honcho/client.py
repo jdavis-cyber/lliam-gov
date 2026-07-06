@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+from lliam_cli.env_compat import getenv_compat
 import logging
 import hashlib
 from dataclasses import dataclass, field
@@ -59,7 +60,7 @@ def resolve_active_host() -> str:
       2. Active profile name via profiles system -> ``hermes.<profile>``
       3. Fallback: ``"hermes"`` (default profile)
     """
-    explicit = os.environ.get("HERMES_HONCHO_HOST", "").strip()
+    explicit = getenv_compat("HONCHO_HOST", "").strip()
     if explicit:
         return explicit
 

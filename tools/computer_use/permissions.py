@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+from lliam_cli.env_compat import getenv_compat
 import shutil
 import subprocess
 import sys
@@ -43,7 +44,7 @@ def _driver_cmd(override: Optional[str]) -> str:
 
         return _cua_driver_cmd()
     except Exception:
-        return os.environ.get("HERMES_CUA_DRIVER_CMD", "").strip() or "cua-driver"
+        return getenv_compat("CUA_DRIVER_CMD", "").strip() or "cua-driver"
 
 
 def _child_env() -> Dict[str, str]:

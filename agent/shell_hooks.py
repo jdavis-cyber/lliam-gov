@@ -109,6 +109,7 @@ import difflib
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import shlex
 import subprocess
@@ -818,7 +819,7 @@ def _resolve_effective_accept(
     """
     if accept_hooks_arg:
         return True
-    env = os.environ.get("HERMES_ACCEPT_HOOKS", "").strip().lower()
+    env = getenv_compat("ACCEPT_HOOKS", "").strip().lower()
     if env in {"1", "true", "yes", "on"}:
         return True
     cfg_val = cfg.get("hooks_auto_accept", False)

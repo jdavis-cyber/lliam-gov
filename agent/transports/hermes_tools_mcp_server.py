@@ -206,9 +206,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    # Quiet mode: keep Hermes' own banners off stdout (which is the MCP wire).
-    os.environ.setdefault("HERMES_QUIET", "1")
-    os.environ.setdefault("HERMES_REDACT_SECRETS", "true")
+    # Quiet mode: keep our own banners off stdout (which is the MCP wire).
+    # Rename R.8a: set the new LLIAM_ names (consumers read LLIAM_ first).
+    os.environ.setdefault("LLIAM_QUIET", "1")
+    os.environ.setdefault("LLIAM_REDACT_SECRETS", "true")
 
     try:
         server = _build_server()

@@ -16,6 +16,7 @@ import copy
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import platform
 import re
 import shutil
@@ -192,9 +193,11 @@ _ENV_VAR_NAME_DENYLIST: frozenset[str] = frozenset({
     "PATH", "SHELL", "BROWSER", "EDITOR", "VISUAL", "PAGER",
     # Git
     "GIT_SSH_COMMAND", "GIT_EXEC_PATH", "GIT_SHELL",
-    # Hermes runtime location — never via dashboard env writer.
-    # NOT a HERMES_* blanket: integration credentials (HERMES_GEMINI_*,
-    # HERMES_LANGFUSE_*, HERMES_SPOTIFY_*, ...) ARE allowed.
+    # Runtime location — never via dashboard env writer.
+    # NOT a LLIAM_*/HERMES_* blanket: integration credentials (LLIAM_GEMINI_*,
+    # LLIAM_LANGFUSE_*, LLIAM_SPOTIFY_*, ...) ARE allowed. Both the new LLIAM_
+    # names (rename R.8a) and legacy HERMES_ names are blocked for parity.
+    "LLIAM_HOME", "LLIAM_PROFILE", "LLIAM_CONFIG", "LLIAM_ENV",
     "HERMES_HOME", "HERMES_PROFILE", "HERMES_CONFIG", "HERMES_ENV",
 })
 
@@ -318,7 +321,7 @@ _MANAGED_SYSTEM_NAMES = {
 
 def get_managed_system() -> Optional[str]:
     """Return the package manager owning this install, if any."""
-    raw = os.getenv("HERMES_MANAGED", "").strip()
+    raw = getenv_compat("MANAGED", "").strip()
     if raw:
         normalized = raw.lower()
         if normalized in _MANAGED_TRUE_VALUES:
@@ -586,7 +589,7 @@ def format_docker_update_message() -> str:
 def format_managed_message(action: str = "modify this Hermes installation") -> str:
     """Build a user-facing error for managed installs."""
     managed_system = get_managed_system() or "a package manager"
-    raw = os.getenv("HERMES_MANAGED", "").strip().lower()
+    raw = getenv_compat("MANAGED", "").strip().lower()
 
     if managed_system == "NixOS":
         env_hint = "true" if raw in _MANAGED_TRUE_VALUES else raw or "true"
@@ -631,7 +634,7 @@ def get_container_exec_info() -> Optional[dict]:
     container.enable = true. It tells the host CLI to exec into the container
     instead of running locally.
     """
-    if os.environ.get("HERMES_DEV") == "1":
+    if getenv_compat("DEV") == "1":
         return None
 
     from lliam_constants import is_container
@@ -679,19 +682,20 @@ def get_config_path() -> Path:
 
 
 def _gov_overlay_path(config_path: Path) -> Optional[Path]:
-    """Resolve the Lliam-GOV governance overlay selected by ``HERMES_CONFIG``.
+    """Resolve the Lliam-GOV governance overlay selected by ``LLIAM_CONFIG``.
 
-    ADDITIVE (LG-CH-01): ``HERMES_CONFIG`` is already in the env allowlist
-    (config.py:198) but was not previously consumed as a config-file selector.
+    ADDITIVE (LG-CH-01): the config-selector env var is already in the env
+    allowlist but was not previously consumed as a config-file selector.
     When it points at an existing file *other than* the home ``config.yaml``,
     that file is returned so ``_load_config_impl`` can deep-merge it OVER the home
     base (governance overlay layering). Returns ``None`` when unset, empty,
     missing, or identical to the home config — in which case load behavior is
     exactly as shipped. This is read-only: ``get_config_path()`` and
     ``save_config()`` are untouched, so the agent never writes the overlay.
-    Rollback is unset/repoint ``HERMES_CONFIG``.
+    Rollback is unset/repoint the selector. Reads ``LLIAM_CONFIG`` first, then
+    falls back to legacy ``HERMES_CONFIG`` (rename R.8a transition window).
     """
-    raw = os.environ.get("HERMES_CONFIG")
+    raw = getenv_compat("CONFIG")
     if not raw or not raw.strip():
         return None
     try:
@@ -729,8 +733,8 @@ def _resolve_hermes_uid_gid() -> tuple[Optional[int], Optional[int]]:
     """
     if sys.platform == "win32":
         return None, None
-    uid_str = os.environ.get("HERMES_UID", "").strip()
-    gid_str = os.environ.get("HERMES_GID", "").strip()
+    uid_str = getenv_compat("UID", "").strip()
+    gid_str = getenv_compat("GID", "").strip()
     try:
         uid = int(uid_str) if uid_str else None
     except ValueError:
@@ -792,7 +796,7 @@ def _secure_dir(path):
     if is_managed():
         return
     try:
-        mode_str = os.environ.get("HERMES_HOME_MODE", "").strip()
+        mode_str = getenv_compat("HOME_MODE", "").strip()
         mode = int(mode_str, 8) if mode_str else 0o700
     except ValueError:
         mode = 0o700
@@ -812,7 +816,7 @@ def _is_container() -> bool:
     permissions.
     """
     # Explicit opt-out
-    if os.environ.get("HERMES_CONTAINER") or os.environ.get("HERMES_SKIP_CHMOD"):
+    if getenv_compat("CONTAINER") or getenv_compat("SKIP_CHMOD"):
         return True
     # Docker / Podman marker file
     if os.path.exists("/.dockerenv"):
@@ -4930,7 +4934,7 @@ def migrate_config(interactive: bool = True, quiet: bool = False) -> Dict[str, A
     if current_ver < 5:
         config = read_raw_config()
         if "timezone" not in config:
-            old_tz = os.getenv("HERMES_TIMEZONE", "")
+            old_tz = getenv_compat("TIMEZONE", "")
             if old_tz and old_tz.strip():
                 config["timezone"] = old_tz.strip()
                 results["config_added"].append(f"timezone={old_tz.strip()} (from HERMES_TIMEZONE)")

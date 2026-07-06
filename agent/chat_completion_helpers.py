@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import threading
 import time
@@ -344,7 +345,7 @@ def interruptible_api_call(agent, api_kwargs: dict):
         _ttfb_enabled = False
     elif _openai_codex_backend:
         _ttfb_disable_above = _env_float("HERMES_CODEX_TTFB_DISABLE_ABOVE_TOKENS", 25_000.0)
-        _ttfb_strict = os.environ.get("HERMES_CODEX_TTFB_STRICT", "").strip().lower() in {
+        _ttfb_strict = getenv_compat("CODEX_TTFB_STRICT", "").strip().lower() in {
             "1", "true", "yes", "on"
         }
         if (

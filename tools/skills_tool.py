@@ -71,6 +71,7 @@ import logging
 
 from lliam_constants import get_hermes_home, display_hermes_home
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 from enum import Enum
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -585,7 +586,7 @@ def _is_skill_disabled(name: str, platform: str = None) -> bool:
         from lliam_cli.config import load_config
         config = load_config()
         skills_cfg = config.get("skills", {})
-        resolved_platform = platform or os.getenv("HERMES_PLATFORM") or _get_session_platform()
+        resolved_platform = platform or getenv_compat("PLATFORM") or _get_session_platform()
         global_disabled = skills_cfg.get("disabled", [])
         if resolved_platform:
             platform_disabled = cfg_get(skills_cfg, "platform_disabled", resolved_platform)

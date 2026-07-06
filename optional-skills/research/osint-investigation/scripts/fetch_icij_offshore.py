@@ -20,6 +20,7 @@ import argparse
 import csv
 import io
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import sys
 import time
@@ -45,7 +46,7 @@ COLUMNS = [
 
 
 def _cache_dir() -> Path:
-    base = os.environ.get("HERMES_OSINT_CACHE")
+    base = getenv_compat("OSINT_CACHE")
     if base:
         return Path(base) / "icij"
     return Path.home() / ".cache" / "hermes-osint" / "icij"

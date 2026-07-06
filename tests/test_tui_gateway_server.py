@@ -2696,6 +2696,9 @@ def test_config_busy_get_and_set(monkeypatch):
 
 
 def test_config_set_yolo_process_scope_treats_false_like_env_as_disabled(monkeypatch):
+    # rename R.8a: a false-like *legacy* HERMES_ value is read via the
+    # getenv_compat fallback, and the toggle writes the new LLIAM_ name.
+    monkeypatch.delenv("LLIAM_YOLO_MODE", raising=False)
     monkeypatch.setenv("HERMES_YOLO_MODE", "false")
 
     resp = server.handle_request(
@@ -2707,7 +2710,7 @@ def test_config_set_yolo_process_scope_treats_false_like_env_as_disabled(monkeyp
     )
 
     assert resp["result"]["value"] == "1"
-    assert os.environ.get("HERMES_YOLO_MODE") == "1"
+    assert os.environ.get("LLIAM_YOLO_MODE") == "1"
 
 
 def test_config_get_statusbar_survives_non_dict_display(monkeypatch):
@@ -2925,15 +2928,16 @@ def test_config_mouse_accepts_preset_strings_and_aliases(monkeypatch):
 
 
 def test_enable_gateway_prompts_sets_gateway_env(monkeypatch):
-    monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-    monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-    monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
+    # rename R.8a: producer writes the LLIAM_ names; clear both for isolation.
+    for _n in ("EXEC_ASK", "GATEWAY_SESSION", "INTERACTIVE"):
+        monkeypatch.delenv(f"LLIAM_{_n}", raising=False)
+        monkeypatch.delenv(f"HERMES_{_n}", raising=False)
 
     server._enable_gateway_prompts()
 
-    assert server.os.environ["HERMES_GATEWAY_SESSION"] == "1"
-    assert server.os.environ["HERMES_EXEC_ASK"] == "1"
-    assert server.os.environ["HERMES_INTERACTIVE"] == "1"
+    assert server.os.environ["LLIAM_GATEWAY_SESSION"] == "1"
+    assert server.os.environ["LLIAM_EXEC_ASK"] == "1"
+    assert server.os.environ["LLIAM_INTERACTIVE"] == "1"
 
 
 def test_setup_status_reports_provider_config(monkeypatch):

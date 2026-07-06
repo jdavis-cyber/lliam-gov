@@ -8,6 +8,7 @@ finish immediately after editing code without fresh evidence.
 from __future__ import annotations
 
 import os
+from lliam_cli.env_compat import getenv_compat
 import tempfile
 from pathlib import Path
 from typing import Any, Iterable
@@ -116,15 +117,13 @@ def _session_is_messaging_surface() -> bool:
         from gateway.session_context import get_session_env
 
         platform = (
-            os.getenv("HERMES_PLATFORM")
+            getenv_compat("PLATFORM")
             or get_session_env("HERMES_SESSION_PLATFORM", "")
         )
         source = get_session_env("HERMES_SESSION_SOURCE", "")
     except Exception:
-        platform = os.getenv("HERMES_PLATFORM", "") or os.environ.get(
-            "HERMES_SESSION_PLATFORM", ""
-        )
-        source = os.environ.get("HERMES_SESSION_SOURCE", "")
+        platform = getenv_compat("PLATFORM", "") or getenv_compat("SESSION_PLATFORM", "")
+        source = getenv_compat("SESSION_SOURCE", "")
     for identity in (platform, source):
         identity = str(identity or "").strip().lower()
         if identity and identity not in _NON_MESSAGING_SESSION_SURFACES:
@@ -144,7 +143,7 @@ def verify_on_stop_enabled(config: dict[str, Any] | None = None) -> bool:
     messaging surfaces (Telegram, Discord, etc.). A missing/unknown value
     falls back to OFF.
     """
-    env = os.environ.get("HERMES_VERIFY_ON_STOP")
+    env = getenv_compat("VERIFY_ON_STOP")
     if env is not None:
         return env.strip().lower() not in {"0", "false", "no", "off"}
     if config is None:

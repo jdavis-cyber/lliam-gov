@@ -2,6 +2,7 @@
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import platform
 import re
 import shutil
@@ -177,7 +178,8 @@ def _build_provider_env_blocklist() -> frozenset:
         "EMAIL_SMTP_HOST",
         "EMAIL_HOME_ADDRESS",
         "EMAIL_HOME_ADDRESS_NAME",
-        "HERMES_DASHBOARD_SESSION_TOKEN",
+        "LLIAM_DASHBOARD_SESSION_TOKEN",  # rename R.8a (new name)
+        "HERMES_DASHBOARD_SESSION_TOKEN",  # legacy fallback
         "GATEWAY_ALLOWED_USERS",
         "GH_TOKEN",
         "GITHUB_APP_ID",
@@ -275,7 +277,8 @@ _ALWAYS_STRIP_KEYS: frozenset[str] = frozenset({
     "GATEWAY_ALLOW_ALL_USERS",
     "HASS_TOKEN",
     "EMAIL_PASSWORD",
-    "HERMES_DASHBOARD_SESSION_TOKEN",
+    "LLIAM_DASHBOARD_SESSION_TOKEN",  # rename R.8a (new name)
+    "HERMES_DASHBOARD_SESSION_TOKEN",  # legacy fallback
     # Remote-compute / infrastructure secrets
     "MODAL_TOKEN_ID",
     "MODAL_TOKEN_SECRET",
@@ -355,7 +358,7 @@ def _find_bash() -> str:
             or "/bin/sh"
         )
 
-    custom = os.environ.get("HERMES_GIT_BASH_PATH")
+    custom = getenv_compat("GIT_BASH_PATH")
     if custom and os.path.isfile(custom):
         return custom
 

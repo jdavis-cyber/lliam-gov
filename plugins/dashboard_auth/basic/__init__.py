@@ -447,8 +447,10 @@ def register(ctx) -> None:
     #   * env password set        → hash it (overrides any config hash)
     #   * else config password_hash set → use it
     #   * else config plaintext password → hash it in-memory
-    plaintext_from_env = os.environ.get(
-        "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD", ""
+    # rename R.8a: LLIAM_ first, legacy HERMES_ fallback (inline two-name).
+    plaintext_from_env = (
+        os.environ.get("LLIAM_DASHBOARD_BASIC_AUTH_PASSWORD")
+        or os.environ.get("HERMES_DASHBOARD_BASIC_AUTH_PASSWORD", "")
     ).strip()
     if plaintext_from_env:
         password_hash = hash_password(plaintext_from_env)

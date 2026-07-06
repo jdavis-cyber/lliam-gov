@@ -13,6 +13,7 @@ import fnmatch
 import functools
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import sys
 import threading
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 # Freeze YOLO mode at module import time. Reading os.environ on every call
 # would allow any skill running inside the process to set this variable and
 # instantly bypass all approval checks — a prompt-injection escalation path.
-_YOLO_MODE_FROZEN: bool = is_truthy_value(os.getenv("HERMES_YOLO_MODE", ""))
+_YOLO_MODE_FROZEN: bool = is_truthy_value(getenv_compat("YOLO_MODE", ""))
 
 # Per-thread/per-task gateway session identity.
 # Gateway runs agent turns concurrently in executor threads, so reading a
@@ -130,7 +131,7 @@ def _get_session_platform() -> str:
 
         return get_session_env("HERMES_SESSION_PLATFORM", "") or ""
     except Exception:
-        return os.getenv("HERMES_SESSION_PLATFORM", "") or ""
+        return getenv_compat("SESSION_PLATFORM", "") or ""
 
 
 def _is_gateway_approval_context() -> bool:
@@ -1032,7 +1033,7 @@ def prompt_dangerous_approval(command: str, description: str,
         # tests, sshd, etc.).
         pass
 
-    os.environ["HERMES_SPINNER_PAUSE"] = "1"
+    os.environ["LLIAM_SPINNER_PAUSE"] = "1"
     try:
         # Resolve the active UI language once per prompt so we don't re-read
         # config/YAML inside the retry loop below.
@@ -1087,8 +1088,9 @@ def prompt_dangerous_approval(command: str, description: str,
         print("\n" + t("approval.cancelled"))
         return "deny"
     finally:
-        if "HERMES_SPINNER_PAUSE" in os.environ:
-            del os.environ["HERMES_SPINNER_PAUSE"]
+        # rename R.8a: clear the LLIAM_ name we set above.
+        if "LLIAM_SPINNER_PAUSE" in os.environ:
+            del os.environ["LLIAM_SPINNER_PAUSE"]
         print()
         sys.stdout.flush()
 

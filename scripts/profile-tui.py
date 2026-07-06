@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from lliam_cli.env_compat import getenv_compat
 import pty
 import select
 import signal
@@ -45,10 +46,10 @@ except ImportError:
         return Path(val) if val else Path.home() / ".hermes"
 
 DEFAULT_TUI_DIR = Path(
-    os.environ.get("HERMES_TUI_DIR")
+    getenv_compat("TUI_DIR")
     or str(Path(__file__).resolve().parent.parent / "ui-tui")
 )
-DEFAULT_LOG = Path(os.environ.get("HERMES_PERF_LOG", str(get_hermes_home() / "perf.log")))
+DEFAULT_LOG = Path(getenv_compat("PERF_LOG", str(get_hermes_home() / "perf.log")))
 DEFAULT_STATE_DB = get_hermes_home() / "state.db"
 
 # Keystroke escape sequences.  Matches what xterm/VT220 send when the
@@ -430,7 +431,7 @@ def run_once(args: argparse.Namespace) -> dict[str, Any]:
 
     # Pass through extra flags the TUI wrapper recognizes (e.g. --no-fullscreen).
     # Stored on args as `extra_flags` list.
-    node = os.environ.get("HERMES_PERF_NODE", "node")
+    node = getenv_compat("PERF_NODE", "node")
     node_args = [node, str(entry), *getattr(args, "extra_flags", [])]
 
     pid, fd = pty.fork()

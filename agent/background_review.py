@@ -22,6 +22,7 @@ import contextlib
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -558,7 +559,7 @@ def build_memory_write_metadata(
         ),
         "session_id": agent.session_id or "",
         "parent_session_id": agent._parent_session_id or "",
-        "platform": agent.platform or os.environ.get("HERMES_SESSION_SOURCE", "cli"),
+        "platform": agent.platform or getenv_compat("SESSION_SOURCE", "cli"),
         "tool_name": "memory",
     }
     if task_id:

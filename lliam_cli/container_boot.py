@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Sequence
@@ -180,7 +181,7 @@ def _maybe_migrate_legacy_gateway_run_state(
     if state_file.exists():
         return None
 
-    if os.environ.get("HERMES_GATEWAY_NO_SUPERVISE", "").lower() in ("1", "true", "yes"):
+    if getenv_compat("GATEWAY_NO_SUPERVISE", "").lower() in ("1", "true", "yes"):
         return None
 
     argv = tuple(container_argv) if container_argv is not None else _read_container_argv()

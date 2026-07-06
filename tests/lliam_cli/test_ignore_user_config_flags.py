@@ -32,10 +32,16 @@ def _clean_env(monkeypatch):
     those writes aren't tracked by monkeypatch and won't be undone by it.
     We add explicit cleanup on yield to prevent cross-test pollution.
     """
-    for var in ("HERMES_IGNORE_USER_CONFIG", "HERMES_IGNORE_RULES"):
+    # rename R.8a: clear both names (consumers read LLIAM_ first; producers
+    # write LLIAM_).
+    _both = (
+        "LLIAM_IGNORE_USER_CONFIG", "LLIAM_IGNORE_RULES",
+        "HERMES_IGNORE_USER_CONFIG", "HERMES_IGNORE_RULES",
+    )
+    for var in _both:
         monkeypatch.delenv(var, raising=False)
     yield
-    for var in ("HERMES_IGNORE_USER_CONFIG", "HERMES_IGNORE_RULES"):
+    for var in _both:
         os.environ.pop(var, None)
 
 
@@ -159,13 +165,13 @@ class TestCmdChatWiring:
     def _simulate_cmd_chat_env_setup(self, args):
         """Replicate the exact snippet from cmd_chat in main.py."""
         if getattr(args, "ignore_user_config", False):
-            os.environ["HERMES_IGNORE_USER_CONFIG"] = "1"
+            os.environ["LLIAM_IGNORE_USER_CONFIG"] = "1"
         if getattr(args, "ignore_rules", False):
-            os.environ["HERMES_IGNORE_RULES"] = "1"
+            os.environ["LLIAM_IGNORE_RULES"] = "1"
 
     def test_both_flags_set_both_env_vars(self, monkeypatch):
-        monkeypatch.delenv("HERMES_IGNORE_USER_CONFIG", raising=False)
-        monkeypatch.delenv("HERMES_IGNORE_RULES", raising=False)
+        monkeypatch.delenv("LLIAM_IGNORE_USER_CONFIG", raising=False)
+        monkeypatch.delenv("LLIAM_IGNORE_RULES", raising=False)
 
         class FakeArgs:
             ignore_user_config = True
@@ -173,12 +179,12 @@ class TestCmdChatWiring:
 
         self._simulate_cmd_chat_env_setup(FakeArgs())
 
-        assert os.environ.get("HERMES_IGNORE_USER_CONFIG") == "1"
-        assert os.environ.get("HERMES_IGNORE_RULES") == "1"
+        assert os.environ.get("LLIAM_IGNORE_USER_CONFIG") == "1"
+        assert os.environ.get("LLIAM_IGNORE_RULES") == "1"
 
     def test_only_ignore_user_config(self, monkeypatch):
-        monkeypatch.delenv("HERMES_IGNORE_USER_CONFIG", raising=False)
-        monkeypatch.delenv("HERMES_IGNORE_RULES", raising=False)
+        monkeypatch.delenv("LLIAM_IGNORE_USER_CONFIG", raising=False)
+        monkeypatch.delenv("LLIAM_IGNORE_RULES", raising=False)
 
         class FakeArgs:
             ignore_user_config = True
@@ -186,20 +192,20 @@ class TestCmdChatWiring:
 
         self._simulate_cmd_chat_env_setup(FakeArgs())
 
-        assert os.environ.get("HERMES_IGNORE_USER_CONFIG") == "1"
-        assert "HERMES_IGNORE_RULES" not in os.environ
+        assert os.environ.get("LLIAM_IGNORE_USER_CONFIG") == "1"
+        assert "LLIAM_IGNORE_RULES" not in os.environ
 
     def test_flags_absent_sets_nothing(self, monkeypatch):
-        monkeypatch.delenv("HERMES_IGNORE_USER_CONFIG", raising=False)
-        monkeypatch.delenv("HERMES_IGNORE_RULES", raising=False)
+        monkeypatch.delenv("LLIAM_IGNORE_USER_CONFIG", raising=False)
+        monkeypatch.delenv("LLIAM_IGNORE_RULES", raising=False)
 
         class FakeArgs:
             pass  # no attributes at all — getattr fallback must handle
 
         self._simulate_cmd_chat_env_setup(FakeArgs())
 
-        assert "HERMES_IGNORE_USER_CONFIG" not in os.environ
-        assert "HERMES_IGNORE_RULES" not in os.environ
+        assert "LLIAM_IGNORE_USER_CONFIG" not in os.environ
+        assert "LLIAM_IGNORE_RULES" not in os.environ
 
 
 class TestArgparseFlagsRegistered:
@@ -240,5 +246,5 @@ class TestArgparseFlagsRegistered:
         import inspect
         import lliam_cli.main as hm
         src = inspect.getsource(hm)
-        assert "HERMES_IGNORE_USER_CONFIG" in src
-        assert "HERMES_IGNORE_RULES" in src
+        assert "LLIAM_IGNORE_USER_CONFIG" in src
+        assert "LLIAM_IGNORE_RULES" in src

@@ -8,6 +8,7 @@ persistence via bind mounts.
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import shutil
 import subprocess
@@ -280,7 +281,7 @@ def find_docker() -> Optional[str]:
         return _docker_executable
 
     # 1. Explicit override via env var (e.g. for Podman on immutable distros)
-    override = os.getenv("HERMES_DOCKER_BINARY")
+    override = getenv_compat("DOCKER_BINARY")
     if override and os.path.isfile(override) and os.access(override, os.X_OK):
         _docker_executable = override
         logger.info("Using HERMES_DOCKER_BINARY override: %s", override)

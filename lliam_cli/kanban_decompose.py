@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -163,7 +164,7 @@ def _extract_json_blob(raw: str) -> Optional[dict]:
 def _profile_author() -> str:
     """Mirror of ``lliam_cli.kanban._profile_author``."""
     return (
-        os.environ.get("HERMES_PROFILE")
+        getenv_compat("PROFILE")
         or os.environ.get("USER")
         or "decomposer"
     )

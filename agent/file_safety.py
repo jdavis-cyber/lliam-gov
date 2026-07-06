@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from lliam_cli.env_compat import getenv_compat
 from pathlib import Path
 from typing import Optional
 
@@ -81,7 +82,7 @@ def get_safe_write_roots() -> set[str]:
     """Return resolved HERMES_WRITE_SAFE_ROOT paths. Supports multiple directories
     separated by ``os.pathsep`` (``:`` on Unix, ``;`` on Windows).
     E.g., ``/opt/data:/var/www/html`` on Unix, ``C:\\data;D:\\www`` on Windows."""
-    env = os.getenv("HERMES_WRITE_SAFE_ROOT", "")
+    env = getenv_compat("WRITE_SAFE_ROOT", "")
     if not env:
         return set()
     roots: set[str] = set()
