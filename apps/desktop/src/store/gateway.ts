@@ -1,4 +1,4 @@
-import type { ConnectionState, GatewayEvent } from '@hermes/shared'
+import type { ConnectionState, GatewayEvent } from '@lliam-gov/shared'
 import { atom } from 'nanostores'
 
 import { HermesGateway } from '@/hermes'

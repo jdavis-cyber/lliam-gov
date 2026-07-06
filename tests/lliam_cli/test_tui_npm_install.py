@@ -15,7 +15,7 @@ def main_mod():
 
 
 def _touch_ink(root: Path) -> None:
-    ink = root / "node_modules" / "@hermes" / "ink" / "package.json"
+    ink = root / "node_modules" / "@lliam-gov" / "ink" / "package.json"
     ink.parent.mkdir(parents=True, exist_ok=True)
     ink.write_text("{}")
 
@@ -204,7 +204,7 @@ def test_make_tui_argv_scopes_npm_install_on_termux_workspace(
     tui_dir = tmp_path / "ui-tui"
     tui_dir.mkdir()
     (tui_dir / "package.json").write_text("{}")
-    ink_dir = tui_dir / "packages" / "hermes-ink"
+    ink_dir = tui_dir / "packages" / "lliam-gov-ink"
     ink_dir.mkdir(parents=True)
     (ink_dir / "package.json").write_text("{}")
     (tmp_path / "package-lock.json").write_text("{}")
@@ -230,7 +230,7 @@ def test_make_tui_argv_scopes_npm_install_on_termux_workspace(
         "--workspace",
         "ui-tui",
         "--workspace",
-        "ui-tui/packages/hermes-ink",
+        "ui-tui/packages/lliam-gov-ink",
         "--include-workspace-root=false",
     ]
     assert calls[0][1]["cwd"] == str(tmp_path)
@@ -302,7 +302,7 @@ def test_make_tui_argv_keeps_desktop_always_build_behaviour(
 def test_make_tui_argv_decodes_dev_prebuild_with_utf8_replace(
     tmp_path: Path, main_mod, monkeypatch
 ) -> None:
-    ink_dir = tmp_path / "packages" / "hermes-ink"
+    ink_dir = tmp_path / "packages" / "lliam-gov-ink"
     ink_dir.mkdir(parents=True)
     tsx = tmp_path / "node_modules" / ".bin" / "tsx"
     tsx.parent.mkdir(parents=True)
@@ -486,7 +486,7 @@ def test_no_stray_lockfiles_in_workspace_subdirs(main_mod) -> None:
         root / "apps" / "desktop",
         root / "apps" / "shared",
     ]
-    # Also sweep ui-tui/packages/* (hermes-ink etc.)
+    # Also sweep ui-tui/packages/* (lliam-gov-ink etc.)
     tui_pkgs = root / "ui-tui" / "packages"
     if tui_pkgs.is_dir():
         subdirs.extend(d for d in tui_pkgs.iterdir() if d.is_dir())

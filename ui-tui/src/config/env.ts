@@ -1,4 +1,4 @@
-import type { MouseTrackingMode } from '@hermes/ink'
+import type { MouseTrackingMode } from '@lliam-gov/ink'
 
 import { isTermuxTuiMode } from '../lib/termux.js'
 
