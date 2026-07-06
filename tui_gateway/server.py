@@ -11131,7 +11131,7 @@ def _cli_exec_blocked(argv: list[str]) -> str | None:
     if a0 == "sessions" and len(argv) > 1 and argv[1].lower() == "browse":
         return "`lliam-gov sessions browse` is interactive — use /resume here, or run browse in another terminal"
     if a0 == "config" and len(argv) > 1 and argv[1].lower() == "edit":
-        return "`hermes config edit` needs $EDITOR in a real terminal"
+        return "`lliam-gov config edit` needs $EDITOR in a real terminal"
     return None
 
 

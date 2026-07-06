@@ -3223,9 +3223,9 @@ def _blank_slate_walkthrough(config: dict, hermes_home):
     print()
     print_header("MCP Servers")
     if prompt_yes_no("Add an MCP server now?", default=False):
-        print_info("Add servers with `hermes mcp add <name> --url ... | --command ...`.")
+        print_info("Add servers with `lliam-gov mcp add <name> --url ... | --command ...`.")
     else:
-        print_info("No MCP servers configured. Add later with `hermes mcp add`.")
+        print_info("No MCP servers configured. Add later with `lliam-gov mcp add`.")
 
     # ── Optional messaging gateway ──
     print()

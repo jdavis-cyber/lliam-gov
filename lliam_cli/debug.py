@@ -1,7 +1,7 @@
-"""``hermes debug`` debug tools for Hermes Agent.
+"""``lliam-gov debug`` debug tools for Hermes Agent.
 
 Currently supports:
-    hermes debug share    Upload debug report (system info + logs) to a
+    lliam-gov debug share    Upload debug report (system info + logs) to a
                           paste service and print a shareable URL.
                           By default, log content is run through
                           ``agent.redact.redact_sensitive_text`` with

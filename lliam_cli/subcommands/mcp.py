@@ -21,7 +21,7 @@ def build_mcp_parser(subparsers, *, cmd_mcp: Callable) -> None:
             "Manage MCP server connections and run Hermes as an MCP server.\n\n"
             "MCP servers provide additional tools via the Model Context Protocol.\n"
             "Use 'lliam-gov mcp add' to connect to a new server, or\n"
-            "'hermes mcp serve' to expose Hermes conversations over MCP."
+            "'lliam-gov mcp serve' to expose Hermes conversations over MCP."
         ),
     )
     mcp_sub = mcp_parser.add_subparsers(dest="mcp_action")

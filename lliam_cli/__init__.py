@@ -2,13 +2,13 @@
 Hermes CLI - Unified command-line interface for Hermes Agent.
 
 Provides subcommands for:
-- hermes chat          - Interactive chat (same as ./hermes)
+- lliam-gov chat          - Interactive chat (same as ./hermes)
 - lliam-gov gateway       - Run gateway in foreground
-- hermes gateway start - Start gateway service
-- hermes gateway stop  - Stop gateway service
-- hermes setup         - Interactive setup wizard
-- hermes status        - Show status of all components
-- hermes cron          - Manage cron jobs
+- lliam-gov gateway start - Start gateway service
+- lliam-gov gateway stop  - Stop gateway service
+- lliam-gov setup         - Interactive setup wizard
+- lliam-gov status        - Show status of all components
+- lliam-gov cron          - Manage cron jobs
 """
 
 import os

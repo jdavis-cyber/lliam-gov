@@ -874,7 +874,7 @@ def run_doctor(args):
                             (
                                 f"No credentials found for provider '{runtime_provider}'. "
                                 f"Run 'lliam-gov setup' or set the provider's API key in {_DHH}/.env, "
-                                f"or switch providers with 'hermes config set model.provider <name>'"
+                                f"or switch providers with 'lliam-gov config set model.provider <name>'"
                             ),
                             issues,
                         )
@@ -1240,7 +1240,7 @@ def run_doctor(args):
                 else:
                     issues.append(
                         "state.db FTS write corruption — run 'lliam-gov doctor --fix' "
-                        "(or 'hermes sessions repair') to rebuild the FTS index"
+                        "(or 'lliam-gov sessions repair') to rebuild the FTS index"
                     )
         except Exception as e:
             from lliam_state import is_malformed_db_error, repair_state_db_schema
@@ -1286,7 +1286,7 @@ def run_doctor(args):
                 else:
                     issues.append(
                         "state.db schema malformed — run 'lliam-gov doctor --fix' "
-                        "(or 'hermes sessions repair') to recover hidden sessions"
+                        "(or 'lliam-gov sessions repair') to recover hidden sessions"
                     )
             else:
                 check_warn(f"{_DHH}/state.db exists but has issues: {e}")

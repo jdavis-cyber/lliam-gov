@@ -1073,7 +1073,7 @@ def _build_no_backend_setup_message() -> str:
     if managed_nous_tools_enabled():
         lines.append(
             "  2. Sign in to a Nous account that has the managed FAL "
-            "gateway enabled (`hermes setup`)"
+            "gateway enabled (`lliam-gov setup`)"
         )
     lines.append(
         "  3. Configure a different image_gen provider via `lliam-gov tools` "

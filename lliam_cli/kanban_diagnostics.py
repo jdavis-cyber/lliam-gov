@@ -434,7 +434,7 @@ def _rule_triage_aux_unavailable(task, events, runs, now, cfg) -> list[Diagnosti
             label=f"Configure {primary_slot}",
             payload={
                 "command": (
-                    f"hermes config set {primary_slot}.provider auto"
+                    f"lliam-gov config set {primary_slot}.provider auto"
                 )
             },
             suggested=True,
@@ -446,7 +446,7 @@ def _rule_triage_aux_unavailable(task, events, runs, now, cfg) -> list[Diagnosti
             label=f"Or configure fallback {fallback_slot}",
             payload={
                 "command": (
-                    f"hermes config set {fallback_slot}.provider auto"
+                    f"lliam-gov config set {fallback_slot}.provider auto"
                 )
             },
         ))

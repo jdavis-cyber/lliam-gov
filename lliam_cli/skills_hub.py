@@ -751,7 +751,7 @@ def do_install(identifier: str, category: str = "", force: bool = False,
                 )
                 c.print(
                     "[dim]You can still schedule it any time by asking the agent "
-                    "or via[/] [bold]hermes cron add[/][dim].[/]\n"
+                    "or via[/] [bold]lliam-gov cron add[/][dim].[/]\n"
                 )
     except Exception:  # pragma: no cover - blueprint detection is best-effort
         pass
