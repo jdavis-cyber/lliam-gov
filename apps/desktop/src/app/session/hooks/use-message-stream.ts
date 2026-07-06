@@ -57,7 +57,7 @@ import { clearSessionSubagents, pruneDelegateFallbackSubagents, upsertSubagent }
 import { setSessionTodos } from '@/store/todos'
 import { recordToolDiff } from '@/store/tool-diffs'
 import { notifyWorkspaceChanged, toolMayMutateFiles } from '@/store/workspace-events'
-import type { RpcEvent } from '@/types/hermes'
+import type { RpcEvent } from '@/types/lliam'
 
 import type { ClientSessionState } from '../../types'
 

@@ -10,7 +10,7 @@ import {
   registerSessionPreview
 } from '@/store/preview'
 import { $currentCwd, $messages } from '@/store/session'
-import type { RpcEvent } from '@/types/hermes'
+import type { RpcEvent } from '@/types/lliam'
 
 import { usePreviewRouting } from './use-preview-routing'
 
@@ -66,7 +66,7 @@ describe('usePreviewRouting', () => {
     clearSessionPreviewRegistry()
     handleEvent = () => undefined
 
-    Object.defineProperty(window, 'hermesDesktop', {
+    Object.defineProperty(window, 'lliamDesktop', {
       configurable: true,
       value: {
         normalizePreviewTarget: vi.fn(async (target: string) => previewTarget(target))
@@ -117,7 +117,7 @@ describe('usePreviewRouting', () => {
     })
 
     expect($previewTarget.get()).toBeNull()
-    expect(window.hermesDesktop.normalizePreviewTarget).not.toHaveBeenCalled()
+    expect(window.lliamDesktop.normalizePreviewTarget).not.toHaveBeenCalled()
   })
 
   it('does not auto-open a preview from tool results', async () => {

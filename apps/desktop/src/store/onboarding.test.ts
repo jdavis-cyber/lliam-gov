@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as notifications from '@/store/notifications'
-import type { OAuthProvider } from '@/types/hermes'
+import type { OAuthProvider } from '@/types/lliam'
 
 import {
   $desktopOnboarding,
@@ -40,7 +40,7 @@ function baseState(overrides: Partial<DesktopOnboardingState> = {}): DesktopOnbo
 }
 
 function installApiMock(api: (request: { path: string }) => Promise<unknown>) {
-  Object.defineProperty(window, 'hermesDesktop', {
+  Object.defineProperty(window, 'lliamDesktop', {
     configurable: true,
     value: { api }
   })

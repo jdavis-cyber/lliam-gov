@@ -1,6 +1,6 @@
 import { type MutableRefObject, useCallback, useState } from 'react'
 
-import { getHermesConfig, getHermesConfigDefaults } from '@/hermes'
+import { getHermesConfig, getHermesConfigDefaults } from '@/lliam'
 import { BUILTIN_PERSONALITIES, normalizePersonalityValue, personalityNamesFromConfig } from '@/lib/chat-runtime'
 import {
   $currentCwd,
@@ -20,12 +20,12 @@ function recordingLimit(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : DEFAULT_VOICE_SECONDS
 }
 
-interface HermesConfigOptions {
+interface LliamConfigOptions {
   activeSessionIdRef: MutableRefObject<string | null>
   refreshProjectBranch: (cwd: string) => Promise<void>
 }
 
-export function useHermesConfig({ activeSessionIdRef, refreshProjectBranch }: HermesConfigOptions) {
+export function useHermesConfig({ activeSessionIdRef, refreshProjectBranch }: LliamConfigOptions) {
   const [voiceMaxRecordingSeconds, setVoiceMaxRecordingSeconds] = useState(DEFAULT_VOICE_SECONDS)
   const [sttEnabled, setSttEnabled] = useState(true)
 

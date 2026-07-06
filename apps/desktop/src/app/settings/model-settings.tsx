@@ -15,20 +15,20 @@ import {
   saveMoaModels,
   setEnvVar,
   setModelAssignment
-} from '@/hermes'
+} from '@/lliam'
 import type {
   AuxiliaryModelsResponse,
   MoaConfigResponse,
   MoaModelSlot,
   ModelOptionProvider,
   StaleAuxAssignment
-} from '@/hermes'
+} from '@/lliam'
 import { useI18n } from '@/i18n'
 import { AlertTriangle, Cpu, Loader2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { notifyError } from '@/store/notifications'
 import { startManualLocalEndpoint, startManualProviderOAuth } from '@/store/onboarding'
-import type { HermesConfigRecord } from '@/types/hermes'
+import type { LliamConfigRecord } from '@/types/lliam'
 
 import { CONTROL_TEXT } from './constants'
 import { getNested, setNested } from './helpers'
@@ -138,7 +138,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
   const [newMoaPresetName, setNewMoaPresetName] = useState('')
   // Full profile config, kept so the reasoning/speed defaults round-trip
   // (read agent.* → write back the whole record) like the generic config page.
-  const [config, setConfig] = useState<HermesConfigRecord | null>(null)
+  const [config, setConfig] = useState<LliamConfigRecord | null>(null)
   const [applying, setApplying] = useState(false)
   const [editingAuxTask, setEditingAuxTask] = useState<null | string>(null)
   const [auxDraft, setAuxDraft] = useState<{ model: string; provider: string }>({ model: '', provider: '' })

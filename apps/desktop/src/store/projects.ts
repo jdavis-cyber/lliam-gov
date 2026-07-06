@@ -1,13 +1,13 @@
 import { atom } from 'nanostores'
 
 import { liveSessionProjectId, type SidebarProjectTree } from '@/app/chat/sidebar/projects/workspace-groups'
-import type { HermesGitBranch } from '@/global'
+import type { LliamGitBranch } from '@/global'
 import { persistentAtom } from '@/lib/persisted'
 import { activeGateway, ensureActiveGatewayOpen } from '@/store/gateway'
 import { setSidebarAgentsGrouped } from '@/store/layout'
 import { requestFreshSession } from '@/store/profile'
 import { $selectedStoredSessionId, $sessions, workspaceCwdForNewSession } from '@/store/session'
-import type { ProjectInfo, ProjectsPayload } from '@/types/hermes'
+import type { ProjectInfo, ProjectsPayload } from '@/types/lliam'
 
 // First-class, per-profile Projects (named, multi-folder workspaces). State is
 // served by the live gateway's `projects.*` JSON-RPC methods, which wrap the
@@ -280,7 +280,7 @@ export async function fetchProjectSessions(projectId: string): Promise<SidebarPr
 let didScanRepos = false
 
 export async function scanAndRecordRepos(force = false): Promise<void> {
-  const scan = window.hermesDesktop?.git?.scanRepos
+  const scan = window.lliamDesktop?.git?.scanRepos
 
   if (!scan || (didScanRepos && !force)) {
     return
@@ -340,7 +340,7 @@ export async function generateProjectIdea(name: string): Promise<string> {
 async function writeProjectIdea(folder: null | string | undefined, idea: string): Promise<void> {
   const dir = (folder || '').trim()
   const body = idea.trim()
-  const write = window.hermesDesktop?.writeTextFile
+  const write = window.lliamDesktop?.writeTextFile
 
   if (!dir || !body || !write) {
     return
@@ -630,7 +630,7 @@ export async function startWorkInRepo(
   repoPath: string,
   options?: { name?: string; branch?: string; base?: string; existingBranch?: string }
 ): Promise<null | { path: string; branch: string }> {
-  const git = window.hermesDesktop?.git
+  const git = window.lliamDesktop?.git
 
   if (!git || !repoPath) {
     return null
@@ -644,8 +644,8 @@ export async function startWorkInRepo(
 
 // Local branches for the composer's "convert a branch into a worktree" picker.
 // Empty on a remote backend / non-repo (the Electron probe can't run).
-export async function listRepoBranches(repoPath: string): Promise<HermesGitBranch[]> {
-  const git = window.hermesDesktop?.git
+export async function listRepoBranches(repoPath: string): Promise<LliamGitBranch[]> {
+  const git = window.lliamDesktop?.git
 
   if (!git?.branchList || !repoPath) {
     return []
@@ -655,7 +655,7 @@ export async function listRepoBranches(repoPath: string): Promise<HermesGitBranc
 }
 
 export async function switchBranchInRepo(repoPath: string, branch: string): Promise<void> {
-  const git = window.hermesDesktop?.git
+  const git = window.lliamDesktop?.git
 
   if (!git || !repoPath || !branch.trim()) {
     return
@@ -708,7 +708,7 @@ export async function removeWorktreePath(
   worktreePath: string,
   options?: { force?: boolean }
 ): Promise<void> {
-  const git = window.hermesDesktop?.git
+  const git = window.lliamDesktop?.git
 
   if (!git) {
     return
@@ -721,21 +721,21 @@ export async function removeWorktreePath(
 // Reveal a project/worktree path in the OS file manager (git-GUI standard).
 export async function revealPath(path: null | string): Promise<void> {
   if (path) {
-    await window.hermesDesktop?.revealPath?.(path)
+    await window.lliamDesktop?.revealPath?.(path)
   }
 }
 
 // Copy a path to the clipboard (git-GUI standard).
 export async function copyPath(path: null | string): Promise<void> {
   if (path) {
-    await window.hermesDesktop?.writeClipboard?.(path)
+    await window.lliamDesktop?.writeClipboard?.(path)
   }
 }
 
 // Open the native directory picker (reuses the Electron default-project-dir
 // chooser). Returns the chosen absolute path, or null when cancelled.
 export async function pickProjectFolder(): Promise<null | string> {
-  const pick = window.hermesDesktop?.settings?.pickDefaultProjectDir
+  const pick = window.lliamDesktop?.settings?.pickDefaultProjectDir
 
   if (!pick) {
     return null

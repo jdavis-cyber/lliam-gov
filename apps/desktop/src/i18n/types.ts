@@ -111,7 +111,7 @@ export interface Translations {
       loadingSettings: string
       loadingSessions: string
       startingDesktopConnection: string
-      startingHermesDesktop: string
+      startingLliamDesktop: string
     }
     errors: {
       backgroundExited: string

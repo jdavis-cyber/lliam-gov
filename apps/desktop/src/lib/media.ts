@@ -81,7 +81,7 @@ export function mediaExternalUrl(path: string): string {
 // file with Range support. Used for audio/video so playback bypasses the data
 // URL size cap and supports seeking. `path` may be a plain path or `file://…`.
 export function mediaStreamUrl(path: string): string {
-  return `hermes-media://stream/${encodeURIComponent(filePathFromMediaPath(path))}`
+  return `lliam-media://stream/${encodeURIComponent(filePathFromMediaPath(path))}`
 }
 
 export function mediaPathFromMarkdownHref(href?: string): string | null {
@@ -121,7 +121,7 @@ export function isRemoteGateway(): boolean {
 export async function gatewayMediaDataUrl(path: string): Promise<string> {
   const file = filePathFromMediaPath(path)
 
-  const result = await window.hermesDesktop!.api<{ data_url: string }>({
+  const result = await window.lliamDesktop!.api<{ data_url: string }>({
     path: `/api/media?path=${encodeURIComponent(file)}`
   })
 

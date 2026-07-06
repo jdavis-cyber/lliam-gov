@@ -1124,12 +1124,14 @@ def build_environment_hints() -> str:
                 f"`uname -a && whoami && pwd`."
             )
 
-    # Hermes desktop GUI — any agent running under the desktop app should know
-    # it. HERMES_DESKTOP marks the backend powering the chat; HERMES_DESKTOP_TERMINAL
-    # marks a hermes launched in the embedded terminal pane. Both set by main.cjs.
+    # Desktop GUI — any agent running under the desktop app should know
+    # it. LLIAM_DESKTOP marks the backend powering the chat; LLIAM_DESKTOP_TERMINAL
+    # marks a backend launched in the embedded terminal pane. Both set by main.cjs.
+    from lliam_cli.env_compat import getenv_compat
+
     _truthy = ("1", "true", "yes")
-    _in_desktop = (os.getenv("HERMES_DESKTOP") or "").strip().lower() in _truthy
-    _in_desktop_term = (os.getenv("HERMES_DESKTOP_TERMINAL") or "").strip().lower() in _truthy
+    _in_desktop = (getenv_compat("DESKTOP") or "").strip().lower() in _truthy
+    _in_desktop_term = (getenv_compat("DESKTOP_TERMINAL") or "").strip().lower() in _truthy
     if _in_desktop or _in_desktop_term:
         _desktop_hint = "Runtime surface: you're running inside the Hermes desktop GUI app."
         if _in_desktop_term:

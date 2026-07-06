@@ -49,8 +49,10 @@ def read_terminal_tool(
 
 
 def check_read_terminal_requirements() -> bool:
-    """Desktop GUI only — HERMES_DESKTOP is set on the gateway the app spawns."""
-    return (os.getenv("HERMES_DESKTOP") or "").strip().lower() in ("1", "true", "yes")
+    """Desktop GUI only — LLIAM_DESKTOP is set on the gateway the app spawns."""
+    from lliam_cli.env_compat import getenv_compat
+
+    return (getenv_compat("DESKTOP") or "").strip().lower() in ("1", "true", "yes")
 
 
 READ_TERMINAL_SCHEMA = {

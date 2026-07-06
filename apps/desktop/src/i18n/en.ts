@@ -66,7 +66,7 @@ export const en: Translations = {
       loadingSettings: 'Loading LLIAM-GOV settings',
       loadingSessions: 'Loading recent sessions',
       startingDesktopConnection: 'Starting desktop connection',
-      startingHermesDesktop: 'Starting LLIAM-GOV Desktop…'
+      startingLliamDesktop: 'Starting LLIAM-GOV Desktop…'
     },
     errors: {
       backgroundExited: 'LLIAM-GOV background process exited.',
@@ -518,7 +518,7 @@ export const en: Translations = {
         `Connection used only when “${profile}” is the active profile. Set it to Local to inherit the default.`,
       envOverrideTitle: 'Environment variables are controlling this desktop session.',
       envOverrideDesc:
-        'Unset HERMES_DESKTOP_REMOTE_URL and HERMES_DESKTOP_REMOTE_TOKEN to use the saved setting below.',
+        'Unset LLIAM_DESKTOP_REMOTE_URL and LLIAM_DESKTOP_REMOTE_TOKEN to use the saved setting below.',
       localTitle: 'Local gateway',
       localDesc: 'Start a private LLIAM-GOV backend on localhost. This is the default and works offline.',
       remoteTitle: 'Remote gateway',

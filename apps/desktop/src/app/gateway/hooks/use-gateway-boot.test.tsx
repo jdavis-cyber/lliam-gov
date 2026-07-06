@@ -7,7 +7,7 @@ import { $gatewayState } from '@/store/session'
 import { useGatewayBoot } from './use-gateway-boot'
 
 // End-to-end-ish repro of the "remote VPS → stuck on CONNECTING, no Settings"
-// bug that drives the REAL useGatewayBoot hook + REAL HermesGateway through a
+// bug that drives the REAL useGatewayBoot hook + REAL LliamGateway through a
 // fake WebSocket we fully control. No Docker / no real port: from the desktop's
 // point of view a "remote VPS" is just a WebSocket that opens once and later
 // refuses to reopen, so that is exactly (and only) what we fake.
@@ -123,7 +123,7 @@ beforeEach(() => {
   FakeWebSocket.mode = 'open'
   FakeWebSocket.instances = []
   ;(globalThis as { WebSocket: unknown }).WebSocket = FakeWebSocket
-  ;(window as { hermesDesktop?: unknown }).hermesDesktop = fakeDesktop()
+  ;(window as { lliamDesktop?: unknown }).lliamDesktop = fakeDesktop()
   $gatewayState.set('idle')
   $desktopBoot.set({
     error: null,
@@ -141,7 +141,7 @@ afterEach(() => {
   cleanup()
   vi.useRealTimers()
   ;(globalThis as { WebSocket: unknown }).WebSocket = originalWebSocket
-  delete (window as { hermesDesktop?: unknown }).hermesDesktop
+  delete (window as { lliamDesktop?: unknown }).lliamDesktop
 })
 
 // Let pending microtasks (awaits) AND the queued 0ms socket open/error fire.
@@ -176,7 +176,7 @@ describe('useGatewayBoot remote reconnect loop (real hook, fake socket)', () => 
           rejectConn = reject
         })
     )
-    ;(window as { hermesDesktop?: unknown }).hermesDesktop = desktop
+    ;(window as { lliamDesktop?: unknown }).lliamDesktop = desktop
 
     render(<Harness />)
     await flushAsync()

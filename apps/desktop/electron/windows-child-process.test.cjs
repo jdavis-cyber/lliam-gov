@@ -46,7 +46,7 @@ test('desktop background child processes opt into hidden Windows consoles', () =
   assert.match(source, /function readVenvHome\(venvRoot\)/)
   assert.match(source, /path\.join\(venvRoot, 'Scripts', 'pythonw\.exe'\)/)
   assert.match(source, /backendStartFailure/)
-  assert.match(source, /HERMES_DESKTOP_READY_FILE/)
+  assert.match(source, /LLIAM_DESKTOP_READY_FILE/)
   assert.match(source, /readyFile: true/)
   assert.match(source, /function getVenvSitePackagesEntries\(venvRoot\)/)
   assert.match(source, /path\.join\(venvRoot, 'Lib', 'site-packages'\)/)

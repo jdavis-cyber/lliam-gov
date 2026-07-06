@@ -1,6 +1,6 @@
 import { atom, computed } from 'nanostores'
 
-import type { HermesGitWorktree, HermesRepoStatus } from '@/global'
+import type { LliamGitWorktree, LliamRepoStatus } from '@/global'
 
 import { $worktreeRefreshToken } from './projects'
 import { $busy, $currentCwd } from './session'
@@ -13,12 +13,12 @@ import { $workspaceChangeTick } from './workspace-events'
 // change, turn settle, window focus, worktree mutation), never per-token and
 // never touching the conversation/system-prompt cache.
 
-export const $repoStatus = atom<HermesRepoStatus | null>(null)
+export const $repoStatus = atom<LliamRepoStatus | null>(null)
 export const $repoStatusLoading = atom(false)
 
 // The repo's real worktrees (for the coding rail's "jump to a worktree" menu).
 // Refreshed on the same edges as the status probe; empty off a repo.
-export const $repoWorktrees = atom<HermesGitWorktree[]>([])
+export const $repoWorktrees = atom<LliamGitWorktree[]>([])
 const REPO_STATUS_REFRESH_DEBOUNCE_MS = 100
 
 export type RepoChangeKind = 'added' | 'conflicted' | 'modified'
@@ -44,7 +44,7 @@ export const $repoChangeByPath = computed([$repoStatus, $currentCwd], (status, c
 })
 
 async function loadWorktrees(target: string): Promise<void> {
-  const list = window.hermesDesktop?.git?.worktreeList
+  const list = window.lliamDesktop?.git?.worktreeList
 
   if (!list) {
     $repoWorktrees.set([])
@@ -80,7 +80,7 @@ const normalizeCwd = (cwd?: null | string): null | string => cwd?.trim() || null
  */
 export async function refreshRepoStatus(cwd?: null | string): Promise<void> {
   const target = normalizeCwd(cwd ?? $currentCwd.get())
-  const probe = window.hermesDesktop?.git?.repoStatus
+  const probe = window.lliamDesktop?.git?.repoStatus
   const seq = (repoStatusRefreshSeq += 1)
 
   if (!target || !probe) {

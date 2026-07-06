@@ -4,19 +4,19 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { getHermesConfigRecord, type HermesGateway, saveHermesConfig } from '@/hermes'
+import { getHermesConfigRecord, type LliamGateway, saveHermesConfig } from '@/lliam'
 import { useI18n } from '@/i18n'
 import { Wrench } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 import { $activeSessionId } from '@/store/session'
-import type { HermesConfigRecord } from '@/types/hermes'
+import type { LliamConfigRecord } from '@/types/lliam'
 
 import { EmptyState, LoadingState, Pill, SettingsContent } from './primitives'
 import { useDeepLinkHighlight } from './use-deep-link-highlight'
 
 interface McpSettingsProps {
-  gateway?: HermesGateway | null
+  gateway?: LliamGateway | null
   onConfigSaved?: () => void
 }
 
@@ -28,7 +28,7 @@ const EMPTY_SERVER = {
   env: {}
 }
 
-function getServers(config: HermesConfigRecord | null): McpServers {
+function getServers(config: LliamConfigRecord | null): McpServers {
   const raw = config?.mcp_servers
 
   return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as McpServers) : {}
@@ -47,7 +47,7 @@ export function McpSettings({ gateway, onConfigSaved }: McpSettingsProps) {
   const { t } = useI18n()
   const m = t.settings.mcp
   const activeSessionId = useStore($activeSessionId)
-  const [config, setConfig] = useState<HermesConfigRecord | null>(null)
+  const [config, setConfig] = useState<LliamConfigRecord | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [body, setBody] = useState('')

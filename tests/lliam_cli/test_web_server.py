@@ -3072,7 +3072,7 @@ class TestNewEndpoints:
         first = blueprints[0]
         assert "fields" in first
         assert first["command"].startswith("/blueprint")
-        assert first["appUrl"].startswith("hermes://")
+        assert first["appUrl"].startswith("lliam-gov://")
 
     def test_blueprint_instantiate_creates_job(self):
         resp = self.client.post(
@@ -6323,10 +6323,10 @@ class TestDesktopCronTicker:
 
         called = threading.Event()
         monkeypatch.setattr(sched, "tick", lambda *a, **k: called.set())
-        monkeypatch.setenv("HERMES_DESKTOP", "1")
+        monkeypatch.setenv("LLIAM_DESKTOP", "1")
 
         with self._client():
-            assert called.wait(3.0), "expected cron tick under HERMES_DESKTOP=1"
+            assert called.wait(3.0), "expected cron tick under LLIAM_DESKTOP=1"
 
     def test_ticker_skipped_without_desktop(self, monkeypatch, _isolate_hermes_home):
         import threading
@@ -6334,7 +6334,7 @@ class TestDesktopCronTicker:
 
         called = threading.Event()
         monkeypatch.setattr(sched, "tick", lambda *a, **k: called.set())
-        monkeypatch.delenv("HERMES_DESKTOP", raising=False)
+        monkeypatch.delenv("LLIAM_DESKTOP", raising=False)
 
         with self._client():
             assert not called.wait(0.5), "ticker must not run outside the desktop app"

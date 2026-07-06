@@ -122,11 +122,11 @@ class TestUnifiedDashboardRouting:
         assert env.get("HERMES_HOME") == "/opt/data"
 
     def test_desktop_profile_backend_skips_machine_dashboard_reroute(self, main_mod, monkeypatch):
-        """A desktop-spawned named-profile backend (HERMES_DESKTOP=1) must NOT
+        """A desktop-spawned named-profile backend (LLIAM_DESKTOP=1) must NOT
         reroute into the machine dashboard. The reroute re-execs as the default
         profile and exits, so the desktop never sees a ready backend → boot
         loop. The guard keeps desktop pool backends per-profile."""
-        monkeypatch.setenv("HERMES_DESKTOP", "1")
+        monkeypatch.setenv("LLIAM_DESKTOP", "1")
         monkeypatch.setattr(
             "lliam_cli.profiles.get_active_profile_name", lambda: "worker_x"
         )

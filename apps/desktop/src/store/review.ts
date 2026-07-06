@@ -2,7 +2,7 @@ import { atom, computed } from 'nanostores'
 
 import { SIDEBAR_COLLAPSE_MEDIA_QUERY } from '@/app/layout-constants'
 import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
-import type { HermesReviewFile, HermesReviewShipInfo } from '@/global'
+import type { LliamReviewFile, LliamReviewShipInfo } from '@/global'
 import { matchesQuery } from '@/hooks/use-media-query'
 import { isExcludedPath } from '@/lib/excluded-paths'
 import { requestOneShot } from '@/lib/oneshot'
@@ -55,7 +55,7 @@ export function toggleReviewTreeMode(): void {
   $reviewTreeMode.set($reviewTreeMode.get() === 'tree' ? 'list' : 'tree')
 }
 
-export const $reviewFiles = atom<HermesReviewFile[]>([])
+export const $reviewFiles = atom<LliamReviewFile[]>([])
 export const $reviewLoading = atom(false)
 // False when the active session isn't in a local git repo (detached/fresh chat,
 // remote backend). Lets the pane say "not a repo" instead of stranding on a
@@ -76,7 +76,7 @@ export const $reviewDiffLoading = atom(false)
 
 // Ship state: gh availability + this branch's PR, and a busy flag for the
 // commit/push/PR action bar (disables buttons + shows progress).
-export const $reviewShipInfo = atom<HermesReviewShipInfo>({ ghReady: false, pr: null })
+export const $reviewShipInfo = atom<LliamReviewShipInfo>({ ghReady: false, pr: null })
 export const $reviewShipBusy = atom(false)
 
 // True while a commit message is being generated (drives the input's spinner).
@@ -84,7 +84,7 @@ export const $reviewCommitMsgBusy = atom(false)
 
 const repoCwd = (): null | string => $currentCwd.get()?.trim() || null
 
-type ReviewBridge = NonNullable<NonNullable<NonNullable<Window['hermesDesktop']>['git']>['review']>
+type ReviewBridge = NonNullable<NonNullable<NonNullable<Window['lliamDesktop']>['git']>['review']>
 let reviewRefreshSeq = 0
 let reviewRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let shipInfoSeq = 0
@@ -94,7 +94,7 @@ let shipInfoLastCheckedAt = 0
 // either is missing (no session, remote backend), so callers bail in one line.
 function reviewCtx(): { cwd: string; review: ReviewBridge } | null {
   const cwd = repoCwd()
-  const review = window.hermesDesktop?.git?.review
+  const review = window.lliamDesktop?.git?.review
 
   return cwd && review ? { cwd, review } : null
 }
@@ -175,7 +175,7 @@ function scheduleReviewRefresh(): void {
   }, REVIEW_REFRESH_DEBOUNCE_MS)
 }
 
-export async function selectReviewFile(file: HermesReviewFile): Promise<void> {
+export async function selectReviewFile(file: LliamReviewFile): Promise<void> {
   $reviewSelectedPath.set(file.path)
 
   const ctx = reviewCtx()
@@ -294,17 +294,17 @@ async function afterMutation(): Promise<void> {
 }
 
 export async function stageReviewFile(path: null | string): Promise<void> {
-  await window.hermesDesktop?.git?.review?.stage(repoCwd() ?? '', path)
+  await window.lliamDesktop?.git?.review?.stage(repoCwd() ?? '', path)
   await afterMutation()
 }
 
 export async function unstageReviewFile(path: null | string): Promise<void> {
-  await window.hermesDesktop?.git?.review?.unstage(repoCwd() ?? '', path)
+  await window.lliamDesktop?.git?.review?.unstage(repoCwd() ?? '', path)
   await afterMutation()
 }
 
 export async function revertReviewFile(path: null | string): Promise<void> {
-  await window.hermesDesktop?.git?.review?.revert(repoCwd() ?? '', path)
+  await window.lliamDesktop?.git?.review?.revert(repoCwd() ?? '', path)
   await afterMutation()
 }
 
@@ -435,7 +435,7 @@ export async function createOrOpenPr(): Promise<void> {
   const existing = $reviewShipInfo.get().pr
 
   if (existing?.url) {
-    void window.hermesDesktop?.openExternal?.(existing.url)
+    void window.lliamDesktop?.openExternal?.(existing.url)
 
     return
   }
@@ -444,7 +444,7 @@ export async function createOrOpenPr(): Promise<void> {
     const { url } = await ctx.review.createPr(ctx.cwd)
 
     if (url) {
-      void window.hermesDesktop?.openExternal?.(url)
+      void window.lliamDesktop?.openExternal?.(url)
     }
 
     void refreshShipInfo()

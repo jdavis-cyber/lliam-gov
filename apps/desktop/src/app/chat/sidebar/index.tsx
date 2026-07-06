@@ -35,8 +35,8 @@ import {
   SidebarMenuItem
 } from '@/components/ui/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { HermesGitWorktree } from '@/global'
-import { searchSessions, type SessionInfo, type SessionSearchResult } from '@/hermes'
+import type { LliamGitWorktree } from '@/global'
+import { searchSessions, type SessionInfo, type SessionSearchResult } from '@/lliam'
 import { useI18n } from '@/i18n'
 import { comboTokens } from '@/lib/keybinds/combo'
 import { profileColor } from '@/lib/profile-color'
@@ -452,10 +452,10 @@ export function ChatSidebar({
       timeout = setTimeout(() => setNewSessionKbdFlash(false), 140)
     }
 
-    window.addEventListener('hermes:new-session-shortcut', onShortcut)
+    window.addEventListener('lliam:new-session-shortcut', onShortcut)
 
     return () => {
-      window.removeEventListener('hermes:new-session-shortcut', onShortcut)
+      window.removeEventListener('lliam:new-session-shortcut', onShortcut)
       clearTimeout(timeout)
     }
   }, [])
@@ -1676,7 +1676,7 @@ interface SidebarSessionsSectionProps {
   projectContent?: SidebarProjectTree
   // Live git lanes (`git worktree list`) for repos in the entered project —
   // a VISUAL enhancer only (empty lanes), never session membership.
-  projectRepoWorktrees?: Record<string, HermesGitWorktree[]>
+  projectRepoWorktrees?: Record<string, LliamGitWorktree[]>
   // Live session cache used for optimistic placement inside entered-project lanes.
   liveSessions?: SessionInfo[]
   // Client-side optimistic eviction layer (deleted/archived ids).

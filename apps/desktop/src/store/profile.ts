@@ -1,6 +1,6 @@
 import { atom, computed } from 'nanostores'
 
-import { getProfiles, setApiRequestProfile } from '@/hermes'
+import { getProfiles, setApiRequestProfile } from '@/lliam'
 import { queryClient } from '@/lib/query-client'
 import {
   arraysEqual,
@@ -13,7 +13,7 @@ import {
 } from '@/lib/storage'
 import { $gateway, ensureGatewayForProfile } from '@/store/gateway'
 import { setConnection } from '@/store/session'
-import type { ProfileInfo } from '@/types/hermes'
+import type { ProfileInfo } from '@/types/lliam'
 
 // Canonical key for a profile: trimmed, empty → "default". Used everywhere we
 // compare a session's owning profile against the live gateway's profile.
@@ -102,7 +102,7 @@ interface ActiveProfileResponse {
 // Best-effort: failures (backend not up yet) leave the prior values intact.
 export async function refreshActiveProfile(): Promise<void> {
   try {
-    const res = await window.hermesDesktop.api<ActiveProfileResponse>({ path: '/api/profiles/active' })
+    const res = await window.lliamDesktop.api<ActiveProfileResponse>({ path: '/api/profiles/active' })
 
     setActiveProfile(res.current || 'default')
   } catch {
@@ -127,7 +127,7 @@ export async function switchProfile(name: string): Promise<void> {
   }
 
   setActiveProfile(name)
-  await window.hermesDesktop.profile.set(name)
+  await window.lliamDesktop.profile.set(name)
 }
 
 // ── Swap-minimal gateway routing ──────────────────────────────────────────
@@ -193,7 +193,7 @@ let gatewaySwitch: Promise<void> | null = null
 // Best-effort: a failed descriptor fetch leaves the prior connection intact for
 // boot/reconnect to resync.
 async function syncConnectionToActiveProfile(profile: string): Promise<void> {
-  const getConnection = window.hermesDesktop?.getConnection
+  const getConnection = window.lliamDesktop?.getConnection
 
   if (!getConnection) {
     return
@@ -392,5 +392,5 @@ export function touchActiveGatewayBackend(): void {
   // Always ping: the main process no-ops for non-pool (primary) backends, so we
   // don't need to know which profile is primary from here.
   const target = normalizeProfileKey($activeGatewayProfile.get())
-  void window.hermesDesktop?.touchBackend?.(target).catch(() => undefined)
+  void window.lliamDesktop?.touchBackend?.(target).catch(() => undefined)
 }

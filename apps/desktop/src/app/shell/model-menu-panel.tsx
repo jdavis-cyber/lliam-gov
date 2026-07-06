@@ -15,8 +15,8 @@ import {
   DropdownMenuSubTrigger
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { HermesGateway } from '@/hermes'
-import { getGlobalModelOptions, getMoaModels } from '@/hermes'
+import type { LliamGateway } from '@/lliam'
+import { getGlobalModelOptions, getMoaModels } from '@/lliam'
 import { useI18n } from '@/i18n'
 import {
   currentPickerSelection,
@@ -42,7 +42,7 @@ import {
   $currentProvider,
   $currentReasoningEffort
 } from '@/store/session'
-import type { MoaConfigResponse, ModelOptionProvider, ModelOptionsResponse } from '@/types/hermes'
+import type { MoaConfigResponse, ModelOptionProvider, ModelOptionsResponse } from '@/types/lliam'
 
 import { ModelEditSubmenu, resolveFastControl } from './model-edit-submenu'
 
@@ -52,7 +52,7 @@ import { ModelEditSubmenu, resolveFastControl } from './model-edit-submenu'
 export const ModelMenuCloseContext = createContext<() => void>(() => {})
 
 interface ModelMenuPanelProps {
-  gateway?: HermesGateway
+  gateway?: LliamGateway
   onSelectModel: (selection: { model: string; provider: string }) => Promise<boolean> | void
   requestGateway: <T>(method: string, params?: Record<string, unknown>) => Promise<T>
 }

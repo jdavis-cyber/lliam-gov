@@ -1,8 +1,8 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useMemo, useState } from 'react'
 
-import type { HermesGitWorktree } from '@/global'
-import type { SessionInfo } from '@/hermes'
+import type { LliamGitWorktree } from '@/global'
+import type { SessionInfo } from '@/lliam'
 import { mapPool } from '@/lib/pool'
 import { $sidebarWorkspaceCollapsedIds, toggleWorkspaceNodeCollapsed } from '@/store/layout'
 import { $worktreeRefreshToken } from '@/store/projects'
@@ -80,15 +80,15 @@ export function sortProjectsForOverview(
 export function useRepoWorktreeMap(
   repoPaths: string[],
   enabled: boolean
-): [Record<string, HermesGitWorktree[]>, boolean] {
-  const [map, setMap] = useState<Record<string, HermesGitWorktree[]>>({})
+): [Record<string, LliamGitWorktree[]>, boolean] {
+  const [map, setMap] = useState<Record<string, LliamGitWorktree[]>>({})
   const [loading, setLoading] = useState(false)
   const key = useMemo(() => pathListKey(repoPaths), [repoPaths])
   // Refetch when a worktree is added/removed so a new lane shows immediately.
   const refreshToken = useStore($worktreeRefreshToken)
 
   useEffect(() => {
-    const git = window.hermesDesktop?.git
+    const git = window.lliamDesktop?.git
 
     if (!enabled || !repoPaths.length || !git?.worktreeList) {
       setMap({})

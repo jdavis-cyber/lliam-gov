@@ -211,7 +211,7 @@ export function revealFileInTree(path: string): void {
 
 // Hotkey → focus the sessions search field. Opens the sidebar first, then lets
 // the field (which only mounts when the sidebar is open) subscribe + focus.
-export const SESSION_SEARCH_FOCUS_EVENT = 'hermes:focus-session-search'
+export const SESSION_SEARCH_FOCUS_EVENT = 'lliam:focus-session-search'
 
 export function requestSessionSearchFocus() {
   setSidebarOpen(true)

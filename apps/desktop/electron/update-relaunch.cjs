@@ -186,14 +186,16 @@ function collectRelaunchArgs(argv) {
 }
 
 // Env keys whose values define the relaunched instance's context (which
-// backend/profile/root it talks to). Anything HERMES_DESKTOP_* is preserved
-// plus HERMES_HOME. We snapshot the values, not the live env, so the new
-// instance comes up pointed at the same place this one was.
+// backend/profile/root it talks to). Anything LLIAM_DESKTOP_* is preserved
+// plus LLIAM_HOME. The legacy HERMES_ names are preserved too during the
+// rename transition so a mid-transition subprocess still resolves them.
+// We snapshot the values, not the live env, so the new instance comes up
+// pointed at the same place this one was.
 // ELECTRON_DISABLE_SANDBOX is preserved for the same reason --no-sandbox is kept
 // in the replayed args: if a relaunch is only safe because the user opted out of
 // the SUID sandbox, the relaunched instance must inherit that opt-out too.
-const PRESERVED_ENV_KEYS = ['HERMES_HOME', 'ELECTRON_DISABLE_SANDBOX']
-const PRESERVED_ENV_PREFIXES = ['HERMES_DESKTOP_']
+const PRESERVED_ENV_KEYS = ['LLIAM_HOME', 'HERMES_HOME', 'ELECTRON_DISABLE_SANDBOX']
+const PRESERVED_ENV_PREFIXES = ['LLIAM_DESKTOP_', 'HERMES_DESKTOP_']
 
 function collectRelaunchEnv(env) {
   const out = {}
