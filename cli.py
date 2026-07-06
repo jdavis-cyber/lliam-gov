@@ -1949,8 +1949,9 @@ def _detect_light_mode() -> bool:
         return _LIGHT_MODE_CACHE
     result = False
     try:
-        # 1. Explicit env override
-        for var in ("HERMES_LIGHT", "HERMES_TUI_LIGHT"):
+        # 1. Explicit env override (LLIAM_ first, legacy HERMES_ fallback —
+        #    R.8b item 15 TUI env-contract rename).
+        for var in ("LLIAM_LIGHT", "LLIAM_TUI_LIGHT", "HERMES_LIGHT", "HERMES_TUI_LIGHT"):
             v = (os.environ.get(var) or "").strip().lower()
             if _TRUE_RE.match(v):
                 result = True

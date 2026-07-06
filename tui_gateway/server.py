@@ -12578,7 +12578,7 @@ def _(rid, params: dict) -> dict:
         # Runtime-only flag (CLI parity) — no _write_config_key, so the
         # next TUI launch starts with voice OFF instead of auto-REC from a
         # persisted stale toggle.
-        os.environ["HERMES_VOICE"] = "1" if enabled else "0"
+        os.environ["LLIAM_VOICE"] = "1" if enabled else "0"
 
         if not enabled:
             # Disabling the mode must tear the continuous loop down; the
@@ -12593,7 +12593,7 @@ def _(rid, params: dict) -> dict:
                 logger.warning("voice: stop_continuous failed during toggle off: %s", e)
 
             # Clear TTS so it can be toggled independently after voice is off.
-            os.environ["HERMES_VOICE_TTS"] = "0"
+            os.environ["LLIAM_VOICE_TTS"] = "0"
 
         return _ok(
             rid,
@@ -12609,7 +12609,7 @@ def _(rid, params: dict) -> dict:
             return _err(rid, 4014, "enable voice mode first: /voice on")
         new_value = not _voice_tts_enabled()
         # Runtime-only flag (CLI parity) — see voice.toggle on/off above.
-        os.environ["HERMES_VOICE_TTS"] = "1" if new_value else "0"
+        os.environ["LLIAM_VOICE_TTS"] = "1" if new_value else "0"
         # Include ``record_key`` on every branch so a /voice tts toggle
         # doesn't reset the TUI's cached shortcut to the default when a
         # user has a custom binding configured (Copilot review, round 2

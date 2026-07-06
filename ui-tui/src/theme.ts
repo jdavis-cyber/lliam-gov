@@ -1,3 +1,5 @@
+import { renv } from './lib/rebrandEnv.js'
+
 export interface ThemeColors {
   primary: string
   accent: string
@@ -415,7 +417,7 @@ export function detectLightMode(
   // precedence rule even though the production allow-list is empty.
   lightDefaultTermPrograms: ReadonlySet<string> = LIGHT_DEFAULT_TERM_PROGRAMS
 ): boolean {
-  const lightFlag = (env.HERMES_TUI_LIGHT ?? '').trim().toLowerCase()
+  const lightFlag = (renv('TUI_LIGHT', env) ?? '').trim().toLowerCase()
 
   if (TRUE_RE.test(lightFlag)) {
     return true
@@ -425,7 +427,7 @@ export function detectLightMode(
     return false
   }
 
-  const themeFlag = (env.HERMES_TUI_THEME ?? '').trim().toLowerCase()
+  const themeFlag = (renv('TUI_THEME', env) ?? '').trim().toLowerCase()
 
   if (themeFlag === 'light') {
     return true
@@ -435,7 +437,7 @@ export function detectLightMode(
     return false
   }
 
-  const bgHint = backgroundLuminance(env.HERMES_TUI_BACKGROUND ?? '')
+  const bgHint = backgroundLuminance(renv('TUI_BACKGROUND', env) ?? '')
 
   if (bgHint !== null) {
     return bgHint >= LUMA_LIGHT_THRESHOLD

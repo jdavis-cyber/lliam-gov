@@ -900,7 +900,7 @@ def test_launch_tui_exports_model_provider_and_toolsets(monkeypatch, main_mod):
     def fake_call(argv, cwd=None, env=None):
         nonlocal active_path_during_call
         captured.update({"argv": argv, "cwd": cwd, "env": env})
-        active_path_during_call = Path(env["HERMES_TUI_ACTIVE_SESSION_FILE"])
+        active_path_during_call = Path(env["LLIAM_TUI_ACTIVE_SESSION_FILE"])
         assert active_path_during_call.exists()
         return 1
 
@@ -914,10 +914,10 @@ def test_launch_tui_exports_model_provider_and_toolsets(monkeypatch, main_mod):
     env = captured["env"]
     assert env["LLIAM_MODEL"] == "nous/hermes-test"
     assert env["LLIAM_INFERENCE_MODEL"] == "nous/hermes-test"
-    assert env["HERMES_TUI_PROVIDER"] == "nous"
+    assert env["LLIAM_TUI_PROVIDER"] == "nous"
     assert env["LLIAM_INFERENCE_PROVIDER"] == "nous"
-    assert env["HERMES_TUI_TOOLSETS"] == "web,terminal"
-    active_path = Path(env["HERMES_TUI_ACTIVE_SESSION_FILE"])
+    assert env["LLIAM_TUI_TOOLSETS"] == "web,terminal"
+    active_path = Path(env["LLIAM_TUI_ACTIVE_SESSION_FILE"])
     assert active_path.name.startswith("hermes-tui-active-session-")
     assert active_path.suffix == ".json"
     assert active_path_during_call == active_path
@@ -1001,7 +1001,10 @@ def test_launch_tui_drops_stale_resume_env_without_resume_arg(monkeypatch, main_
     with pytest.raises(SystemExit):
         main_mod._launch_tui()
 
+    # Launcher pops BOTH the legacy and the new resume var (item-15 rename)
+    # so a stale value from either name can't leak into the TUI subprocess.
     assert "HERMES_TUI_RESUME" not in captured["env"]
+    assert "LLIAM_TUI_RESUME" not in captured["env"]
 
 
 def test_launch_tui_sets_resume_env_from_resume_arg(monkeypatch, main_mod):
@@ -1022,7 +1025,7 @@ def test_launch_tui_sets_resume_env_from_resume_arg(monkeypatch, main_mod):
     with pytest.raises(SystemExit):
         main_mod._launch_tui(resume_session_id="20260518_000000_goodid")
 
-    assert captured["env"]["HERMES_TUI_RESUME"] == "20260518_000000_goodid"
+    assert captured["env"]["LLIAM_TUI_RESUME"] == "20260518_000000_goodid"
 
 
 def test_make_tui_argv_dev_prebuilds_hermes_ink(monkeypatch, main_mod, tmp_path):

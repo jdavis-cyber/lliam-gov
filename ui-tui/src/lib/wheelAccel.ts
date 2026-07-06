@@ -16,6 +16,7 @@
 // Cursor) emit wheel events with different cadences, hence two paths.
 
 import { isXtermJs } from '@lliam-gov/ink'
+import { renv } from './rebrandEnv.js'
 
 // ── Native (ghostty, iTerm2, WezTerm, …) ───────────────────────────────
 const WHEEL_ACCEL_WINDOW_MS = 40
@@ -67,7 +68,7 @@ export function initWheelAccel(xtermJs = false, base = 1): WheelAccelState {
 /** HERMES_TUI_SCROLL_SPEED (or CLAUDE_CODE_SCROLL_SPEED for portability).
  *  Default 1, clamped (0, 20]. */
 export function readScrollSpeedBase(): number {
-  const n = parseFloat(process.env.HERMES_TUI_SCROLL_SPEED ?? process.env.CLAUDE_CODE_SCROLL_SPEED ?? '')
+  const n = parseFloat(renv('TUI_SCROLL_SPEED') ?? process.env.CLAUDE_CODE_SCROLL_SPEED ?? '')
 
   return Number.isFinite(n) && n > 0 ? Math.min(n, 20) : 1
 }

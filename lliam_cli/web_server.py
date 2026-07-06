@@ -11886,11 +11886,12 @@ def _resolve_chat_argv(
     # makes browser-side transcript scrolling feel broken. Keep the terminal
     # build unchanged for native CLI usage; only disable mouse tracking for
     # the dashboard PTY path.
-    # TUI-subprocess env is a cross-language contract read by the (still
-    # HERMES_-named) node TUI; deferred to R.8b, so keep the legacy names here.
-    env.setdefault("HERMES_TUI_DISABLE_MOUSE", "1")
-    env.setdefault("HERMES_TUI_INLINE", "1")
-    env["HERMES_TUI_DASHBOARD"] = "1"
+    # TUI-subprocess env is a cross-language contract (R.8b item 15): the node
+    # TUI reads these via renv() = LLIAM_ first, HERMES_ fallback, so emit the
+    # new LLIAM_ names here.
+    env.setdefault("LLIAM_TUI_DISABLE_MOUSE", "1")
+    env.setdefault("LLIAM_TUI_INLINE", "1")
+    env["LLIAM_TUI_DASHBOARD"] = "1"
 
     if profile_dir is not None:
         env["HERMES_HOME"] = str(profile_dir)
@@ -11899,13 +11900,13 @@ def _resolve_chat_argv(
         latest_resume, _latest_path = _session_latest_descendant(resume)
         if latest_resume:
             resume = latest_resume
-        env["HERMES_TUI_RESUME"] = resume
+        env["LLIAM_TUI_RESUME"] = resume
 
     if sidecar_url:
-        env["HERMES_TUI_SIDECAR_URL"] = sidecar_url
+        env["LLIAM_TUI_SIDECAR_URL"] = sidecar_url
 
     if active_session_file:
-        env["HERMES_TUI_ACTIVE_SESSION_FILE"] = active_session_file
+        env["LLIAM_TUI_ACTIVE_SESSION_FILE"] = active_session_file
 
     # Profile-scoped chats must NOT attach to the dashboard's in-memory
     # gateway — it runs under the dashboard's own profile. Without the
@@ -11913,7 +11914,7 @@ def _resolve_chat_argv(
     # inherits the profile HERMES_HOME set above.
     if profile_dir is None:
         if gateway_ws_url := _build_gateway_ws_url():
-            env["HERMES_TUI_GATEWAY_URL"] = gateway_ws_url
+            env["LLIAM_TUI_GATEWAY_URL"] = gateway_ws_url
 
     return list(argv), str(cwd) if cwd else None, env
 

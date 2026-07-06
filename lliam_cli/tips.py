@@ -376,8 +376,8 @@ TIPS = [
     'provider_routing.require_parameters: true only routes to providers that support every param in your request.',
 
     # --- TUI & Dashboard ---
-    'HERMES_TUI_RESUME=1 auto-re-attaches to the most recent TUI session on launch — handy after SSH drops.',
-    "HERMES_TUI_THEME=light|dark|<hex> forces the TUI theme on terminals that don't set COLORFGBG.",
+    'LLIAM_TUI_RESUME=1 auto-re-attaches to the most recent TUI session on launch — handy after SSH drops.',
+    "LLIAM_TUI_THEME=light|dark|<hex> forces the TUI theme on terminals that don't set COLORFGBG.",
     'Ctrl+G or Ctrl+X Ctrl+E in the TUI opens the input buffer in $EDITOR for long multi-line prompts.',
     'The TUI renders LaTeX inline — $E=mc^2$ becomes Unicode math instead of raw TeX.',
     'lliam-gov dashboard launches a local web UI at 127.0.0.1:9119 — zero data leaves localhost.',
