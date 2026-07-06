@@ -237,7 +237,7 @@ rm "$HOME/.hermes/hermes-agent/.hermes-bootstrap-complete"
 rm -rf "$HOME/.hermes/hermes-agent/venv"
 
 # Reset a stuck macOS microphone prompt
-tccutil reset Microphone com.nousresearch.hermes
+tccutil reset Microphone com.secondorderstrategy.lliam-gov
 ```
 
 ### "Build desktop app" stuck on Electron download

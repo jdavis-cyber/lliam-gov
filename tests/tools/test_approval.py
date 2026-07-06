@@ -1163,6 +1163,22 @@ class TestLaunchctlGatewayLifecycle:
         dangerous, _, _ = detect_dangerous_command(cmd)
         assert dangerous is True
 
+    def test_launchctl_stop_lliam_label_detected(self):
+        """The renamed service label must be gated exactly like the legacy one."""
+        cmd = "launchctl stop com.secondorderstrategy.lliam-gov.gateway"
+        dangerous, _, _ = detect_dangerous_command(cmd)
+        assert dangerous is True
+
+    def test_launchctl_bootout_lliam_label_detected(self):
+        cmd = "launchctl bootout gui/501/com.secondorderstrategy.lliam-gov.gateway"
+        dangerous, _, _ = detect_dangerous_command(cmd)
+        assert dangerous is True
+
+    def test_launchctl_unload_lliam_plist_detected(self):
+        cmd = "launchctl unload ~/Library/LaunchAgents/com.secondorderstrategy.lliam-gov.gateway.plist"
+        dangerous, _, _ = detect_dangerous_command(cmd)
+        assert dangerous is True
+
     def test_launchctl_print_unrelated_not_flagged(self):
         """Read-only inspection of an unrelated launchd label must stay safe."""
         cmd = "launchctl print system/com.apple.WindowServer"

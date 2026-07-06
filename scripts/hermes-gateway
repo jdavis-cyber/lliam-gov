@@ -54,7 +54,7 @@ def get_systemd_unit_path() -> Path:
 
 def get_launchd_plist_path() -> Path:
     """Get the path for the launchd plist file (macOS)."""
-    return Path.home() / "Library" / "LaunchAgents" / f"ai.hermes.gateway.plist"
+    return Path.home() / "Library" / "LaunchAgents" / f"com.secondorderstrategy.lliam-gov.gateway.plist"
 
 def get_python_path() -> str:
     """Get the path to the Python interpreter."""
@@ -180,7 +180,7 @@ def generate_launchd_plist() -> str:
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>ai.hermes.gateway</string>
+    <string>com.secondorderstrategy.lliam-gov.gateway</string>
     
     <key>ProgramArguments</key>
     <array>
@@ -237,8 +237,8 @@ def install_launchd():
     print(f"  tail -f ~/.hermes/logs/gateway.log")
     print(f"")
     print(f"To manage the service:")
-    print(f"  launchctl start ai.hermes.gateway")
-    print(f"  launchctl stop ai.hermes.gateway")
+    print(f"  launchctl start com.secondorderstrategy.lliam-gov.gateway")
+    print(f"  launchctl stop com.secondorderstrategy.lliam-gov.gateway")
 
 def uninstall_launchd():
     """Uninstall the launchd service (macOS)."""
@@ -256,16 +256,16 @@ def uninstall_launchd():
 
 def launchd_status():
     """Show launchd service status."""
-    subprocess.run(["launchctl", "list", "ai.hermes.gateway"])
+    subprocess.run(["launchctl", "list", "com.secondorderstrategy.lliam-gov.gateway"])
 
 def launchd_start():
     """Start the launchd service."""
-    subprocess.run(["launchctl", "start", "ai.hermes.gateway"], check=True)
+    subprocess.run(["launchctl", "start", "com.secondorderstrategy.lliam-gov.gateway"], check=True)
     print(f"✓ Service started")
 
 def launchd_stop():
     """Stop the launchd service."""
-    subprocess.run(["launchctl", "stop", "ai.hermes.gateway"], check=True)
+    subprocess.run(["launchctl", "stop", "com.secondorderstrategy.lliam-gov.gateway"], check=True)
     print(f"✓ Service stopped")
 
 def launchd_restart():

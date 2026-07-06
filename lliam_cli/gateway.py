@@ -2071,24 +2071,31 @@ def _find_legacy_hermes_units() -> list[tuple[str, Path, bool]]:
 
 
 def has_legacy_hermes_units() -> bool:
-    """Return True when any legacy Hermes gateway unit files exist."""
-    return bool(_find_legacy_hermes_units())
+    """Return True when any legacy Hermes gateway unit/job files exist.
+
+    Covers both legacy systemd units (Linux) and legacy launchd jobs
+    (macOS, ``ai.hermes.gateway*`` from pre-rename installs).
+    """
+    return bool(_find_legacy_hermes_units()) or has_legacy_launchd_jobs()
 
 
 def print_legacy_unit_warning() -> None:
-    """Warn about legacy Hermes gateway unit files if any are installed.
+    """Warn about legacy Hermes gateway units/jobs if any are installed.
 
-    Idempotent: prints nothing when no legacy units are detected. Safe to
-    call from any status/install/setup path.
+    Idempotent: prints nothing when no legacy units/jobs are detected. Safe
+    to call from any status/install/setup path.
     """
     legacy = _find_legacy_hermes_units()
-    if not legacy:
+    legacy_launchd = _find_legacy_launchd_jobs()
+    if not legacy and not legacy_launchd:
         return
-    print_warning("Legacy Hermes gateway unit(s) detected from an older install:")
+    print_warning("Legacy Hermes gateway service(s) detected from an older install:")
     for name, path, is_system in legacy:
         scope = "system" if is_system else "user"
         print_info(f"    {path}  ({scope} scope)")
-    print_info("  These run alongside the current hermes-gateway service and")
+    for label, path in legacy_launchd:
+        print_info(f"    {path}  (label: {label})")
+    print_info("  These run alongside the current gateway service and")
     print_info("  cause SIGTERM flap loops — both try to use the same bot token.")
     print_info("  Remove them with:")
     print_info("    lliam-gov gateway migrate-legacy")
@@ -2422,11 +2429,16 @@ def _launchd_user_home() -> Path:
 def get_launchd_plist_path() -> Path:
     """Return the launchd plist path, scoped per profile.
 
-    Default ``~/.hermes`` → ``ai.hermes.gateway.plist`` (backward compatible).
-    Profile ``~/.hermes/profiles/coder`` → ``ai.hermes.gateway-coder.plist``.
+    Default ``~/.hermes`` → ``com.secondorderstrategy.lliam-gov.gateway.plist``.
+    Profile ``~/.hermes/profiles/coder`` →
+    ``com.secondorderstrategy.lliam-gov.gateway-coder.plist``.
+
+    Pre-rename installs used ``ai.hermes.gateway(-<suffix>).plist`` — see
+    ``_LEGACY_LAUNCHD_LABEL_BASE`` / ``_find_legacy_launchd_jobs`` for detection
+    and cleanup of those.
     """
     suffix = _profile_suffix()
-    name = f"ai.hermes.gateway-{suffix}" if suffix else "ai.hermes.gateway"
+    name = f"{_LAUNCHD_LABEL_BASE}-{suffix}" if suffix else _LAUNCHD_LABEL_BASE
     return _launchd_user_home() / "Library" / "LaunchAgents" / f"{name}.plist"
 
 
@@ -3430,10 +3442,131 @@ def systemd_status(deep: bool = False, system: bool = False, full: bool = False)
 # =============================================================================
 
 
+# Base launchd label, aligned with the electron-builder appId
+# (com.secondorderstrategy.lliam-gov) so the gateway service and the desktop
+# app share one bundle-identity namespace. Pre-rename installs used
+# ``ai.hermes.gateway`` — kept discoverable via ``_LEGACY_LAUNCHD_LABEL_BASE``
+# so an existing service can still be found for stop/uninstall.
+_LAUNCHD_LABEL_BASE = "com.secondorderstrategy.lliam-gov.gateway"
+
+
 def get_launchd_label() -> str:
     """Return the launchd service label, scoped per profile."""
     suffix = _profile_suffix()
-    return f"ai.hermes.gateway-{suffix}" if suffix else "ai.hermes.gateway"
+    return f"{_LAUNCHD_LABEL_BASE}-{suffix}" if suffix else _LAUNCHD_LABEL_BASE
+
+
+# Legacy launchd label from pre-rename installs, before the label moved to
+# the electron-builder appId namespace. Kept as an explicit allowlist (NOT a
+# glob) so profile jobs (``ai.hermes.gateway-<suffix>``) and unrelated
+# third-party ``ai.*``/``hermes*`` jobs are never matched by prefix alone —
+# each candidate is only flagged when its plist also names our gateway
+# entrypoint. Mirrors ``_LEGACY_SERVICE_NAMES`` on the systemd side.
+_LEGACY_LAUNCHD_LABEL_BASE = "ai.hermes.gateway"
+
+
+def _legacy_launchd_label(suffix: str = "") -> str:
+    return f"{_LEGACY_LAUNCHD_LABEL_BASE}-{suffix}" if suffix else _LEGACY_LAUNCHD_LABEL_BASE
+
+
+def _legacy_launchd_plist_path(suffix: str = "") -> Path:
+    name = _legacy_launchd_label(suffix)
+    return _launchd_user_home() / "Library" / "LaunchAgents" / f"{name}.plist"
+
+
+def _find_legacy_launchd_jobs() -> list[tuple[str, Path]]:
+    """Return ``[(label, plist_path), ...]`` for legacy ``ai.hermes.gateway*`` jobs.
+
+    Detects launchd plists installed by pre-rename Hermes versions, scoped
+    to the current profile suffix (the same suffix ``get_launchd_label()``
+    uses) plus the bare default-profile label. A candidate is only flagged
+    when its plist content names our gateway entrypoint, so an unrelated
+    third-party ``ai.hermes.*`` job is left untouched.
+
+    Results are returned purely for caller inspection; this function never
+    mutates or removes anything.
+    """
+    if not is_macos():
+        return []
+
+    results: list[tuple[str, Path]] = []
+    suffix = _profile_suffix()
+    for label, path in {
+        (_legacy_launchd_label(suffix), _legacy_launchd_plist_path(suffix)),
+        (_legacy_launchd_label(""), _legacy_launchd_plist_path("")),
+    }:
+        try:
+            if not path.exists():
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except (OSError, PermissionError):
+            continue
+        if not any(marker in text for marker in _LEGACY_UNIT_EXECSTART_MARKERS):
+            continue
+        results.append((label, path))
+    return results
+
+
+def has_legacy_launchd_jobs() -> bool:
+    """Return True when any legacy ``ai.hermes.gateway*`` launchd plist exists."""
+    return bool(_find_legacy_launchd_jobs())
+
+
+def remove_legacy_launchd_jobs(
+    interactive: bool = True,
+    dry_run: bool = False,
+) -> tuple[int, list[Path]]:
+    """Bootout and remove legacy ``ai.hermes.gateway*`` launchd jobs.
+
+    Mirrors ``remove_legacy_hermes_units`` (systemd) for macOS: stops the
+    job under whichever launchd domain has it loaded, then deletes the
+    plist. Returns ``(removed_count, remaining_paths)``.
+    """
+    legacy = _find_legacy_launchd_jobs()
+    if not legacy:
+        print("No legacy launchd gateway jobs found.")
+        return 0, []
+
+    print()
+    print("Legacy launchd gateway job(s) found:")
+    for label, path in legacy:
+        print(f"  {path}  (label: {label})")
+    print()
+
+    if dry_run:
+        print("(dry-run — nothing removed)")
+        return 0, [p for _, p in legacy]
+
+    if interactive and not prompt_yes_no("Remove these legacy launchd jobs?", True):
+        print("Skipped. Run again with: lliam-gov gateway migrate-legacy")
+        return 0, [p for _, p in legacy]
+
+    removed = 0
+    remaining: list[Path] = []
+    domain = _launchd_domain()
+    for label, path in legacy:
+        try:
+            subprocess.run(
+                ["launchctl", "bootout", f"{domain}/{label}"],
+                check=False,
+                timeout=90,
+            )
+            path.unlink(missing_ok=True)
+            print(f"  ✓ Removed {path}")
+            removed += 1
+        except (OSError, subprocess.TimeoutExpired) as e:
+            print(f"  ⚠ Could not remove {path}: {e}")
+            remaining.append(path)
+
+    print()
+    if remaining:
+        print_warning(
+            f"{len(remaining)} legacy launchd job(s) still present — see messages above."
+        )
+    else:
+        print_success(f"Removed {removed} legacy launchd job(s).")
+
+    return removed, remaining
 
 
 # Cached launchd domain result — probing is cheap but should only run once per
@@ -6837,12 +6970,16 @@ def _gateway_command_inner(args):
         _gateway_list()
 
     elif subcmd == "migrate-legacy":
-        # Stop, disable, and remove legacy Hermes gateway unit files from
-        # pre-rename installs (e.g. hermes.service). Profile units and
-        # unrelated third-party services are never touched.
+        # Stop, disable, and remove legacy Hermes gateway units/jobs from
+        # pre-rename installs (e.g. hermes.service on Linux, ai.hermes.gateway
+        # on macOS). Profile units/jobs and unrelated third-party services
+        # are never touched.
         dry_run = getattr(args, "dry_run", False)
         yes = getattr(args, "yes", False)
         if not supports_systemd_services() and not is_macos():
-            print("Legacy unit migration only applies to systemd-based Linux hosts.")
+            print("Legacy unit migration only applies to systemd-based Linux or macOS hosts.")
             return
-        remove_legacy_hermes_units(interactive=not yes, dry_run=dry_run)
+        if supports_systemd_services():
+            remove_legacy_hermes_units(interactive=not yes, dry_run=dry_run)
+        if is_macos():
+            remove_legacy_launchd_jobs(interactive=not yes, dry_run=dry_run)
