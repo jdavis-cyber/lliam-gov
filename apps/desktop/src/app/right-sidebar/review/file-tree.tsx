@@ -311,7 +311,7 @@ function ReviewFileRow({ node, depth }: { node: ReviewTreeNode; depth: number })
         onDragStart={event => {
           event.dataTransfer.effectAllowed = 'copy'
           event.dataTransfer.setData(
-            'application/x-hermes-paths',
+            'application/x-lliam-gov-paths',
             JSON.stringify([{ isDirectory: false, path: dragPath }])
           )
           event.dataTransfer.setData('text/plain', dragPath)

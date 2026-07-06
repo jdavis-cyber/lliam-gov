@@ -1,4 +1,4 @@
-"""``lliam-gov debug`` debug tools for Hermes Agent.
+"""``lliam-gov debug`` debug tools for Lliam-GOV.
 
 Currently supports:
     lliam-gov debug share    Upload debug report (system info + logs) to a

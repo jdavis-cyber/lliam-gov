@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
-import { getHermesConfigRecord, type LliamConfigRecord, saveHermesConfig } from '@/lliam'
+import { getLliamConfigRecord, type LliamConfigRecord, saveLliamConfig } from '@/lliam'
 
 import { TRANSLATIONS } from './catalog'
 import { DEFAULT_LOCALE, localeConfigValue, normalizeLocale } from './languages'
@@ -20,14 +20,14 @@ const defaultConfigClient: I18nConfigClient = {
       return Promise.resolve({})
     }
 
-    return getHermesConfigRecord()
+    return getLliamConfigRecord()
   },
   saveConfig: config => {
     if (typeof window === 'undefined' || !window.lliamDesktop?.api) {
       return Promise.resolve({ ok: true })
     }
 
-    return saveHermesConfig(config)
+    return saveLliamConfig(config)
   }
 }
 

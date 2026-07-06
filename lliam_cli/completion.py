@@ -97,7 +97,7 @@ def generate_bash(parser: argparse.ArgumentParser) -> str:
 
     cases_str = "\n".join(cases)
 
-    return f"""# Hermes Agent bash completion
+    return f"""# Lliam-GOV bash completion
 # Add to ~/.bashrc:
 #   eval "$(lliam-gov completion bash)"
 
@@ -200,7 +200,7 @@ def generate_zsh(parser: argparse.ArgumentParser) -> str:
     sub_cases_str = "\n".join(sub_cases)
 
     return f"""#compdef lliam-gov lliam
-# Hermes Agent zsh completion
+# Lliam-GOV zsh completion
 # Add to ~/.zshrc:
 #   eval "$(lliam-gov completion zsh)"
 
@@ -254,7 +254,7 @@ def generate_fish(parser: argparse.ArgumentParser) -> str:
     top_cmds_str = " ".join(top_cmds)
 
     lines: list[str] = [
-        "# Hermes Agent fish completion",
+        "# Lliam-GOV fish completion",
         "# Add to your config:",
         "#   lliam-gov completion fish | source",
         "",

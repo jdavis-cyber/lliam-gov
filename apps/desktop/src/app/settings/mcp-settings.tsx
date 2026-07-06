@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { getHermesConfigRecord, type LliamGateway, saveHermesConfig } from '@/lliam'
+import { getLliamConfigRecord, type LliamGateway, saveLliamConfig } from '@/lliam'
 import { useI18n } from '@/i18n'
 import { Wrench } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -57,7 +57,7 @@ export function McpSettings({ gateway, onConfigSaved }: McpSettingsProps) {
   useEffect(() => {
     let cancelled = false
 
-    getHermesConfigRecord()
+    getLliamConfigRecord()
       .then(next => {
         if (cancelled) {
           return
@@ -132,7 +132,7 @@ export function McpSettings({ gateway, onConfigSaved }: McpSettingsProps) {
       nextServers[nextName] = parsed
 
       const nextConfig = { ...config, mcp_servers: nextServers }
-      await saveHermesConfig(nextConfig)
+      await saveLliamConfig(nextConfig)
       setConfig(nextConfig)
       setSelected(nextName)
       onConfigSaved?.()
@@ -152,7 +152,7 @@ export function McpSettings({ gateway, onConfigSaved }: McpSettingsProps) {
       delete nextServers[serverName]
 
       const nextConfig = { ...config, mcp_servers: nextServers }
-      await saveHermesConfig(nextConfig)
+      await saveLliamConfig(nextConfig)
       setConfig(nextConfig)
       setSelected(Object.keys(nextServers).sort()[0] ?? null)
       onConfigSaved?.()

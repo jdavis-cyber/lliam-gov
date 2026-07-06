@@ -46,15 +46,15 @@ export default function Success() {
           }
         >
           <span>
-            <span>Hermes is ready</span>
+            <span>Lliam-GOV is ready</span>
           </span>
-          <span aria-hidden="true">Hermes is ready</span>
+          <span aria-hidden="true">Lliam-GOV is ready</span>
         </p>
 
         <p className="m-0 text-center text-base leading-normal tracking-tight text-muted-foreground">
           You can launch from here, or any time from your terminal with{' '}
           <code className="rounded bg-muted/60 px-1 py-0.5 font-mono text-sm">
-            hermes desktop
+            lliam-gov desktop
           </code>
           .
         </p>
@@ -67,7 +67,7 @@ export default function Success() {
         className="inline-flex items-center gap-2 px-6"
       >
         <Rocket size={18} />
-        {launching ? 'Launching…' : 'Launch Hermes'}
+        {launching ? 'Launching…' : 'Launch Lliam-GOV'}
       </Button>
 
       {error && (

@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  checkHermesUpdate,
+  checkLliamUpdate,
   getActionStatus,
   getStatus,
   restartGateway,
   setApiRequestProfile,
-  updateHermes
+  updateLliam
 } from './lliam'
 
 // Contract: every backend-targeted action helper must carry the active gateway
@@ -38,8 +38,8 @@ describe('backend action helpers are profile-scoped', () => {
 
     void getStatus()
     void restartGateway()
-    void updateHermes()
-    void checkHermesUpdate()
+    void updateLliam()
+    void checkLliamUpdate()
     void getActionStatus('gateway-restart')
 
     for (const call of api.mock.calls) {

@@ -207,7 +207,7 @@ class TestOpenclawResidueHint:
     def test_hint_mentions_migrate_command(self):
         # `migrate` is the non-destructive path — should lead the banner.
         msg = openclaw_residue_hint_cli()
-        assert "hermes claw migrate" in msg
+        assert "lliam-gov claw migrate" in msg
         assert "~/.openclaw" in msg
 
     def test_hint_mentions_cleanup_command(self):

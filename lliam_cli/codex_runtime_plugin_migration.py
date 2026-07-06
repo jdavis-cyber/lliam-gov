@@ -697,9 +697,9 @@ def migrate(
     # The server itself is agent/transports/lliam_tools_mcp_server.py
     # and is launched on demand by codex (stdio MCP).
     if expose_hermes_tools:
-        translated["hermes-tools"] = _build_hermes_tools_mcp_entry()
-        if "hermes-tools" not in report.migrated:
-            report.migrated.append("hermes-tools")
+        translated["lliam-tools"] = _build_hermes_tools_mcp_entry()
+        if "lliam-tools" not in report.migrated:
+            report.migrated.append("lliam-tools")
 
     # Build the new managed block
     managed_block = render_codex_toml_section(

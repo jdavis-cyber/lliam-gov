@@ -1,6 +1,6 @@
 import { type MutableRefObject, useCallback, useState } from 'react'
 
-import { getHermesConfig, getHermesConfigDefaults } from '@/lliam'
+import { getLliamConfig, getLliamConfigDefaults } from '@/lliam'
 import { BUILTIN_PERSONALITIES, normalizePersonalityValue, personalityNamesFromConfig } from '@/lib/chat-runtime'
 import {
   $currentCwd,
@@ -25,13 +25,13 @@ interface LliamConfigOptions {
   refreshProjectBranch: (cwd: string) => Promise<void>
 }
 
-export function useHermesConfig({ activeSessionIdRef, refreshProjectBranch }: LliamConfigOptions) {
+export function useLliamConfig({ activeSessionIdRef, refreshProjectBranch }: LliamConfigOptions) {
   const [voiceMaxRecordingSeconds, setVoiceMaxRecordingSeconds] = useState(DEFAULT_VOICE_SECONDS)
   const [sttEnabled, setSttEnabled] = useState(true)
 
-  const refreshHermesConfig = useCallback(async () => {
+  const refreshLliamConfig = useCallback(async () => {
     try {
-      const [config, defaults] = await Promise.all([getHermesConfig(), getHermesConfigDefaults().catch(() => ({}))])
+      const [config, defaults] = await Promise.all([getLliamConfig(), getLliamConfigDefaults().catch(() => ({}))])
 
       const personality = normalizePersonalityValue(
         typeof config.display?.personality === 'string' ? config.display.personality : ''
@@ -70,5 +70,5 @@ export function useHermesConfig({ activeSessionIdRef, refreshProjectBranch }: Ll
     }
   }, [activeSessionIdRef, refreshProjectBranch])
 
-  return { refreshHermesConfig, sttEnabled, voiceMaxRecordingSeconds }
+  return { refreshLliamConfig, sttEnabled, voiceMaxRecordingSeconds }
 }

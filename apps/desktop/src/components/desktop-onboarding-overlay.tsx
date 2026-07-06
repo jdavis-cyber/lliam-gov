@@ -398,7 +398,7 @@ function Header() {
 }
 
 export const FEATURED_ID = 'nous'
-const SHOW_ALL_KEY = 'hermes-onboarding-show-all-v1'
+const SHOW_ALL_KEY = 'lliam-gov-onboarding-show-all-v1'
 
 const readShowAll = () => {
   try {

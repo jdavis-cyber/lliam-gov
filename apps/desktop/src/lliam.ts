@@ -319,35 +319,35 @@ export function getLogs(params: {
   })
 }
 
-export function getHermesConfig(): Promise<LliamConfig> {
+export function getLliamConfig(): Promise<LliamConfig> {
   return window.lliamDesktop.api<LliamConfig>({
     ...profileScoped(),
     path: '/api/config'
   })
 }
 
-export function getHermesConfigRecord(): Promise<LliamConfigRecord> {
+export function getLliamConfigRecord(): Promise<LliamConfigRecord> {
   return window.lliamDesktop.api<LliamConfigRecord>({
     ...profileScoped(),
     path: '/api/config'
   })
 }
 
-export function getHermesConfigDefaults(): Promise<LliamConfigRecord> {
+export function getLliamConfigDefaults(): Promise<LliamConfigRecord> {
   return window.lliamDesktop.api<LliamConfigRecord>({
     ...profileScoped(),
     path: '/api/config/defaults'
   })
 }
 
-export function getHermesConfigSchema(): Promise<ConfigSchemaResponse> {
+export function getLliamConfigSchema(): Promise<ConfigSchemaResponse> {
   return window.lliamDesktop.api<ConfigSchemaResponse>({
     ...profileScoped(),
     path: '/api/config/schema'
   })
 }
 
-export function saveHermesConfig(config: LliamConfigRecord): Promise<{ ok: boolean }> {
+export function saveLliamConfig(config: LliamConfigRecord): Promise<{ ok: boolean }> {
   return window.lliamDesktop.api<{ ok: boolean }>({
     ...profileScoped(),
     path: '/api/config',
@@ -784,7 +784,7 @@ export function restartGateway(): Promise<ActionResponse> {
   })
 }
 
-export function updateHermes(): Promise<ActionResponse> {
+export function updateLliam(): Promise<ActionResponse> {
   return window.lliamDesktop.api<ActionResponse>({
     ...profileScoped(),
     path: '/api/hermes/update',
@@ -795,7 +795,7 @@ export function updateHermes(): Promise<ActionResponse> {
 /** Query the connected backend's own update state. In remote mode this is the
  *  authoritative source for the backend's behind-count + "what's changed",
  *  distinct from the Electron client clone's git state. */
-export function checkHermesUpdate(force = false): Promise<BackendUpdateCheckResponse> {
+export function checkLliamUpdate(force = false): Promise<BackendUpdateCheckResponse> {
   return window.lliamDesktop.api<BackendUpdateCheckResponse>({
     ...profileScoped(),
     path: `/api/hermes/update/check${force ? '?force=true' : ''}`

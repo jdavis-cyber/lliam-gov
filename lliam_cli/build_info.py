@@ -1,5 +1,5 @@
 """
-Baked-in build metadata for Hermes Agent.
+Baked-in build metadata for Lliam-GOV.
 
 Source installs report their git revision live via ``git rev-parse`` (see
 ``lliam_cli/dump.py`` and ``lliam_cli/banner.py``).  That doesn't work inside

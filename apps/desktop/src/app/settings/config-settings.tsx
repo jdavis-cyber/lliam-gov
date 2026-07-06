@@ -8,10 +8,10 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
   getElevenLabsVoices,
-  getHermesConfigDefaults,
-  getHermesConfigRecord,
-  getHermesConfigSchema,
-  saveHermesConfig
+  getLliamConfigDefaults,
+  getLliamConfigRecord,
+  getLliamConfigSchema,
+  saveLliamConfig
 } from '@/lliam'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -235,7 +235,7 @@ export function ConfigSettings({
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([getHermesConfigRecord(), getHermesConfigDefaults(), getHermesConfigSchema()])
+    Promise.all([getLliamConfigRecord(), getLliamConfigDefaults(), getLliamConfigSchema()])
       .then(([c, d, s]) => {
         if (cancelled) {
           return
@@ -283,7 +283,7 @@ export function ConfigSettings({
     const t = window.setTimeout(() => {
       void (async () => {
         try {
-          await saveHermesConfig(config)
+          await saveLliamConfig(config)
 
           if (saveVersionRef.current === v) {
             onConfigSaved?.()

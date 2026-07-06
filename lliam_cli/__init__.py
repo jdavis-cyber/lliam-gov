@@ -1,5 +1,5 @@
 """
-Hermes CLI - Unified command-line interface for Hermes Agent.
+Hermes CLI - Unified command-line interface for Lliam-GOV.
 
 Provides subcommands for:
 - lliam-gov chat          - Interactive chat (same as ./hermes)

@@ -39,11 +39,10 @@ class LliamGovAgent < Formula
   end
 
   test do
-    # NOTE: the version banner string ("Hermes Agent v…") is renamed in a later
-    # rename task (visible-strings sweep), not in this file/dir-rename task; keep
-    # this assertion matching the CLI's current runtime output so `brew test`
-    # stays green until that sweep lands.
-    assert_match "Hermes Agent v#{version}", shell_output("#{bin}/lliam-gov version")
+    # Matches the CLI's runtime version banner (lliam_cli/banner.py
+    # format_banner_version_label / main.py fast path). Keep in sync if the
+    # banner product-name prefix changes.
+    assert_match "Lliam-GOV v#{version}", shell_output("#{bin}/lliam-gov version")
 
     managed = shell_output("#{bin}/lliam-gov update 2>&1")
     assert_match "managed by Homebrew", managed

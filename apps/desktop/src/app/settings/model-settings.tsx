@@ -8,10 +8,10 @@ import {
   getAuxiliaryModels,
   getGlobalModelInfo,
   getGlobalModelOptions,
-  getHermesConfigRecord,
+  getLliamConfigRecord,
   getMoaModels,
   getRecommendedDefaultModel,
-  saveHermesConfig,
+  saveLliamConfig,
   saveMoaModels,
   setEnvVar,
   setModelAssignment
@@ -160,7 +160,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
         getGlobalModelOptions(),
         getAuxiliaryModels(),
         getMoaModels().catch(() => null),
-        getHermesConfigRecord()
+        getLliamConfigRecord()
       ])
 
       setMainModel({ model: modelInfo.model, provider: modelInfo.provider })
@@ -327,7 +327,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
       setConfig(next)
 
       try {
-        await saveHermesConfig(next)
+        await saveLliamConfig(next)
       } catch (err) {
         setConfig(prev)
         notifyError(err, m.defaultsFailed)
