@@ -7,6 +7,44 @@ correctly and the operator's real ~/.hermes is never touched during isolated run
 
 Never invoked at import time — only from an explicit startup call site (see
 ``lliam_cli/main.py:main``). Importing this module must not touch the filesystem.
+
+Credential-store survey (Task R.6, hermes -> lliam rename)
+----------------------------------------------------------
+No Lliam-owned OS-keychain service name exists, so there is nothing to rename
+and no credential migration to add beyond this home-directory copy. Every
+credential path was mapped; all are either file-based under the data home (which
+this module already migrates) or owned by an external provider whose identity we
+must not rewrite:
+
+  * Lliam's own secrets are file-based under the data home. The ``lliam secrets``
+    / Bitwarden Secrets Manager config lives in ``<home>/config.yaml`` under the
+    ``secrets:`` key (``lliam_cli/env_loader.py:359`` ``_load_secrets_config``);
+    the actual secrets live in Bitwarden's cloud, fetched via a token env var.
+    API keys resolve from env / dotenv under the home (``lliam_cli/auth.py``,
+    ``lliam_cli/env_loader.py``). All of this is inside the migrated home tree —
+    no keychain service name is involved.
+  * The macOS Keychain is touched only to READ (and clear) *Claude Code's*
+    credentials under Anthropic's service name ``"Claude Code-credentials"``
+    (``agent/anthropic_adapter.py:889``, ``lliam_cli/web_server.py:6245``). That
+    is a third-party integration identity, not a Lliam identity — renaming it
+    would break the integration. Out of scope, intentionally unchanged.
+  * There is NO Python ``keyring``/``keytar`` usage and NO Lliam-owned
+    ``add-generic-password`` write anywhere in the tree.
+
+Electron ``safeStorage`` caveat (honest impact statement): the desktop shell
+encrypts exactly one secret — the remote-gateway auth token stored in
+``connection.json`` (``apps/desktop/electron/main.cjs`` ``encryptDesktopSecret``
+/ ``decryptDesktopSecret``). On macOS, ``safeStorage`` keys its AES key to a
+Keychain entry named ``"<productName> Safe Storage"``. Because R.2 changed
+``productName`` from ``"Hermes"`` to ``"Lliam-GOV"``, any token encrypted by a
+pre-rename build under ``"Hermes Safe Storage"`` is undecryptable by the renamed
+build. This is accepted data loss for a pre-release demo app: ``decryptDesktopSecret``
+returns ``""`` on failure (never crashes), the connection simply falls back to
+prompting for the token or reading ``LLIAM_DESKTOP_REMOTE_TOKEN`` from the
+environment, and the affected value is a re-enterable gateway token, not
+irreplaceable user data. No migration is attempted because safeStorage exposes
+no cross-key re-encryption path and the only user of the desktop build is a
+fresh install.
 """
 
 import shutil
