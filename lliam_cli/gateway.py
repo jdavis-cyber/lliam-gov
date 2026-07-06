@@ -2071,30 +2071,28 @@ def _find_legacy_hermes_units() -> list[tuple[str, Path, bool]]:
 
 
 def has_legacy_hermes_units() -> bool:
-    """Return True when any legacy Hermes gateway unit/job files exist.
+    """Return True when any legacy Hermes gateway systemd unit files exist.
 
-    Covers both legacy systemd units (Linux) and legacy launchd jobs
-    (macOS, ``ai.hermes.gateway*`` from pre-rename installs).
+    systemd (Linux) only — every caller is a systemd flow (install/start/
+    setup). The macOS launchd counterpart is ``has_legacy_launchd_jobs``,
+    surfaced through ``gateway migrate-legacy``.
     """
-    return bool(_find_legacy_hermes_units()) or has_legacy_launchd_jobs()
+    return bool(_find_legacy_hermes_units())
 
 
 def print_legacy_unit_warning() -> None:
-    """Warn about legacy Hermes gateway units/jobs if any are installed.
+    """Warn about legacy Hermes gateway unit files if any are installed.
 
-    Idempotent: prints nothing when no legacy units/jobs are detected. Safe
-    to call from any status/install/setup path.
+    Idempotent: prints nothing when no legacy units are detected. Safe to
+    call from any status/install/setup path.
     """
     legacy = _find_legacy_hermes_units()
-    legacy_launchd = _find_legacy_launchd_jobs()
-    if not legacy and not legacy_launchd:
+    if not legacy:
         return
-    print_warning("Legacy Hermes gateway service(s) detected from an older install:")
+    print_warning("Legacy Hermes gateway unit(s) detected from an older install:")
     for name, path, is_system in legacy:
         scope = "system" if is_system else "user"
         print_info(f"    {path}  ({scope} scope)")
-    for label, path in legacy_launchd:
-        print_info(f"    {path}  (label: {label})")
     print_info("  These run alongside the current gateway service and")
     print_info("  cause SIGTERM flap loops — both try to use the same bot token.")
     print_info("  Remove them with:")
@@ -3474,14 +3472,35 @@ def _legacy_launchd_plist_path(suffix: str = "") -> Path:
     return _launchd_user_home() / "Library" / "LaunchAgents" / f"{name}.plist"
 
 
+# Plist content markers that identify a launchd job as running our gateway.
+# Unlike systemd's single-line ``ExecStart=... gateway run`` (see
+# ``_LEGACY_UNIT_EXECSTART_MARKERS``), launchd plists carry each
+# ProgramArguments token as its OWN ``<string>`` element, so space-joined
+# command markers never match. Match the entrypoint tokens that appear
+# verbatim in every generation of our plist instead:
+#   - ``hermes_cli.main``      — upstream / pre-module-rename installs
+#   - ``lliam_cli.main``       — post-R.3 installs that still used the
+#                                ``ai.hermes.gateway`` label (pre-R.7)
+#   - ``scripts/hermes-gateway`` — the standalone installer script's
+#                                ProgramArguments path
+#   - ``gateway/run.py``       — oldest direct-run form
+_LEGACY_LAUNCHD_CONTENT_MARKERS: tuple[str, ...] = (
+    "hermes_cli.main",
+    "lliam_cli.main",
+    "scripts/hermes-gateway",
+    "gateway/run.py",
+)
+
+
 def _find_legacy_launchd_jobs() -> list[tuple[str, Path]]:
     """Return ``[(label, plist_path), ...]`` for legacy ``ai.hermes.gateway*`` jobs.
 
     Detects launchd plists installed by pre-rename Hermes versions, scoped
     to the current profile suffix (the same suffix ``get_launchd_label()``
     uses) plus the bare default-profile label. A candidate is only flagged
-    when its plist content names our gateway entrypoint, so an unrelated
-    third-party ``ai.hermes.*`` job is left untouched.
+    when its plist content names our gateway entrypoint
+    (``_LEGACY_LAUNCHD_CONTENT_MARKERS``), so an unrelated third-party
+    ``ai.hermes.*`` job is left untouched.
 
     Results are returned purely for caller inspection; this function never
     mutates or removes anything.
@@ -3489,19 +3508,21 @@ def _find_legacy_launchd_jobs() -> list[tuple[str, Path]]:
     if not is_macos():
         return []
 
-    results: list[tuple[str, Path]] = []
     suffix = _profile_suffix()
-    for label, path in {
-        (_legacy_launchd_label(suffix), _legacy_launchd_plist_path(suffix)),
-        (_legacy_launchd_label(""), _legacy_launchd_plist_path("")),
-    }:
+    candidates = [(_legacy_launchd_label(suffix), _legacy_launchd_plist_path(suffix))]
+    default_candidate = (_legacy_launchd_label(""), _legacy_launchd_plist_path(""))
+    if default_candidate not in candidates:
+        candidates.append(default_candidate)
+
+    results: list[tuple[str, Path]] = []
+    for label, path in candidates:
         try:
             if not path.exists():
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
         except (OSError, PermissionError):
             continue
-        if not any(marker in text for marker in _LEGACY_UNIT_EXECSTART_MARKERS):
+        if not any(marker in text for marker in _LEGACY_LAUNCHD_CONTENT_MARKERS):
             continue
         results.append((label, path))
     return results
