@@ -1,9 +1,9 @@
-# nix/hermes-agent.nix — Overridable Hermes Agent package
+# nix/lliam-gov-agent.nix — Overridable Lliam-GOV Agent package
 #
 # callPackage auto-wires nixpkgs args; flake inputs are passed explicitly.
 # Users override via:
-#   pkgs.hermes-agent.override { extraPythonPackages = [...]; }
-#   pkgs.hermes-agent.override { extraDependencyGroups = [ "hindsight" ]; }
+#   pkgs.lliam-gov-agent.override { extraPythonPackages = [...]; }
+#   pkgs.lliam-gov-agent.override { extraDependencyGroups = [ "hindsight" ]; }
 {
   lib,
   stdenv,
@@ -151,7 +151,7 @@ let
   '';
 in
 stdenv.mkDerivation (finalAttrs: {
-  pname = "hermes-agent";
+  pname = "lliam-gov-agent";
   version = (fromTOML (builtins.readFile ../pyproject.toml)).project.version;
 
   dontUnpack = true;
@@ -161,11 +161,11 @@ stdenv.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    mkdir -p $out/share/hermes-agent $out/bin
-    cp -r ${bundledSkills} $out/share/hermes-agent/skills
-    cp -r ${bundledPlugins} $out/share/hermes-agent/plugins
-    cp -r ${bundledLocales} $out/share/hermes-agent/locales
-    cp -r ${hermesWeb} $out/share/hermes-agent/web_dist
+    mkdir -p $out/share/lliam-gov-agent $out/bin
+    cp -r ${bundledSkills} $out/share/lliam-gov-agent/skills
+    cp -r ${bundledPlugins} $out/share/lliam-gov-agent/plugins
+    cp -r ${bundledLocales} $out/share/lliam-gov-agent/locales
+    cp -r ${hermesWeb} $out/share/lliam-gov-agent/web_dist
 
     mkdir -p $out/ui-tui
     cp -r ${hermesTui}/lib/hermes-tui/* $out/ui-tui/
@@ -174,10 +174,10 @@ stdenv.mkDerivation (finalAttrs: {
       (name: ''
         makeWrapper ${hermesVenv}/bin/${name} $out/bin/${name} \
           --suffix PATH : "${runtimePath}" \
-          --set HERMES_BUNDLED_SKILLS $out/share/hermes-agent/skills \
-          --set HERMES_BUNDLED_PLUGINS $out/share/hermes-agent/plugins \
-          --set HERMES_BUNDLED_LOCALES $out/share/hermes-agent/locales \
-          --set HERMES_WEB_DIST $out/share/hermes-agent/web_dist \
+          --set HERMES_BUNDLED_SKILLS $out/share/lliam-gov-agent/skills \
+          --set HERMES_BUNDLED_PLUGINS $out/share/lliam-gov-agent/plugins \
+          --set HERMES_BUNDLED_LOCALES $out/share/lliam-gov-agent/locales \
+          --set HERMES_WEB_DIST $out/share/lliam-gov-agent/web_dist \
           --set HERMES_TUI_DIR $out/ui-tui \
           --set HERMES_PYTHON ${hermesVenv}/bin/python3 \
           --set HERMES_NODE ${lib.getExe nodejs} \
@@ -185,9 +185,9 @@ stdenv.mkDerivation (finalAttrs: {
           ${lib.optionalString (extraPythonPackages != [ ]) ''--suffix PYTHONPATH : "${pythonPath}"''}
       '')
       [
-        "hermes"
-        "hermes-agent"
-        "hermes-acp"
+        "lliam-gov"
+        "lliam-gov-agent"
+        "lliam-gov-acp"
       ]
     }
 
@@ -229,8 +229,8 @@ stdenv.mkDerivation (finalAttrs: {
 
   meta = with lib; {
     description = "AI agent with advanced tool-calling capabilities";
-    homepage = "https://github.com/NousResearch/hermes-agent";
-    mainProgram = "hermes";
+    homepage = "https://github.com/jdavis-cyber/lliam-gov";
+    mainProgram = "lliam-gov";
     license = licenses.mit;
     platforms = platforms.unix;
   };
