@@ -3090,12 +3090,15 @@ class TestLegacyLaunchdJobDetection:
     def test_accepts_all_legacy_content_variants(self, tmp_path, monkeypatch):
         """Every generation of our plist must be recognized:
         hermes_cli.main (upstream), lliam_cli.main (post-R.3 / pre-R.7),
-        scripts/hermes-gateway (standalone installer), gateway/run.py."""
+        scripts/hermes-gateway (pre-R.8b standalone installer),
+        scripts/lliam-gov-gateway (post-R.8b standalone installer),
+        gateway/run.py."""
         la_dir = _setup_launchd_home(tmp_path, monkeypatch)
         variants = [
             "<string>hermes_cli.main</string>",
             "<string>lliam_cli.main</string>",
             "<string>/opt/hermes/scripts/hermes-gateway</string>",
+            "<string>/opt/lliam/scripts/lliam-gov-gateway</string>",
             "<string>/opt/hermes/gateway/run.py</string>",
         ]
         for i, token in enumerate(variants):

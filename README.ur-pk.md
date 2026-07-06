@@ -213,15 +213,15 @@ hermes claw migrate --overwrite  # موجودہ متصادم فائلوں کو �
 
 ہم آپ کے تعاون کا خیرمقدم کرتے ہیں! ڈیویلپمنٹ سیٹ اپ، کوڈ کے انداز اور PR کے طریقہ کار کے لیے براہ کرم ہماری [Contributing گائیڈ](https://hermes-agent.nousresearch.com/docs/developer-guide/contributing) دیکھیں۔
 
-معاونین (contributors) کے لیے فوری آغاز — کلون (clone) کریں اور `setup-hermes.sh` چلائیں:
+معاونین (contributors) کے لیے فوری آغاز — کلون (clone) کریں اور `setup-lliam.sh` چلائیں:
 
 <div dir="ltr">
 
 ```bash
 git clone https://github.com/jdavis-cyber/lliam-gov.git
-cd hermes-agent
-./setup-hermes.sh     # uv کو انسٹال کرتا ہے، venv بناتا ہے، .[all] کو انسٹال کرتا ہے، اور ~/.local/bin/hermes کا سیم لنک (symlink) بناتا ہے
-./hermes              # خود بخود venv کی شناخت کرتا ہے، پہلے `source` کرنے کی ضرورت نہیں
+cd lliam-gov
+./setup-lliam.sh     # uv کو انسٹال کرتا ہے، venv بناتا ہے، .[all] کو انسٹال کرتا ہے، اور ~/.local/bin/lliam-gov کا سیم لنک (symlink) بناتا ہے
+./lliam-gov              # خود بخود venv کی شناخت کرتا ہے، پہلے `source` کرنے کی ضرورت نہیں
 ```
 
 </div>

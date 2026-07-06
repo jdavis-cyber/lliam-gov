@@ -182,13 +182,13 @@ Consulta `hermes claw migrate --help` para todas las opciones, o usa la habilida
 
 ¡Las contribuciones son bienvenidas! Consulta la [Guía de Contribución](CONTRIBUTING.es.md) para la configuración del desarrollo, el estilo de código y el proceso de PR.
 
-Inicio rápido para colaboradores — clona y comienza con `setup-hermes.sh`:
+Inicio rápido para colaboradores — clona y comienza con `setup-lliam.sh`:
 
 ```bash
 git clone https://github.com/jdavis-cyber/lliam-gov.git
-cd hermes-agent
-./setup-hermes.sh     # instala uv, crea venv, instala .[all], enlaza ~/.local/bin/hermes
-./hermes              # detecta automáticamente el venv, no necesitas hacer `source` primero
+cd lliam-gov
+./setup-lliam.sh     # instala uv, crea venv, instala .[all], enlaza ~/.local/bin/lliam-gov
+./lliam-gov          # detecta automáticamente el venv, no necesitas hacer `source` primero
 ```
 
 Ruta manual (equivalente a lo anterior):

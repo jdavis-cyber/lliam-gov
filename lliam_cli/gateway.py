@@ -3482,13 +3482,16 @@ def _legacy_launchd_plist_path(suffix: str = "") -> Path:
 #   - ``hermes_cli.main``      — upstream / pre-module-rename installs
 #   - ``lliam_cli.main``       — post-R.3 installs that still used the
 #                                ``ai.hermes.gateway`` label (pre-R.7)
-#   - ``scripts/hermes-gateway`` — the standalone installer script's
+#   - ``scripts/hermes-gateway`` — the pre-R.8b standalone installer script's
+#                                ProgramArguments path (kept for legacy detection)
+#   - ``scripts/lliam-gov-gateway`` — the post-R.8b standalone installer script's
 #                                ProgramArguments path
 #   - ``gateway/run.py``       — oldest direct-run form
 _LEGACY_LAUNCHD_CONTENT_MARKERS: tuple[str, ...] = (
     "hermes_cli.main",
     "lliam_cli.main",
     "scripts/hermes-gateway",
+    "scripts/lliam-gov-gateway",
     "gateway/run.py",
 )
 
