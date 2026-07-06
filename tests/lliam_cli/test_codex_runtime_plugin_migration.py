@@ -498,7 +498,7 @@ class TestMigrate:
                          expose_hermes_tools=True)
         text = (tmp_path / "config.toml").read_text()
         assert "[mcp_servers.hermes-tools]" in text
-        assert "hermes_tools_mcp_server" in text
+        assert "lliam_tools_mcp_server" in text
         # Must include startup + tool timeouts so codex doesn't give up
         assert "startup_timeout_sec" in text
         assert "tool_timeout_sec" in text
