@@ -343,6 +343,10 @@ class AIAgent:
         "[hermes-agent: tool call arguments were corrupted in this session and "
         "have been dropped to keep the conversation alive. See issue #15236.]"
     )
+    notice_callback: Optional[Callable[[Any], None]]
+    notice_clear_callback: Optional[Callable[[str], None]]
+    _credits_state: Optional[Any]
+    _credits_session_start_micros: Optional[int]
 
     @property
     def base_url(self) -> str:
