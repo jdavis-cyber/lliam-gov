@@ -147,8 +147,8 @@ def test_gateway_run_redirects_to_supervised(
     # The CMD process (PID under /init that the wrapper exec'd into)
     # should be sleeping, not the gateway. We count `sleep infinity`
     # processes parented to the CMD wrapper (main-wrapper.sh / rc.init
-    # top), NOT the static main-hermes service's sleep — a bare grep
-    # for `sleep infinity` would false-positive on the main-hermes
+    # top), NOT the static main-lliam service's sleep — a bare grep
+    # for `sleep infinity` would false-positive on the main-lliam
     # sleep and pass even before the redirect fires.
     r = docker_exec_sh(
         container_name,
@@ -324,7 +324,7 @@ def test_supervised_gateway_does_not_recurse(
 
     # Stronger positive assertion: there should be exactly one
     # `sleep infinity` process whose parent is the main-wrapper.sh
-    # CMD process (PID 17 typically). The static `main-hermes`
+    # CMD process (PID 17 typically). The static `main-lliam`
     # service has its own `sleep infinity` child; THAT one is fine
     # and unrelated to our redirect.
     r = docker_exec_sh(

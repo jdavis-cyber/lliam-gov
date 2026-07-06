@@ -284,7 +284,7 @@ def _check_s6_supervision(issues: list[str]) -> None:
 
     # Static services. They live under /run/service/ via s6-rc symlinks,
     # so the same s6-svstat probe works.
-    for static in ("main-hermes", "dashboard"):
+    for static in ("main-lliam", "dashboard"):
         if mgr.is_running(static):
             check_ok(f"{static}: up")
         else:
