@@ -55,9 +55,9 @@
           extraDependencyGroups = [ "messaging" ];
         };
 
-        tui = full.hermesTui;
-        web = full.hermesWeb;
-        desktop = full.hermesDesktop;
+        tui = full.lliamTui;
+        web = full.lliamWeb;
+        desktop = full.lliamDesktop;
       };
     };
 }

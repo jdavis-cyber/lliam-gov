@@ -44,7 +44,7 @@
 
     # Generate config.yaml from Nix attrset (YAML is a superset of JSON)
     configJson = builtins.toJSON cfg.settings;
-    generatedConfigFile = pkgs.writeText "hermes-config.yaml" configJson;
+    generatedConfigFile = pkgs.writeText "lliam-config.yaml" configJson;
     configFile = if cfg.configFile != null then cfg.configFile else generatedConfigFile;
 
     configMergeScript = pkgs.callPackage ./configMergeScript.nix { };
@@ -555,7 +555,7 @@
         type = types.bool;
         default = false;
         description = ''
-          Add the hermes CLI to environment.systemPackages and export
+          Add the lliam-gov CLI to environment.systemPackages and export
           HERMES_HOME system-wide (via environment.variables) so interactive
           shells share state with the gateway service.
         '';
@@ -649,7 +649,7 @@
       })
 
       # ── Host CLI ──────────────────────────────────────────────────────
-      # Add the hermes CLI to system PATH and export HERMES_HOME system-wide
+      # Add the lliam-gov CLI to system PATH and export HERMES_HOME system-wide
       # so interactive shells share state (sessions, skills, cron) with the
       # gateway service instead of creating a separate ~/.hermes/.
       (lib.mkIf cfg.addToSystemPackages {

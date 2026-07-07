@@ -1,7 +1,7 @@
 # nix/web.nix — Lliam-GOV Web Dashboard (Vite/React) frontend build
-{ pkgs, hermesNpmLib, ... }:
+{ pkgs, lliamNpmLib, ... }:
 let
-  npm = hermesNpmLib.mkNpmPassthru { folder = "web"; attr = "web"; pname = "hermes-web"; };
+  npm = lliamNpmLib.mkNpmPassthru { folder = "web"; attr = "web"; pname = "hermes-web"; };
 
   packageJson = builtins.fromJSON (builtins.readFile (npm.src + "/web/package.json"));
   version = packageJson.version;

@@ -1,6 +1,6 @@
 # nix/desktop.nix — Lliam-GOV Desktop (Electron) app build + wrapper
 #
-# `hermesAgent` is the fully-built `.#default` package — it ships the
+# `lliamAgent` is the fully-built `.#default` package — it ships the
 # `lliam-gov` binary with the venv, runtime PATH, bundled skills/plugins, etc.
 # already wired up.  We point the desktop at it via the existing
 # `HERMES_DESKTOP_HERMES` override env var, so the desktop's resolver
@@ -11,13 +11,13 @@
   lib,
   stdenv,
   makeWrapper,
-  hermesNpmLib,
+  lliamNpmLib,
   electron,
-  hermesAgent,
+  lliamAgent,
   ...
 }:
 let
-  npm = hermesNpmLib.mkNpmPassthru {
+  npm = lliamNpmLib.mkNpmPassthru {
     folder = "apps/desktop";
     attr = "desktop";
     pname = "hermes-desktop";
@@ -148,7 +148,7 @@ stdenv.mkDerivation {
     # No reimplementation of the agent resolver in the wrapper.
     makeWrapper ${lib.getExe electron} $out/bin/hermes-desktop \
       --add-flags "$out/share/hermes-desktop" \
-      --set LLIAM_DESKTOP_HERMES "${lib.getExe hermesAgent}" \
+      --set LLIAM_DESKTOP_HERMES "${lib.getExe lliamAgent}" \
       --set ELECTRON_IS_DEV 0
 
     runHook postInstall

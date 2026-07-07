@@ -37,25 +37,25 @@
 }:
 let
   nodejs = nodejs_22;
-  mkHermesVenv =
+  mkLliamVenv =
     extraDependencyGroups:
     callPackage ./python.nix {
       inherit uv2nix pyproject-nix pyproject-build-systems;
       dependency-groups = [ "all" ] ++ extraDependencyGroups;
     };
 
-  hermesVenv = mkHermesVenv extraDependencyGroups;
+  lliamVenv = mkLliamVenv extraDependencyGroups;
 
-  hermesNpmLib = callPackage ./lib.nix {
+  lliamNpmLib = callPackage ./lib.nix {
     inherit npm-lockfile-fix nodejs;
   };
 
-  hermesTui = callPackage ./tui.nix {
-    inherit hermesNpmLib;
+  lliamTui = callPackage ./tui.nix {
+    inherit lliamNpmLib;
   };
 
-  hermesWeb = callPackage ./web.nix {
-    inherit hermesNpmLib;
+  lliamWeb = callPackage ./web.nix {
+    inherit lliamNpmLib;
   };
 
   bundledSkills = lib.cleanSourceWith {
@@ -118,7 +118,7 @@ let
 
     # Collect core venv package names
     core = set()
-    venv_sp = pathlib.Path('${hermesVenv}/${sitePackagesPath}')
+    venv_sp = pathlib.Path('${lliamVenv}/${sitePackagesPath}')
     for di in venv_sp.glob('*.dist-info'):
         meta = di / 'METADATA'
         if meta.exists():
@@ -165,21 +165,21 @@ stdenv.mkDerivation (finalAttrs: {
     cp -r ${bundledSkills} $out/share/lliam-gov-agent/skills
     cp -r ${bundledPlugins} $out/share/lliam-gov-agent/plugins
     cp -r ${bundledLocales} $out/share/lliam-gov-agent/locales
-    cp -r ${hermesWeb} $out/share/lliam-gov-agent/web_dist
+    cp -r ${lliamWeb} $out/share/lliam-gov-agent/web_dist
 
     mkdir -p $out/ui-tui
-    cp -r ${hermesTui}/lib/hermes-tui/* $out/ui-tui/
+    cp -r ${lliamTui}/lib/hermes-tui/* $out/ui-tui/
 
     ${lib.concatMapStringsSep "\n"
       (name: ''
-        makeWrapper ${hermesVenv}/bin/${name} $out/bin/${name} \
+        makeWrapper ${lliamVenv}/bin/${name} $out/bin/${name} \
           --suffix PATH : "${runtimePath}" \
           --set HERMES_BUNDLED_SKILLS $out/share/lliam-gov-agent/skills \
           --set HERMES_BUNDLED_PLUGINS $out/share/lliam-gov-agent/plugins \
           --set HERMES_BUNDLED_LOCALES $out/share/lliam-gov-agent/locales \
           --set HERMES_WEB_DIST $out/share/lliam-gov-agent/web_dist \
           --set HERMES_TUI_DIR $out/ui-tui \
-          --set HERMES_PYTHON ${hermesVenv}/bin/python3 \
+          --set HERMES_PYTHON ${lliamVenv}/bin/python3 \
           --set HERMES_NODE ${lib.getExe nodejs} \
           ${lib.optionalString (rev != null) ''--set HERMES_REVISION ${rev} \''}
           ${lib.optionalString (extraPythonPackages != [ ]) ''--suffix PYTHONPATH : "${pythonPath}"''}
@@ -193,7 +193,7 @@ stdenv.mkDerivation (finalAttrs: {
 
     ${lib.optionalString (extraPythonPackages != [ ]) ''
       echo "=== Checking for plugin/core package collisions ==="
-      ${hermesVenv}/bin/python3 -c "${checkPackageCollisions}"
+      ${lliamVenv}/bin/python3 -c "${checkPackageCollisions}"
       echo "=== No collisions ==="
     ''}
 
@@ -202,29 +202,29 @@ stdenv.mkDerivation (finalAttrs: {
 
   passthru = {
     inherit
-      hermesTui
-      hermesWeb
-      hermesNpmLib
-      hermesVenv
+      lliamTui
+      lliamWeb
+      lliamNpmLib
+      lliamVenv
       ;
 
-    # `hermesDesktop` references `finalAttrs.finalPackage` (this whole
+    # `lliamDesktop` references `finalAttrs.finalPackage` (this whole
     # derivation, after all overrides are applied) so the desktop wrapper
     # can prepend its `/bin` to PATH.  The desktop's resolver step 4
     # ("existing lliam-gov on PATH") then picks up the fully wrapped
     # `lliam-gov` binary — venv with all deps, bundled skills/plugins,
     # runtime PATH (ripgrep/git/ffmpeg/etc).  No re-implementation
     # of the agent resolution in the desktop wrapper.
-    hermesDesktop = callPackage ./desktop.nix {
-      inherit hermesNpmLib electron;
-      hermesAgent = finalAttrs.finalPackage;
+    lliamDesktop = callPackage ./desktop.nix {
+      inherit lliamNpmLib electron;
+      lliamAgent = finalAttrs.finalPackage;
     };
 
     devShellHook = ''
-      export HERMES_PYTHON=${hermesVenv}/bin/python3
+      export HERMES_PYTHON=${lliamVenv}/bin/python3
     '';
 
-    devDeps = runtimeDeps ++ [ (mkHermesVenv (extraDependencyGroups ++ [ "dev" ])) ];
+    devDeps = runtimeDeps ++ [ (mkLliamVenv (extraDependencyGroups ++ [ "dev" ])) ];
   };
 
   meta = with lib; {

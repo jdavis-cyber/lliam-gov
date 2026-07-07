@@ -66,8 +66,13 @@ WHOLE_TREE_KEEPS = [
     "hermes_cli/env_compat.py",
     "tests/rename",
     "scripts/rename",
-    # Container / OS install identity — whole docker/ tree.
+    # Container / OS install identity — whole docker/ tree + the root Dockerfile
+    # that builds it. Inside the container the command, OS user, and install
+    # prefix are all deliberately `hermes` / `/opt/hermes` (see
+    # docker/lliam-exec-shim.sh) — a self-consistent inherited runtime contract,
+    # not the product display name. Renaming any of it desyncs the image.
     "docker",
+    "Dockerfile",
     # Upstream (D4) skills — `name:` is a registry key; renaming orphans them.
     "skills/autonomous-ai-agents/hermes-agent",
     "skills/software-development/hermes-agent-skill-authoring",
@@ -151,6 +156,14 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"taskkill.*hermes\.exe|hermes\.exe.*taskkill", "OLD-binary termination — cleanup"),
     (r"looks_like_gateway_command_line|_gateway_runtime_command_line",
      "OLD gateway command-line detection helper"),
+    (r'setproctitle\(\s*"hermes"\)|prctl\(15,\s*b"hermes"|pthread_setname_np\(\s*b"hermes"|process title to .hermes',
+     "process title 'hermes' — coordinated with the pkill/pgrep self-termination "
+     "guard (tools/approval.py) that blocks killing the running gateway; kept so "
+     "the guard keeps matching and already-running processes stay detectable"),
+    (r"process show up as 'hermes'|show up as .hermes",
+     "comment documenting the kept 'hermes' proctitle value"),
+    (r'\(hermes\|gateway\|cli\.py\)|pkill hermes|pgrep -f hermes|hermes\.\*dashboard|hermes/gateway',
+     "process-name detection/kill-guard pattern — must match the kept 'hermes' proctitle"),
     (r"hermes\.exe(?!\.)", "OLD desktop/gateway binary name — detection/cleanup target"),
     (r"hermes\.app", "OLD macOS app bundle name — detection/cleanup target"),
     (r"hermes\.plist|hermes-gateway\.service", "legacy service unit filename — detection"),
@@ -192,9 +205,15 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
 
     # --- Container / OS install identity (also covered by docker/** whole-tree keep) ---
     (r"/opt/hermes", "container install prefix — OS install identity"),
-    (r"TARGET_USER=hermes|GROUP_NAME=hermes|useradd.*hermes|groupadd.*hermes",
+    (r'TARGET_USER="?hermes|GROUP_NAME="?hermes|useradd.*hermes|groupadd.*hermes',
      "container OS user/group identity"),
     (r"hermes_uid|hermes_gid|hermes_tree", "container OS uid/gid/tree identity"),
+    (r"container_name:\s*hermes|image:\s*hermes-agent",
+     "docker-compose container/image identity — inherited runtime contract"),
+    (r"hermes user|hermes group|hermes-group|hermes/env|python interpreter as hermes|"
+     r'default = "hermes"|host-installed hermes|interpreter as hermes',
+     "NixOS module OS user/group identity — same inherited runtime-account contract as docker/**"),
+    (r"rtk-hermes", "external third-party repo name (rtk-hermes) — not this product"),
 
     # --- Incident / proper-noun ---
     (r"hermes-0day", "security incident proper-noun name"),

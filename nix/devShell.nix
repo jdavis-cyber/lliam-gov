@@ -11,7 +11,7 @@
     { pkgs, self', ... }:
     let
       packages = builtins.attrValues self'.packages;
-      hermesNpmLib = self'.packages.default.passthru.hermesNpmLib;
+      lliamNpmLib = self'.packages.default.passthru.lliamNpmLib;
 
       # Collect all packageJsonPath values from npm workspace packages.
       npmPackageJsonPaths = builtins.filter (p: p != null) (
@@ -34,8 +34,8 @@
         shellHook = ''
           echo "Lliam-GOV dev shell"
           ${combinedNonNpm}
-          ${hermesNpmLib.mkNpmDevShellHook npmPackageJsonPaths}
-          echo "Ready. Run 'hermes' to start."
+          ${lliamNpmLib.mkNpmDevShellHook npmPackageJsonPaths}
+          echo "Ready. Run 'lliam-gov' to start."
         '';
       };
     };

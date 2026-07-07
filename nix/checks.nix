@@ -7,7 +7,7 @@
   perSystem = { pkgs, lib, self', ... }:
     let
       lliam-gov-agent = self'.packages.default;
-      hermesVenv = lliam-gov-agent.hermesVenv;
+      lliamVenv = lliam-gov-agent.lliamVenv;
 
       configMergeScript = pkgs.callPackage ./configMergeScript.nix { };
 
@@ -15,7 +15,7 @@
       configKeys = pkgs.runCommand "hermes-config-keys" {} ''
         set -euo pipefail
         export HOME=$TMPDIR
-        ${hermesVenv}/bin/python3 -c '
+        ${lliamVenv}/bin/python3 -c '
 import json, sys
 from lliam_cli.config import DEFAULT_CONFIG
 
@@ -84,7 +84,7 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
           echo "PASS: All binaries present"
 
           echo "=== Checking version ==="
-          ${lliam-gov-agent}/bin/lliam-gov version 2>&1 | grep -qi "hermes" || (echo "FAIL: version check"; exit 1)
+          ${lliam-gov-agent}/bin/lliam-gov version 2>&1 | grep -qi "lliam-gov" || (echo "FAIL: version check"; exit 1)
           echo "PASS: Version check"
 
           echo "=== All checks passed ==="
@@ -110,7 +110,7 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
           set -e
           export HOME=$(mktemp -d)
 
-          echo "=== Checking hermes --help ==="
+          echo "=== Checking lliam-gov --help ==="
           ${lliam-gov-agent}/bin/lliam-gov --help 2>&1 | grep -q "gateway" || (echo "FAIL: gateway subcommand missing"; exit 1)
           ${lliam-gov-agent}/bin/lliam-gov --help 2>&1 | grep -q "config" || (echo "FAIL: config subcommand missing"; exit 1)
           echo "PASS: All subcommands accessible"
@@ -183,7 +183,7 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
           echo "=== Rendering via the wrapper override (HERMES_BUNDLED_LOCALES) ==="
           export HOME=$(mktemp -d)
           RENDERED=$(cd "$HOME" && HERMES_BUNDLED_LOCALES=${lliam-gov-agent}/share/lliam-gov-agent/locales \
-            ${hermesVenv}/bin/python3 -c "from agent import i18n; print(i18n.t('gateway.reset.header_default', lang='en'))")
+            ${lliamVenv}/bin/python3 -c "from agent import i18n; print(i18n.t('gateway.reset.header_default', lang='en'))")
           echo "rendered: $RENDERED"
           test "$RENDERED" != "gateway.reset.header_default" || (echo "FAIL: i18n returned the raw key with HERMES_BUNDLED_LOCALES set"; exit 1)
           echo "PASS: i18n renders a human string via the wrapper override"
@@ -194,8 +194,8 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
           # the wrapper override above would mask the regression at runtime while
           # `pip install`/other sealed paths silently break — this catches it.
           echo "=== Rendering WITHOUT the env var (data-files materialization) ==="
-          BARE_DIR=$(cd "$HOME" && ${hermesVenv}/bin/python3 -c "from agent import i18n; print(i18n._locales_dir())")
-          BARE=$(cd "$HOME" && ${hermesVenv}/bin/python3 -c "from agent import i18n; print(i18n.t('gateway.reset.header_default', lang='en'))")
+          BARE_DIR=$(cd "$HOME" && ${lliamVenv}/bin/python3 -c "from agent import i18n; print(i18n._locales_dir())")
+          BARE=$(cd "$HOME" && ${lliamVenv}/bin/python3 -c "from agent import i18n; print(i18n.t('gateway.reset.header_default', lang='en'))")
           echo "resolved dir (no env var): $BARE_DIR"
           echo "rendered: $BARE"
           test "$BARE" != "gateway.reset.header_default" || \
@@ -276,18 +276,18 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
         # Verify extraPythonPackages PYTHONPATH injection
         extra-python-packages = let
           testPkg = pkgs.python312Packages.pyfiglet;
-          hermesWithExtra = lliam-gov-agent.override {
+          lliamWithExtra = lliam-gov-agent.override {
             extraPythonPackages = [ testPkg ];
           };
         in pkgs.runCommand "hermes-extra-python-packages" { } ''
           set -e
           echo "=== Checking extraPythonPackages PYTHONPATH injection ==="
 
-          grep -q "PYTHONPATH" ${hermesWithExtra}/bin/lliam-gov || \
+          grep -q "PYTHONPATH" ${lliamWithExtra}/bin/lliam-gov || \
             (echo "FAIL: PYTHONPATH not in wrapper"; exit 1)
           echo "PASS: PYTHONPATH present in wrapper"
 
-          grep -q "${testPkg}" ${hermesWithExtra}/bin/lliam-gov || \
+          grep -q "${testPkg}" ${lliamWithExtra}/bin/lliam-gov || \
             (echo "FAIL: test package path not in PYTHONPATH"; exit 1)
           echo "PASS: test package path found in wrapper"
 
@@ -304,7 +304,7 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
 
         # Verify extraDependencyGroups passes through to python.nix
         extra-dependency-groups = let
-          hermesWithGroups = lliam-gov-agent.override {
+          lliamWithGroups = lliam-gov-agent.override {
             extraDependencyGroups = [ "honcho" ];
           };
         in pkgs.runCommand "hermes-extra-dependency-groups" { } ''
@@ -314,8 +314,8 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
           # Eval-only: verify the override produces valid derivation paths
           # without building the full venv (which is expensive and redundant
           # since the mechanism is just list concatenation into python.nix).
-          echo "derivation: ${hermesWithGroups}"
-          echo "venv: ${hermesWithGroups.hermesVenv}"
+          echo "derivation: ${lliamWithGroups}"
+          echo "venv: ${lliamWithGroups.lliamVenv}"
           echo "PASS: extraDependencyGroups override evaluates cleanly"
 
           echo "=== All extraDependencyGroups checks passed ==="
@@ -329,7 +329,7 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
         messaging-variant = pkgs.runCommand "hermes-messaging-variant" { } ''
           set -e
           echo "=== Checking discord.py importable from messaging variant ==="
-          ${self'.packages.messaging.hermesVenv}/bin/python3 -c \
+          ${self'.packages.messaging.lliamVenv}/bin/python3 -c \
             "import discord; print(discord.__version__)"
           echo "PASS: discord.py importable from messaging variant venv"
           mkdir -p $out
@@ -410,7 +410,7 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
             local hermes_home="$1"
             export HERMES_HOME="$hermes_home"
             ${configMergeScript} ${nixSettings} "$hermes_home/config.yaml"
-            ${hermesVenv}/bin/python3 -c '
+            ${lliamVenv}/bin/python3 -c '
 import json, sys
 from lliam_cli.config import load_config
 json.dump(load_config(), sys.stdout, default=str)
