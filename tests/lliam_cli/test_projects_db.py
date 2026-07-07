@@ -58,7 +58,7 @@ def test_create_get_list(conn):
     assert proj.folders[0].is_primary is True
 
     # Lookup by slug too.
-    assert pdb.get_project(conn, "hermes-agent").id == pid
+    assert pdb.get_project(conn, "lliam-gov-agent").id == pid
     assert len(pdb.list_projects(conn)) == 1
 
 
