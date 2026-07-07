@@ -174,6 +174,10 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"hermes gateway|/hermes gateway", "legacy CLI-invocation string matched for detection"),
     (r"Hermes_Gateway", "legacy scheduled-task name — detection"),
     (r'source_host.*hermes_', "legacy source-host prefix detection"),
+    (r'"hermes" units|ai\.\*.*hermes\*|/opt/custom-hermes|username \(e\.g\. hermes\)|'
+     r'hermes\* jobs|third-party.*hermes',
+     "gateway service/job DETECTION prose + a kept /opt/custom-hermes rename example + a bot-"
+     "username example — detection strings must keep matching legacy 'hermes' units"),
     (r"hermes\.exe\.old", "old-binary cleanup filename"),
     (r"command -v hermes\b|shutil\.which\(.hermes.\)|which\(.hermes.\)",
      "OLD-binary presence detection (not invoking the new product binary)"),
@@ -214,6 +218,15 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"hermes-agent", "upstream product id / registered wire tag (portal, exa, copilot, honcho)"),
     (r'product=hermes|"topic":\s*"hermes', "registered wire product/topic tag — external"),
     (r"_ECHO_TAG|x-exa-integration", "registered integration tag value — external"),
+    (r"hermes[-.]atof|hermes[-.]atif|hermes\.nemo_relay|hermes-session-\{|hermes\.turn\.|"
+     r"hermes\.api\.(response|error)|hermes\.tool\.response|hermes\.[a-z_.]+\.(start|end|unmatched)",
+     "NeMo observability telemetry event/file/subscriber name emitted to an external "
+     "relay — external wire/telemetry contract"),
+    (r"hermes-nemo-relay", "NeMo-relay internal task/thread name — telemetry-adjacent identifier"),
+    (r'host != "hermes"|aiPeer.*"hermes"|workspace.*"hermes"|"aiPeer",\s*"hermes"|'
+     r'"workspace",\s*"hermes"|HermesAgent',
+     "Honcho/Signal external service peer/workspace/link identifier — registered with the "
+     "3rd-party service; renaming addresses a different peer"),
     (r"/hermes\b", "Slack slash-command registered with the app — external"),
     (r"hermes slack manifest|slack.*hermes manifest", "Slack app manifest name — external"),
     (r"@[Hh]ermes(bot|_bot)?\b", "Matrix/Telegram/IRC registered handle — external"),
@@ -278,6 +291,9 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"hermes-0day", "security incident proper-noun name"),
     (r"hermes #\d+", "upstream issue-tracker reference (hermes #NNNNN) — attribution/traceability"),
     (r"hermesagent26@users\.noreply\.github\.com", "contributor email — proper noun"),
+    (r"hermes@[a-z0-9.]+|hermesagent26@|nadyahermes|hermes-shim|hermes-eval",
+     "git contributor email / handle / PR-reference proper-noun in the release attribution "
+     "map (scripts/release.py) — historical author data, not the product name"),
 
     # --- Upstream file/skill refs ---
     (r"openclaw_to_hermes\.py", "real un-renamed migration script filename"),

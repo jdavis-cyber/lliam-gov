@@ -1,5 +1,5 @@
 """
-Gateway subcommand for hermes CLI.
+Gateway subcommand for lliam-gov CLI.
 
 Handles: lliam-gov gateway [run|start|stop|restart|status|install|uninstall|setup]
 """
@@ -169,7 +169,7 @@ def _get_parent_pid(pid: int) -> int | None:
     older implementation shelled out to ``ps -o ppid= -p <pid>``, which
     silently fails on Windows (no ``ps``) so the ancestor walk terminated
     at self — the caller's dedup / exclude logic then couldn't distinguish
-    "hermes CLI that invoked this scan" from "real gateway process".
+    "lliam-gov CLI that invoked this scan" from "real gateway process".
     """
     if pid <= 1:
         return None

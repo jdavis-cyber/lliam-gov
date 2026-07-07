@@ -1714,7 +1714,7 @@ def cmd_migrate(args) -> None:
         print("  2. lliam-gov honcho migrate            — re-run this walkthrough")
     else:
         print("  1. lliam-gov honcho status             — verify Honcho connection")
-        print("  2. hermes                           — start a session")
+        print("  2. lliam-gov                        — start a session")
         print("     (user memory files auto-uploaded on first turn if not done above)")
         print("  3. lliam-gov honcho identity --show    — verify AI peer representation")
         print("  4. lliam-gov honcho tokens             — tune context and dialectic budgets")
