@@ -491,7 +491,7 @@ class TestMigrate:
         into Lliam-GOV for browser/web/delegate_task/vision/memory tools.
 
         This is the fix for 'all other tools that codex doesn't provide
-        should be useable by hermes' — quirk #7."""
+        should be useable by lliam-gov' — quirk #7."""
         report = migrate({}, codex_home=tmp_path,
                          discover_plugins=False,
                          default_permission_profile=None,
@@ -668,7 +668,7 @@ class TestStripUnmanagedPluginTables:
 
     When codex itself writes ``[plugins."<name>@<marketplace>"]`` tables
     (via the user running ``codex plugins enable`` directly), re-running
-    ``hermes codex-runtime migrate`` would re-emit them inside the managed
+    ``lliam-gov codex-runtime migrate`` would re-emit them inside the managed
     block and the resulting duplicate-table-header would crash codex.
     """
 

@@ -1,4 +1,4 @@
-"""Tests for ``hermes migrate xai`` — apply path with ruamel round-trip."""
+"""Tests for ``lliam-gov migrate xai`` — apply path with ruamel round-trip."""
 from __future__ import annotations
 
 from pathlib import Path

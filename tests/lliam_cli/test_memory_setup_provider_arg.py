@@ -3,7 +3,7 @@
 The `memory setup` subcommand accepts an optional positional ``provider`` so a
 fresh install can configure a specific provider directly (e.g.
 ``lliam-gov memory setup honcho``) without the interactive picker — which matters
-because the per-provider ``hermes <provider>`` subcommand is only registered
+because the per-provider ``lliam-gov <provider>`` subcommand is only registered
 once that provider is active.
 """
 

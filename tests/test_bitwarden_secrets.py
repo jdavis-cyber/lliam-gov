@@ -2,7 +2,7 @@
 
 We never hit GitHub or Bitwarden in tests — subprocess + urllib are
 mocked so the suite stays fast and offline-safe.  The "live" pull and
-binary download are exercised manually by `hermes secrets bitwarden
+binary download are exercised manually by `lliam-gov secrets bitwarden
 setup` outside of pytest.
 """
 

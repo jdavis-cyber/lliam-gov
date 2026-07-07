@@ -17,7 +17,7 @@ from lliam_cli.completion import _walk, generate_bash, generate_zsh, generate_fi
 # ---------------------------------------------------------------------------
 
 def _make_parser() -> argparse.ArgumentParser:
-    """Build a minimal parser that mirrors the real hermes structure."""
+    """Build a minimal parser that mirrors the real lliam-gov structure."""
     p = argparse.ArgumentParser(prog="hermes")
     p.add_argument("--version", "-V", action="store_true")
     p.add_argument("-p", "--profile", help="Profile name")

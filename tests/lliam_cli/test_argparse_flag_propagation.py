@@ -19,7 +19,7 @@ import pytest
 
 
 def _build_parser():
-    """Build the hermes argument parser from the real code.
+    """Build the lliam-gov argument parser from the real code.
 
     We import the real main() and extract the parser it builds.
     Since main() is a large function that does much more than parse args,
@@ -167,7 +167,7 @@ class TestAcceptHooksOnAgentSubparsers:
         ["acp", "--accept-hooks", "--help"],
     ])
     def test_accepted_at_every_position(self, argv):
-        """Invoking `hermes <argv>` must exit 0 (help) rather than
+        """Invoking `lliam-gov <argv>` must exit 0 (help) rather than
         failing with `unrecognized arguments`."""
         import subprocess
         result = subprocess.run(

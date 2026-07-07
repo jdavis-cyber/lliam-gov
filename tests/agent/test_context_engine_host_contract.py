@@ -196,7 +196,7 @@ def test_update_from_response_forwards_canonical_cache_buckets():
 
 
 def test_discover_context_engines_includes_plugin_registered_engines(monkeypatch):
-    """Plugin-registered context engines appear in the ``hermes plugins`` picker."""
+    """Plugin-registered context engines appear in the ``lliam-gov plugins`` picker."""
     from lliam_cli import plugins_cmd
 
     fake_repo = lambda: [("compressor", "built-in", True)]

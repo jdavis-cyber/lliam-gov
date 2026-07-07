@@ -723,7 +723,7 @@ def test_conflicting_systemd_units_warning(monkeypatch, tmp_path, capsys):
 
 def test_install_linux_gateway_from_setup_non_root_never_offers_system(monkeypatch, capsys):
     # Non-root sessions must not be offered system scope, and must never be
-    # handed a `sudo hermes …` self-elevation recipe.
+    # handed a `sudo lliam-gov …` self-elevation recipe.
     captured = {}
 
     def fake_prompt_choice(_msg, options, default=0):

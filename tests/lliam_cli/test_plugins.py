@@ -1210,7 +1210,7 @@ class TestPluginManagerList:
         already-loaded plugins, so when a later plugin registered a hook name
         an earlier plugin had already used, the shared name was attributed to
         the first plugin only and the later plugin reported 0 hooks in
-        `hermes plugins list`. Attribution now counts what each plugin's own
+        `lliam-gov plugins list`. Attribution now counts what each plugin's own
         register() added (per-registration delta), so both get credit.
         """
         plugins_dir = tmp_path / "hermes_test" / "plugins"

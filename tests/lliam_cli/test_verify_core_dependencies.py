@@ -199,7 +199,7 @@ class TestVerifyCoreDependencies:
 
         That reinstall rewrites the editable entry-point shims, and on Windows
         pip can't overwrite the live launcher — so without quarantine the shim
-        is left missing and ``hermes`` drops off PATH. Previously this path
+        is left missing and ``lliam-gov`` drops off PATH. Previously this path
         called ``_run_install_with_heartbeat`` directly, bypassing the
         quarantine that the primary install path performs.
         """

@@ -1,4 +1,4 @@
-"""Tests for lliam_cli/bundles.py — the `hermes bundles` CLI subcommand."""
+"""Tests for lliam_cli/bundles.py — the `lliam-gov bundles` CLI subcommand."""
 
 import argparse
 

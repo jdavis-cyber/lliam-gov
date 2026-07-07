@@ -30,7 +30,7 @@ COMMON_LLIAM_TOOLS = ["read_file", "search_files", "terminal", "patch", "write_f
 
 class TestToolKindMap:
     def test_all_lliam_tools_have_kind(self):
-        """Every common hermes tool should appear in TOOL_KIND_MAP."""
+        """Every common lliam-gov tool should appear in TOOL_KIND_MAP."""
         for tool in COMMON_LLIAM_TOOLS:
             assert tool in TOOL_KIND_MAP, f"{tool} missing from TOOL_KIND_MAP"
 

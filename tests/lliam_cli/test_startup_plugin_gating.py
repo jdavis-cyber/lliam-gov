@@ -152,7 +152,7 @@ def test_builtin_set_covers_every_registered_subcommand():
     """
     live = _live_subcommand_names()
     # "help" is synthetic — an argparse-implicit convenience we include
-    # in the set so ``hermes help <cmd>`` skips discovery; it won't show
+    # in the set so ``lliam-gov help <cmd>`` skips discovery; it won't show
     # up as a subparser in the --help output.
     declared = _BUILTIN_SUBCOMMANDS - {"help"}
     missing_from_declaration = live - declared

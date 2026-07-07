@@ -270,8 +270,8 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     # --- Wire attribution to 3rd-party APIs (X-Title / User-Agent / registry name) ---
     (r'X-Title.*Hermes Agent|"Hermes Agent"', "OpenRouter X-Title / ACP registry name — wire attribution"),
     (r"Hermes-Watcher|Hermes[- ]Agent[/ ]", "User-Agent value sent to 3rd-party API"),
-    (r'"User-Agent":\s*"Hermes"|User-Agent.*"Hermes"',
-     "bare 'Hermes' User-Agent value sent to a 3rd-party API — wire attribution"),
+    (r'"User-Agent":\s*"Hermes"|User-Agent.*"Hermes"|"Hermes/[0-9]',
+     "bare 'Hermes' / 'Hermes/1.0' User-Agent value sent to a 3rd-party API — wire attribution"),
     (r"HermesDashboard/|hermes-dashboard/1\.0",
      "User-Agent value the dashboard sends to 3rd-party APIs — wire attribution"),
     (r"codex_cli_rs|graph-client|x-exa", "3rd-party User-Agent/integration value on a hermes line"),
@@ -279,6 +279,11 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     # --- Upstream (D4): Nous Research / Hermes-4 model + repo attribution ---
     (r"nous_hermes|is_nous_hermes", "upstream Nous Hermes model detection"),
     (r"Hermes-4|Hermes 4|Hermes-3|Hermes 3", "upstream Nous Research model family name"),
+    (r"hermes-honcho:|hermes2-pro|hermes-llm-\d|nous-hermes-\d|hermes3\b|hermes-mystery|"
+     r'validate_toolset\("hermes"\)|"hermes" anywhere|Qwen3 wrapper|"hermes-does-not-exist"|'
+     r"hermes-brain:|opencode_go",
+     "model-name / toolset-name test fixture data (incl. the nous_hermes detection test's own "
+     "sample model ids) — opaque data / detection fixtures, not the product display name"),
     (r"nousresearch/hermes-agent|NousResearch/hermes-agent",
      "upstream repo path — attribution + working link"),
     (r"hermes-agent\.nousresearch\.com", "upstream download/site host — attribution"),
@@ -376,6 +381,68 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
      r'`hermes`, ask it to|Run `hermes`|another hermes process|client_id": "hermes-\d',
      "test fixture: fake 'hermes' shim binary / CLI-run instruction / opaque process reference / "
      "client_id fixture — opaque test data"),
+    # --- Final broad test-fixture-DATA keeps (opaque values a test sets/asserts/negates) ---
+    (r'"peer":\s*"hermes"|"peer",\s*"hermes"|peerName|peer": "hermes"|hermes\.dreamer|'
+     r'seen\["host"\] == "hermes"|works on hermes|prewarm.*hermes',
+     "Honcho peer/host fixture value a test asserts — opaque external-service datum"),
+    (r'_current_nick = "hermes"|001 hermes|433 \* hermes|PRIVMSG.*hermes|:hermes!bot@host|'
+     r'current_nick.*hermes|nick.*"hermes"',
+     "IRC adapter fixture: current-nick / server-numeric / PRIVMSG line 'hermes' a test drives — opaque data"),
+    (r'"hermes" not in|not in finish|not in data|assert "hermes" not in',
+     "negative assertion checking 'hermes' is ABSENT from output — a rename would make the "
+     "assertion vacuous; kept as the thing being asserted-absent"),
+    (r'prog="hermes"|prog="hermes [a-z]+"|ArgumentParser\(prog="hermes|`hermes meet`|hermes meet|'
+     r'"cognee hermes"|command = "hermes "|projects" / "hermes"|/ "hermes"\)|approved via ``hermes|'
+     r'append_message\([^)]*"hermes"|owned_by"\] == "hermes"|command_link_dir / "hermes"',
+     "argparse prog-name replica / tmp-dir name / pairing-approval fixture / wire owned_by value / "
+     "appended-message content / command-link fixture — opaque test data a test constructs or asserts"),
+    (r'HermesIndexSource', "test helper class name for the skills index — internal test identifier"),
+    # --- Final tail: ACP contract key, container-fixture, kanban-shim detection, misc opaque data ---
+    (r'== \{"hermes"\}|meta\.keys\(\) == \{"hermes"\}|set\(meta',
+     "ACP provenance metadata key set {'hermes'} — external wire contract (test_session_provenance)"),
+    (r'No such container: hermes|OPENVIKING_AGENT", "hermes|OpenClaw→Hermes|'
+     r'enabled_toolsets = \["hermes-core"\]|"hermes-core"|"branch": "hermes/|scope.push.*hermes|'
+     r'"scope", "hermes"|hermes-task"|title="hermes-task|Legacy Hermes/petdex|cached hermes modules|'
+     r'lliam_xai_user_agent|profile": ',
+     "container-name / openviking-agent / toolset / branch / scope-tag / kanban-title / petdex / "
+     "cached-module test fixture value — opaque test data"),
+    (r'shim = tmp_path.*hermes|path_lliam = tmp_path.*hermes|bin" / "hermes"|`hermes` is on PATH|'
+     r"use a `hermes|Workers spawned.*hermes|NOT `hermes`|`hermes` package|python -m hermes|"
+     r"module name.*hermes|hermes-too|the shim|`hermes` on|created by root in the shim",
+     "kanban worker/shim DETECTION test: a fake 'hermes' binary on PATH + the shim-vs-module "
+     "resolution the test asserts — opaque fixture + detection of the legacy command name"),
+    (r'The hermes install dir|the hermes install|without the h[a-z]*$|reachable in the te|'
+     r"gateway was launched without|Falls back to sys.executable",
+     "install-dir/env-blocklist test narration — references the kept install-dir behavior; non-shipping"),
+    (r'you are hermes|instructions="you are hermes"|huge hermes system prompt|'
+     r'port goal command to hermes|content": "hermes|assistant", "hermes|"container: hermes"|'
+     r'"%PDF-1\.4 hermes|Hermes-processed output|Hermes/1\.0',
+     "system-prompt / goal / container-name / PDF-byte / message-content test fixture value a "
+     "test constructs or asserts equality on — opaque test data"),
+    (r"hermes CLI \(console_script\)|leaves hermes|hermes start even|TestLegacyHermesUnitDetection|"
+     r"macOS mirror of TestLegacyHermes|custom.*hermes|custom_home.*hermes",
+     "bootstrap/legacy-unit-detection test narration + a custom_home tmp-dir fixture — "
+     "references the kept console-script / legacy-unit detection; non-shipping test data"),
+    # --- Memory-provider agent/source/bank fixture DATA (external-service identifiers a test asserts) ---
+    (r'agent == "hermes"|"agent":\s*"hermes"|_retain_source == "hermes"|_sanitize_bank_segment\("hermes"\)|'
+     r'result == "hermes"|retain_source.*hermes|assistant_peer_id|X-OpenViking.*hermes|'
+     r'headers\["X-OpenViking',
+     "openviking/hindsight memory-provider agent/source/bank fixture value 'hermes' a test asserts "
+     "equality on — opaque external-service datum (renaming would change what bank/actor is addressed)"),
+    (r'hermes-exdev-test|hermes-dedup-|hermes-write-ded|_make_safe_tempdir\("hermes|'
+     r'shm / f"hermes-|"hermes test document|hello from hermes|hermes-install-dir',
+     "test temp-dir prefix / PDF-fixture bytes / message-content fixture — opaque test data"),
+    (r"restarting Hermes|hermes's own graceful|hermes accumulat|hermes still run|"
+     r"hermes uses an internal scheduler|owning hermes PID|concurrent hermes process|"
+     r"which hermes process|across hermes|reachable in the test|TestHermesBinDir|bare ``hermes``|"
+     r"real ``hermes``|missing the hermes dir|the hermes dir|hermes secrets|hermes is not on PATH|"
+     r"hermes home|Hermes-home|hermes-dedup|Patch the hermes",
+     "docker/lifecycle/install-dir test narration referencing the kept container command + PID "
+     "ownership + install-dir behavior — describes the kept 'hermes' runtime identity, or a "
+     "process-reference in test prose; non-shipping test narration"),
+]
+
+KEEP_PATTERNS += [
     (r"hermes: 'nous'|hermes:\s*.nous.",
      "skin-name mapping data (hermes->nous) — the default skin's registry key"),
     (r"hermes-audit@|hermes-your-platform|start-open-webui-hermes",

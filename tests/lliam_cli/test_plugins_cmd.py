@@ -1,4 +1,4 @@
-"""Tests for lliam_cli.plugins_cmd — the ``hermes plugins`` CLI subcommand."""
+"""Tests for lliam_cli.plugins_cmd — the ``lliam-gov plugins`` CLI subcommand."""
 
 from __future__ import annotations
 

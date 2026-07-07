@@ -1,4 +1,4 @@
-"""Tests for ``hermes dashboard register``.
+"""Tests for ``lliam-gov dashboard register``.
 
 Covers the CLI half of self-hosted dashboard registration:
   - Docker-style auto-name generation

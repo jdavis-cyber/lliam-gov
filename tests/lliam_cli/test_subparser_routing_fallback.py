@@ -16,7 +16,7 @@ import sys
 
 
 def _build_parser():
-    """Build a minimal replica of the hermes top-level parser."""
+    """Build a minimal replica of the lliam-gov top-level parser."""
     parser = argparse.ArgumentParser(prog="hermes")
     parser.add_argument("--version", "-V", action="store_true")
     parser.add_argument("--resume", "-r", metavar="SESSION", default=None)

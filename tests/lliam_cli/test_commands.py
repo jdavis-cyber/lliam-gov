@@ -390,7 +390,7 @@ class TestSlackNativeSlashes:
 
 
 class TestSlackAppManifest:
-    """Generated Slack app manifest (used by `hermes slack manifest`)."""
+    """Generated Slack app manifest (used by `lliam-gov slack manifest`)."""
 
     def test_returns_dict(self):
         m = slack_app_manifest()

@@ -240,7 +240,7 @@ class TestEntryPointsImportBootstrap:
     # Entry points that invoke Lliam-GOV as a process.  Each one must
     # import lliam_bootstrap before doing any file I/O or stdout writes.
     ENTRY_POINTS = [
-        "lliam_cli/main.py",   # hermes CLI (console_script)
+        "lliam_cli/main.py",   # lliam-gov CLI (console_script)
         "run_agent.py",          # hermes-agent (console_script)
         "acp_adapter/entry.py",  # hermes-acp (console_script)
         "gateway/run.py",        # gateway
