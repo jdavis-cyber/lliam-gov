@@ -64,7 +64,7 @@ mcp_servers:
 
 ### 3. 重启 Lliam-GOV
 ```bash
-hermes
+lliam-gov
 ```
 所有 11 个 AgentMail 工具现已自动可用。
 

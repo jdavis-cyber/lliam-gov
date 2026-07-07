@@ -372,6 +372,10 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
      "internal task/thread/temp-file/glob name — opaque runtime identifier, not the display name"),
     (r'spec_from_file_location\("openclaw_to_hermes"|"openclaw_to_hermes"',
      "import spec name for the kept openclaw_to_hermes.py migration module"),
+    (r'shim_dir, "hermes"\)|os\.path\.join\(shim_dir, "hermes"\)|the `hermes` CLI child|'
+     r'`hermes`, ask it to|Run `hermes`|another hermes process|client_id": "hermes-\d',
+     "test fixture: fake 'hermes' shim binary / CLI-run instruction / opaque process reference / "
+     "client_id fixture — opaque test data"),
     (r"hermes: 'nous'|hermes:\s*.nous.",
      "skin-name mapping data (hermes->nous) — the default skin's registry key"),
     (r"hermes-audit@|hermes-your-platform|start-open-webui-hermes",
@@ -419,8 +423,11 @@ KEEP_PATTERNS += [
     (r"hermes-plugin\b", "x-sdk-runtime plugin tag value — external wire"),
     # --- External-service peer/workspace/host default identifiers ---
     (r'hermes-default|hermes-assistant|HOST = "hermes"|ai_peer.*"hermes"|_acct_id.*"hermes"|'
-     r'"hermes-\{identity\}"|hermes-\{identity\}|hermes-coder|hermes-\{profile\}|hermes\.<profile>',
-     "external memory-service peer/workspace/host/container default identifier — opaque data"),
+     r'"hermes-\{identity\}"|hermes-\{identity\}|hermes-coder|hermes-\{profile\}|hermes\.<profile>|'
+     r'_host_key.*"hermes"|host == "hermes"|host="hermes"|profile_host_key.*"hermes"|'
+     r'resolve_active_host\(\) == "hermes"|hosts.*\["hermes"\]|"hermes"\]|from_env\(host="hermes"|'
+     r'"hermetika", "hermes"|client_id": "hermes-\d',
+     "external Honcho memory-service host/peer default identifier ('hermes') a test asserts — opaque data"),
     (r"_DEFAULT_CONTAINER_TAG = \"hermes\"|default_headers.*hermes|HermesMeetSink|hermes-meet-node|"
      r'source: str = "hermes-desktop"|"hermes-desktop"',
      "external-service default container/source/display identifier — opaque data / wire tag"),
@@ -440,8 +447,11 @@ KEEP_PATTERNS += [
     # --- Detection / kill / classification regexes (must keep matching legacy 'hermes') ---
     (r"lliam-gov\|lliam\|hermes|CLAUDE\|CODEX\|HERMES|hermes\\s\+gateway|hermes.*gateway|"
      r'base == "hermes"|base\.startswith\("hermes|"hermes" in|"off", "default", "disable", "hermes"|'
-     r"hermes\[-_ \]\?\[34\]|kickstart.*hermes|systemctl.*hermes|p\?kill.*hermes|hermes-brain",
-     "gateway/service/model DETECTION or kill regex — must keep matching legacy 'hermes' units/models"),
+     r"hermes\[-_ \]\?\[34\]|kickstart.*hermes|systemctl.*hermes|p\?kill.*hermes|hermes-brain|"
+     r"killall hermes|pkill( -9)? hermes|pgrep hermes|pidof hermes|pkill -f.*hermes|"
+     r'"pkill", "-f", "hermes"|"killall", "hermes"|hermes-themed|hermes-triage',
+     "gateway/service/model DETECTION or kill/pkill/pgrep test command — must keep matching "
+     "legacy 'hermes' process name (these tests assert the kill-guard blocks self-termination)"),
     # --- Internal temp-dir / task / thread / container-name prefixes (opaque) ---
     (r"hermes-ssh|hermes-sync-back-|hermes-overlays|hermes-cmd-stt-|hermes-local-stt-|"
      r"hermes-skills-safe-|hermes-core-constraints-|hermes-bws-|hermes-osint|hermes-lsp-loop|"
