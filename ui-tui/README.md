@@ -3,7 +3,7 @@
 React + Ink terminal UI for Lliam-GOV. TypeScript owns the screen. Python owns sessions, tools, model calls, and most command logic.
 
 ```bash
-hermes --tui
+lliam-gov --tui
 ```
 
 ## What runs
@@ -38,7 +38,7 @@ Malformed stdout lines are treated as protocol noise and surfaced as `gateway.pr
 From the repo root, the normal path is:
 
 ```bash
-hermes --tui
+lliam-gov --tui
 ```
 
 The CLI expects `ui-tui/dist/entry.js` to exist, or the whole source code available in which to run `npm install` and `npm run dev`.
@@ -486,5 +486,5 @@ tui_gateway/
   entry.py               stdio entrypoint
   server.py              RPC handlers and session logic
   render.py              optional rich/ANSI bridge
-  slash_worker.py        persistent HermesCLI subprocess for slash commands
+  slash_worker.py        persistent LliamCLI subprocess for slash commands
 ```

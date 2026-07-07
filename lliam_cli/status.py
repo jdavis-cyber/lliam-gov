@@ -1,5 +1,5 @@
 """
-Status command for hermes CLI.
+Status command for lliam-gov CLI.
 
 Shows the status of all Lliam-GOV components.
 """

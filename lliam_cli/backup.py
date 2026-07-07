@@ -1,5 +1,5 @@
 """
-Backup and import commands for hermes CLI.
+Backup and import commands for lliam-gov CLI.
 
 `lliam-gov backup` creates a zip archive of the entire ~/.hermes/ directory
 (excluding the hermes-agent repo and transient files).

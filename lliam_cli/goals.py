@@ -21,7 +21,7 @@ Design notes / invariants:
   prompt and also pauses the goal loop for that turn (we still re-judge
   after, so if the user's message happens to complete the goal the judge
   will say ``done``).
-- This module has zero hard dependency on ``cli.HermesCLI`` or the gateway
+- This module has zero hard dependency on ``cli.LliamCLI`` or the gateway
   runner — both wire the same ``GoalManager`` in.
 
 Nothing in this module touches the agent's system prompt or toolset.

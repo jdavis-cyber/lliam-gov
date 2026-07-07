@@ -374,7 +374,7 @@ def check_alias_collision(name: str) -> Optional[str]:
             if existing_path == str(expected):
                 try:
                     content = expected.read_text()
-                    if "hermes -p" in content:
+                    if "lliam-gov -p" in content:
                         return None  # it's our wrapper, safe to overwrite
                 except Exception:
                     pass
@@ -414,7 +414,7 @@ def create_wrapper_script(name: str, target: Optional[str] = None) -> Optional[P
     if is_windows:
         wrapper_path = wrapper_dir / f"{canon}.bat"
         try:
-            wrapper_path.write_text(f"@echo off\r\nhermes -p {profile} %*\r\n")
+            wrapper_path.write_text(f"@echo off\r\nlliam-gov -p {profile} %*\r\n")
             return wrapper_path
         except OSError as e:
             print(f"⚠ Could not create wrapper at {wrapper_path}: {e}")
@@ -447,7 +447,7 @@ def remove_wrapper_script(name: str) -> bool:
             try:
                 # Verify it's our wrapper before removing
                 content = wrapper_path.read_text()
-                if "hermes -p" in content:
+                if "lliam-gov -p" in content:
                     wrapper_path.unlink()
                     return True
             except Exception:
@@ -504,7 +504,7 @@ def find_alias_for_profile(profile_name: str) -> Optional[str]:
         return None
     canon = normalize_profile_name(profile_name)
     is_windows = sys.platform == "win32"
-    needle = f"hermes -p {canon}"
+    needle = f"lliam-gov -p {canon}"
 
     custom: Optional[str] = None
     profile_named: Optional[str] = None

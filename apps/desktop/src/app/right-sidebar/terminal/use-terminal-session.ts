@@ -345,7 +345,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
       fontWeightBold: 'bold',
       letterSpacing: 0,
       lineHeight: 1.12,
-      // Full-screen TUIs (hermes --tui, vim) grab the mouse, so a plain drag
+      // Full-screen TUIs (lliam-gov --tui, vim) grab the mouse, so a plain drag
       // can't select — ⌥-drag (macOS) / Shift-drag (else) forces a native
       // selection over mouse-mode apps, which ⌘/Ctrl+L then sends to chat.
       macOptionClickForcesSelection: true,

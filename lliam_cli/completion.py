@@ -1,4 +1,4 @@
-"""Shell completion script generation for hermes CLI.
+"""Shell completion script generation for lliam-gov CLI.
 
 Walks the live argparse parser tree to generate accurate, always-up-to-date
 completion scripts — no hardcoded subcommand lists, no extra dependencies.

@@ -1,5 +1,5 @@
 """
-Doctor command for hermes CLI.
+Doctor command for lliam-gov CLI.
 
 Diagnoses issues with Lliam-GOV setup.
 """
@@ -230,7 +230,7 @@ def _check_version_consistency(issues: list[str]) -> None:
     """Verify pyproject.toml version matches lliam_cli.__version__.
 
     A git conflict resolution (reset/merge) can revert one file without the
-    other, leaving ``hermes --version`` reporting a stale version while
+    other, leaving ``lliam-gov --version`` reporting a stale version while
     ``pyproject.toml`` is current. Detect that drift so users can re-sync.
     Silent no-op for installed wheels where pyproject.toml isn't present.
     """
@@ -1344,7 +1344,7 @@ def run_doctor(args):
         else:
             _cmd_link_dir = Path.home() / ".local" / "bin"
             _cmd_link_display = "~/.local/bin"
-        _cmd_link = _cmd_link_dir / "hermes"
+        _cmd_link = _cmd_link_dir / "lliam-gov"
 
         if _venv_bin is None:
             check_warn(

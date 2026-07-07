@@ -1,11 +1,11 @@
-"""Agent-construction and session-resume display methods for ``HermesCLI``.
+"""Agent-construction and session-resume display methods for ``LliamCLI``.
 
 Extracted from ``cli.py`` as part of the god-file decomposition campaign
 (``~/.hermes/plans/god-file-decomposition.md``, Phase 4 step 2). This mixin holds
 the agent lifecycle/setup cluster: runtime-credential resolution, per-turn agent
 config, first-use agent construction, and resumed-session preload + history recap.
 
-Behavior-neutral: every method is lifted verbatim from ``HermesCLI``. ``self.*``
+Behavior-neutral: every method is lifted verbatim from ``LliamCLI``. ``self.*``
 calls resolve unchanged via the MRO. Neutral dependencies are imported at module
 top level; ``cli.py``-internal helpers/constants are imported lazily inside each
 method (``from cli import ...`` resolves at call time, when ``cli`` is fully
@@ -20,7 +20,7 @@ from rich.markup import escape as _escape
 
 
 class CLIAgentSetupMixin:
-    """Agent construction + session-resume display methods for ``HermesCLI``."""
+    """Agent construction + session-resume display methods for ``LliamCLI``."""
 
     def _ensure_runtime_credentials(self) -> bool:
         """

@@ -251,7 +251,7 @@ def auth_add_command(args) -> None:
         # Codex-style auto-import: if a shared Nous credential lives at
         # <hermes-root>/shared/nous_auth.json (written by any previous
         # successful login), offer to import it instead of running the
-        # full device-code flow. This makes `hermes --profile <name>
+        # full device-code flow. This makes `lliam-gov --profile <name>
         # auth add nous --type oauth` a one-tap operation for users who
         # run multiple profiles.
         shared = auth_mod._read_shared_nous_state()

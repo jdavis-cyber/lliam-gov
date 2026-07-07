@@ -136,7 +136,7 @@ pytest tests/ -v
 ```
 lliam-gov-agent/
 ├── run_agent.py              # Clase AIAgent — bucle de conversación central, despacho de herramientas, persistencia de sesión
-├── cli.py                    # Clase HermesCLI — TUI interactiva, integración prompt_toolkit
+├── cli.py                    # Clase LliamCLI — TUI interactiva, integración prompt_toolkit
 ├── model_tools.py            # Orquestación de herramientas (capa delgada sobre tools/registry.py)
 ├── toolsets.py               # Agrupaciones y presets de herramientas (lliam-gov-cli, lliam-gov-telegram, etc.)
 ├── lliam_state.py           # Base de datos de sesiones SQLite con búsqueda de texto completo FTS5, títulos de sesión

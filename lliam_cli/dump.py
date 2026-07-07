@@ -1,5 +1,5 @@
 """
-Dump command for hermes CLI.
+Dump command for lliam-gov CLI.
 
 Outputs a compact, plain-text summary of the user's Lliam-GOV setup
 that can be copy-pasted into Discord/GitHub/Telegram for support context.

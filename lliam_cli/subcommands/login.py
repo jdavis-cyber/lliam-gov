@@ -20,7 +20,7 @@ def build_login_parser(subparsers, *, cmd_login: Callable) -> None:
     'login'`` error — but:
 
     - The subparser is registered WITHOUT a ``help=`` kwarg so the row is
-      omitted from ``hermes --help`` (argparse only lists subcommands that
+      omitted from ``lliam-gov --help`` (argparse only lists subcommands that
       have a help string).  This hides a command that no longer works (#24756)
       without the ``help=argparse.SUPPRESS`` ``==SUPPRESS==`` leak that
       argparse emits for a top-level subparser on Python 3.12+.
