@@ -296,7 +296,7 @@ def check_via_pypi() -> Optional[int]:
 
 
 def check_for_updates() -> Optional[int]:
-    """Check whether a Hermes update is available.
+    """Check whether a Lliam-GOV update is available.
 
     Two paths: if ``HERMES_REVISION`` is set (nix builds embed it), compare
     it to upstream main via ``git ls-remote``. Otherwise look for a local
@@ -316,7 +316,7 @@ def check_for_updates() -> Optional[int]:
     # fall through to `check_via_pypi()`, whose PyPI-version mismatch flag (1)
     # then gets rendered by the CLI banner and the TUI badge as a phantom
     # "1 commit behind" — even though no git repo or commit math is involved,
-    # and `hermes update` correctly refuses to run in-place inside the
+    # and `lliam-gov update` correctly refuses to run in-place inside the
     # container anyway. The dashboard's REST `/api/hermes/update/check`
     # endpoint already short-circuits docker the same way (web_server.py);
     # mirror that here so the banner/TUI surfaces agree. Returning None makes
@@ -372,7 +372,7 @@ def check_for_updates() -> Optional[int]:
 
 
 def _resolve_repo_dir() -> Optional[Path]:
-    """Return the active Hermes git checkout, or None if this isn't a git install.
+    """Return the active Lliam-GOV git checkout, or None if this isn't a git install.
 
     Prefers the running code's location over the profile-scoped path
     because ``$HERMES_HOME/hermes-agent/`` may be a stale copy carried
@@ -467,7 +467,7 @@ def get_latest_release_tag(repo_dir: Optional[Path] = None) -> Optional[tuple]:
     """Return ``(tag, release_url)`` for the latest git tag, or None.
 
     Local-only — runs ``git describe --tags --abbrev=0`` against the
-    Hermes checkout. Cached per-process. Release URL always points at the
+    Lliam-GOV checkout. Cached per-process. Release URL always points at the
     canonical NousResearch/hermes-agent repo (forks don't get a link).
     """
     global _latest_release_cache
@@ -507,7 +507,7 @@ def get_latest_release_tag(repo_dir: Optional[Path] = None) -> Optional[tuple]:
 
 def format_banner_version_label() -> str:
     """Return the version label shown in the startup banner title."""
-    base = f"Lliam-GOV v{VERSION} ({RELEASE_DATE}) · built on Hermes Agent"
+    base = f"Lliam-GOV v{VERSION} ({RELEASE_DATE}) · built on Lliam-GOV"
     state = get_git_banner_state()
     if not state:
         return base

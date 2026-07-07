@@ -2996,7 +2996,7 @@ class TestChatCompletionsAgentIncomplete:
     @pytest.mark.asyncio
     async def test_truncation_with_partial_text_uses_length_finish_reason(self, adapter):
         """Partial text + truncation marker → finish_reason='length', 200 OK,
-        plus hermes extras + headers."""
+        plus lliam-gov extras + headers."""
         mock_result = {
             "final_response": "Here is part one of the answer",
             "completed": False,
@@ -3089,7 +3089,7 @@ class TestChatCompletionsAgentIncomplete:
     @pytest.mark.asyncio
     async def test_normal_completion_unchanged(self, adapter):
         """Sanity: a completed-True result still returns finish_reason='stop'
-        and no hermes extras (preserves the existing happy-path contract)."""
+        and no lliam-gov extras (preserves the existing happy-path contract)."""
         mock_result = {
             "final_response": "All good.",
             "completed": True,

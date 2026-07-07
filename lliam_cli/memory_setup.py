@@ -1,4 +1,4 @@
-"""hermes memory setup|status — configure memory provider plugins.
+"""lliam-gov memory setup|status — configure memory provider plugins.
 
 Auto-detects installed memory providers via the plugin system.
 Interactive curses-based UI for provider selection, then walks through
@@ -19,7 +19,7 @@ _CANCELLED = -1
 
 
 # ---------------------------------------------------------------------------
-# Curses-based interactive picker (same pattern as hermes tools)
+# Curses-based interactive picker (same pattern as lliam-gov tools)
 # ---------------------------------------------------------------------------
 
 def _curses_select(

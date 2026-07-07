@@ -1,4 +1,4 @@
-"""``hermes insights`` subcommand parser.
+"""``lliam-gov insights`` subcommand parser.
 
 Extracted from ``lliam_cli/main.py:main()`` (god-file Phase 2 follow-up).
 Handler injected to avoid importing ``main``.

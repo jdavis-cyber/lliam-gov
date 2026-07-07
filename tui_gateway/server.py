@@ -287,7 +287,7 @@ class _SlashWorker:
             text=True,
             bufsize=1,
             cwd=os.getcwd(),
-            # slash_worker runs the Hermes agent → needs provider credentials.
+            # slash_worker runs the Lliam-GOV agent → needs provider credentials.
             # Tier-1 secrets (gateway/GitHub/infra) are still stripped (#29157).
             env=lliam_subprocess_env(inherit_credentials=True),
         )
@@ -1142,7 +1142,7 @@ def _wait_agent(session: dict, rid: str, timeout: float = 30.0) -> dict | None:
 def _start_agent_build(sid: str, session: dict) -> None:
     """Start building the real AIAgent for a TUI session, once.
 
-    Classic `hermes` shows the prompt before constructing AIAgent; the TUI used
+    Classic `lliam-gov` shows the prompt before constructing AIAgent; the TUI used
     to eagerly build it during session.create, making startup feel blocked on
     tool discovery/model metadata even though the composer was visible.  Keep
     the shell responsive by deferring this work until the first prompt (or any
@@ -2378,7 +2378,7 @@ def _load_enabled_toolsets() -> list[str] | None:
     cfg = None
     fallback_notice = None
 
-    # Coding posture (base Hermes): with no explicit pin, collapse to the
+    # Coding posture (base Lliam-GOV): with no explicit pin, collapse to the
     # coding toolset (+ enabled MCP servers) when sitting in a code workspace.
     # The desktop app and `hermes --tui` both land here. See
     # agent/coding_context.py. No config is loaded yet at this point, so we let
@@ -6004,7 +6004,7 @@ def _(rid, params: dict) -> dict:
 
     Desktop parity with the CLI ``/handoff`` command: we only write
     ``handoff_state='pending'`` onto the persisted session row. The actual
-    transfer is performed by the separate ``hermes gateway`` process, whose
+    transfer is performed by the separate ``lliam-gov gateway`` process, whose
     ``_handoff_watcher`` claims the row, re-binds the session to the platform's
     home channel, and forges a synthetic turn. The desktop then polls
     ``handoff.state`` for the terminal result.
@@ -6327,7 +6327,7 @@ def _pet_active_selection():
 def _pet_state_rows(spritesheet) -> list[str]:
     """Row taxonomy for the concrete active pet sheet.
 
-    Hermes has to support both the legacy 8-row petdex atlas and the current
+    Lliam-GOV has to support both the legacy 8-row petdex atlas and the current
     Codex/petdex 9-row atlas. The desktop canvas gets this list and indexes it
     with the same `PetState` names the Python renderer uses.
     """
@@ -7428,7 +7428,7 @@ def _(rid, params: dict) -> dict:
     provider = getattr(agent, "provider", None) or "unknown"
     model = getattr(agent, "model", None) or "(unknown)"
     lines = [
-        "Hermes TUI Status",
+        "Lliam-GOV TUI Status",
         "",
         f"Session ID: {key}",
         f"Path: {display_lliam_home()}",
@@ -7602,7 +7602,7 @@ def _(rid, params: dict) -> dict:
         return err
 
     agent = session["agent"]
-    # Mirror the classic CLI /save: snapshot under the Hermes profile home
+    # Mirror the classic CLI /save: snapshot under the Lliam-GOV profile home
     # (~/.hermes/sessions/saved/) rather than the project/workspace CWD, and
     # include the system prompt so the export matches the dashboard save.
     saved_dir = get_lliam_home() / "sessions" / "saved"
@@ -9495,14 +9495,14 @@ def _(rid, params: dict) -> dict:
                 if has_history
                 else None
             ),
-            "Restart exactly the app intended for the Preview URL, not Hermes Desktop itself.",
+            "Restart exactly the app intended for the Preview URL, not Lliam-GOV Desktop itself.",
             "The Preview URL and port are the target. Preserve that target unless you conclude it is impossible.",
             "If the prior conversation shows a specific command that bound this URL/port, prefer re-running THAT exact command (in the same cwd) over guessing a new one.",
-            "First inspect what process, if any, owns the Preview URL port. If a stale server exists, inspect its cwd and prefer that cwd over the Hermes/Desktop process cwd.",
+            "First inspect what process, if any, owns the Preview URL port. If a stale server exists, inspect its cwd and prefer that cwd over the Lliam-GOV/Desktop process cwd.",
             "The Current working directory is only a hint. Do not assume it is the preview app root when the port owner or files indicate another root.",
             "If the console shows a module-script MIME error for src/main.tsx or similar, a static server is serving source files. Do not restart python -m http.server or any dumb static server for that app.",
             "For module-script MIME failures, inspect package.json/vite config in the candidate app root and start the real dev server/bundler (for example npm/pnpm/yarn dev) so module transforms happen.",
-            "Before declaring success, verify the Preview URL responds with the intended app, not Hermes Desktop. If it serves Hermes/Desktop UI or another unrelated app, stop that process and report failure.",
+            "Before declaring success, verify the Preview URL responds with the intended app, not Lliam-GOV Desktop. If it serves Lliam-GOV/Desktop UI or another unrelated app, stop that process and report failure.",
             "Do not modify files. Do not ask the user unless blocked.",
             "Prefer existing project scripts or commands when they are clear.",
             "If a stale process owns the needed port, handle it safely.",
@@ -10335,8 +10335,8 @@ def _discover_repos_payload(db, *, conn=None, backfill: bool = True) -> list[dic
     """Merge filesystem-scanned repos (cached) with session-derived repo roots.
 
     Repo-first: the disk scan (persisted by `projects.record_repos`) surfaces
-    repos even with zero hermes sessions. Session-derived roots cover repos
-    outside the scan roots. Both are junk-filtered (hermes home subtree + bare
+    repos even with zero lliam-gov sessions. Session-derived roots cover repos
+    outside the scan roots. Both are junk-filtered (lliam-gov home subtree + bare
     home) and carry their session totals for the overview.
 
     ``conn`` reuses an already-open projects.db connection (the tree path holds
@@ -10768,7 +10768,7 @@ def _(rid, params: dict) -> dict:
                     "provider": provider,
                     "model": runtime.get("model"),
                     "source": source,
-                    "error": "No Hermes provider is configured.",
+                    "error": "No Lliam-GOV provider is configured.",
                 },
             )
 
@@ -11126,7 +11126,7 @@ def _(rid, params: dict) -> dict:
 def _cli_exec_blocked(argv: list[str]) -> str | None:
     """Return user hint if this argv must not run headless in the gateway process."""
     if not argv:
-        return "bare `lliam-gov` is interactive — use `/hermes chat -q …` or run `lliam-gov` in another terminal"
+        return "bare `lliam-gov` is interactive — use `/lliam-gov chat -q …` or run `lliam-gov` in another terminal"
     a0 = argv[0].lower()
     if a0 == "setup":
         return "`lliam-gov setup` needs a full terminal — run it outside the TUI"
@@ -13463,7 +13463,7 @@ def _(rid, params: dict) -> dict:
     """List installed plugins with activation state, or toggle one on/off.
 
     Backs the TUI Plugins Hub. Uses the same disk-discovery + enable/disable
-    primitives as ``hermes plugins`` / the dashboard, so the three surfaces
+    primitives as ``lliam-gov plugins`` / the dashboard, so the three surfaces
     agree on what's installed and what's enabled.
 
     Actions:

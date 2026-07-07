@@ -1,4 +1,4 @@
-"""Migrate Hermes' MCP server config and Codex's installed curated plugins
+"""Migrate Lliam-GOV' MCP server config and Codex's installed curated plugins
 to the format Codex expects in ~/.codex/config.toml.
 
 When the user enables the codex_app_server runtime, the codex subprocess
@@ -7,7 +7,7 @@ Asana, plus per-account ChatGPT apps via app/list). For both of those to
 be useful, the user's choices need to be visible to codex too. This
 module:
 
-  1. Reads Hermes' YAML and writes equivalent [mcp_servers.<name>]
+  1. Reads Lliam-GOV' YAML and writes equivalent [mcp_servers.<name>]
      entries to ~/.codex/config.toml.
   2. Queries codex's `plugin/list` for the openai-curated marketplace
      and writes [plugins."<name>@<marketplace>"] entries for any plugin
@@ -19,17 +19,17 @@ module:
      don't get an approval prompt on every write attempt.
 
 What translates (MCP servers):
-  Hermes mcp_servers.<n>.command/args/env  → codex stdio transport
-  Hermes mcp_servers.<n>.url/headers       → codex streamable_http transport
-  Hermes mcp_servers.<n>.timeout           → codex tool_timeout_sec
-  Hermes mcp_servers.<n>.connect_timeout   → codex startup_timeout_sec
+  Lliam-GOV mcp_servers.<n>.command/args/env  → codex stdio transport
+  Lliam-GOV mcp_servers.<n>.url/headers       → codex streamable_http transport
+  Lliam-GOV mcp_servers.<n>.timeout           → codex tool_timeout_sec
+  Lliam-GOV mcp_servers.<n>.connect_timeout   → codex startup_timeout_sec
 
 What does NOT translate (warned + skipped):
-  Hermes-specific keys (sampling, etc.) — codex's MCP client has no
+  Lliam-GOV-specific keys (sampling, etc.) — codex's MCP client has no
   equivalent. Listed in the per-server skipped[] field of the report.
 
 What's NOT migrated (intentional):
-  AGENTS.md — codex respects this file natively in its cwd. Hermes' own
+  AGENTS.md — codex respects this file natively in its cwd. Lliam-GOV' own
   AGENTS.md (project-level) is already in the worktree, so codex picks
   it up without translation. No code needed.
 """
@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 # Marker comments wrapping the managed section so re-runs can detect
 # what's ours and what's user-edited. Both must appear or strip is a no-op.
 MIGRATION_MARKER = (
-    "# managed by hermes-agent — `hermes codex-runtime migrate` regenerates this section"
+    "# managed by hermes-agent — `lliam-gov codex-runtime migrate` regenerates this section"
 )
 MIGRATION_END_MARKER = (
     "# end hermes-agent managed section"
@@ -84,7 +84,7 @@ class MigrationReport:
                 )
                 lines.append(f"  - {name}{note}")
         else:
-            lines.append("No MCP servers found in Hermes config.")
+            lines.append("No MCP servers found in Lliam-GOV config.")
         if self.migrated_plugins:
             lines.append(
                 f"Migrated {len(self.migrated_plugins)} native Codex plugin(s):"
@@ -103,7 +103,7 @@ class MigrationReport:
         return "\n".join(lines)
 
 
-# Hermes keys that codex's MCP schema doesn't support — dropped during
+# Lliam-GOV keys that codex's MCP schema doesn't support — dropped during
 # migration with a warning. Anything not on the keep list AND not the
 # transport keys is added to skipped.
 _KNOWN_LLIAM_KEYS = {
@@ -119,7 +119,7 @@ _KNOWN_LLIAM_KEYS = {
 
 # Subset that have a direct codex equivalent.
 _KEYS_DROPPED_WITH_WARNING = {
-    # Hermes' sampling subsection — codex MCP has no equivalent
+    # Lliam-GOV' sampling subsection — codex MCP has no equivalent
     "sampling",
 }
 
@@ -127,7 +127,7 @@ _KEYS_DROPPED_WITH_WARNING = {
 def _translate_one_server(
     name: str, lliam_cfg: dict
 ) -> tuple[Optional[dict], list[str]]:
-    """Translate one Hermes MCP server config to the codex inline-table dict
+    """Translate one Lliam-GOV MCP server config to the codex inline-table dict
     representation. Returns (codex_entry, skipped_keys).
 
     codex_entry is a dict ready for TOML serialization, or None when the
@@ -164,7 +164,7 @@ def _translate_one_server(
         headers = lliam_cfg.get("headers") or {}
         if headers:
             out["http_headers"] = {str(k): str(v) for k, v in headers.items()}
-        # Hermes' transport: sse hint is informational; codex auto-negotiates
+        # Lliam-GOV' transport: sse hint is informational; codex auto-negotiates
         if lliam_cfg.get("transport") == "sse":
             skipped.append("transport=sse (codex auto-negotiates)")
     else:
@@ -191,7 +191,7 @@ def _translate_one_server(
         if key in _KEYS_DROPPED_WITH_WARNING:
             skipped.append(f"{key} (no codex equivalent)")
         elif key not in _KNOWN_LLIAM_KEYS:
-            skipped.append(f"{key} (unknown Hermes key)")
+            skipped.append(f"{key} (unknown Lliam-GOV key)")
 
     return out, skipped
 
@@ -263,7 +263,7 @@ def render_codex_toml_section(
     """
     out = [MIGRATION_MARKER]
     if not servers and not plugins and not default_permission_profile:
-        out.append("# (no MCP servers, plugins, or permissions configured by Hermes)")
+        out.append("# (no MCP servers, plugins, or permissions configured by Lliam-GOV)")
         out.append(MIGRATION_END_MARKER)
         return "\n".join(out) + "\n"
 
@@ -305,7 +305,7 @@ def render_codex_toml_section(
 
 
 def _insert_managed_block_at_top_level(user_text: str, managed_block: str) -> str:
-    """Insert Hermes' managed Codex TOML block while keeping root keys root-scoped.
+    """Insert Lliam-GOV' managed Codex TOML block while keeping root keys root-scoped.
 
     TOML has no syntax to return to the document root after a table header.
     Therefore appending a root key like `default_permissions = ...` after a
@@ -340,7 +340,7 @@ def _strip_unmanaged_plugin_tables(toml_text: str) -> str:
     managed block.
 
     Codex itself writes these tables when the user runs ``codex plugins enable``
-    directly (i.e. before Hermes' migrate has ever touched the file). When we
+    directly (i.e. before Lliam-GOV' migrate has ever touched the file). When we
     later run migrate, ``_query_codex_plugins()`` reports the same plugins via
     the live ``plugin/list`` RPC and we re-emit them inside the managed block.
     The result without this strip is duplicate ``[plugins."X@Y"]`` table
@@ -412,7 +412,7 @@ def _strip_existing_managed_block(toml_text: str) -> str:
     follows, we fall back to the heuristic that swallows lines until we
     hit a section that's not [mcp_servers.*]/[plugins.*]/[permissions]/
     a `default_permissions =` key. This matches what older versions of
-    this code wrote so re-runs don't break configs from prior Hermes
+    this code wrote so re-runs don't break configs from prior Lliam-GOV
     versions."""
     lines = toml_text.splitlines(keepends=True)
     out: list[str] = []
@@ -555,12 +555,12 @@ def _looks_like_test_tempdir(path: str) -> bool:
 
 
 def _build_lliam_tools_mcp_entry() -> dict:
-    """Build the codex stdio-transport entry that launches Hermes' own
+    """Build the codex stdio-transport entry that launches Lliam-GOV' own
     tool surface as an MCP server. Codex's subprocess will call back into
     this for browser/web/delegate_task/vision/memory/skills tools.
 
     The command runs the worktree's Python via the current sys.executable
-    so a hermes installed under /opt/, /usr/local/, or a venv all work.
+    so a lliam-gov installed under /opt/, /usr/local/, or a venv all work.
     HERMES_HOME and PYTHONPATH are passed through so the spawned process
     sees the same config + module layout the user is running."""
     import sys
@@ -584,7 +584,7 @@ def _build_lliam_tools_mcp_entry() -> dict:
         lliam_home = ""
     if lliam_home:
         env["HERMES_HOME"] = lliam_home
-    # PYTHONPATH passes through so a worktree-launched hermes finds the
+    # PYTHONPATH passes through so a worktree-launched lliam-gov finds the
     # branch's modules instead of the installed package.
     pythonpath = os.environ.get("PYTHONPATH")
     if pythonpath:
@@ -618,7 +618,7 @@ def migrate(
     default_permission_profile: Optional[str] = ":workspace",
     expose_lliam_tools: bool = True,
 ) -> MigrationReport:
-    """Translate Hermes mcp_servers config + Codex curated plugins into
+    """Translate Lliam-GOV mcp_servers config + Codex curated plugins into
     ~/.codex/config.toml.
 
     Args:
@@ -638,10 +638,10 @@ def migrate(
             configured in their own [permissions.<name>] table. Set None
             to leave permissions unset and let codex use its compiled-in
             default (which is read-only).
-        expose_hermes_tools: when True (default), register Hermes' own
+        expose_hermes_tools: when True (default), register Lliam-GOV' own
             tool surface (web_search, browser_*, delegate_task, vision,
             memory, skills, etc.) as an MCP server in ~/.codex/config.toml
-            so the codex subprocess can call back into Hermes for tools
+            so the codex subprocess can call back into Lliam-GOV for tools
             codex doesn't have built in. Set False to opt out.
     """
     report = MigrationReport(dry_run=dry_run)
@@ -652,7 +652,7 @@ def migrate(
     lliam_servers = (lliam_config or {}).get("mcp_servers") or {}
     if not isinstance(lliam_servers, dict):
         report.errors.append(
-            "mcp_servers in Hermes config is not a dict; cannot migrate."
+            "mcp_servers in Lliam-GOV config is not a dict; cannot migrate."
         )
         return report
 
@@ -690,8 +690,8 @@ def migrate(
     if default_permission_profile:
         report.wrote_permissions_default = default_permission_profile
 
-    # Inject Hermes' own tool surface as an MCP server so the spawned
-    # codex subprocess can call back into Hermes for the tools codex
+    # Inject Lliam-GOV' own tool surface as an MCP server so the spawned
+    # codex subprocess can call back into Lliam-GOV for the tools codex
     # doesn't ship with — web_search, browser_*, delegate_task, vision,
     # memory, skills, session_search, image_generate, text_to_speech.
     # The server itself is agent/transports/lliam_tools_mcp_server.py

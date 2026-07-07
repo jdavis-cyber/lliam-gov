@@ -1,6 +1,6 @@
-"""CLI handlers for ``hermes migrate ...``.
+"""CLI handlers for ``lliam-gov migrate ...``.
 
-Currently exposes only ``hermes migrate xai`` — diagnoses and (with --apply)
+Currently exposes only ``lliam-gov migrate xai`` — diagnoses and (with --apply)
 rewrites references to xAI models retired on May 15, 2026.
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ from lliam_cli.config import load_config
 
 
 def cmd_migrate(args: Any) -> int:
-    """Dispatcher for ``hermes migrate <subtype>``."""
+    """Dispatcher for ``lliam-gov migrate <subtype>``."""
     sub = getattr(args, "migrate_type", None)
     if sub == "xai":
         return cmd_migrate_xai(args)

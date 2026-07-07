@@ -143,7 +143,7 @@ from lliam_cli.config import (
     get_env_value,
     ensure_lliam_home,
 )
-# display_lliam_home imported lazily at call sites (stale-module safety during hermes update)
+# display_lliam_home imported lazily at call sites (stale-module safety during lliam-gov update)
 
 from lliam_cli.colors import Colors, color
 
@@ -177,13 +177,13 @@ def is_interactive_stdin() -> bool:
 def print_noninteractive_setup_guidance(reason: str | None = None) -> None:
     """Print guidance for headless/non-interactive setup flows."""
     print()
-    print(color("⚕ Hermes Setup — Non-interactive mode", Colors.CYAN, Colors.BOLD))
+    print(color("⚕ Lliam-GOV Setup — Non-interactive mode", Colors.CYAN, Colors.BOLD))
     print()
     if reason:
         print_info(reason)
     print_info("The interactive wizard cannot be used here.")
     print()
-    print_info("Configure Hermes using environment variables or config commands:")
+    print_info("Configure Lliam-GOV using environment variables or config commands:")
     print_info("  lliam-gov config set model.provider custom")
     print_info("  lliam-gov config set model.base_url http://localhost:8080/v1")
     print_info("  lliam-gov config set model.default your-model-name")
@@ -482,7 +482,7 @@ def _print_setup_summary(config: dict, lliam_home):
         else:
             tool_status.append(("Image Generation", False, "FAL_KEY or OPENAI_API_KEY"))
 
-    # Video generation — opt-in via `hermes tools` → Video Generation.
+    # Video generation — opt-in via `lliam-gov tools` → Video Generation.
     # Only show the row when a plugin reports available so we don't badger
     # users who don't care about video gen with a "missing" status line.
     if subscription_features.video_gen.managed_by_nous:
@@ -556,7 +556,7 @@ def _print_setup_summary(config: dict, lliam_home):
     if get_env_value("HASS_TOKEN"):
         tool_status.append(("Smart Home (Home Assistant)", True, None))
 
-    # Spotify (OAuth via hermes auth spotify — check auth.json, not env vars)
+    # Spotify (OAuth via lliam-gov auth spotify — check auth.json, not env vars)
     try:
         from lliam_cli.auth import get_provider_auth_state
         _spotify_state = get_provider_auth_state("spotify") or {}
@@ -711,7 +711,7 @@ def _prompt_container_resources(config: dict):
 
 
 # Tool categories and provider config are now in tools_config.py (shared
-# between `hermes tools` and `hermes setup tools`).
+# between `lliam-gov tools` and `lliam-gov setup tools`).
 
 
 # =============================================================================
@@ -723,10 +723,10 @@ def _prompt_container_resources(config: dict):
 def setup_model_provider(config: dict, *, quick: bool = False):
     """Configure the inference provider and default model.
 
-    Delegates to ``cmd_model()`` (the same flow used by ``hermes model``)
+    Delegates to ``cmd_model()`` (the same flow used by ``lliam-gov model``)
     for provider selection, credential prompting, and model picking.
     This ensures a single code path for all provider setup — any new
-    provider added to ``hermes model`` is automatically available here.
+    provider added to ``lliam-gov model`` is automatically available here.
 
     When *quick* is True, skips credential rotation, vision, and TTS
     configuration — used by the streamlined first-time quick setup.
@@ -738,7 +738,7 @@ def setup_model_provider(config: dict, *, quick: bool = False):
     print_info(f"   Guide: {_DOCS_BASE}/integrations/providers")
     print()
 
-    # Delegate to the shared hermes model flow — handles provider picker,
+    # Delegate to the shared lliam-gov model flow — handles provider picker,
     # credential prompting, model selection, and config persistence.
     from lliam_cli.main import select_provider_and_model
     try:
@@ -749,7 +749,7 @@ def setup_model_provider(config: dict, *, quick: bool = False):
     except Exception as exc:
         logger.debug("select_provider_and_model error during setup: %s", exc)
         print_warning(f"Provider setup encountered an error: {exc}")
-        print_info("You can try again later with: hermes model")
+        print_info("You can try again later with: lliam-gov model")
 
     # Re-sync the wizard's config dict from what cmd_model saved to disk.
     # This is critical: cmd_model writes to disk via its own load/save cycle,
@@ -770,8 +770,8 @@ def setup_model_provider(config: dict, *, quick: bool = False):
     # Credential rotation, vision-backend selection, and TTS provider are no
     # longer prompted here. They have safe defaults (rotation off, vision
     # auto-detected from the main provider, TTS = Edge) and are configurable
-    # on demand via `hermes auth add`, `hermes setup` vision, and
-    # `hermes setup tts`. This keeps both quick and full setup thin.
+    # on demand via `lliam-gov auth add`, `lliam-gov setup` vision, and
+    # `lliam-gov setup tts`. This keeps both quick and full setup thin.
 
     # Tool Gateway prompt is already shown by _model_flow_nous() above.
     save_config(config)
@@ -866,7 +866,7 @@ def _xai_oauth_logged_in_for_setup() -> bool:
     """True iff xAI Grok OAuth credentials are already stored locally.
 
     Lets TTS / STT setup skip the API-key prompt for users who logged in
-    through ``hermes model`` -> xAI Grok OAuth (SuperGrok / Premium+).
+    through ``lliam-gov model`` -> xAI Grok OAuth (SuperGrok / Premium+).
     """
     try:
         from lliam_cli.auth import get_xai_oauth_auth_status
@@ -1023,7 +1023,7 @@ def _setup_tts_provider(config: dict):
 
     elif selected == "xai":
         # Resolution order: existing OAuth tokens (free for SuperGrok subscribers
-        # via the Hermes auth store) > existing XAI_API_KEY > prompt the user.
+        # via the Lliam-GOV auth store) > existing XAI_API_KEY > prompt the user.
         # When neither is configured, offer both options instead of forcing the
         # API-key path — xAI TTS works fine with OAuth bearer tokens too.
         oauth_logged_in = _xai_oauth_logged_in_for_setup()
@@ -1067,7 +1067,7 @@ def _setup_tts_provider(config: dict):
                     from lliam_constants import display_lliam_home as _dhh
                     print_warning(
                         "No xAI API key provided for TTS. Configure XAI_API_KEY "
-                        f"via hermes setup model or {_dhh()}/.env to use xAI TTS. "
+                        f"via lliam-gov setup model or {_dhh()}/.env to use xAI TTS. "
                         "Falling back to Edge TTS."
                     )
                     selected = "edge"
@@ -1151,7 +1151,7 @@ def _setup_tts_provider(config: dict):
 
 
 def setup_tts(config: dict):
-    """Standalone TTS setup (for 'hermes setup tts')."""
+    """Standalone TTS setup (for 'lliam-gov setup tts')."""
     _setup_tts_provider(config)
 
 
@@ -1164,7 +1164,7 @@ def setup_terminal_backend(config: dict):
     """Configure the terminal execution backend."""
     import platform as _platform
     print_header("Terminal Backend")
-    print_info("Choose where Hermes runs shell commands and code.")
+    print_info("Choose where Lliam-GOV runs shell commands and code.")
     print_info("This affects tool execution, file access, and isolation.")
     print_info(f"   Guide: {_DOCS_BASE}/user-guide/configuration#terminal-backend-configuration")
     print()
@@ -1211,7 +1211,7 @@ def setup_terminal_backend(config: dict):
         print_success("Terminal backend: Local")
         print_info("Commands run directly on this machine.")
         # Gateway working directory defaults to home; sudo stays off. Both are
-        # configurable later via `hermes setup terminal` / config.yaml.
+        # configurable later via `lliam-gov setup terminal` / config.yaml.
         config["terminal"].setdefault("cwd", str(Path.home()))
 
     elif selected_backend == "docker":
@@ -1225,7 +1225,7 @@ def setup_terminal_backend(config: dict):
         else:
             print_info(f"Docker found: {docker_bin}")
 
-        # Image and resource limits use defaults; tune via `hermes setup terminal`.
+        # Image and resource limits use defaults; tune via `lliam-gov setup terminal`.
         config["terminal"].setdefault(
             "docker_image", "nikolaik/python-nodejs:python3.11-nodejs20"
         )
@@ -1243,7 +1243,7 @@ def setup_terminal_backend(config: dict):
         else:
             print_info(f"Found: {sing_bin}")
 
-        # Image and resource limits use defaults; tune via `hermes setup terminal`.
+        # Image and resource limits use defaults; tune via `lliam-gov setup terminal`.
         config["terminal"].setdefault(
             "singularity_image",
             "docker://nikolaik/python-nodejs:python3.11-nodejs20",
@@ -1395,7 +1395,7 @@ def setup_terminal_backend(config: dict):
                 save_env_value("DAYTONA_API_KEY", api_key)
                 print_success("    Configured")
 
-        # Image and resource limits use defaults; tune via `hermes setup terminal`.
+        # Image and resource limits use defaults; tune via `lliam-gov setup terminal`.
         config["terminal"].setdefault(
             "daytona_image", "nikolaik/python-nodejs:python3.11-nodejs20"
         )
@@ -1809,7 +1809,7 @@ def _setup_telegram():
         print_info("⚠️  No allowlist set - anyone who finds your bot can use it!")
 
     print()
-    print_info("📬 Home Channel: where Hermes delivers cron job results,")
+    print_info("📬 Home Channel: where Lliam-GOV delivers cron job results,")
     print_info("   cross-platform messages, and notifications.")
     print_info("   For Telegram DMs, this is your user ID (same as above).")
 
@@ -1847,7 +1847,7 @@ def _setup_bluebubbles():
         if not prompt_yes_no("Reconfigure BlueBubbles?", False):
             return
 
-    print_info("Connects Hermes to iMessage via BlueBubbles — a free, open-source")
+    print_info("Connects Lliam-GOV to iMessage via BlueBubbles — a free, open-source")
     print_info("macOS server that bridges iMessage to any device.")
     print_info("   Requires a Mac running BlueBubbles Server v1.0.0+")
     print_info("   Download: https://bluebubbles.app/")
@@ -1952,8 +1952,8 @@ def _setup_webhooks():
     print_info("   Route configuration guide:")
     print_info("   https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks/#configuring-routes")
     print()
-    print_info("   Open config in your editor:  hermes config edit")
-    print_info("   Open config in your editor:  hermes config edit")
+    print_info("   Open config in your editor:  lliam-gov config edit")
+    print_info("   Open config in your editor:  lliam-gov config edit")
 
 
 def setup_gateway(config: dict):
@@ -1961,7 +1961,7 @@ def setup_gateway(config: dict):
     from lliam_cli.gateway import _all_platforms, _platform_status, _configure_platform
 
     print_header("Messaging Platforms")
-    print_info("Connect to messaging platforms to chat with Hermes from anywhere.")
+    print_info("Connect to messaging platforms to chat with Lliam-GOV from anywhere.")
     print_info("Toggle with Space, confirm with Enter.")
     print()
 
@@ -2169,11 +2169,11 @@ def setup_gateway(config: dict):
                             print_error(f"  Start failed: {e}")
                 except Exception as e:
                     print_error(f"  Install failed: {e}")
-                    print_info("  You can try manually: hermes gateway install")
+                    print_info("  You can try manually: lliam-gov gateway install")
             else:
-                print_info("  You can install later: hermes gateway install")
+                print_info("  You can install later: lliam-gov gateway install")
                 if supports_systemd and os.geteuid() == 0:  # windows-footgun: ok — guarded by supports_systemd (Linux only)
-                    print_info("  Or as a boot-time service: hermes gateway install --system")
+                    print_info("  Or as a boot-time service: lliam-gov gateway install --system")
                 print_info("  Or run in foreground:  lliam-gov gateway")
         else:
             from lliam_constants import is_container
@@ -2199,7 +2199,7 @@ def setup_gateway(config: dict):
 def setup_tools(config: dict, first_install: bool = False):
     """Configure tools — delegates to the unified tools_command() in tools_config.py.
 
-    Both `hermes setup tools` and `hermes tools` use the same flow:
+    Both `lliam-gov setup tools` and `lliam-gov tools` use the same flow:
     platform selection → toolset toggles → provider/API key configuration.
 
     Args:
@@ -2397,15 +2397,15 @@ def _load_openclaw_migration_module():
 
 # Item kinds that represent high-impact changes warranting explicit warnings.
 # Gateway tokens/channels can hijack messaging platforms from the old agent.
-# Config values may have different semantics between OpenClaw and Hermes.
+# Config values may have different semantics between OpenClaw and Lliam-GOV.
 # Instruction/context files (.md) can contain incompatible setup procedures.
 _HIGH_IMPACT_KIND_KEYWORDS = {
-    "gateway": "⚠ Gateway/messaging — this will configure Hermes to use your OpenClaw messaging channels",
-    "telegram": "⚠ Telegram — this will point Hermes at your OpenClaw Telegram bot",
-    "slack": "⚠ Slack — this will point Hermes at your OpenClaw Slack workspace",
-    "discord": "⚠ Discord — this will point Hermes at your OpenClaw Discord bot",
-    "whatsapp": "⚠ WhatsApp — this will point Hermes at your OpenClaw WhatsApp connection",
-    "config": "⚠ Config values — OpenClaw settings may not map 1:1 to Hermes equivalents",
+    "gateway": "⚠ Gateway/messaging — this will configure Lliam-GOV to use your OpenClaw messaging channels",
+    "telegram": "⚠ Telegram — this will point Lliam-GOV at your OpenClaw Telegram bot",
+    "slack": "⚠ Slack — this will point Lliam-GOV at your OpenClaw Slack workspace",
+    "discord": "⚠ Discord — this will point Lliam-GOV at your OpenClaw Discord bot",
+    "whatsapp": "⚠ WhatsApp — this will point Lliam-GOV at your OpenClaw WhatsApp connection",
+    "config": "⚠ Config values — OpenClaw settings may not map 1:1 to Lliam-GOV equivalents",
     "soul": "⚠ Instruction file — may contain OpenClaw-specific setup/restart procedures",
     "memory": "⚠ Memory/context file — may reference OpenClaw-specific infrastructure",
     "context": "⚠ Context file — may contain OpenClaw-specific instructions",
@@ -2449,7 +2449,7 @@ def _print_migration_preview(report: dict):
         print()
 
     if conflict_items:
-        print(color("  Would overwrite (conflicts with existing Hermes config):", Colors.YELLOW))
+        print(color("  Would overwrite (conflicts with existing Lliam-GOV config):", Colors.YELLOW))
         for item in conflict_items:
             kind = item.get("kind", "unknown")
             reason = item.get("reason", "already exists")
@@ -2470,8 +2470,8 @@ def _print_migration_preview(report: dict):
         for warning in sorted(warnings_shown):
             print(color(f"    {warning}", Colors.YELLOW))
         print()
-        print(color("  Note: OpenClaw config values may have different semantics in Hermes.", Colors.YELLOW))
-        print(color("  For example, OpenClaw's tool_call_execution: \"auto\" ≠ Hermes's yolo mode.", Colors.YELLOW))
+        print(color("  Note: OpenClaw config values may have different semantics in Lliam-GOV.", Colors.YELLOW))
+        print(color("  For example, OpenClaw's tool_call_execution: \"auto\" ≠ Lliam-GOV's yolo mode.", Colors.YELLOW))
         print(color("  Instruction files (.md) from OpenClaw may contain incompatible procedures.", Colors.YELLOW))
         print()
 
@@ -2494,7 +2494,7 @@ def _offer_openclaw_migration(lliam_home: Path) -> bool:
     print()
     print_header("OpenClaw Installation Detected")
     print_info(f"Found OpenClaw data at {openclaw_dir}")
-    print_info("Hermes can preview what would be imported before making any changes.")
+    print_info("Lliam-GOV can preview what would be imported before making any changes.")
     print()
 
     if not prompt_yes_no("Would you like to see what can be imported?", default=True):
@@ -2564,7 +2564,7 @@ def _offer_openclaw_migration(lliam_home: Path) -> bool:
         )
         return False
 
-    # Execute the migration — overwrite=False so existing Hermes configs are
+    # Execute the migration — overwrite=False so existing Lliam-GOV configs are
     # preserved. The user saw the preview; conflicts are skipped by default.
     try:
         migrator = mod.Migrator(
@@ -2572,7 +2572,7 @@ def _offer_openclaw_migration(lliam_home: Path) -> bool:
             target_root=lliam_home.resolve(),
             execute=True,
             workspace_target=None,
-            overwrite=False,  # preserve existing Hermes config
+            overwrite=False,  # preserve existing Lliam-GOV config
             migrate_secrets=True,
             output_dir=None,
             selected_options=selected,
@@ -2595,7 +2595,7 @@ def _offer_openclaw_migration(lliam_home: Path) -> bool:
     if migrated:
         print_success(f"Imported {migrated} item(s) from OpenClaw.")
     if conflicts:
-        print_info(f"Skipped {conflicts} item(s) that already exist in Hermes (use hermes claw migrate --overwrite to force).")
+        print_info(f"Skipped {conflicts} item(s) that already exist in Lliam-GOV (use lliam-gov claw migrate --overwrite to force).")
     if skipped:
         print_info(f"Skipped {skipped} item(s) (not found or unchanged).")
     if errors:
@@ -2626,18 +2626,18 @@ SETUP_SECTIONS = [
 def _run_portal_one_shot(config: dict) -> None:
     """One-shot Nous Portal setup — OAuth + model pick + provider + Tool Gateway.
 
-    Wired into ``hermes setup --portal`` and ``hermes portal``. This is the
+    Wired into ``lliam-gov setup --portal`` and ``lliam-gov portal``. This is the
     Nous-Portal slice of the first-time quick setup, collapsed into a single
     shareable command so a brand-new user goes from zero to a fully working
-    Hermes session — model selected, provider set, and web/image/tts/browser
+    Lliam-GOV session — model selected, provider set, and web/image/tts/browser
     tools routed via their Portal sub — without being told to run
-    ``hermes setup`` and hunt for the quick-setup option.
+    ``lliam-gov setup`` and hunt for the quick-setup option.
 
     The login + model selection + provider switch + Tool Gateway opt-in are all
     delegated to ``_model_flow_nous`` — the exact same flow quick setup uses
-    (``_run_first_time_quick_setup``) and the same one ``hermes model`` runs
+    (``_run_first_time_quick_setup``) and the same one ``lliam-gov model`` runs
     when you pick Nous. Routing through it (instead of hand-rolling the auth +
-    provider write here) means ``hermes portal`` always offers a model picker,
+    provider write here) means ``lliam-gov portal`` always offers a model picker,
     and there is a single source of truth for the Nous onboarding steps.
     """
     from lliam_cli.config import load_config
@@ -2649,7 +2649,7 @@ def _run_portal_one_shot(config: dict) -> None:
             Colors.MAGENTA,
         )
     )
-    print(color("│     ⚕ Hermes Setup — Nous Portal (one-shot)             │", Colors.MAGENTA))
+    print(color("│     ⚕ Lliam-GOV Setup — Nous Portal (one-shot)             │", Colors.MAGENTA))
     print(
         color(
             "└─────────────────────────────────────────────────────────┘",
@@ -2668,7 +2668,7 @@ def _run_portal_one_shot(config: dict) -> None:
     # which selects a model internally) and the already-logged-in path (curated
     # Nous model picker), then offers the Tool Gateway opt-in and sets
     # provider=nous via the login/model save. This is the same routine quick
-    # setup calls, so `hermes portal` == quick setup's Nous step.
+    # setup calls, so `lliam-gov portal` == quick setup's Nous step.
     try:
         from lliam_cli.main import _model_flow_nous
 
@@ -2681,13 +2681,13 @@ def _run_portal_one_shot(config: dict) -> None:
         # Treat all of these as a graceful cancel/abort for the portal flow.
         print()
         print_info("  Setup cancelled.")
-        print_info("  You can retry later with `hermes portal`.")
+        print_info("  You can retry later with `lliam-gov portal`.")
         return
     except Exception as exc:
-        logger.debug("_model_flow_nous error during `hermes portal`: %s", exc)
+        logger.debug("_model_flow_nous error during `lliam-gov portal`: %s", exc)
         print()
         print_error(f"  Nous Portal setup encountered an error: {exc}")
-        print_info("  You can retry later with `hermes portal`.")
+        print_info("  You can retry later with `lliam-gov portal`.")
         return
 
     # Re-sync the in-memory config from disk — _model_flow_nous (and the
@@ -2711,13 +2711,13 @@ def run_setup_wizard(args):
     """Run the interactive setup wizard.
 
     Supports full, quick, and section-specific setup:
-      hermes setup           — full or quick (auto-detected)
-      hermes setup model     — just model/provider
-      hermes setup tts       — just text-to-speech
-      hermes setup terminal  — just terminal backend
-      hermes setup gateway   — just messaging platforms
-      hermes setup tools     — just tool configuration
-      hermes setup agent     — just agent settings
+      lliam-gov setup           — full or quick (auto-detected)
+      lliam-gov setup model     — just model/provider
+      lliam-gov setup tts       — just text-to-speech
+      lliam-gov setup terminal  — just terminal backend
+      lliam-gov setup gateway   — just messaging platforms
+      lliam-gov setup tools     — just tool configuration
+      lliam-gov setup agent     — just agent settings
     """
     from lliam_cli.config import is_managed, managed_error
     if is_managed():
@@ -2779,7 +2779,7 @@ def run_setup_wizard(args):
                         Colors.MAGENTA,
                     )
                 )
-                print(color(f"│     ⚕ Hermes Setup — {label:<34s} │", Colors.MAGENTA))
+                print(color(f"│     ⚕ Lliam-GOV Setup — {label:<34s} │", Colors.MAGENTA))
                 print(
                     color(
                         "└─────────────────────────────────────────────────────────┘",
@@ -2855,11 +2855,11 @@ def run_setup_wizard(args):
 
         print()
         print_header("Reconfigure")
-        print_success("You already have Hermes configured.")
+        print_success("You already have Lliam-GOV configured.")
         print_info("Running the full wizard — each prompt shows your current value.")
         print_info("Press Enter to keep it, or type a new value to change it.")
         print_info("")
-        print_info("Tip: jump straight to a section with 'hermes setup model|terminal|")
+        print_info("Tip: jump straight to a section with 'lliam-gov setup model|terminal|")
         print_info("     gateway|tools|agent', or fill only missing items with --quick.")
         # Fall through to the "Full Setup — run all sections" block below.
         # --reconfigure is now the default on existing installs; the flag
@@ -2880,7 +2880,7 @@ def run_setup_wizard(args):
             config = load_config()
 
         setup_mode = prompt_choice(
-            "How would you like to set up Hermes?",
+            "How would you like to set up Lliam-GOV?",
             [
                 "Quick Setup (Nous Portal) — free OAuth login, no API keys, model + tools (recommended)",
                 "Full setup — configure every provider, tool & option yourself (bring your own keys)",
@@ -2921,7 +2921,7 @@ def run_setup_wizard(args):
 
     # Section 3: Agent Settings — no longer prompted. First installs get the
     # recommended defaults silently; existing installs keep whatever they have.
-    # Tune later with `hermes setup agent`.
+    # Tune later with `lliam-gov setup agent`.
     if not is_existing:
         _apply_default_agent_settings(config)
 
@@ -2948,8 +2948,8 @@ def _run_first_time_quick_setup(config: dict, lliam_home, is_existing: bool):
     Routes straight to the Nous Portal provider — runs the device-code OAuth
     login, picks a Nous model, then configures the terminal backend and (optionally)
     a messaging platform. Applies sensible defaults for everything else (agent
-    settings, tools); the user can customize later via ``hermes setup <section>``
-    or switch providers with ``hermes model``.
+    settings, tools); the user can customize later via ``lliam-gov setup <section>``
+    or switch providers with ``lliam-gov model``.
     """
     from lliam_cli.config import load_config
 
@@ -2972,7 +2972,7 @@ def _run_first_time_quick_setup(config: dict, lliam_home, is_existing: bool):
     except Exception as exc:
         logger.debug("_model_flow_nous error during quick setup: %s", exc)
         print_warning(f"Nous Portal setup encountered an error: {exc}")
-        print_info("You can try again later with: hermes model")
+        print_info("You can try again later with: lliam-gov model")
 
     # Re-sync the wizard's config dict from disk — _model_flow_nous (and the
     # underlying login/model save) write via their own load/save cycle, and the
@@ -2995,7 +2995,7 @@ def _run_first_time_quick_setup(config: dict, lliam_home, is_existing: bool):
         "Connect a messaging platform? (Telegram, Discord, etc.)",
         [
             "Set up messaging now (recommended)",
-            "Skip — set up later with 'hermes setup gateway'",
+            "Skip — set up later with 'lliam-gov setup gateway'",
         ],
         0,
     )
@@ -3007,9 +3007,9 @@ def _run_first_time_quick_setup(config: dict, lliam_home, is_existing: bool):
     print()
     print_success("Setup complete! You're ready to go.")
     print()
-    print_info("  Configure all settings:    hermes setup")
+    print_info("  Configure all settings:    lliam-gov setup")
     if gateway_choice != 0:
-        print_info("  Connect Telegram/Discord:  hermes setup gateway")
+        print_info("  Connect Telegram/Discord:  lliam-gov setup gateway")
     print()
 
     _print_setup_summary(config, lliam_home)
@@ -3028,7 +3028,7 @@ def _blank_slate_minimal_toolsets(config: dict):
        non-configurable platform-toolset recovery that would otherwise re-add
        toolsets like ``kanban``). We list every known toolset except the two we
        keep, guaranteeing a true blank slate regardless of platform/recovery
-       quirks. The user re-enables any of them later via ``hermes tools`` (which
+       quirks. The user re-enables any of them later via ``lliam-gov tools`` (which
        rewrites ``platform_toolsets``) or by editing ``agent.disabled_toolsets``.
     """
     keep = {"file", "terminal"}
@@ -3060,7 +3060,7 @@ def _blank_slate_minimal_toolsets(config: dict):
 def _blank_slate_minimize_config(config: dict):
     """Turn OFF the optional config features for a Blank Slate install.
 
-    Everything here is opt-in afterwards via ``hermes setup agent`` /
+    Everything here is opt-in afterwards via ``lliam-gov setup agent`` /
     ``lliam-gov config set``. We keep only what's needed to run.
     """
     config.setdefault("agent", {})["max_turns"] = 90
@@ -3141,7 +3141,7 @@ def _run_blank_slate_setup(config: dict, lliam_home, is_existing: bool):
     if path == 0:
         save_config(config)
         # Blank Slate means no bundled skills; record the opt-out so future
-        # `hermes update` runs don't re-inject them.
+        # `lliam-gov update` runs don't re-inject them.
         try:
             from tools.skills_sync import set_bundled_skills_opt_out
             set_bundled_skills_opt_out(True)
@@ -3150,11 +3150,11 @@ def _run_blank_slate_setup(config: dict, lliam_home, is_existing: bool):
         print()
         print_success("Blank Slate setup complete — minimal agent ready.")
         print_info("Enable anything later, on demand:")
-        print_info("  Enable tools:        hermes tools")
-        print_info("  Seed skills:         hermes skills opt-in --sync")
-        print_info("  Add MCP servers:     hermes mcp add")
-        print_info("  Enable plugins:      hermes plugins")
-        print_info("  Tune agent settings: hermes setup agent")
+        print_info("  Enable tools:        lliam-gov tools")
+        print_info("  Seed skills:         lliam-gov skills opt-in --sync")
+        print_info("  Add MCP servers:     lliam-gov mcp add")
+        print_info("  Enable plugins:      lliam-gov plugins")
+        print_info("  Tune agent settings: lliam-gov setup agent")
         print()
         _print_setup_summary(config, lliam_home)
         return
@@ -3186,8 +3186,8 @@ def _blank_slate_walkthrough(config: dict, lliam_home):
         else:
             set_bundled_skills_opt_out(True)
             print_info("No skills seeded. A .no-bundled-skills marker keeps future")
-            print_info("`hermes update` runs from re-injecting them. Opt back in any")
-            print_info("time with `hermes skills opt-in --sync`.")
+            print_info("`lliam-gov update` runs from re-injecting them. Opt back in any")
+            print_info("time with `lliam-gov skills opt-in --sync`.")
     except Exception as exc:
         logger.debug("blank-slate skill handling error: %s", exc)
         print_warning(f"Skill setup step encountered an error: {exc}")
@@ -3210,15 +3210,15 @@ def _blank_slate_walkthrough(config: dict, lliam_home):
             logger.debug("blank-slate tools_command error: %s", exc)
             print_warning(f"Tool selector encountered an error: {exc}")
     else:
-        print_info("Keeping the minimal toolset. Add tools later with `hermes tools`.")
+        print_info("Keeping the minimal toolset. Add tools later with `lliam-gov tools`.")
 
     # ── Built-in plugins (off unless chosen) ──
     print()
     print_header("Plugins")
     if prompt_yes_no("Review and enable built-in plugins now?", default=False):
-        print_info("Manage plugins with `hermes plugins list` / `hermes plugins install`.")
+        print_info("Manage plugins with `lliam-gov plugins list` / `lliam-gov plugins install`.")
     else:
-        print_info("No plugins enabled. Add later with `hermes plugins`.")
+        print_info("No plugins enabled. Add later with `lliam-gov plugins`.")
 
     # ── MCP servers (off unless chosen) ──
     print()
@@ -3237,10 +3237,10 @@ def _blank_slate_walkthrough(config: dict, lliam_home):
 
     print()
     print_success("Blank Slate setup complete — minimal agent ready.")
-    print_info("  Enable more tools:   hermes tools")
-    print_info("  Seed skills:         hermes skills opt-in --sync")
-    print_info("  Add MCP servers:     hermes mcp add")
-    print_info("  Tune agent settings: hermes setup agent")
+    print_info("  Enable more tools:   lliam-gov tools")
+    print_info("  Seed skills:         lliam-gov skills opt-in --sync")
+    print_info("  Add MCP servers:     lliam-gov mcp add")
+    print_info("  Tune agent settings: lliam-gov setup agent")
     print()
 
     _print_setup_summary(config, lliam_home)
@@ -3339,8 +3339,8 @@ def _run_quick_setup(config: dict, lliam_home):
     if missing_messaging:
         print()
         print_header("Messaging Platforms")
-        print_info("Connect Hermes to messaging apps to chat from anywhere.")
-        print_info("You can configure these later with 'hermes setup gateway'.")
+        print_info("Connect Lliam-GOV to messaging apps to chat from anywhere.")
+        print_info("You can configure these later with 'lliam-gov setup gateway'.")
 
         # Group by platform (preserving order)
         platform_order = []

@@ -1,12 +1,12 @@
-"""hermes claw — OpenClaw migration commands.
+"""lliam-gov claw — OpenClaw migration commands.
 
 Usage:
-    hermes claw migrate              # Preview then migrate (always shows preview first)
+    lliam-gov claw migrate              # Preview then migrate (always shows preview first)
     lliam-gov claw migrate --dry-run    # Preview only, no changes
-    hermes claw migrate --yes        # Skip confirmation prompt
+    lliam-gov claw migrate --yes        # Skip confirmation prompt
     lliam-gov claw migrate --preset full --overwrite --migrate-secrets  # Full run w/ secrets
-    hermes claw migrate --no-backup  # Skip pre-migration snapshot
-    hermes claw cleanup              # Archive leftover OpenClaw directories
+    lliam-gov claw migrate --no-backup  # Skip pre-migration snapshot
+    lliam-gov claw cleanup              # Archive leftover OpenClaw directories
     lliam-gov claw cleanup --dry-run    # Preview what would be archived
 """
 
@@ -134,7 +134,7 @@ def _warn_if_openclaw_running(auto_yes: bool) -> None:
     print_info(
         "Messaging platforms (Telegram, Discord, Slack) only allow one "
         "active session per bot token. If you continue, both OpenClaw and "
-        "Hermes may try to use the same token, causing disconnects."
+        "Lliam-GOV may try to use the same token, causing disconnects."
     )
     print_info("Recommendation: stop OpenClaw before migrating.")
     print()
@@ -149,7 +149,7 @@ def _warn_if_openclaw_running(auto_yes: bool) -> None:
 
 
 def _warn_if_gateway_running(auto_yes: bool) -> None:
-    """Check if a Hermes gateway is running with connected platforms.
+    """Check if a Lliam-GOV gateway is running with connected platforms.
 
     Migrating bot tokens while the gateway is polling will cause conflicts
     (e.g. Telegram 409 "terminated by other getUpdates request"). Warn the
@@ -169,7 +169,7 @@ def _warn_if_gateway_running(auto_yes: bool) -> None:
 
     print()
     print_error(
-        "Hermes gateway is running with active connections: "
+        "Lliam-GOV gateway is running with active connections: "
         + ", ".join(connected)
     )
     print_info(
@@ -293,7 +293,7 @@ def _archive_directory(source_dir: Path, dry_run: bool = False) -> Path:
 
 
 def claw_command(args):
-    """Route hermes claw subcommands."""
+    """Route lliam-gov claw subcommands."""
     action = getattr(args, "claw_action", None)
 
     if action == "migrate":
@@ -304,14 +304,14 @@ def claw_command(args):
         print("Usage: lliam-gov claw <command> [options]")
         print()
         print("Commands:")
-        print("  migrate          Migrate settings from OpenClaw to Hermes")
+        print("  migrate          Migrate settings from OpenClaw to Lliam-GOV")
         print("  cleanup          Archive leftover OpenClaw directories after migration")
         print()
         print("Run 'lliam-gov claw <command> --help' for options.")
 
 
 def _cmd_migrate(args):
-    """Run the OpenClaw → Hermes migration."""
+    """Run the OpenClaw → Lliam-GOV migration."""
     # Check current and legacy OpenClaw directories
     explicit_source = getattr(args, "source", None)
     if explicit_source:
@@ -335,7 +335,7 @@ def _cmd_migrate(args):
 
     # Secrets are never included implicitly — they must be explicitly requested
     # via --migrate-secrets, even under --preset full.  This mirrors OpenClaw's
-    # migrate-hermes posture (two-phase: run once without secrets, rerun with
+    # migrate-lliam-gov posture (two-phase: run once without secrets, rerun with
     # --include-secrets) and prevents a --preset full invocation from silently
     # importing API keys that the user may not have intended to copy.
 
@@ -348,7 +348,7 @@ def _cmd_migrate(args):
     )
     print(
         color(
-            "│          ⚕ Hermes — OpenClaw Migration                 │",
+            "│          ⚕ Lliam-GOV — OpenClaw Migration                 │",
             Colors.MAGENTA,
         )
     )
@@ -364,7 +364,7 @@ def _cmd_migrate(args):
         print()
         print_error(f"OpenClaw directory not found: {source_dir}")
         print_info("Make sure your OpenClaw installation is at the expected path.")
-        print_info("You can specify a custom path: hermes claw migrate --source /path/to/.openclaw")
+        print_info("You can specify a custom path: lliam-gov claw migrate --source /path/to/.openclaw")
         return
 
     # Find the migration script
@@ -398,7 +398,7 @@ def _cmd_migrate(args):
     # active will cause conflicts (e.g. Telegram 409).
     _warn_if_openclaw_running(auto_yes)
 
-    # Check if a Hermes gateway is running with connected platforms.
+    # Check if a Lliam-GOV gateway is running with connected platforms.
     _warn_if_gateway_running(auto_yes)
 
     # Ensure config.yaml exists before migration tries to read it
@@ -498,11 +498,11 @@ def _cmd_migrate(args):
             print_info("Migration cancelled.")
             return
 
-    # ── Phase 2b: Pre-apply backup of the Hermes home ─────────
+    # ── Phase 2b: Pre-apply backup of the Lliam-GOV home ─────────
     # Delegates to lliam_cli.backup.create_pre_migration_backup(), which
     # shares implementation with the pre-update backup (same exclusion
     # rules, same SQLite safe-copy, zip format) so the archive is
-    # restorable with `hermes import`.  Mirrors OpenClaw's
+    # restorable with `lliam-gov import`.  Mirrors OpenClaw's
     # createPreMigrationBackup posture — one atomic restore point before
     # any mutation, auto-pruned to the last 5 pre-migration zips.
     backup_archive: Optional[Path] = None
@@ -514,12 +514,12 @@ def _cmd_migrate(args):
                 size_str = _format_size(backup_archive.stat().st_size)
                 print()
                 print_success(f"Pre-migration backup: {backup_archive} ({size_str})")
-                print_info(f"Restore with: hermes import {backup_archive.name}")
+                print_info(f"Restore with: lliam-gov import {backup_archive.name}")
         except Exception as e:
             print()
             print_error(f"Could not create pre-migration backup: {e}")
             print_info(
-                "Re-run with --no-backup to skip, or free up disk space under the Hermes home."
+                "Re-run with --no-backup to skip, or free up disk space under the Lliam-GOV home."
             )
             logger.debug("Pre-migration backup error", exc_info=True)
             return
@@ -544,7 +544,7 @@ def _cmd_migrate(args):
         logger.debug("OpenClaw migration error", exc_info=True)
         if backup_archive:
             print_info(f"A pre-migration backup is available at: {backup_archive}")
-            print_info(f"Restore with: hermes import {backup_archive.name}")
+            print_info(f"Restore with: lliam-gov import {backup_archive.name}")
         return
 
     # Print results
@@ -552,7 +552,7 @@ def _cmd_migrate(args):
 
     # Source directory is left untouched — archiving is not the migration
     # tool's responsibility.  Users who want to clean up can run
-    # 'hermes claw cleanup' separately.
+    # 'lliam-gov claw cleanup' separately.
 
 
 def _cmd_cleanup(args):
@@ -574,7 +574,7 @@ def _cmd_cleanup(args):
     )
     print(
         color(
-            "│          ⚕ Hermes — OpenClaw Cleanup                   │",
+            "│          ⚕ Lliam-GOV — OpenClaw Cleanup                   │",
             Colors.MAGENTA,
         )
     )

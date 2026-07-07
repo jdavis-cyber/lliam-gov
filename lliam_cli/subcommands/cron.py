@@ -1,4 +1,4 @@
-"""``hermes cron`` subcommand parser.
+"""``lliam-gov cron`` subcommand parser.
 
 Extracted verbatim from ``lliam_cli/main.py:main()`` — same arguments, same
 ``func=cmd_cron`` dispatch. The handler is injected so this module does not

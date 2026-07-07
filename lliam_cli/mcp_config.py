@@ -1,7 +1,7 @@
 """
-MCP Server Management CLI — ``hermes mcp`` subcommand.
+MCP Server Management CLI — ``lliam-gov mcp`` subcommand.
 
-Implements ``hermes mcp add/remove/list/test/configure`` for interactive
+Implements ``lliam-gov mcp add/remove/list/test/configure`` for interactive
 MCP server lifecycle management (issue #690 Phase 2).
 
 Relies on tools/mcp_tool.py for connection/discovery and keeps
@@ -265,7 +265,7 @@ def _probe_single_server(
 def _oauth_tokens_present(name: str) -> bool:
     """Return True if an OAuth token file exists on disk for ``name``.
 
-    Used after ``hermes mcp login`` to distinguish a genuine authentication
+    Used after ``lliam-gov mcp login`` to distinguish a genuine authentication
     from a probe that succeeded only because the server allowed
     initialize/tools-list without auth (so no token was ever acquired).
     """
@@ -294,7 +294,7 @@ def _unwrap_exception_group(exc: BaseException) -> Exception:
     return RuntimeError(str(exc))
 
 
-# ─── hermes mcp add ──────────────────────────────────────────────────────────
+# ─── lliam-gov mcp add ──────────────────────────────────────────────────────────
 
 def cmd_mcp_add(args):
     """Add a new MCP server with discovery-first tool selection."""
@@ -428,7 +428,7 @@ def cmd_mcp_add(args):
             server_config["enabled"] = False
             if _save_mcp_server(name, server_config):
                 _success(f"Saved '{name}' to config (disabled)")
-                _info("Fix the issue, then: hermes mcp test " + name)
+                _info("Fix the issue, then: lliam-gov mcp test " + name)
         return
 
     if not tools:
@@ -498,7 +498,7 @@ def cmd_mcp_add(args):
         _info("Start a new session to use these tools.")
 
 
-# ─── hermes mcp remove ───────────────────────────────────────────────────────
+# ─── lliam-gov mcp remove ───────────────────────────────────────────────────────
 
 def cmd_mcp_remove(args):
     """Remove an MCP server from config."""
@@ -521,7 +521,7 @@ def cmd_mcp_remove(args):
 
     # Clean up OAuth tokens if they exist — route through MCPOAuthManager so
     # any provider instance cached in the current process (e.g. from an
-    # earlier `hermes mcp test` in the same session) is evicted too.
+    # earlier `lliam-gov mcp test` in the same session) is evicted too.
     try:
         from tools.mcp_oauth_manager import get_manager
         get_manager().remove(name)
@@ -530,7 +530,7 @@ def cmd_mcp_remove(args):
         pass
 
 
-# ─── hermes mcp list ──────────────────────────────────────────────────────────
+# ─── lliam-gov mcp list ──────────────────────────────────────────────────────────
 
 def cmd_mcp_list(args=None):
     """List all configured MCP servers."""
@@ -599,7 +599,7 @@ def cmd_mcp_list(args=None):
     print()
 
 
-# ─── hermes mcp test ──────────────────────────────────────────────────────────
+# ─── lliam-gov mcp test ──────────────────────────────────────────────────────────
 
 def cmd_mcp_test(args):
     """Test connection to an MCP server."""
@@ -663,15 +663,15 @@ def cmd_mcp_test(args):
     print()
 
 
-# ─── hermes mcp login ────────────────────────────────────────────────────────
+# ─── lliam-gov mcp login ────────────────────────────────────────────────────────
 
 def _reauth_oauth_server(name: str, server_config: dict) -> bool:
     """Force a fresh OAuth flow for one server. Returns True on success.
 
     Wipes cached OAuth state (disk + in-process MCPOAuthManager cache),
     re-probes to trigger the browser flow, and verifies a token actually
-    landed before reporting success. Shared by ``hermes mcp login`` and
-    ``hermes mcp reauth`` so both behave identically for a single server.
+    landed before reporting success. Shared by ``lliam-gov mcp login`` and
+    ``lliam-gov mcp reauth`` so both behave identically for a single server.
     """
     url = server_config.get("url")
     if not url:
@@ -764,8 +764,8 @@ def cmd_mcp_login(args):
 def cmd_mcp_reauth(args):
     """Re-authenticate one OAuth MCP server, or all of them sequentially.
 
-    ``hermes mcp reauth <name>`` re-auths a single server (same as ``login``).
-    ``hermes mcp reauth --all`` discovers every ``auth: oauth`` server in
+    ``lliam-gov mcp reauth <name>`` re-auths a single server (same as ``login``).
+    ``lliam-gov mcp reauth --all`` discovers every ``auth: oauth`` server in
     config and re-auths them ONE AT A TIME.
 
     Serial-by-design: a human can only complete one browser OAuth flow at a
@@ -811,13 +811,13 @@ def cmd_mcp_reauth(args):
     _reauth_oauth_server(name, servers[name])
 
 
-# ─── hermes mcp configure ────────────────────────────────────────────────────
+# ─── lliam-gov mcp configure ────────────────────────────────────────────────────
 
 def cmd_mcp_configure(args):
     """Reconfigure which tools are enabled for an existing MCP server."""
     import sys as _sys
     if not _sys.stdin.isatty():
-        print("Error: 'hermes mcp configure' requires an interactive terminal.", file=_sys.stderr)
+        print("Error: 'lliam-gov mcp configure' requires an interactive terminal.", file=_sys.stderr)
         _sys.exit(1)
     name = args.name
     servers = _get_mcp_servers()
@@ -913,7 +913,7 @@ def cmd_mcp_configure(args):
 # ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 def mcp_command(args):
-    """Main dispatcher for ``hermes mcp`` subcommands."""
+    """Main dispatcher for ``lliam-gov mcp`` subcommands."""
     action = getattr(args, "mcp_action", None)
 
     if action == "serve":
@@ -957,7 +957,7 @@ def mcp_command(args):
         handler(args)
     else:
         # No subcommand — drop the user into the catalog picker. This is the
-        # "try enabling and it flows you into setup" UX matching `hermes plugin`.
+        # "try enabling and it flows you into setup" UX matching `lliam-gov plugin`.
         from lliam_cli.mcp_picker import run_picker
         run_picker()
         print(color("  Commands:", Colors.CYAN))

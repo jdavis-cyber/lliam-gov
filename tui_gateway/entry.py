@@ -3,7 +3,7 @@ from lliam_cli.env_compat import getenv_compat
 import sys
 
 # Stop a ``utils/`` (or ``proxy/``, ``ui/``) package in the launch directory
-# from shadowing Hermes's own top-level modules.  ``lliam_bootstrap`` lives at
+# from shadowing Lliam-GOV's own top-level modules.  ``lliam_bootstrap`` lives at
 # the repo root next to this package, so importing it is safe before the guard
 # runs (its name won't collide with a user package), and it owns the canonical
 # path-hardening logic shared with the other entry points.

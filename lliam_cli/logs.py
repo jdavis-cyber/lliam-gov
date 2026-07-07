@@ -1,4 +1,4 @@
-"""``hermes logs`` — view and filter Hermes log files.
+"""``lliam-gov logs`` — view and filter Lliam-GOV log files.
 
 Supports tailing, following, session filtering, level filtering,
 component filtering, and relative time ranges.  All log files live
@@ -6,17 +6,17 @@ under ``~/.hermes/logs/``.
 
 Usage examples::
 
-    hermes logs                    # last 50 lines of agent.log
-    hermes logs -f                 # follow agent.log in real time
-    hermes logs errors             # last 50 lines of errors.log
-    hermes logs gateway -n 100    # last 100 lines of gateway.log
-    hermes logs gui -f            # follow gui.log (dashboard/pty/ws)
-    hermes logs desktop -f        # follow desktop.log (Electron app boot/backend)
-    hermes logs --level WARNING    # only WARNING+ lines
-    hermes logs --session abc123   # filter by session ID substring
-    hermes logs --component tools  # only tool-related lines
-    hermes logs --since 1h         # lines from the last hour
-    hermes logs --since 30m -f     # follow, starting 30 min ago
+    lliam-gov logs                    # last 50 lines of agent.log
+    lliam-gov logs -f                 # follow agent.log in real time
+    lliam-gov logs errors             # last 50 lines of errors.log
+    lliam-gov logs gateway -n 100    # last 100 lines of gateway.log
+    lliam-gov logs gui -f            # follow gui.log (dashboard/pty/ws)
+    lliam-gov logs desktop -f        # follow desktop.log (Electron app boot/backend)
+    lliam-gov logs --level WARNING    # only WARNING+ lines
+    lliam-gov logs --session abc123   # filter by session ID substring
+    lliam-gov logs --component tools  # only tool-related lines
+    lliam-gov logs --since 1h         # lines from the last hour
+    lliam-gov logs --since 30m -f     # follow, starting 30 min ago
 """
 
 import re
@@ -176,7 +176,7 @@ def tail_log(
     log_path = get_lliam_home() / "logs" / filename
     if not log_path.exists():
         print(f"Log file not found: {log_path}")
-        print(f"(Logs are created when Hermes runs — try 'lliam-gov chat' first)")
+        print(f"(Logs are created when Lliam-GOV runs — try 'lliam-gov chat' first)")
         sys.exit(1)
 
     # Parse --since into a datetime cutoff

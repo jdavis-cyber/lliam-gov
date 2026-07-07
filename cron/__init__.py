@@ -1,5 +1,5 @@
 """
-Cron job scheduling system for Hermes Agent.
+Cron job scheduling system for Lliam-GOV.
 
 This module provides scheduled task execution, allowing the agent to:
 - Run automated tasks on schedules (cron expressions, intervals, one-shot)
@@ -7,7 +7,7 @@ This module provides scheduled task execution, allowing the agent to:
 - Execute tasks in isolated sessions (no prior context)
 
 Cron jobs are executed automatically by the gateway daemon:
-    hermes gateway install    # Install as a user service
+    lliam-gov gateway install    # Install as a user service
     sudo lliam-gov gateway install --system  # Linux servers: boot-time system service
     lliam-gov gateway            # Or run in foreground
 

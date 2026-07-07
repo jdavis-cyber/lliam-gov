@@ -1,22 +1,22 @@
-"""Profile distributions — shareable, packaged Hermes profiles via git.
+"""Profile distributions — shareable, packaged Lliam-GOV profiles via git.
 
-A distribution is a Hermes profile published as a git repository (or
+A distribution is a Lliam-GOV profile published as a git repository (or
 installed from a local directory for development). Install with one command
 from a git URL, update in place, and keep your local memories / sessions /
 credentials untouched.
 
 Where this fits relative to the existing pieces:
 
-* ``hermes profile export/import`` — local backup / restore for a profile
+* ``lliam-gov profile export/import`` — local backup / restore for a profile
   on your own machine. NOT a distribution format. Stays as-is.
-* ``hermes skills install <url>`` — the URL install pattern we're mirroring,
+* ``lliam-gov skills install <url>`` — the URL install pattern we're mirroring,
   but at the profile granularity.
 
-Subcommands (all live under ``hermes profile``, not a parallel tree):
+Subcommands (all live under ``lliam-gov profile``, not a parallel tree):
 
-    hermes profile install <source> [--name N] [--alias] [--force] [--yes]
-    hermes profile update  <name>  [--force-config] [--yes]
-    hermes profile info    <name>
+    lliam-gov profile install <source> [--name N] [--alias] [--force] [--yes]
+    lliam-gov profile update  <name>  [--force-config] [--yes]
+    lliam-gov profile info    <name>
 
 ``<source>`` is one of:
 
@@ -322,7 +322,7 @@ def check_lliam_requires(spec: str, current_version: str) -> None:
     }[op]
     if not ok:
         raise DistributionError(
-            f"This distribution requires Hermes {op}{target}, "
+            f"This distribution requires Lliam-GOV {op}{target}, "
             f"but you have {current_version}."
         )
 
@@ -335,7 +335,7 @@ def check_lliam_requires(spec: str, current_version: str) -> None:
 def _env_template_from_manifest(manifest: DistributionManifest) -> str:
     """Generate a ``.env.template`` body from env_requires."""
     lines = [
-        "# Environment variables required by this Hermes distribution.",
+        "# Environment variables required by this Lliam-GOV distribution.",
         "# Copy to `.env` and fill in your own values before running.",
         "",
     ]
@@ -393,7 +393,7 @@ def _stage_source(source: str, workdir: Path) -> Tuple[Path, str]:
     """Resolve *source* to a local directory containing distribution.yaml.
 
     Returns ``(staged_dir, provenance)`` where ``provenance`` is stored in the
-    installed manifest's ``source:`` field so ``hermes profile update`` can
+    installed manifest's ``source:`` field so ``lliam-gov profile update`` can
     re-pull from the same place.
 
     Accepts:
@@ -412,7 +412,7 @@ def _stage_source(source: str, workdir: Path) -> Tuple[Path, str]:
         if not (cloned / MANIFEST_FILENAME).is_file():
             raise DistributionError(
                 f"No {MANIFEST_FILENAME} at the root of {src_str!r}. "
-                "This repository is not a Hermes profile distribution."
+                "This repository is not a Lliam-GOV profile distribution."
             )
         return cloned, src_str
 
@@ -503,7 +503,7 @@ def plan_install(
     if manifest is None:
         raise DistributionError(
             f"No {MANIFEST_FILENAME} found at the distribution root — "
-            "this source is not a Hermes distribution."
+            "this source is not a Lliam-GOV distribution."
         )
 
     # Version check up-front so we fail fast
@@ -678,7 +678,7 @@ def update_distribution(
     if not existing_manifest.source:
         raise DistributionError(
             f"Profile '{canon}' has no recorded source.  Re-install with "
-            "`hermes profile install <source> --name {canon} --force`."
+            "`lliam-gov profile install <source> --name {canon} --force`."
         )
 
     with tempfile.TemporaryDirectory(prefix="hermes_dist_update_") as tmp:

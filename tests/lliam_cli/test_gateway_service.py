@@ -167,9 +167,9 @@ class TestSystemdServiceRefresh:
         assert "lliam-gov gateway status" in output
 
     def test_systemd_restart_timeout_prints_status_guidance(self, monkeypatch, capsys):
-        """`hermes gateway restart` must not surface a raw TimeoutExpired traceback.
+        """`lliam-gov gateway restart` must not surface a raw TimeoutExpired traceback.
 
-        The dashboard spawns `hermes gateway restart` in the background; when a
+        The dashboard spawns `lliam-gov gateway restart` in the background; when a
         wedged adapter websocket pushes drain past the 90s CLI timeout, the
         dashboard would previously show a Python traceback (issue #19937
         follow-up: the same failure mode applies to restart, not just stop).
@@ -208,7 +208,7 @@ class TestSystemdServiceRefresh:
     def test_run_gateway_refreshes_outdated_unit_on_boot(self, tmp_path, monkeypatch):
         """run_gateway() should refresh the systemd unit on boot so that
         restart settings take effect even when the process was respawned
-        via exit-code-75 (bypassing `hermes gateway restart`)."""
+        via exit-code-75 (bypassing `lliam-gov gateway restart`)."""
         unit_path = tmp_path / "hermes-gateway.service"
         unit_path.write_text("old unit\n", encoding="utf-8")
 
@@ -295,7 +295,7 @@ class TestSystemdServiceRefresh:
         """Structural guard: a manual E2E HERMES_HOME like
         ``/tmp/hermes-e2e-41264`` carries none of the pytest markers but
         poisons the unit identically (seen live 2026-06-11 — an E2E probe ran
-        ``hermes gateway restart`` with a /tmp HERMES_HOME exported; the
+        ``lliam-gov gateway restart`` with a /tmp HERMES_HOME exported; the
         restart's unit refresh baked it into the production unit and the
         post-update restart produced a 7-hour zombie gateway). The refresh
         must refuse ANY temp-dir HERMES_HOME, not just pytest-shaped ones.
@@ -2544,7 +2544,7 @@ class TestDockerAwareGateway:
         assert "status" in calls[0]
 
     def test_install_in_container_prints_docker_guidance(self, monkeypatch, capsys):
-        """'hermes gateway install' inside Docker exits 0 with container guidance."""
+        """'lliam-gov gateway install' inside Docker exits 0 with container guidance."""
         import pytest
 
         monkeypatch.setattr(gateway_cli, "is_managed", lambda: False)
@@ -2564,7 +2564,7 @@ class TestDockerAwareGateway:
         assert "restart" in out.lower()
 
     def test_uninstall_in_container_prints_docker_guidance(self, monkeypatch, capsys):
-        """'hermes gateway uninstall' inside Docker exits 0 with container guidance."""
+        """'lliam-gov gateway uninstall' inside Docker exits 0 with container guidance."""
         import pytest
 
         monkeypatch.setattr(gateway_cli, "is_managed", lambda: False)
@@ -2582,7 +2582,7 @@ class TestDockerAwareGateway:
         assert "docker" in out.lower()
 
     def test_start_in_container_prints_docker_guidance(self, monkeypatch, capsys):
-        """'hermes gateway start' inside Docker exits 0 with container guidance."""
+        """'lliam-gov gateway start' inside Docker exits 0 with container guidance."""
         import pytest
 
         monkeypatch.setattr(gateway_cli, "is_termux", lambda: False)
@@ -2617,7 +2617,7 @@ class TestLegacyLliamUnitDetection:
 
     # Minimal ExecStart that looks like our gateway
     _OUR_UNIT_TEXT = (
-        "[Unit]\nDescription=Hermes Gateway\n[Service]\n"
+        "[Unit]\nDescription=Lliam-GOV Gateway\n[Service]\n"
         "ExecStart=/usr/bin/python -m lliam_cli.main gateway run --replace\n"
     )
 
@@ -2690,12 +2690,12 @@ class TestLegacyLliamUnitDetection:
     def test_ignores_unrelated_lliam_service(self, tmp_path, monkeypatch):
         """Third-party ``hermes.service`` that isn't ours stays untouched.
 
-        If a user has some other package named ``hermes`` installed as a
+        If a user has some other package named ``lliam-gov`` installed as a
         service, we must not flag it.
         """
         user_dir, _ = self._setup_search_paths(tmp_path, monkeypatch)
         (user_dir / "hermes.service").write_text(
-            "[Unit]\nDescription=Some Other Hermes\n[Service]\n"
+            "[Unit]\nDescription=Some Other Lliam-GOV\n[Service]\n"
             "ExecStart=/opt/other-hermes/bin/daemon --foreground\n",
             encoding="utf-8",
         )
@@ -2743,7 +2743,7 @@ class TestLegacyLliamUnitDetection:
             name = f"hermes.service" if i == 0 else f"hermes.service"  # same name
             # Test each variant fresh
             (user_dir / "hermes.service").write_text(
-                f"[Unit]\nDescription=Old Hermes\n[Service]\n{execstart}\n",
+                f"[Unit]\nDescription=Old Lliam-GOV\n[Service]\n{execstart}\n",
                 encoding="utf-8",
             )
             results = gateway_cli._find_legacy_lliam_units()
@@ -2792,7 +2792,7 @@ class TestRemoveLegacyLliamUnits:
     """Tests for remove_legacy_hermes_units (the migration action)."""
 
     _OUR_UNIT_TEXT = (
-        "[Unit]\nDescription=Hermes Gateway\n[Service]\n"
+        "[Unit]\nDescription=Lliam-GOV Gateway\n[Service]\n"
         "ExecStart=/usr/bin/python -m lliam_cli.main gateway run --replace\n"
     )
 
@@ -3285,7 +3285,7 @@ class TestRemoveLegacyLaunchdJobs:
 
 
 class TestMigrateLegacyCommand:
-    """Tests for the `hermes gateway migrate-legacy` subcommand dispatch."""
+    """Tests for the `lliam-gov gateway migrate-legacy` subcommand dispatch."""
 
     def test_migrate_legacy_subparser_accepts_dry_run_and_yes(self):
         """Verify the argparse subparser is registered and parses flags."""
@@ -3295,7 +3295,7 @@ class TestMigrateLegacyCommand:
         # Fall back to calling main's setup helper if direct access isn't exposed
         # The key thing: the subparser must exist. We verify by constructing
         # a namespace through argparse directly — but if build_parser isn't
-        # public, just confirm that `hermes gateway --help` shows it.
+        # public, just confirm that `lliam-gov gateway --help` shows it.
         import subprocess
         import sys
 
@@ -3658,7 +3658,7 @@ class TestSystemScopeWizardPreCheck:
         assert gateway_cli._system_scope_wizard_would_need_root() is False
 
     def test_non_root_with_explicit_system_arg_returns_true(self, tmp_path, monkeypatch):
-        # Caller passed system=True explicitly (e.g. ``hermes gateway start --system``).
+        # Caller passed system=True explicitly (e.g. ``lliam-gov gateway start --system``).
         self._setup_units(tmp_path, monkeypatch, system_present=False, user_present=False)
         monkeypatch.setattr(gateway_cli.os, "geteuid", lambda: 1000)
 
@@ -3702,7 +3702,7 @@ class TestSystemScopeRemediationOutput:
 
 
 class TestGatewayCommandCatchesSystemScopeError:
-    """The direct CLI path (``hermes gateway start --system`` etc.) must
+    """The direct CLI path (``lliam-gov gateway start --system`` etc.) must
     still exit 1 with a clean message when non-root. The top-level
     ``gateway_command`` catches ``SystemScopeRequiresRootError`` and
     converts it back to ``sys.exit(1)``, preserving existing CLI behavior.

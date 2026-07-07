@@ -1,7 +1,7 @@
 """Tests for the Phase 4 s6 dispatch helper in lliam_cli.gateway.
 
 `_dispatch_via_service_manager_if_s6` decides whether a
-`hermes gateway start/stop/restart` invocation should be routed to
+`lliam-gov gateway start/stop/restart` invocation should be routed to
 the in-container S6ServiceManager instead of falling through to the
 host systemd/launchd/windows code path.
 """
@@ -293,7 +293,7 @@ def test_dispatch_renders_gateway_not_registered_friendly(
     assert excinfo.value.code == 1
     out = capsys.readouterr().out
     assert "no such gateway 'typo'" in out
-    assert "hermes profile create typo" in out
+    assert "lliam-gov profile create typo" in out
     # And critically: no traceback prefix.
     assert "Traceback" not in out
 

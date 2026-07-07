@@ -1,4 +1,4 @@
-"""``hermes dashboard register`` — register a self-hosted dashboard OAuth client.
+"""``lliam-gov dashboard register`` — register a self-hosted dashboard OAuth client.
 
 Automates what a user otherwise does by hand: open the Nous Portal
 ``/local-dashboards`` page in a browser, click "register", copy the
@@ -199,7 +199,7 @@ def _print_post_register_hint(
     print()
     print(
         "  Heads up — Nous login only *engages* on a non-loopback bind. A plain\n"
-        "  `hermes dashboard` (localhost) leaves the gate off and serves locally\n"
+        "  `lliam-gov dashboard` (localhost) leaves the gate off and serves locally\n"
         "  without auth, which is fine for your own machine."
     )
     print()
@@ -238,7 +238,7 @@ def cmd_dashboard_register(args) -> None:
     # mistake — and save_env_value refuses to write anyway.
     if is_managed():
         print(
-            "✗ `hermes dashboard register` is not available in a managed/hosted "
+            "✗ `lliam-gov dashboard register` is not available in a managed/hosted "
             "install.\n"
             "  The dashboard OAuth client is provisioned by the hosting platform."
         )

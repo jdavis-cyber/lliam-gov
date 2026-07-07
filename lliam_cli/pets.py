@@ -1,4 +1,4 @@
-"""CLI subcommand: ``hermes pets <subcommand>``.
+"""CLI subcommand: ``lliam-gov pets <subcommand>``.
 
 Thin shell around :mod:`agent.pet`.  Browses the public petdex gallery,
 installs pets into the profile's ``pets/`` directory, selects the active
@@ -29,7 +29,7 @@ def _cmd_list(args) -> int:
     if getattr(args, "installed", False):
         pets = store.installed_pets()
         if not pets:
-            _print("No pets installed. Try: hermes pets install boba")
+            _print("No pets installed. Try: lliam-gov pets install boba")
             return 0
         _print(f"Installed pets ({len(pets)}):")
         for pet in pets:
@@ -62,7 +62,7 @@ def _cmd_list(args) -> int:
         _print(f"  {mark} {entry.slug:<28} {entry.display_name}  ({entry.kind})")
     if limit and len(entries) > limit:
         _print(f"  … {len(entries) - limit} more (use --limit 0 or --query to filter)")
-    _print("\nInstall one with: hermes pets install <slug>")
+    _print("\nInstall one with: lliam-gov pets install <slug>")
     return 0
 
 
@@ -83,7 +83,7 @@ def _cmd_install(args) -> int:
         _set_active(slug)
         _print(f"✓ {pet.display_name} is now the active pet (display.pet.slug={slug}, enabled)")
     else:
-        _print(f"  Make it active with: hermes pets select {slug}")
+        _print(f"  Make it active with: lliam-gov pets select {slug}")
     return 0
 
 

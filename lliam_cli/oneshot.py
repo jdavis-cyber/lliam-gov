@@ -4,12 +4,12 @@ Bypasses cli.py entirely.  No banner, no spinner, no session_id line,
 no stderr chatter.  Just the agent's final text to stdout.
 
 Toolsets = explicit --toolsets when provided, otherwise whatever the user has
-configured for "cli" in `hermes tools`.
+configured for "cli" in `lliam-gov tools`.
 Rules / memory / AGENTS.md / preloaded skills = same as a normal chat turn.
 Approvals = auto-bypassed (HERMES_YOLO_MODE=1 is set for the call).
 Working directory = the user's CWD (AGENTS.md etc. resolve from there as usual).
 
-Model / provider selection mirrors `hermes chat`:
+Model / provider selection mirrors `lliam-gov chat`:
     - Both optional. If omitted, use the user's configured default.
     - If both given, pair them exactly as given.
     - If only --model given, auto-detect the provider that serves it.
@@ -257,7 +257,7 @@ def _run_agent(
 ) -> tuple[str, dict]:
     """Build an AIAgent exactly like a normal CLI chat turn would, then
     run a single conversation.  Returns ``(final_response, run_result)``."""
-    # Imports are local so they don't run when hermes is invoked for
+    # Imports are local so they don't run when lliam-gov is invoked for
     # other commands (keeps top-level CLI startup cheap).
     from lliam_cli.config import load_config
     from lliam_cli.models import detect_provider_for_model

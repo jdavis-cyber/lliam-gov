@@ -1,4 +1,4 @@
-"""``hermes gui`` subcommand parser.
+"""``lliam-gov gui`` subcommand parser.
 
 Extracted verbatim from ``lliam_cli/main.py:main()`` (god-file Phase 2).
 Handler injected to avoid importing ``main``.
@@ -18,7 +18,7 @@ def build_gui_parser(subparsers, *, cmd_gui: Callable) -> None:
         aliases=["gui"],
         help="Build and launch the native desktop app",
         description=(
-            "Launch the Hermes Electron desktop app. By default this installs "
+            "Launch the Lliam-GOV Electron desktop app. By default this installs "
             "workspace Node dependencies, builds the current OS's unpacked "
             "Electron app, then launches that packaged artifact."
         ),

@@ -2,14 +2,14 @@
 CLI commands for the DM pairing system.
 
 Usage:
-    hermes pairing list              # Show all pending + approved users
-    hermes pairing approve <platform> <code>  # Approve a pairing code
-    hermes pairing revoke <platform> <user_id> # Revoke user access
-    hermes pairing clear-pending     # Clear all expired/pending codes
+    lliam-gov pairing list              # Show all pending + approved users
+    lliam-gov pairing approve <platform> <code>  # Approve a pairing code
+    lliam-gov pairing revoke <platform> <user_id> # Revoke user access
+    lliam-gov pairing clear-pending     # Clear all expired/pending codes
 """
 
 def pairing_command(args):
-    """Handle hermes pairing subcommands."""
+    """Handle lliam-gov pairing subcommands."""
     from gateway.pairing import PairingStore
 
     store = PairingStore()

@@ -1,8 +1,8 @@
 """
-Unified self-relaunch for Hermes CLI.
+Unified self-relaunch for Lliam-GOV CLI.
 
 Preserves critical flags (--tui, --dev, --profile, --model, etc.) across
-process replacement so that ``hermes sessions browse`` or post-setup relaunch
+process replacement so that ``lliam-gov sessions browse`` or post-setup relaunch
 doesn't silently drop the user's UI mode or other preferences.
 
 Also works when ``lliam-gov`` is not on PATH (e.g. ``nix run`` or ``python -m``).
@@ -22,7 +22,7 @@ from lliam_cli._parser import (
 def _build_inherited_flag_table() -> list[tuple[str, bool]]:
     """Build the ``(option_string, takes_value)`` table of flags that must
     survive a self-relaunch, by introspecting the real parser used by
-    ``hermes`` itself.
+    ``lliam-gov`` itself.
 
     A flag participates if its argparse Action carries
     ``inherit_on_relaunch = True`` — set by ``_parser._inherited_flag``.
@@ -78,7 +78,7 @@ def _extract_inherited_flags(argv: Sequence[str]) -> list[str]:
 
 
 def resolve_lliam_bin() -> Optional[str]:
-    """Find the hermes entry point.
+    """Find the lliam-gov entry point.
 
     Priority:
       1. ``sys.argv[0]`` if it resolves to a real executable.
@@ -158,7 +158,7 @@ def relaunch(
     preserve_inherited: bool = True,
     original_argv: Optional[Sequence[str]] = None,
 ) -> None:
-    """Replace the current process with a fresh hermes invocation.
+    """Replace the current process with a fresh lliam-gov invocation.
 
     On POSIX we use ``os.execvp`` which replaces the running process with
     the new one in place — same PID, no double-fork.  That's what the
@@ -175,8 +175,8 @@ def relaunch(
     The Windows-correct pattern is: spawn the child with ``subprocess.run``
     (which routes through ``cmd.exe`` via ``shell=False`` + PATHEXT resolution),
     wait for it to exit, then propagate its exit code via ``sys.exit``.
-    That's functionally equivalent — the user sees "hermes exited, then
-    new hermes started" — just with two PIDs in play instead of one.
+    That's functionally equivalent — the user sees "lliam-gov exited, then
+    new lliam-gov started" — just with two PIDs in play instead of one.
     """
     new_argv = build_relaunch_argv(
         extra_args, preserve_inherited=preserve_inherited, original_argv=original_argv
@@ -192,7 +192,7 @@ def relaunch(
         except OSError as exc:
             # Surface a helpful error rather than the raw OSError — the
             # caller used to see ``[Errno 8] Exec format error`` which is
-            # cryptic.  Common causes: ``hermes`` not on PATH yet (install
+            # cryptic.  Common causes: ``lliam-gov`` not on PATH yet (install
             # hasn't propagated User PATH into this shell) or a stale shim.
             print(
                 f"\nHermes relaunch failed: {exc}\n"

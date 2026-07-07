@@ -1,4 +1,4 @@
-"""``hermes tools`` subcommand parser.
+"""``lliam-gov tools`` subcommand parser.
 
 Extracted from ``lliam_cli/main.py:main()`` (god-file Phase 2 follow-up).
 Handler injected to avoid importing ``main``.
@@ -28,7 +28,7 @@ def build_tools_parser(subparsers, *, cmd_tools: Callable) -> None:
     )
     tools_sub = tools_parser.add_subparsers(dest="tools_action")
 
-    # hermes tools list [--platform cli]
+    # lliam-gov tools list [--platform cli]
     tools_list_p = tools_sub.add_parser(
         "list",
         help="Show all tools and their enabled/disabled status",
@@ -39,7 +39,7 @@ def build_tools_parser(subparsers, *, cmd_tools: Callable) -> None:
         help="Platform to show (default: cli)",
     )
 
-    # hermes tools disable <name...> [--platform cli]
+    # lliam-gov tools disable <name...> [--platform cli]
     tools_disable_p = tools_sub.add_parser(
         "disable",
         help="Disable toolsets or MCP tools",
@@ -56,7 +56,7 @@ def build_tools_parser(subparsers, *, cmd_tools: Callable) -> None:
         help="Platform to apply to (default: cli)",
     )
 
-    # hermes tools enable <name...> [--platform cli]
+    # lliam-gov tools enable <name...> [--platform cli]
     tools_enable_p = tools_sub.add_parser(
         "enable",
         help="Enable toolsets or MCP tools",
@@ -73,13 +73,13 @@ def build_tools_parser(subparsers, *, cmd_tools: Callable) -> None:
         help="Platform to apply to (default: cli)",
     )
 
-    # hermes tools post-setup <key>
+    # lliam-gov tools post-setup <key>
     tools_postsetup_p = tools_sub.add_parser(
         "post-setup",
         help="Run a provider's post-setup install hook (npm/pip/binary)",
         description=(
             "Run the install/bootstrap hook a tool backend declares — the\n"
-            "same step `hermes tools` runs after you pick a provider that\n"
+            "same step `lliam-gov tools` runs after you pick a provider that\n"
             "needs extra dependencies (browser Chromium, Camofox, cua-driver,\n"
             "KittenTTS/Piper, ddgs, Spotify, Langfuse, xAI). Stable,\n"
             "non-interactive target the dashboard spawns to drive backend\n"

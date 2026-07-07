@@ -1,4 +1,4 @@
-"""``hermes slack ...`` CLI subcommands.
+"""``lliam-gov slack ...`` CLI subcommands.
 
 Today only ``hermes slack manifest`` is implemented — it generates the
 Slack app manifest JSON for registering every gateway command as a native
@@ -31,9 +31,9 @@ def _build_full_manifest(
     """Build a full Slack manifest merging display info + our slash list.
 
     The slash-command list is always generated from ``COMMAND_REGISTRY`` so
-    it stays in sync with the rest of Hermes. Other manifest sections
+    it stays in sync with the rest of Lliam-GOV. Other manifest sections
     (display info, OAuth scopes, socket mode) are set to sensible defaults
-    for a Hermes deployment — users can tweak them in the Slack UI after
+    for a Lliam-GOV deployment — users can tweak them in the Slack UI after
     pasting.
 
     When ``include_assistant`` is True (default) the manifest opts the app
@@ -88,7 +88,7 @@ def _build_full_manifest(
 
     if include_assistant:
         features["assistant_view"] = {
-            "assistant_description": "Chat with Hermes in threads and DMs.",
+            "assistant_description": "Chat with Lliam-GOV in threads and DMs.",
         }
         bot_scopes.append("assistant:write")
         bot_events.extend(
@@ -107,7 +107,7 @@ def _build_full_manifest(
         },
         "display_information": {
             "name": bot_name[:35],
-            "description": (bot_description or "Your Hermes agent on Slack")[:140],
+            "description": (bot_description or "Your Lliam-GOV agent on Slack")[:140],
             "background_color": "#1a1a2e",
         },
         "features": features,
@@ -175,7 +175,7 @@ def slack_manifest_command(args) -> int:
         print(f"Slack manifest written to: {target}", file=sys.stderr)
         print(
             "\nNext steps:\n"
-            "  1. Open https://api.slack.com/apps and pick your Hermes app\n"
+            "  1. Open https://api.slack.com/apps and pick your Lliam-GOV app\n"
             "     (or create a new one: Create New App → From an app manifest).\n"
             f"  2. Features → App Manifest → paste the contents of\n"
             f"     {target}\n"

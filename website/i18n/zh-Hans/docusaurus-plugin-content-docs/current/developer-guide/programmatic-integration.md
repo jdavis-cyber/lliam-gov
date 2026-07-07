@@ -95,7 +95,7 @@ GET  /v1/models                  列出 lliam-gov-agent
 GET  /health, /health/detailed
 ```
 
-配置、请求头（`X-Lliam-GOV-Session-Id`、`X-Lliam-GOV-Session-Key`）及前端接入：[API Server](../user-guide/features/api-server)。
+配置、请求头（`X-Hermes-Session-Id`、`X-Hermes-Session-Key`）及前端接入：[API Server](../user-guide/features/api-server)。
 
 ---
 
@@ -115,7 +115,7 @@ GET  /health, /health/detailed
 - **CLI / TUI：** `/model claude-sonnet-4` 或 `/model openrouter:anthropic/claude-sonnet-4.6`
 - **TUI gateway RPC：** 使用 `{"command": "/model claude-sonnet-4"}` 调用 `command.dispatch`
 - **ACP：** IDE 将 slash 命令作为 prompt 发送，agent 负责分发
-- **API server：** 在请求体中包含 `model` 字段，或设置 `X-Lliam-GOV-Model`
+- **API server：** 在请求体中包含 `model` 字段，或设置 `X-Hermes-Model`
 
 内置 provider 感知解析（相同的模型名称会根据当前 provider 自动选择正确格式）。参见 `lliam_cli/model_switch.py`。
 

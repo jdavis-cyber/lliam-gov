@@ -1,4 +1,4 @@
-"""``hermes gateway enroll`` — enroll a self-hosted gateway with a relay connector.
+"""``lliam-gov gateway enroll`` — enroll a self-hosted gateway with a relay connector.
 
 The connector⇄gateway channel is authenticated (the gateway may be
 customer-managed and internet-exposed). This command is the gateway half of the
@@ -6,7 +6,7 @@ zero-touch enrollment in the connector repo's
 ``docs/connector-gateway-auth-design.md``:
 
   1. Resolve a fresh Nous Portal access token from the existing login
-     (``~/.hermes/auth.json``) — the same path ``hermes dashboard register``
+     (``~/.hermes/auth.json``) — the same path ``lliam-gov dashboard register``
      uses (``resolve_nous_access_token``). This proves *which Nous org (tenant)*
      the caller owns; the connector derives the authoritative tenant from it via
      ``GET /api/oauth/account`` (never from anything the gateway asserts).
@@ -154,7 +154,7 @@ def cmd_gateway_enroll(args) -> None:
     # write anyway.
     if is_managed():
         print(
-            "✗ `hermes gateway enroll` is not available in a managed/hosted install.\n"
+            "✗ `lliam-gov gateway enroll` is not available in a managed/hosted install.\n"
             "  The relay gateway secret is provisioned by the hosting platform."
         )
         sys.exit(1)

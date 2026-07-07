@@ -1,4 +1,4 @@
-"""Tests for hermes backup and import commands."""
+"""Tests for lliam-gov backup and import commands."""
 
 import json
 import os
@@ -345,7 +345,7 @@ class TestBackup:
         # Add a nested hermes-agent directory inside skills (like the real layout)
         nested = lliam_home / "skills" / "autonomous-ai-agents" / "hermes-agent"
         nested.mkdir(parents=True)
-        (nested / "SKILL.md").write_text("# Hermes Agent Skill\n")
+        (nested / "SKILL.md").write_text("# Lliam-GOV Skill\n")
         (nested / "sub").mkdir()
         (nested / "sub" / "item.txt").write_text("nested content\n")
 
@@ -460,7 +460,7 @@ class TestValidateBackupZip:
                 zf.writestr(name, "dummy")
 
     def test_state_db_passes(self, tmp_path):
-        """A zip containing state.db is accepted as a valid Hermes backup."""
+        """A zip containing state.db is accepted as a valid Lliam-GOV backup."""
         from lliam_cli.backup import _validate_backup_zip
         zip_path = tmp_path / "backup.zip"
         self._make_zip(zip_path, ["state.db", "sessions/abc.json"])
@@ -502,7 +502,7 @@ class TestImport:
                     zf.writestr(name, content)
 
     def test_restores_files(self, tmp_path, monkeypatch):
-        """Import extracts files into hermes home."""
+        """Import extracts files into lliam-gov home."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
         monkeypatch.setenv("HERMES_HOME", str(lliam_home))
@@ -565,7 +565,7 @@ class TestImport:
             run_import(args)
 
     def test_rejects_non_lliam_zip(self, tmp_path, monkeypatch):
-        """Import rejects a zip that doesn't look like a hermes backup."""
+        """Import rejects a zip that doesn't look like a lliam-gov backup."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
         monkeypatch.setenv("HERMES_HOME", str(lliam_home))
@@ -604,7 +604,7 @@ class TestImport:
 
         # config.yaml should be restored
         assert (lliam_home / "config.yaml").exists()
-        # traversal file should NOT exist outside hermes home
+        # traversal file should NOT exist outside lliam-gov home
         assert not (tmp_path / "etc" / "passwd").exists()
 
     def test_preserves_live_gateway_state(self, tmp_path, monkeypatch):
@@ -909,7 +909,7 @@ class TestValidation:
         assert ok
 
     def test_validate_rejects_random(self):
-        """Zip without hermes markers fails validation."""
+        """Zip without lliam-gov markers fails validation."""
         import io
         from lliam_cli.backup import _validate_backup_zip
 
@@ -968,7 +968,7 @@ class TestValidation:
 
 class TestBackupEdgeCases:
     def test_nonexistent_lliam_home(self, tmp_path, monkeypatch):
-        """Backup exits when hermes home doesn't exist."""
+        """Backup exits when lliam-gov home doesn't exist."""
         fake_home = tmp_path / "nonexistent" / ".hermes"
         monkeypatch.setenv("HERMES_HOME", str(fake_home))
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "nonexistent")
@@ -1018,7 +1018,7 @@ class TestBackupEdgeCases:
         assert (tmp_path / "mybackup.tar.zip").exists()
 
     def test_empty_lliam_home(self, tmp_path, monkeypatch):
-        """Backup handles empty hermes home (no files to back up)."""
+        """Backup handles empty lliam-gov home (no files to back up)."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
         # Only excluded dirs, no actual files
@@ -1092,7 +1092,7 @@ class TestBackupEdgeCases:
             assert "ancient.txt" not in names
 
     def test_skips_output_zip_inside_lliam(self, tmp_path, monkeypatch):
-        """Backup skips its own output zip if it's inside hermes root."""
+        """Backup skips its own output zip if it's inside lliam-gov root."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
         (lliam_home / "config.yaml").write_text("model: test\n")
@@ -1100,7 +1100,7 @@ class TestBackupEdgeCases:
         monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        # Output inside hermes home
+        # Output inside lliam-gov home
         out_zip = lliam_home / "backup.zip"
         args = Namespace(output=str(out_zip))
 
@@ -1590,7 +1590,7 @@ class TestQuickSnapshot:
         assert snap_id is not None
 
 # ---------------------------------------------------------------------------
-# Pre-update backup (hermes update safety net)
+# Pre-update backup (lliam-gov update safety net)
 # ---------------------------------------------------------------------------
 
     # -- security: path traversal regression coverage -----------------------
@@ -1865,7 +1865,7 @@ class TestQuickSnapshotProjectsKanban:
 
 
 class TestPreUpdateBackup:
-    """Tests for create_pre_update_backup — the auto-backup ``hermes update``
+    """Tests for create_pre_update_backup — the auto-backup ``lliam-gov update``
     runs before touching anything."""
 
     @pytest.fixture
@@ -1886,7 +1886,7 @@ class TestPreUpdateBackup:
 
     def test_backup_contents_match_full_backup(self, lliam_home):
         """Pre-update backup should include the same user data that
-        ``hermes backup`` would, and should exclude the same directories."""
+        ``lliam-gov backup`` would, and should exclude the same directories."""
         from lliam_cli.backup import create_pre_update_backup
         out = create_pre_update_backup(lliam_home=lliam_home)
         assert out is not None
@@ -2055,14 +2055,14 @@ class TestRunPreUpdateBackup:
         assert "Creating pre-update backup" in out
         assert "Saved:" in out
         assert "Restore:" in out
-        assert "hermes import" in out
+        assert "lliam-gov import" in out
         assert "Disable:" in out
         # Actual backup was created
         backups = list((lliam_home / "backups").glob("pre-update-*.zip"))
         assert len(backups) == 1
 
     def test_default_disabled_is_silent(self, lliam_home, capsys):
-        """With the default (``pre_update_backup: false``), ``hermes update``
+        """With the default (``pre_update_backup: false``), ``lliam-gov update``
         does NOT create a backup and stays silent — zipping a large
         HERMES_HOME can add minutes to every update. Users who want the
         #48200 safety net opt in via the config knob or ``--backup``.
@@ -2146,12 +2146,12 @@ class TestRunPreUpdateBackup:
 
 
 # ---------------------------------------------------------------------------
-# Pre-migration backup (hermes claw migrate safety net)
+# Pre-migration backup (lliam-gov claw migrate safety net)
 # ---------------------------------------------------------------------------
 
 class TestPreMigrationBackup:
     """Tests for create_pre_migration_backup — the auto-backup
-    ``hermes claw migrate`` runs before mutating ~/.hermes/."""
+    ``lliam-gov claw migrate`` runs before mutating ~/.hermes/."""
 
     @pytest.fixture
     def lliam_home(self, tmp_path):
@@ -2173,7 +2173,7 @@ class TestPreMigrationBackup:
 
     def test_backup_uses_shared_exclusion_rules(self, lliam_home):
         """Pre-migration backup reuses the same exclusion rules as
-        ``hermes backup`` / ``create_pre_update_backup`` — no drift."""
+        ``lliam-gov backup`` / ``create_pre_update_backup`` — no drift."""
         from lliam_cli.backup import create_pre_migration_backup
         out = create_pre_migration_backup(lliam_home=lliam_home)
         assert out is not None
@@ -2189,8 +2189,8 @@ class TestPreMigrationBackup:
         assert "gateway.pid" not in names
 
     def test_restorable_with_lliam_import(self, lliam_home, tmp_path):
-        """The zip produced by pre-migration backup must be a valid Hermes
-        backup — `hermes import` should accept it."""
+        """The zip produced by pre-migration backup must be a valid Lliam-GOV
+        backup — `lliam-gov import` should accept it."""
         from lliam_cli.backup import create_pre_migration_backup, _validate_backup_zip
         out = create_pre_migration_backup(lliam_home=lliam_home)
         assert out is not None
@@ -2250,7 +2250,7 @@ class TestPreMigrationBackup:
 # ---------------------------------------------------------------------------
 
 class TestRestoreCronJobsIfEmptied:
-    """`hermes update` config migration can leave cron/jobs.json valid-but-empty,
+    """`lliam-gov update` config migration can leave cron/jobs.json valid-but-empty,
     silently dropping every scheduled job. `restore_cron_jobs_if_emptied` is the
     post-migration safety net that restores from the pre-update snapshot."""
 

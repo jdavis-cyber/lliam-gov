@@ -230,7 +230,7 @@ _hermes() {{
             subcmds=(
 {top_cmds_str}
             )
-            _describe 'hermes command' subcmds
+            _describe 'lliam-gov command' subcmds
             ;;
         args)
             case ${{line[1]}} in

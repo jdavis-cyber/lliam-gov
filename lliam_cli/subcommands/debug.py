@@ -1,4 +1,4 @@
-"""``hermes debug`` subcommand parser.
+"""``lliam-gov debug`` subcommand parser.
 
 Extracted verbatim from ``lliam_cli/main.py:main()`` (god-file Phase 2).
 Handler injected to avoid importing ``main``.
@@ -24,12 +24,12 @@ def build_debug_parser(subparsers, *, cmd_debug: Callable) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 Examples:
-    hermes debug share              Upload debug report and print URL
-    hermes debug share --lines 500  Include more log lines
-    hermes debug share --expire 30  Keep paste for 30 days
-    hermes debug share --local      Print report locally (no upload)
-    hermes debug share --no-redact  Disable upload-time secret redaction
-    hermes debug delete <url>       Delete a previously uploaded paste
+    lliam-gov debug share              Upload debug report and print URL
+    lliam-gov debug share --lines 500  Include more log lines
+    lliam-gov debug share --expire 30  Keep paste for 30 days
+    lliam-gov debug share --local      Print report locally (no upload)
+    lliam-gov debug share --no-redact  Disable upload-time secret redaction
+    lliam-gov debug delete <url>       Delete a previously uploaded paste
 """,
     )
     debug_sub = debug_parser.add_subparsers(dest="debug_command")
@@ -66,7 +66,7 @@ Examples:
     )
     delete_parser = debug_sub.add_parser(
         "delete",
-        help="Delete a paste uploaded by 'hermes debug share'",
+        help="Delete a paste uploaded by 'lliam-gov debug share'",
     )
     delete_parser.add_argument(
         "urls",

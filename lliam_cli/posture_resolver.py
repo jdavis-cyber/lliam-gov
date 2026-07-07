@@ -1,6 +1,6 @@
 """lliam_cli/posture_resolver.py — Lliam-GOV strict-posture coherence.
 
-ADDITIVE OVERLAY MODULE — no existing Hermes/Lliam module, file, CLI command, or
+ADDITIVE OVERLAY MODULE — no existing Lliam-GOV/Lliam module, file, CLI command, or
 identifier is renamed, moved, or refactored by anything in here. (PATH-FREEZE.)
 
 Realizes:
@@ -22,7 +22,7 @@ How it is wired (capability-preserving, additive):
 Design notes:
   * Deterministic + idempotent: applying twice yields the same result.
   * Never raises into the config-load path. A resolver fault must not brick every
-    ``hermes`` invocation; on unexpected error it logs and returns the config
+    ``lliam-gov`` invocation; on unexpected error it logs and returns the config
     untouched. The *enforcement* of fail-closed blocking lives in the dedicated
     startup gate; this module only renders the coherent fail-closed config + the
     blocking signal it consumes.
@@ -42,7 +42,7 @@ STRICT = "strict"
 
 # Coercion table: (dotted path under the loaded config, value to force when
 # posture == strict, short human reason). Every key here already exists in
-# Hermes DEFAULT_CONFIG except ``security.deny_on_no_approver``, which is an
+# Lliam-GOV DEFAULT_CONFIG except ``security.deny_on_no_approver``, which is an
 # additive governance key consumed by the approval path (a later Phase-0/2 step).
 # Forcing it here makes the no-approver branch fail-closed under strict posture.
 _STRICT_COERCIONS: Tuple[Tuple[str, Any, str], ...] = (

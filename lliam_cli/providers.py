@@ -7,7 +7,7 @@ Two data sources, merged at runtime:
    names, and full model metadata (context, cost, capabilities).  This is
    the primary database.
 
-2. **Hermes overlays** — transport type, auth patterns, aggregator flags,
+2. **Lliam-GOV overlays** — transport type, auth patterns, aggregator flags,
    and additional env vars that models.dev doesn't track.  Small dict,
    maintained here.
 
@@ -28,12 +28,12 @@ from utils import base_url_host_matches, base_url_hostname
 logger = logging.getLogger(__name__)
 
 
-# -- Hermes overlay ----------------------------------------------------------
-# Hermes-specific metadata that models.dev doesn't provide.
+# -- Lliam-GOV overlay ----------------------------------------------------------
+# Lliam-GOV-specific metadata that models.dev doesn't provide.
 
 @dataclass(frozen=True)
 class LliamOverlay:
-    """Hermes-specific provider metadata layered on top of models.dev."""
+    """Lliam-GOV-specific provider metadata layered on top of models.dev."""
 
     transport: str = "openai_chat"        # openai_chat | anthropic_messages | codex_responses
     is_aggregator: bool = False
@@ -402,8 +402,8 @@ def get_provider(name: str) -> Optional[ProviderDef]:
     """Look up a built-in provider by id or alias.
 
     Resolution order:
-      1. Hermes overlays (for providers not in models.dev: nous, openai-codex, etc.)
-      2. models.dev catalog + Hermes overlay
+      1. Lliam-GOV overlays (for providers not in models.dev: nous, openai-codex, etc.)
+      2. models.dev catalog + Lliam-GOV overlay
 
     User-defined providers from config.yaml (``providers:`` / ``custom_providers:``)
     are resolved by :func:`resolve_provider_full`, which layers ``resolve_user_provider``
@@ -431,7 +431,7 @@ def get_provider(name: str) -> Optional[ProviderDef]:
         base_url_env = overlay.base_url_env_var if overlay else ""
         base_url_override = overlay.base_url_override if overlay else ""
 
-        # Combine env vars: models.dev env + hermes extra
+        # Combine env vars: models.dev env + lliam-gov extra
         env_vars = list(mdev_info.env)
         if overlay and overlay.extra_env_vars:
             for ev in overlay.extra_env_vars:
@@ -452,7 +452,7 @@ def get_provider(name: str) -> Optional[ProviderDef]:
         )
 
     if overlay is not None:
-        # Hermes-only provider (not in models.dev)
+        # Lliam-GOV-only provider (not in models.dev)
         return ProviderDef(
             id=canonical,
             name=_LABEL_OVERRIDES.get(canonical, canonical),

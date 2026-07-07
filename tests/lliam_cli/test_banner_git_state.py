@@ -8,7 +8,7 @@ def test_format_banner_version_label_without_git_state():
         value = banner.format_banner_version_label()
 
     assert value == (
-        f"Lliam-GOV v{banner.VERSION} ({banner.RELEASE_DATE}) · built on Hermes Agent"
+        f"Lliam-GOV v{banner.VERSION} ({banner.RELEASE_DATE}) · built on Lliam-GOV"
     )
 
 

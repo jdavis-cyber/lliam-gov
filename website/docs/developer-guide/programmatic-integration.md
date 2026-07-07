@@ -98,7 +98,7 @@ GET  /v1/models                  Lists lliam-gov-agent
 GET  /health, /health/detailed
 ```
 
-Setup, headers (`X-Lliam-GOV-Session-Id`, `X-Lliam-GOV-Session-Key`), and frontend wiring: [API Server](../user-guide/features/api-server).
+Setup, headers (`X-Hermes-Session-Id`, `X-Hermes-Session-Key`), and frontend wiring: [API Server](../user-guide/features/api-server).
 
 ---
 
@@ -118,7 +118,7 @@ Mid-session model switching works on every surface — it's the `/model` slash c
 - **CLI / TUI:** `/model claude-sonnet-4` or `/model openrouter:anthropic/claude-sonnet-4.6`
 - **TUI gateway RPC:** `command.dispatch` with `{"command": "/model claude-sonnet-4"}`
 - **ACP:** the IDE sends the slash command as a prompt; the agent dispatches it
-- **API server:** include a `model` field in the request body or set `X-Lliam-GOV-Model`
+- **API server:** include a `model` field in the request body or set `X-Hermes-Model`
 
 Provider-aware resolution (the same model name picks the right format for whatever provider you're on) is built in. See `lliam_cli/model_switch.py`.
 

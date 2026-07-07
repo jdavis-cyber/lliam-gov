@@ -1,4 +1,4 @@
-"""``hermes update`` subcommand parser.
+"""``lliam-gov update`` subcommand parser.
 
 Extracted verbatim from ``lliam_cli/main.py:main()`` (god-file Phase 2).
 Handler injected to avoid importing ``main``.
@@ -56,7 +56,7 @@ def build_update_parser(subparsers, *, cmd_update: Callable) -> None:
         metavar="NAME",
         help=(
             "Update against this branch instead of the default (main). "
-            "If the local checkout is on a different branch, hermes will "
+            "If the local checkout is on a different branch, lliam-gov will "
             "switch to the requested branch first (auto-stashing any "
             "uncommitted changes)."
         ),

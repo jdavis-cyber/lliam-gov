@@ -8,7 +8,7 @@ Usage::
 
     python -m acp_adapter.entry
     # or
-    hermes acp
+    lliam-gov acp
     # or
     hermes-acp
 """
@@ -19,13 +19,13 @@ try:
     import lliam_bootstrap  # noqa: F401
 except ModuleNotFoundError:
     # Graceful fallback when lliam_bootstrap isn't registered in the venv
-    # yet — happens during partial ``hermes update`` where git-reset landed
+    # yet — happens during partial ``lliam-gov update`` where git-reset landed
     # new code but ``uv pip install -e .`` didn't finish.  Missing bootstrap
     # means UTF-8 stdio setup is skipped on Windows; POSIX is unaffected.
     pass
 else:
     # Stop a ``utils/``/``proxy/``/``ui/`` package in the launch directory from
-    # shadowing Hermes's own modules — ``hermes acp`` can be started from any
+    # shadowing Lliam-GOV's own modules — ``lliam-gov acp`` can be started from any
     # cwd, including a project that has same-named packages on its path.
     lliam_bootstrap.harden_import_path()
 
@@ -116,9 +116,9 @@ def _load_env() -> None:
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="lliam-gov-acp",
-        description="Run Hermes Agent as an ACP stdio server.",
+        description="Run Lliam-GOV as an ACP stdio server.",
     )
-    parser.add_argument("--version", action="store_true", help="Print Hermes version and exit")
+    parser.add_argument("--version", action="store_true", help="Print Lliam-GOV version and exit")
     parser.add_argument(
         "--check",
         action="store_true",
@@ -127,7 +127,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--setup",
         action="store_true",
-        help="Run interactive Hermes provider/model setup for ACP terminal auth",
+        help="Run interactive Lliam-GOV provider/model setup for ACP terminal auth",
     )
     parser.add_argument(
         "--setup-browser",
@@ -156,7 +156,7 @@ def _run_check() -> None:
     import acp  # noqa: F401
     from acp_adapter.server import LliamACPAgent  # noqa: F401
 
-    print("Hermes ACP check OK")
+    print("Lliam-GOV ACP check OK")
 
 
 def _run_setup() -> None:
@@ -190,7 +190,7 @@ def _run_setup_browser(assume_yes: bool = False) -> int:
     """Bootstrap agent-browser + Chromium.
 
     Routes through dep_ensure -> install.{sh,ps1} --ensure, sharing code
-    with ``hermes postinstall`` and the runtime lazy installer.
+    with ``lliam-gov postinstall`` and the runtime lazy installer.
 
     Returns 0 on success, 1 on failure.
     """

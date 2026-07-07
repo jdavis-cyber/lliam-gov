@@ -76,7 +76,7 @@ def _warn_if_gateway_not_running() -> None:
         return
 
     print(color("  ⚠  Gateway is not running — jobs won't fire automatically.", Colors.YELLOW))
-    print(color("     Start it with: hermes gateway install", Colors.DIM))
+    print(color("     Start it with: lliam-gov gateway install", Colors.DIM))
     print(color("                    sudo lliam-gov gateway install --system  # Linux servers", Colors.DIM))
     print(color("     Check status:  lliam-gov cron status", Colors.DIM))
 
@@ -89,7 +89,7 @@ def cron_list(show_all: bool = False):
 
     if not jobs:
         print(color("No scheduled jobs.", Colors.DIM))
-        print(color("Create one with 'hermes cron create ...' or the /cron command in chat.", Colors.DIM))
+        print(color("Create one with 'lliam-gov cron create ...' or the /cron command in chat.", Colors.DIM))
         return
 
     print()
@@ -205,7 +205,7 @@ def cron_status():
                 Colors.YELLOW,
             ))
             print(f"  PID: {', '.join(map(str, pids))}")
-            print("  Cron jobs may NOT be firing. Restart: hermes gateway restart")
+            print("  Cron jobs may NOT be firing. Restart: lliam-gov gateway restart")
         elif hb_age is not None and ok_age is not None and ok_age > STALE_AFTER:
             # Loop is alive (fresh heartbeat) but no tick has SUCCEEDED in a
             # long time → ticks are failing every iteration.

@@ -1,4 +1,4 @@
-"""Tests for `hermes curator archive` and `hermes curator prune`.
+"""Tests for `lliam-gov curator archive` and `lliam-gov curator prune`.
 
 Covers:
 - archive refuses pinned skills with an `unpin` hint
@@ -39,7 +39,7 @@ def test_archive_refuses_pinned(monkeypatch, capsys):
     assert called == []
     out = capsys.readouterr().out
     assert "pinned" in out.lower()
-    assert "hermes curator unpin" in out
+    assert "lliam-gov curator unpin" in out
 
 
 def test_archive_calls_archive_skill(monkeypatch, capsys):
@@ -239,7 +239,7 @@ def test_archive_and_prune_registered():
     import argparse
     import lliam_cli.curator as curator_cli
 
-    parser = argparse.ArgumentParser(prog="hermes curator")
+    parser = argparse.ArgumentParser(prog="lliam-gov curator")
     curator_cli.register_cli(parser)
 
     args = parser.parse_args(["archive", "my-skill"])
@@ -257,7 +257,7 @@ def test_prune_defaults():
     import argparse
     import lliam_cli.curator as curator_cli
 
-    parser = argparse.ArgumentParser(prog="hermes curator")
+    parser = argparse.ArgumentParser(prog="lliam-gov curator")
     curator_cli.register_cli(parser)
     args = parser.parse_args(["prune"])
     assert args.days == 90

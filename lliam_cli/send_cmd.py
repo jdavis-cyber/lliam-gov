@@ -1,4 +1,4 @@
-"""CLI subcommand: ``hermes send`` — pipe text from shell scripts to any
+"""CLI subcommand: ``lliam-gov send`` — pipe text from shell scripts to any
 configured messaging platform (Telegram, Discord, Slack, Signal, SMS, etc.).
 
 This is a thin wrapper around ``tools.send_message_tool.send_message_tool``
@@ -61,7 +61,7 @@ def _read_message_body(
             return Path(file_path).read_text(encoding="utf-8")
         except UnicodeDecodeError:
             print(
-                f"hermes send: {file_path} is not a text file. --file reads the "
+                f"lliam-gov send: {file_path} is not a text file. --file reads the "
                 "message *body* (logs, reports, markdown).\n"
                 "To send an image/document/audio file as a native attachment, "
                 "reference it with MEDIA: in the message text instead:\n"
@@ -73,7 +73,7 @@ def _read_message_body(
             )
             sys.exit(_USAGE_EXIT)
         except OSError as exc:
-            print(f"hermes send: cannot read {file_path}: {exc}", file=sys.stderr)
+            print(f"lliam-gov send: cannot read {file_path}: {exc}", file=sys.stderr)
             sys.exit(_USAGE_EXIT)
 
     # Piped input: only consume stdin when it is not a TTY. Reading from a
@@ -118,7 +118,7 @@ def _emit_result(
         pass
     else:
         if payload.get("error"):
-            print(f"hermes send: {payload['error']}", file=sys.stderr)
+            print(f"lliam-gov send: {payload['error']}", file=sys.stderr)
         elif payload.get("success"):
             note = payload.get("note")
             if note:
@@ -153,13 +153,13 @@ def _list_targets(platform_filter: Optional[str], *, json_mode: bool) -> int:
             load_directory,
         )
     except Exception as exc:
-        print(f"hermes send: failed to load channel directory: {exc}", file=sys.stderr)
+        print(f"lliam-gov send: failed to load channel directory: {exc}", file=sys.stderr)
         return _FAILURE_EXIT
 
     try:
         raw = load_directory()
     except Exception as exc:
-        print(f"hermes send: failed to read channel directory: {exc}", file=sys.stderr)
+        print(f"lliam-gov send: failed to read channel directory: {exc}", file=sys.stderr)
         return _FAILURE_EXIT
 
     platforms = dict(raw.get("platforms") or {})
@@ -169,7 +169,7 @@ def _list_targets(platform_filter: Optional[str], *, json_mode: bool) -> int:
         filtered = {k: v for k, v in platforms.items() if k.lower() == key}
         if not filtered:
             print(
-                f"hermes send: no targets found for platform '{platform_filter}'. "
+                f"lliam-gov send: no targets found for platform '{platform_filter}'. "
                 f"Configured: {', '.join(sorted(platforms)) or '(none)'}",
                 file=sys.stderr,
             )
@@ -215,16 +215,16 @@ def _load_lliam_env() -> None:
 
     ``send_message_tool`` reads tokens and home-channel IDs via
     ``os.getenv(...)`` on each call. The gateway process does two things at
-    startup that ``hermes send`` must replicate when invoked standalone:
+    startup that ``lliam-gov send`` must replicate when invoked standalone:
 
     1. ``load_dotenv(~/.hermes/.env)`` — brings bot tokens into the env.
     2. Bridge top-level simple values from ``~/.hermes/config.yaml`` into
        ``os.environ`` (without overriding existing env vars). This is where
        ``TELEGRAM_HOME_CHANNEL`` and friends live when the user saved them
-       via ``hermes config set``.
+       via ``lliam-gov config set``.
 
     See ``gateway/run.py`` for the canonical version of this bridge — we
-    intentionally reimplement the minimum needed here so ``hermes send``
+    intentionally reimplement the minimum needed here so ``lliam-gov send``
     doesn't pull in the full gateway module just to resolve a home channel.
     """
     # Step 1: dotenv
@@ -314,7 +314,7 @@ def cmd_send(args: argparse.Namespace) -> None:
     target = _resolve_target(getattr(args, "to", None))
     if not target:
         print(
-            "hermes send: --to PLATFORM[:channel[:thread]] is required\n"
+            "lliam-gov send: --to PLATFORM[:channel[:thread]] is required\n"
             "Examples:\n"
             "  lliam-gov send --to telegram \"hello\"\n"
             "  lliam-gov send --to discord:#ops --file report.md\n"
@@ -329,7 +329,7 @@ def cmd_send(args: argparse.Namespace) -> None:
     )
     if message is None or not message.strip():
         print(
-            "hermes send: no message provided. Pass text as a positional "
+            "lliam-gov send: no message provided. Pass text as a positional "
             "argument, use --file PATH, or pipe data via stdin.",
             file=sys.stderr,
         )
@@ -341,7 +341,7 @@ def cmd_send(args: argparse.Namespace) -> None:
     if subject:
         message = f"{subject}\n\n{message.lstrip()}"
 
-    # Import lazily so `hermes send --help` stays fast and does not pull in
+    # Import lazily so `lliam-gov send --help` stays fast and does not pull in
     # the full tool registry / gateway config stack.
     from tools.send_message_tool import send_message_tool
 
@@ -376,7 +376,7 @@ def register_send_subparser(subparsers) -> argparse.ArgumentParser:
         "send",
         help="Send a message to a configured platform (scripts, cron jobs, CI).",
         description=(
-            "Pipe text from any shell script to any messaging platform Hermes "
+            "Pipe text from any shell script to any messaging platform Lliam-GOV "
             "is already configured for. Reuses the gateway's platform "
             "credentials (~/.hermes/.env + ~/.hermes/config.yaml) — no LLM, "
             "no agent loop, no running gateway required for bot-token "
@@ -385,7 +385,7 @@ def register_send_subparser(subparsers) -> argparse.ArgumentParser:
         epilog=(
             "Examples:\n"
             "  lliam-gov send --to telegram \"deploy finished\"\n"
-            "  echo \"RAM 92%\" | hermes send --to telegram:-1001234567890\n"
+            "  echo \"RAM 92%\" | lliam-gov send --to telegram:-1001234567890\n"
             "  lliam-gov send --to discord:#ops --file /tmp/report.md\n"
             "  lliam-gov send --to slack:#eng --subject \"[CI]\" --file build.log\n"
             "  lliam-gov send --to telegram \"MEDIA:/tmp/chart.png\"   # send a media attachment\n"
@@ -446,7 +446,7 @@ def register_send_subparser(subparsers) -> argparse.ArgumentParser:
         dest="list_targets",
         action="store_true",
         default=False,
-        help="List available targets. Optional positional filter: `hermes send --list telegram`.",
+        help="List available targets. Optional positional filter: `lliam-gov send --list telegram`.",
     )
 
     parser.add_argument(

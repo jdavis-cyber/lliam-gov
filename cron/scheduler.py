@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import List, Optional
 
 # Add parent directory to path for imports BEFORE repo-level imports.
-# Without this, standalone invocations (e.g. after `hermes update` reloads
+# Without this, standalone invocations (e.g. after `lliam-gov update` reloads
 # the module) fail with ModuleNotFoundError for lliam_time et al.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -175,7 +175,7 @@ def _resolve_cron_enabled_toolsets(job: dict, cfg: dict) -> list[str] | None:
        Keeps the agent's job-scoped toolset override intact — #6130. Enabled
        MCP servers are layered on per ``_merge_mcp_into_per_job_toolsets`` so a
        native-toolset allowlist does not silently strip MCP tools.
-    2. Per-platform ``hermes tools`` config for the ``cron`` platform.
+    2. Per-platform ``lliam-gov tools`` config for the ``cron`` platform.
        Mirrors gateway behavior (``_get_platform_tools(cfg, platform_key)``)
        so users can gate cron toolsets globally without recreating every job.
     3. ``None`` on any lookup failure — AIAgent loads the full default set
@@ -356,7 +356,7 @@ _lliam_home: Path | None = None
 
 
 def _get_lliam_home() -> Path:
-    """Resolve Hermes home dynamically while preserving test monkeypatch hooks.
+    """Resolve Lliam-GOV home dynamically while preserving test monkeypatch hooks.
 
     Cron is per-profile by design (#4707): the in-process ticker runs inside a
     profile-scoped gateway, so resolving the active HERMES_HOME at call time
@@ -549,7 +549,7 @@ def _open_continuable_cron_thread(
     if not callable(create_thread) or loop is None:
         return None
     task_name = job.get("name") or job.get("id", "cron")
-    thread_name = f"Hermes — {task_name}"
+    thread_name = f"Lliam-GOV — {task_name}"
     try:
         from agent.async_utils import safe_schedule_threadsafe
 
@@ -1565,7 +1565,7 @@ def _run_job_script(script_path: str) -> tuple[bool, str]:
     (the `memory-watchdog.sh` pattern) without wrapping them in Python.
 
     Subprocess environment is passed through ``_sanitize_subprocess_env`` so
-    provider credentials and other Hermes-managed secrets are not inherited
+    provider credentials and other Lliam-managed secrets are not inherited
     (SECURITY.md §2.3), matching terminal and MCP child processes.
 
     Args:
@@ -2291,7 +2291,7 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
                 "config.yaml model.default missing or empty). "
                 f"Set a per-job model via "
                 f"`cronjob action=update job_id={job_id} model=<name>` or set a "
-                "default with `hermes model <name>`."
+                "default with `lliam-gov model <name>`."
             )
 
         # Apply IPv4 preference if configured.
