@@ -11850,7 +11850,7 @@ def _resolve_chat_argv(
     dashboard's ``/api/pub`` endpoint (see :func:`pub_ws`).
 
     `active_session_file` (when set) is forwarded as
-    ``HERMES_TUI_ACTIVE_SESSION_FILE``. The TUI writes the current session id
+    ``LLIAM_TUI_ACTIVE_SESSION_FILE``. The TUI writes the current session id
     there whenever it creates/resumes/switches sessions, giving the dashboard a
     small cross-process breadcrumb for reconnecting after an unexpected browser
     WebSocket close.

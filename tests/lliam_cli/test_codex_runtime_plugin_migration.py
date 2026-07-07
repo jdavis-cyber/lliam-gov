@@ -497,13 +497,13 @@ class TestMigrate:
                          default_permission_profile=None,
                          expose_hermes_tools=True)
         text = (tmp_path / "config.toml").read_text()
-        assert "[mcp_servers.hermes-tools]" in text
+        assert "[mcp_servers.lliam-tools]" in text
         assert "lliam_tools_mcp_server" in text
         # Must include startup + tool timeouts so codex doesn't give up
         assert "startup_timeout_sec" in text
         assert "tool_timeout_sec" in text
         # And the entry is reported
-        assert "hermes-tools" in report.migrated
+        assert "lliam-tools" in report.migrated
 
     def test_expose_hermes_tools_disabled_skips_entry(self, tmp_path):
         """expose_hermes_tools=False suppresses the callback registration."""
@@ -512,8 +512,8 @@ class TestMigrate:
                 default_permission_profile=None,
                 expose_hermes_tools=False)
         text = (tmp_path / "config.toml").read_text()
-        assert "[mcp_servers.hermes-tools]" not in text
-        assert "hermes_tools_mcp_server" not in text
+        assert "[mcp_servers.lliam-tools]" not in text
+        assert "lliam_tools_mcp_server" not in text
 
     def test_dry_run_doesnt_write(self, tmp_path):
         report = migrate({"mcp_servers": {"x": {"command": "y"}}},

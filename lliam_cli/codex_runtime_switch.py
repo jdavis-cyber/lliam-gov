@@ -200,10 +200,10 @@ def apply(
         try:
             from lliam_cli.codex_runtime_plugin_migration import migrate
             mig_report = migrate(config)
-            # Tools/MCP servers (excluding the hermes-tools callback,
+            # Tools/MCP servers (excluding the lliam-tools callback,
             # which is internal plumbing — surface separately).
             user_servers = [
-                s for s in mig_report.migrated if s != "hermes-tools"
+                s for s in mig_report.migrated if s != "lliam-tools"
             ]
             if user_servers:
                 msg_lines.append(
@@ -228,9 +228,9 @@ def apply(
                     f"Default sandbox: {mig_report.wrote_permissions_default} "
                     f"(no approval prompt on every write)"
                 )
-            if "hermes-tools" in mig_report.migrated:
+            if "lliam-tools" in mig_report.migrated:
                 msg_lines.append(
-                    "Hermes tool callback registered: codex can now use "
+                    "Lliam tool callback registered: codex can now use "
                     "web_search, web_extract, browser_*, vision_analyze, "
                     "image_generate, skill_view, skills_list, text_to_speech, "
                     "kanban_* (worker + orchestrator) via MCP."
