@@ -1,6 +1,6 @@
-# Contributing to Hermes Agent
+# Contributing to Lliam-GOV Agent
 
-Thank you for contributing to Hermes Agent! This guide covers everything you need: setting up your dev environment, understanding the architecture, deciding what to build, and getting your PR merged.
+Thank you for contributing to Lliam-GOV Agent! This guide covers everything you need: setting up your dev environment, understanding the architecture, deciding what to build, and getting your PR merged.
 
 ---
 
@@ -9,7 +9,7 @@ Thank you for contributing to Hermes Agent! This guide covers everything you nee
 We value contributions in this order:
 
 1. **Bug fixes** — crashes, incorrect behavior, data loss. Always top priority.
-2. **Cross-platform compatibility** — macOS, different Linux distros, and WSL2 on Windows. We want Hermes to work everywhere.
+2. **Cross-platform compatibility** — macOS, different Linux distros, and WSL2 on Windows. We want Lliam-GOV to work everywhere.
 3. **Security hardening** — shell injection, prompt injection, path traversal, privilege escalation. See [Security](#security-considerations).
 4. **Performance and robustness** — retry logic, error handling, graceful degradation.
 5. **New skills** — but only broadly useful ones. See [Should it be a Skill or a Tool?](#should-it-be-a-skill-or-a-tool)
@@ -32,7 +32,7 @@ A quick search before you build saves your time and keeps the PR queue clean —
 - **If an open PR already addresses it**, consider reviewing or improving that one instead of opening a competing duplicate.
 - **For larger work**, comment on the issue to signal you're working on it, so others don't start the same thing.
 
-Related: #38284 covers the agent-side analog — Hermes itself checking existing issues and PRs before deep self-troubleshooting. This section is the human-contributor complement.
+Related: #38284 covers the agent-side analog — Lliam-GOV itself checking existing issues and PRs before deep self-troubleshooting. This section is the human-contributor complement.
 
 ---
 
@@ -56,26 +56,26 @@ This is the most common question for new contributors. The answer is almost alwa
 
 ### Should the Skill be bundled?
 
-Bundled skills (in `skills/`) ship with every Hermes install. They should be **broadly useful to most users**:
+Bundled skills (in `skills/`) ship with every Lliam-GOV install. They should be **broadly useful to most users**:
 
 - Document handling, web research, common dev workflows, system administration
 - Used regularly by a wide range of people
 
-If your skill is official and useful but not universally needed (e.g., a paid service integration, a heavyweight dependency), put it in **`optional-skills/`** — it ships with the repo but isn't activated by default. Users can discover it via `hermes skills browse` (labeled "official") and install it with `hermes skills install` (no third-party warning, built-in trust).
+If your skill is official and useful but not universally needed (e.g., a paid service integration, a heavyweight dependency), put it in **`optional-skills/`** — it ships with the repo but isn't activated by default. Users can discover it via `lliam-gov skills browse` (labeled "official") and install it with `lliam-gov skills install` (no third-party warning, built-in trust).
 
-If your skill is specialized, community-contributed, or niche, it's better suited for a **Skills Hub** — upload it to a skills registry and share it in the [Nous Research Discord](https://discord.gg/NousResearch). Users can install it with `hermes skills install`.
+If your skill is specialized, community-contributed, or niche, it's better suited for a **Skills Hub** — upload it to a skills registry and share it in the [Nous Research Discord](https://discord.gg/NousResearch). Users can install it with `lliam-gov skills install`.
 
 ---
 
 ## Memory Providers: Ship as a Standalone Plugin
 
-**We are no longer accepting new memory providers into this repo.** The set of built-in providers under `plugins/memory/` (honcho, mem0, supermemory, byterover, hindsight, holographic, openviking, retaindb) is closed. If you want to add a new memory backend, publish it as a **standalone plugin repo** that users install into `~/.hermes/plugins/` (or via a pip entry point).
+**We are no longer accepting new memory providers into this repo.** The set of built-in providers under `plugins/memory/` (honcho, mem0, supermemory, byterover, hindsight, holographic, openviking, retaindb) is closed. If you want to add a new memory backend, publish it as a **standalone plugin repo** that users install into `~/.lliam/plugins/` (or via a pip entry point).
 
 Standalone memory plugins:
 
 - Implement the same `MemoryProvider` ABC (`agent/memory_provider.py`) — `sync_turn`, `prefetch`, `shutdown`, and optionally `post_setup(hermes_home, config)` for setup-wizard integration
 - Use the same discovery system — `discover_memory_providers()` picks them up from user/project plugin directories and pip entry points
-- Integrate with `hermes memory setup` via `post_setup()` — no need to touch core code
+- Integrate with `lliam-gov memory setup` via `post_setup()` — no need to touch core code
 - Can register their own CLI subcommands via `register_cli(subparser)` in a `cli.py` file
 - Get all the same lifecycle hooks and config plumbing as in-tree providers
 
@@ -89,11 +89,11 @@ This isn't a quality bar — it's a coupling-and-maintenance decision. Memory pr
 
 The same rule extends to **any plugin that integrates someone else's product or project** — observability/metrics backends, vendor SaaS connectors, analytics dashboards, paid-service tie-ins, and similar third-party integrations. **These do not land in this repo.**
 
-The reason is maintenance load, not quality. Every external product absorbed into the core tree becomes ours to keep working against a fast-moving codebase, for a backend we don't own and can't control. Hermes ships a lot and the core moves quickly; coupling third-party products into it creates an open-ended burden on the maintainers.
+The reason is maintenance load, not quality. Every external product absorbed into the core tree becomes ours to keep working against a fast-moving codebase, for a backend we don't own and can't control. Lliam-GOV ships a lot and the core moves quickly; coupling third-party products into it creates an open-ended burden on the maintainers.
 
 Publish these as a **standalone plugin repo** instead:
 
-- Implement the relevant ABC and use the existing plugin discovery path (`~/.hermes/plugins/`, project `.hermes/plugins/`, or a pip entry point) — see [Build a Hermes Plugin](https://hermes-agent.nousresearch.com/docs/guides/build-a-hermes-plugin)
+- Implement the relevant ABC and use the existing plugin discovery path (`~/.lliam/plugins/`, project `.lliam/plugins/`, or a pip entry point) — see [Build a Lliam-GOV Plugin](https://hermes-agent.nousresearch.com/docs/guides/build-a-hermes-plugin)
 - Register lifecycle hooks (`pre_tool_call`, `post_tool_call`, `pre_llm_call`, `post_llm_call`, `on_session_start`, `on_session_end`), tools (`ctx.register_tool`), and CLI subcommands (`ctx.register_cli_command`) through the surface we already expose — no core changes needed
 - If your plugin needs a capability the framework doesn't expose, that's a feature request to **widen the generic plugin surface** (a new hook or `ctx` method) — never special-case your plugin in core
 - Promote it in the [Nous Research Discord](https://discord.gg/NousResearch) `#plugins-skills-and-skins` channel so users can find and install it
@@ -117,9 +117,9 @@ A well-built third-party-product plugin can clear automated review and still be 
 
 For most contributors, the best development bootstrap is the same path users
 take: run the standard installer, then work inside the repository it cloned.
-The installer creates the Hermes venv, wires the `hermes` command, stamps the
-install method for `hermes update`, and clones the full git project into
-`$HERMES_HOME/hermes-agent` (usually `~/.hermes/hermes-agent`). That keeps your
+The installer creates the Lliam-GOV venv, wires the `lliam-gov` command, stamps the
+install method for `lliam-gov update`, and clones the full git project into
+`$HERMES_HOME/hermes-agent` (usually `~/.lliam/lliam-gov-agent`). That keeps your
 development environment on the same layout the CLI, updater, lazy dependency
 installer, gateway, and docs assume.
 
@@ -143,15 +143,15 @@ scripts/run_tests.sh
 
 ### Manual clone fallback
 
-Use this only if you intentionally do not want Hermes' managed install layout
+Use this only if you intentionally do not want Lliam-GOV' managed install layout
 (for example, a throwaway clone inside a container or CI job). If you install
-this way, make sure you run the `hermes` entrypoint from this venv; running the
-system `python3 -m hermes_cli.main` can pick up unrelated system Python
+this way, make sure you run the `lliam-gov` entrypoint from this venv; running the
+system `python3 -m lliam_cli.main` can pick up unrelated system Python
 packages.
 
 ```bash
 git clone https://github.com/jdavis-cyber/lliam-gov.git
-cd hermes-agent
+cd lliam-gov-agent
 
 # Create venv with Python 3.11
 uv venv venv --python 3.11
@@ -167,28 +167,28 @@ npm install
 ### Configure for development
 
 ```bash
-mkdir -p ~/.hermes/{cron,sessions,logs,memories,skills}
-cp cli-config.yaml.example ~/.hermes/config.yaml
-touch ~/.hermes/.env
+mkdir -p ~/.lliam/{cron,sessions,logs,memories,skills}
+cp cli-config.yaml.example ~/.lliam/config.yaml
+touch ~/.lliam/.env
 
 # Add at minimum an LLM provider key:
-echo "OPENROUTER_API_KEY=***" >> ~/.hermes/.env
+echo "OPENROUTER_API_KEY=***" >> ~/.lliam/.env
 ```
 
 ### Run
 
 ```bash
-# The standard installer already put `hermes` on PATH.
-hermes doctor
-hermes chat -q "Hello"
+# The standard installer already put `lliam-gov` on PATH.
+lliam-gov doctor
+lliam-gov chat -q "Hello"
 ```
 
-If you used the manual clone fallback, run `./hermes` from the checkout or
+If you used the manual clone fallback, run `./lliam-gov` from the checkout or
 symlink this clone's venv explicitly:
 
 ```bash
 mkdir -p ~/.local/bin
-ln -sf "$(pwd)/venv/bin/hermes" ~/.local/bin/hermes
+ln -sf "$(pwd)/venv/bin/lliam-gov" ~/.local/bin/lliam-gov
 ```
 
 ### Run tests
@@ -207,12 +207,12 @@ pytest tests/ -v
 ## Project Structure
 
 ```
-hermes-agent/
+lliam-gov-agent/
 ├── run_agent.py              # AIAgent class — core conversation loop, tool dispatch, session persistence
 ├── cli.py                    # HermesCLI class — interactive TUI, prompt_toolkit integration
 ├── model_tools.py            # Tool orchestration (thin layer over tools/registry.py)
-├── toolsets.py               # Tool groupings and presets (hermes-cli, hermes-telegram, etc.)
-├── hermes_state.py           # SQLite session database with FTS5 full-text search, session titles
+├── toolsets.py               # Tool groupings and presets (lliam-gov-cli, lliam-gov-telegram, etc.)
+├── lliam_state.py           # SQLite session database with FTS5 full-text search, session titles
 ├── batch_runner.py           # Parallel batch processing for trajectory generation
 │
 ├── agent/                    # Agent internals (extracted modules)
@@ -223,7 +223,7 @@ hermes-agent/
 │   ├── model_metadata.py         # Model context lengths, token estimation
 │   └── trajectory.py             # Trajectory saving helpers
 │
-├── hermes_cli/               # CLI command implementations
+├── lliam_cli/               # CLI command implementations
 │   ├── main.py                   # Entry point, argument parsing, command dispatch
 │   ├── config.py                 # Config management, migration, env var definitions
 │   ├── setup.py                  # Interactive setup wizard
@@ -264,28 +264,28 @@ hermes-agent/
 │   ├── install.ps1               # Windows PowerShell installer
 │   └── whatsapp-bridge/          # Node.js WhatsApp bridge (Baileys)
 │
-├── skills/                   # Bundled skills (copied to ~/.hermes/skills/ on install)
+├── skills/                   # Bundled skills (copied to ~/.lliam/skills/ on install)
 ├── optional-skills/          # Official optional skills (discoverable via hub, not activated by default)
 ├── tests/                    # Test suite
 ├── website/                  # Documentation site (hermes-agent.nousresearch.com)
 │
-├── cli-config.yaml.example   # Example configuration (copied to ~/.hermes/config.yaml)
+├── cli-config.yaml.example   # Example configuration (copied to ~/.lliam/config.yaml)
 └── AGENTS.md                 # Development guide for AI coding assistants
 ```
 
-### User configuration (stored in `~/.hermes/`)
+### User configuration (stored in `~/.lliam/`)
 
 | Path | Purpose |
 |------|---------|
-| `~/.hermes/config.yaml` | Settings (model, terminal, toolsets, compression, etc.) |
-| `~/.hermes/.env` | API keys and secrets |
-| `~/.hermes/auth.json` | OAuth credentials (Nous Portal) |
-| `~/.hermes/skills/` | All active skills (bundled + hub-installed + agent-created) |
-| `~/.hermes/memories/` | Persistent memory (MEMORY.md, USER.md) |
-| `~/.hermes/state.db` | SQLite session database |
-| `~/.hermes/sessions/` | Gateway routing index (`sessions.json`), request-dump breadcrumbs, gateway `*.jsonl` transcripts, and (optionally) per-session JSON snapshots when `sessions.write_json_snapshots: true` is set. The per-session snapshots are off by default; state.db is canonical. |
-| `~/.hermes/cron/` | Scheduled job data |
-| `~/.hermes/whatsapp/session/` | WhatsApp bridge credentials |
+| `~/.lliam/config.yaml` | Settings (model, terminal, toolsets, compression, etc.) |
+| `~/.lliam/.env` | API keys and secrets |
+| `~/.lliam/auth.json` | OAuth credentials (Nous Portal) |
+| `~/.lliam/skills/` | All active skills (bundled + hub-installed + agent-created) |
+| `~/.lliam/memories/` | Persistent memory (MEMORY.md, USER.md) |
+| `~/.lliam/state.db` | SQLite session database |
+| `~/.lliam/sessions/` | Gateway routing index (`sessions.json`), request-dump breadcrumbs, gateway `*.jsonl` transcripts, and (optionally) per-session JSON snapshots when `sessions.write_json_snapshots: true` is set. The per-session snapshots are off by default; state.db is canonical. |
+| `~/.lliam/cron/` | Scheduled job data |
+| `~/.lliam/whatsapp/session/` | WhatsApp bridge credentials |
 
 ---
 
@@ -312,7 +312,7 @@ User message → AIAgent._run_agent_loop()
 
 - **Self-registering tools**: Each tool file calls `registry.register()` at import time. `model_tools.py` triggers discovery by importing all tool modules.
 - **Toolset grouping**: Tools are grouped into toolsets (`web`, `terminal`, `file`, `browser`, etc.) that can be enabled/disabled per platform.
-- **Session persistence**: All conversations are stored in SQLite (`hermes_state.py`) with full-text search and unique session titles. Per-session JSON snapshots in `~/.hermes/sessions/` were superseded by the SQLite store and are off by default; opt back in with `sessions.write_json_snapshots: true` if you have external tooling that consumes the JSON files directly.
+- **Session persistence**: All conversations are stored in SQLite (`lliam_state.py`) with full-text search and unique session titles. Per-session JSON snapshots in `~/.lliam/sessions/` were superseded by the SQLite store and are off by default; opt back in with `sessions.write_json_snapshots: true` if you have external tooling that consumes the JSON files directly.
 - **Ephemeral injection**: System prompts and prefill messages are injected at API call time, never persisted to the database or logs.
 - **Provider abstraction**: The agent works with any OpenAI-compatible API. Provider resolution happens at init time (Nous Portal OAuth, OpenRouter API key, or custom endpoint).
 - **Provider routing**: When using OpenRouter, `provider_routing` in config.yaml controls provider selection (sort by throughput/latency/price, allow/ignore specific providers, data retention policies). These are injected as `extra_body.provider` in API requests.
@@ -433,7 +433,7 @@ prerequisites:                     # Optional legacy runtime requirements
   env_vars: [MY_API_KEY]           #   Backward-compatible alias for required env vars
   commands: [curl, jq]             #   Advisory only; does not hide the skill
 metadata:
-  hermes:
+  lliam-gov:
     tags: [Category, Subcategory, Keywords]
     related_skills: [other-skill-name]
     fallback_for_toolsets: [web]       # Optional — show only when toolset is unavailable
@@ -482,11 +482,11 @@ If the field is omitted or empty, the skill loads on all platforms (backward com
 
 Skills can declare conditions that control when they appear in the system prompt, based on which tools and toolsets are available in the current session. This is primarily used for **fallback skills** — alternatives that should only be shown when a primary tool is unavailable.
 
-Four fields are supported under `metadata.hermes`:
+Four fields are supported under `metadata.lliam`:
 
 ```yaml
 metadata:
-  hermes:
+  lliam-gov:
     fallback_for_toolsets: [web]      # Show ONLY when these toolsets are unavailable
     requires_toolsets: [terminal]     # Show ONLY when these toolsets are available
     fallback_for_tools: [web_search]  # Show ONLY when these specific tools are unavailable
@@ -504,17 +504,17 @@ metadata:
 ```yaml
 # DuckDuckGo search — shown when Firecrawl (web toolset) is unavailable
 metadata:
-  hermes:
+  lliam-gov:
     fallback_for_toolsets: [web]
 
 # Smart home skill — only useful when terminal is available
 metadata:
-  hermes:
+  lliam-gov:
     requires_toolsets: [terminal]
 
 # Local browser fallback — shown when Browserbase is unavailable
 metadata:
-  hermes:
+  lliam-gov:
     fallback_for_toolsets: [browser]
 ```
 
@@ -532,7 +532,7 @@ required_environment_variables:
     required_for: full functionality
 ```
 
-The user may skip setup and keep loading the skill. Hermes only exposes metadata (`stored_as`, `skipped`, `validated`) to the model — never the secret value.
+The user may skip setup and keep loading the skill. Lliam-GOV only exposes metadata (`stored_as`, `skipped`, `validated`) to the model — never the secret value.
 
 Legacy `prerequisites.env_vars` remains supported and is normalized into the new representation.
 
@@ -542,7 +542,7 @@ prerequisites:
   commands: [curl, jq]            # Advisory CLI checks
 ```
 
-Gateway and messaging sessions never collect secrets in-band; they instruct the user to run `hermes setup` or update `~/.hermes/.env` locally.
+Gateway and messaging sessions never collect secrets in-band; they instruct the user to run `lliam-gov setup` or update `~/.lliam/.env` locally.
 
 **When to declare required environment variables:**
 - The skill uses an API key or token that should be collected securely at load time
@@ -570,7 +570,7 @@ Every new or modernized skill — bundled, optional, or contributed — must mee
    Good: `Search arXiv papers by keyword, author, category, or ID.`
    Bad: `A powerful and comprehensive skill that allows the agent to search arXiv for relevant academic papers using various criteria including keywords, authors, and categories.`
 
-2. **Tools referenced in SKILL.md prose must be native Hermes tools or MCP servers the skill explicitly expects.** When the skill needs a capability, point at the proper tool by name in backticks: `` `terminal` ``, `` `web_extract` ``, `` `web_search` ``, `` `read_file` ``, `` `write_file` ``, `` `patch` ``, `` `search_files` ``, `` `vision_analyze` ``, `` `browser_navigate` ``, `` `delegate_task` ``, `` `image_generate` ``, `` `text_to_speech` ``, `` `cronjob` ``, `` `memory` ``, `` `skill_view` ``, `` `todo` ``, `` `execute_code` ``.
+2. **Tools referenced in SKILL.md prose must be native Lliam-GOV tools or MCP servers the skill explicitly expects.** When the skill needs a capability, point at the proper tool by name in backticks: `` `terminal` ``, `` `web_extract` ``, `` `web_search` ``, `` `read_file` ``, `` `write_file` ``, `` `patch` ``, `` `search_files` ``, `` `vision_analyze` ``, `` `browser_navigate` ``, `` `delegate_task` ``, `` `image_generate` ``, `` `text_to_speech` ``, `` `cronjob` ``, `` `memory` ``, `` `skill_view` ``, `` `todo` ``, `` `execute_code` ``.
 
    Do NOT name shell utilities the agent already has wrapped:
 
@@ -587,7 +587,7 @@ Every new or modernized skill — bundled, optional, or contributed — must mee
 
 3. **`platforms:` gating audited against actual script imports.** Skills that use POSIX-only primitives (`fcntl`, `termios`, `os.setsid`, `os.kill(pid, 0)` for liveness, `/proc`, hardcoded `/tmp` paths, `signal.SIGKILL`, bash heredocs, `osascript`, `apt`, `systemctl`) must declare their supported platforms via the `platforms:` frontmatter. Default posture is to fix it cross-platform first — `tempfile.gettempdir()`, `pathlib.Path`, `psutil.pid_exists()`, Python-level filtering instead of `grep`. Gate to a narrower set only when the dependency is genuinely platform-bound (e.g. `osascript` is macOS-only, `/proc` is Linux-only).
 
-4. **`author` credits the human contributor first.** For external contributions, the contributor's real name + GitHub handle goes first (`Jane Doe (jane-doe)`); "Hermes Agent" is the secondary collaborator. If the contributor's commit shows "Hermes Agent" as author because they used Hermes to draft the skill, replace it with their actual name — credit the human, not the tool.
+4. **`author` credits the human contributor first.** For external contributions, the contributor's real name + GitHub handle goes first (`Jane Doe (jane-doe)`); "Lliam-GOV Agent" is the secondary collaborator. If the contributor's commit shows "Lliam-GOV Agent" as author because they used Lliam-GOV to draft the skill, replace it with their actual name — credit the human, not the tool.
 
 5. **SKILL.md body uses the modern section order.** `# <Skill> Skill` title, 2-3 sentence intro stating what it does and what it doesn't do, then:
    - `## When to Use` — trigger conditions
@@ -608,20 +608,20 @@ Every new or modernized skill — bundled, optional, or contributed — must mee
 
 ### Skill guidelines
 
-- **No external dependencies unless absolutely necessary.** Prefer stdlib Python, curl, and existing Hermes tools (`web_extract`, `terminal`, `read_file`).
+- **No external dependencies unless absolutely necessary.** Prefer stdlib Python, curl, and existing Lliam-GOV tools (`web_extract`, `terminal`, `read_file`).
 - **Progressive disclosure.** Put the most common workflow first. Edge cases and advanced usage go at the bottom.
 - **Include helper scripts** for XML/JSON parsing or complex logic — don't expect the LLM to write parsers inline every time.
-- **Test it.** Run `hermes --toolsets skills -q "Use the X skill to do Y"` and verify the agent follows the instructions correctly.
+- **Test it.** Run `lliam-gov --toolsets skills -q "Use the X skill to do Y"` and verify the agent follows the instructions correctly.
 
 ---
 
 ## Adding a Skin / Theme
 
-Hermes uses a data-driven skin system — no code changes needed to add a new skin.
+Lliam-GOV uses a data-driven skin system — no code changes needed to add a new skin.
 
 **Option A: User skin (YAML file)**
 
-Create `~/.hermes/skins/<name>.yaml`:
+Create `~/.lliam/skins/<name>.yaml`:
 
 ```yaml
 name: mytheme
@@ -655,19 +655,19 @@ All fields are optional — missing values inherit from the default skin.
 
 **Option B: Built-in skin**
 
-Add to `_BUILTIN_SKINS` dict in `hermes_cli/skin_engine.py`. Use the same schema as above but as a Python dict. Built-in skins ship with the package and are always available.
+Add to `_BUILTIN_SKINS` dict in `lliam_cli/skin_engine.py`. Use the same schema as above but as a Python dict. Built-in skins ship with the package and are always available.
 
 **Activating:**
 - CLI: `/skin mytheme` or set `display.skin: mytheme` in config.yaml
 - Config: `display: { skin: mytheme }`
 
-See `hermes_cli/skin_engine.py` for the full schema and existing skins as examples.
+See `lliam_cli/skin_engine.py` for the full schema and existing skins as examples.
 
 ---
 
 ## Cross-Platform Compatibility
 
-Hermes runs on Linux, macOS, and native Windows (plus WSL2). When writing code
+Lliam-GOV runs on Linux, macOS, and native Windows (plus WSL2). When writing code
 that touches the OS, assume *any* platform can hit your code path.
 
 > **Before you PR:** run `scripts/check-windows-footguns.py` to catch the
@@ -695,7 +695,7 @@ that touches the OS, assume *any* platform can hit your code path.
        ...
    ```
 
-   If you specifically need the hermes wrapper (it has a stdlib fallback
+   If you specifically need the lliam-gov wrapper (it has a stdlib fallback
    for scaffold-phase imports before pip install finishes), use
    `gateway.status._pid_exists(pid)`. It calls `psutil.pid_exists` first
    and falls back to a hand-rolled `OpenProcess + WaitForSingleObject`
@@ -714,7 +714,7 @@ that touches the OS, assume *any* platform can hit your code path.
 
    For process enumeration: PowerShell's `Get-CimInstance Win32_Process` is
    the modern replacement for `wmic process`. See
-   `hermes_cli/gateway.py::_scan_gateway_pids` for the pattern.
+   `lliam_cli/gateway.py::_scan_gateway_pids` for the pattern.
 
 3. **`termios` and `fcntl` are Unix-only.** Always catch both `ImportError`
    and `NotImplementedError`:
@@ -794,7 +794,7 @@ that touches the OS, assume *any* platform can hit your code path.
     process. `pythonw.exe` is the no-console variant. Combine with
     `CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP |
     CREATE_BREAKAWAY_FROM_JOB` in `subprocess.Popen(creationflags=...)`.
-    See `hermes_cli/gateway_windows.py::_spawn_detached` for the reference
+    See `lliam_cli/gateway_windows.py::_spawn_detached` for the reference
     implementation.
 
 11. **`subprocess.Popen` with `.cmd` or `.bat` shims needs `shutil.which`
@@ -832,7 +832,7 @@ that touches the OS, assume *any* platform can hit your code path.
     (["schtasks", "/TR", some_cmd])` → schtasks itself parses `/TR`, AND
     the `some_cmd` string is re-parsed by `cmd.exe` when the task fires.
     Different parsers, different escape rules. Use two separate quoting
-    helpers and never cross them. See `hermes_cli/gateway_windows.py::
+    helpers and never cross them. See `lliam_cli/gateway_windows.py::
     _quote_cmd_script_arg` and `_quote_schtasks_arg` for the reference
     pair.
 
@@ -855,7 +855,7 @@ through the wrong branch on a Windows runner.
 
 ## Security Considerations
 
-Hermes has terminal access. Security matters.
+Lliam-GOV has terminal access. Security matters.
 
 ### Existing protections
 
@@ -937,7 +937,7 @@ refactor/description   # Code restructuring
 ### Before submitting
 
 1. **Run tests**: `scripts/run_tests.sh` (recommended; same as CI) or `pytest tests/ -v` with the project venv activated
-2. **Test manually**: Run `hermes` and exercise the code path you changed
+2. **Test manually**: Run `lliam-gov` and exercise the code path you changed
 3. **Check cross-platform impact**: If you touch file I/O, process management, or terminal handling, consider macOS, Linux, and WSL2
 4. **Keep PRs focused**: One logical change per PR. Don't mix a bug fix with a refactor with a new feature.
 
@@ -981,7 +981,7 @@ test(tools): add unit tests for file_operations
 ## Reporting Issues
 
 - Use [GitHub Issues](https://github.com/NousResearch/hermes-agent/issues)
-- Include: OS, Python version, Hermes version (`hermes version`), full error traceback
+- Include: OS, Python version, Lliam-GOV version (`lliam-gov version`), full error traceback
 - Include steps to reproduce
 - Check existing issues before creating duplicates
 - For security vulnerabilities, please report privately

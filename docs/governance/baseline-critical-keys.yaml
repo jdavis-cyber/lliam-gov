@@ -13,7 +13,7 @@
 # -----------------------------------------------------------------------------
 # Enumerates the configuration keys whose drift away from the approved
 # cli-config.gov.yaml baseline is security-relevant for a CUI profile. The
-# startup drift gate — an additive extension of hermes_cli/security_audit_startup
+# startup drift gate — an additive extension of lliam_cli/security_audit_startup
 # built in a later Phase-0 step — compares the EFFECTIVE running config (after
 # the governance-overlay merge AND posture_resolver coercion) against the
 # expected values below. Under `security.posture: strict`:
@@ -25,7 +25,7 @@
 # strict posture.
 #
 # ADDITIVE — this is a NEW policy file. No existing config key is renamed. Keys
-# are referenced by their dotted path in the effective Hermes config.
+# are referenced by their dotted path in the effective Lliam-GOV config.
 #
 # STATUS LEGEND for `activated_in`:
 #   P0.1  -> enforced now (key is live in cli-config.gov.yaml + posture_resolver)

@@ -6,7 +6,7 @@
 | Phase | S0.1 — Phase 0 baseline |
 | Branch | `harden/phase-0-baseline` |
 | Captured | 2026-06-29 |
-| Engine | Hermes Agent (Nous Research, MIT) — Lliam-GOV fork |
+| Engine | Lliam-GOV Agent (Nous Research, MIT) — Lliam-GOV fork |
 | Status | Living record — update as the baseline is re-measured each phase |
 
 This note records the agent's **as-shipped, pre-hardening behavior** so later phases have a
@@ -19,10 +19,10 @@ control is allowed to remove a capability recorded here without a logged decisio
 ## Isolation context for this baseline
 
 - **Clone under test:** `~/dev/lliam-gov` (fresh clone of `jdavis-cyber/lliam-gov`, branch `harden/phase-0-baseline`).
-- **State isolation:** `HERMES_HOME=~/dev/lliam-gov-home` — set **per-invocation only**, never exported globally, never written to `~/.zshrc`. All test-agent credentials, memory, sessions, and logs live there, never in the live `~/.hermes`.
-- **Interpreter:** the live venv at `~/.hermes/hermes-agent/venv/bin/python` drives the **clone's** code (Python puts the script dir first on `sys.path`, so the clone's `hermes_cli` wins). No code was modified to run this baseline.
+- **State isolation:** `HERMES_HOME=~/dev/lliam-gov-home` — set **per-invocation only**, never exported globally, never written to `~/.zshrc`. All test-agent credentials, memory, sessions, and logs live there, never in the live `~/.lliam`.
+- **Interpreter:** the live venv at `~/.lliam/lliam-gov-agent/venv/bin/python` drives the **clone's** code (Python puts the script dir first on `sys.path`, so the clone's `lliam_cli` wins). No code was modified to run this baseline.
 - **Credentials:** `.env` + `auth.json` were **copied** from the live home into the throwaway home so the test instance is functional. The live install was never read from at runtime and never modified.
-- **Backups in place:** `~/.hermes` → `~/.hermes.pre-harden-backup` (3.6G); `~/Library/Application Support/Lliam-GOV` → `…/Lliam-GOV.pre-harden-backup` (2.0M).
+- **Backups in place:** `~/.lliam` → `~/.lliam-gov.pre-harden-backup` (3.6G); `~/Library/Application Support/Lliam-GOV` → `…/Lliam-GOV.pre-harden-backup` (2.0M).
 
 ---
 
@@ -30,8 +30,8 @@ control is allowed to remove a capability recorded here without a logged decisio
 
 | Capability | How verified | Result |
 |---|---|---|
-| CLI launches from the clone | `hermes --help` lists full subcommand set | ✓ responds |
-| Status / config introspection | `hermes status` | ✓ Provider `OpenAI Codex` (OAuth, logged in); model resolves to `gpt-5.4` from config |
+| CLI launches from the clone | `lliam-gov --help` lists full subcommand set | ✓ responds |
+| Status / config introspection | `lliam-gov status` | ✓ Provider `OpenAI Codex` (OAuth, logged in); model resolves to `gpt-5.4` from config |
 | Provider inference | one-shot `-z` prompt against `gpt-5.4` via `openai-codex` | ✓ completes |
 | File read tool | agent read `sample.py` in cwd | ✓ |
 | Coding task / file write tool | agent created `multiply.py` with `multiply(a,b)` | ✓ correct (`multiply(6,7)=42`) |

@@ -14,7 +14,7 @@
 
 ## Install
 
-Installs LLIAM-GOV — the `hermes` command-line agent and (with `--include-desktop`) the desktop app, built from source on your machine. The installer provisions everything it needs (Python 3.11, Node.js, uv) automatically.
+Installs LLIAM-GOV — the `lliam-gov` command-line agent and (with `--include-desktop`) the desktop app, built from source on your machine. The installer provisions everything it needs (Python 3.11, Node.js, uv) automatically.
 
 **macOS / Linux / WSL2:**
 
@@ -40,10 +40,10 @@ source ~/.zshrc   # or ~/.bashrc
 
 | Command | What it does |
 |---|---|
-| `hermes` | Terminal chat (TUI) |
-| `hermes desktop` | Open the LLIAM-GOV desktop app |
-| `hermes setup` | Connect a model provider |
-| `hermes update` | Update to the latest version |
+| `lliam-gov` | Terminal chat (TUI) |
+| `lliam-gov desktop` | Open the LLIAM-GOV desktop app |
+| `lliam-gov setup` | Connect a model provider |
+| `lliam-gov update` | Update to the latest version |
 
 > Optional: `ripgrep` and `ffmpeg` enable faster search and voice messages. Install them with your package manager (e.g. `brew install ripgrep ffmpeg`).
 

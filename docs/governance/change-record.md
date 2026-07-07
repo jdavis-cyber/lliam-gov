@@ -16,7 +16,7 @@ moved.
 1. Edit the pin in `pyproject.toml` (keep the `<next_major` upper bound).
 2. Regenerate the hashed lock: `uv lock` (then verify `uv sync --locked`).
 3. Add a row below: date, package, old→new version, reason (CVE/feature/compat),
-   approver, and the OSV/`hermes security audit` result for the new version.
+   approver, and the OSV/`lliam-gov security audit` result for the new version.
 4. Re-run the supply-chain CI gate (upper-bound + audit) and confirm green.
 
 | Date | Package | Old → New | Reason | Approver | OSV/audit result |
