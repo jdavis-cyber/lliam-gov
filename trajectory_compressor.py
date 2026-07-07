@@ -49,11 +49,11 @@ from lliam_constants import OPENROUTER_BASE_URL, get_lliam_home
 from agent.retry_utils import jittered_backoff
 
 # Load .env from HERMES_HOME first, then project root as a dev fallback.
-from lliam_cli.env_loader import load_hermes_dotenv
+from lliam_cli.env_loader import load_lliam_dotenv
 
 _lliam_home = get_lliam_home()
 _project_env = Path(__file__).parent / ".env"
-load_hermes_dotenv(lliam_home=_lliam_home, project_env=_project_env)
+load_lliam_dotenv(lliam_home=_lliam_home, project_env=_project_env)
 
 
 def _effective_temperature_for_model(

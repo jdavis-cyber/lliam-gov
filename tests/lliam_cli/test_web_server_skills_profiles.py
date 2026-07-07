@@ -171,7 +171,7 @@ class TestProfileScopedHubActions:
             calls.append((list(subcommand), name))
             return _FakeProc()
 
-        monkeypatch.setattr(web_server, "_spawn_hermes_action", _fake_spawn)
+        monkeypatch.setattr(web_server, "_spawn_lliam_action", _fake_spawn)
         resp = client.post(
             "/api/skills/hub/install",
             json={"identifier": "official/demo", "profile": "worker_alpha"},
@@ -196,7 +196,7 @@ class TestProfileScopedHubActions:
 
         monkeypatch.setattr(
             web_server,
-            "_spawn_hermes_action",
+            "_spawn_lliam_action",
             lambda subcommand, name: calls.append(list(subcommand)) or _FakeProc(),
         )
         resp = client.post(

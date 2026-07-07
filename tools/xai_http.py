@@ -63,7 +63,7 @@ def get_env_value(name: str, default=None):
     return os.environ.get(name, default)
 
 
-def hermes_xai_user_agent() -> str:
+def lliam_xai_user_agent() -> str:
     """Return a stable Hermes-specific User-Agent for xAI HTTP calls."""
     try:
         from lliam_cli import __version__

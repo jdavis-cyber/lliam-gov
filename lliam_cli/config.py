@@ -658,13 +658,13 @@ def get_container_exec_info() -> Optional[dict]:
     backend = info.get("backend", "docker")
     container_name = info.get("container_name", "hermes-agent")
     exec_user = info.get("exec_user", "hermes")
-    hermes_bin = info.get("hermes_bin", "/data/current-package/bin/hermes")
+    lliam_bin = info.get("hermes_bin", "/data/current-package/bin/hermes")
 
     return {
         "backend": backend,
         "container_name": container_name,
         "exec_user": exec_user,
-        "hermes_bin": hermes_bin,
+        "hermes_bin": lliam_bin,
     }
 
 

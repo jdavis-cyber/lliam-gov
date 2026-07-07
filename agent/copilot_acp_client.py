@@ -24,7 +24,7 @@ from typing import Any
 
 from agent.file_safety import get_read_block_error, is_write_denied
 from agent.redact import redact_sensitive_text
-from tools.environments.local import hermes_subprocess_env
+from tools.environments.local import lliam_subprocess_env
 
 ACP_MARKER_BASE_URL = "acp://copilot"
 _DEFAULT_TIMEOUT_SECONDS = 900.0
@@ -99,7 +99,7 @@ def _build_subprocess_env() -> dict[str, str]:
     # Copilot ACP is a model-driving CLI executor: it legitimately needs LLM
     # provider credentials. Route through the central helper so Tier-1 secrets
     # (gateway bot tokens, GitHub auth, infra) are still stripped (#29157).
-    env = hermes_subprocess_env(inherit_credentials=True)
+    env = lliam_subprocess_env(inherit_credentials=True)
     home = _resolve_home_dir()
     env["HOME"] = home
     from lliam_constants import apply_subprocess_home_env

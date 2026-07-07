@@ -1268,9 +1268,9 @@ _lliam_home = get_lliam_home()
 # Load environment variables from ~/.hermes/.env first.
 # User-managed env files should override stale shell exports on restart.
 from dotenv import load_dotenv  # noqa: F401  # backward-compat for tests that monkeypatch this symbol
-from lliam_cli.env_loader import load_hermes_dotenv
+from lliam_cli.env_loader import load_lliam_dotenv
 _env_path = _lliam_home / '.env'
-load_hermes_dotenv(lliam_home=_lliam_home, project_env=Path(__file__).resolve().parents[1] / '.env')
+load_lliam_dotenv(lliam_home=_lliam_home, project_env=Path(__file__).resolve().parents[1] / '.env')
 
 
 def _reload_runtime_env_preserving_config_authority() -> None:
@@ -1295,7 +1295,7 @@ def _reload_runtime_env_preserving_config_authority() -> None:
         _bridge_max_turns_from_config(_lliam_home)
         return
 
-    load_hermes_dotenv(
+    load_lliam_dotenv(
         lliam_home=_lliam_home,
         project_env=Path(__file__).resolve().parents[1] / '.env',
     )
@@ -2243,9 +2243,9 @@ def _resolve_hermes_bin() -> Optional[list[str]]:
     """
     import shutil
 
-    hermes_bin = shutil.which("hermes")
-    if hermes_bin:
-        return [hermes_bin]
+    lliam_bin = shutil.which("hermes")
+    if lliam_bin:
+        return [lliam_bin]
 
     try:
         import importlib.util
@@ -5427,8 +5427,8 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         import shutil
         import subprocess
 
-        hermes_cmd = _resolve_hermes_bin()
-        if not hermes_cmd:
+        lliam_cmd = _resolve_hermes_bin()
+        if not lliam_cmd:
             logger.error("Could not locate hermes binary for detached /restart")
             return
         if self._detached_restart_helper_started:
@@ -5447,7 +5447,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             import textwrap
             from lliam_cli._subprocess_compat import windows_detach_popen_kwargs
 
-            cmd_argv = [*hermes_cmd, "gateway", "restart"]
+            cmd_argv = [*lliam_cmd, "gateway", "restart"]
             watcher = textwrap.dedent(
                 """
                 import os, subprocess, sys, time
@@ -5519,7 +5519,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             )
             return
 
-        cmd = " ".join(shlex.quote(part) for part in hermes_cmd)
+        cmd = " ".join(shlex.quote(part) for part in lliam_cmd)
         shell_cmd = (
             f"deadline=$(( $(date +%s) + {int(restart_after_s)} )); "
             f"while kill -0 {current_pid} 2>/dev/null && [ $(date +%s) -lt $deadline ]; do sleep 0.2; done; "

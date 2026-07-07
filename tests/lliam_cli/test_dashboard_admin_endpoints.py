@@ -237,7 +237,7 @@ class TestWebhookEndpoints:
             restart_calls.append((subcommand, name))
             return FakeRestartProc()
 
-        monkeypatch.setattr(ws, "_spawn_hermes_action", fake_spawn_action)
+        monkeypatch.setattr(ws, "_spawn_lliam_action", fake_spawn_action)
 
         r = self.client.post("/api/webhooks/enable")
 
@@ -266,7 +266,7 @@ class TestWebhookEndpoints:
             assert name == "gateway-restart"
             raise RuntimeError("supervisor unavailable")
 
-        monkeypatch.setattr(ws, "_spawn_hermes_action", fail_spawn_action)
+        monkeypatch.setattr(ws, "_spawn_lliam_action", fail_spawn_action)
 
         r = self.client.post("/api/webhooks/enable")
 
@@ -297,7 +297,7 @@ class TestWebhookEndpoints:
         def fail_spawn_action(subcommand, name):
             raise AssertionError("must not spawn a second concurrent restart")
 
-        monkeypatch.setattr(ws, "_spawn_hermes_action", fail_spawn_action)
+        monkeypatch.setattr(ws, "_spawn_lliam_action", fail_spawn_action)
 
         r = self.client.post("/api/webhooks/enable")
 
@@ -1060,7 +1060,7 @@ class TestToolsConfigEndpoints:
             spawned["name"] = name
             return _FakeProc()
 
-        monkeypatch.setattr(ws, "_spawn_hermes_action", _fake_spawn)
+        monkeypatch.setattr(ws, "_spawn_lliam_action", _fake_spawn)
         r = self.client.post(
             "/api/tools/toolsets/browser/post-setup",
             json={"key": "agent_browser"},

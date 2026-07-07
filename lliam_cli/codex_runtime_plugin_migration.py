@@ -649,15 +649,15 @@ def migrate(
     target = codex_home / "config.toml"
     report.target_path = target
 
-    hermes_servers = (hermes_config or {}).get("mcp_servers") or {}
-    if not isinstance(hermes_servers, dict):
+    lliam_servers = (hermes_config or {}).get("mcp_servers") or {}
+    if not isinstance(lliam_servers, dict):
         report.errors.append(
             "mcp_servers in Hermes config is not a dict; cannot migrate."
         )
         return report
 
     translated: dict[str, dict] = {}
-    for name, cfg in hermes_servers.items():
+    for name, cfg in lliam_servers.items():
         out, skipped = _translate_one_server(str(name), cfg or {})
         if out is None:
             report.errors.append(

@@ -100,10 +100,10 @@ def _setup_logging() -> None:
 
 def _load_env() -> None:
     """Load .env from HERMES_HOME (default ``~/.hermes``)."""
-    from lliam_cli.env_loader import load_hermes_dotenv
+    from lliam_cli.env_loader import load_lliam_dotenv
 
     lliam_home = get_lliam_home()
-    loaded = load_hermes_dotenv(lliam_home=lliam_home)
+    loaded = load_lliam_dotenv(lliam_home=lliam_home)
     if loaded:
         for env_file in loaded:
             logging.getLogger(__name__).info("Loaded env from %s", env_file)

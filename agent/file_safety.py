@@ -109,16 +109,16 @@ def is_write_denied(path: str) -> bool:
 
     mcp_tokens_dir_name = "mcp-tokens"
 
-    hermes_dirs = []
+    lliam_dirs = []
     for base in (_hermes_home_path(), _hermes_root_path()):
         try:
             real = os.path.realpath(base)
-            if real not in hermes_dirs:
-                hermes_dirs.append(real)
+            if real not in lliam_dirs:
+                lliam_dirs.append(real)
         except Exception:
             continue
 
-    for base_real in hermes_dirs:
+    for base_real in lliam_dirs:
         try:
             mcp_real = os.path.realpath(os.path.join(base_real, mcp_tokens_dir_name))
             if resolved == mcp_real or resolved.startswith(mcp_real + os.sep):
@@ -211,17 +211,17 @@ def get_read_block_error(path: str) -> Optional[str]:
     # blocked when running under a profile (HERMES_HOME points at
     # <root>/profiles/<name> in profile mode). Same shape as the write
     # deny widening (#15981, #14157).
-    hermes_dirs: list[Path] = []
+    lliam_dirs: list[Path] = []
     for base in (_hermes_home_path(), _hermes_root_path()):
         try:
             real = base.resolve()
-            if real not in hermes_dirs:
-                hermes_dirs.append(real)
+            if real not in lliam_dirs:
+                lliam_dirs.append(real)
         except Exception:
             continue
 
     # Skills .hub: prompt-injection carriers.
-    for hd in hermes_dirs:
+    for hd in lliam_dirs:
         blocked_dirs = [
             hd / "skills" / ".hub" / "index-cache",
             hd / "skills" / ".hub",
@@ -251,7 +251,7 @@ def get_read_block_error(path: str) -> Optional[str]:
         # was introduced by #31968 but not added to this guard.
         os.path.join("cache", "bws_cache.json"),
     )
-    for hd in hermes_dirs:
+    for hd in lliam_dirs:
         for name in credential_file_names:
             try:
                 blocked = (hd / name).resolve()
@@ -268,7 +268,7 @@ def get_read_block_error(path: str) -> Optional[str]:
 
     # mcp-tokens/: directory prefix match — anything inside is OAuth
     # token material.
-    for hd in hermes_dirs:
+    for hd in lliam_dirs:
         try:
             mcp_tokens = (hd / "mcp-tokens").resolve()
         except Exception:

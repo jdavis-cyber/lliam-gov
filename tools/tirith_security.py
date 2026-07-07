@@ -548,12 +548,12 @@ def _resolve_tirith_path(configured_path: str) -> str:
         _clear_install_failed()
         return found
 
-    hermes_bin = os.path.join(_hermes_bin_dir(), "tirith")
-    if os.path.isfile(hermes_bin) and os.access(hermes_bin, os.X_OK):
-        _resolved_path = hermes_bin
+    lliam_bin = os.path.join(_hermes_bin_dir(), "tirith")
+    if os.path.isfile(lliam_bin) and os.access(lliam_bin, os.X_OK):
+        _resolved_path = lliam_bin
         _install_failure_reason = ""
         _clear_install_failed()
-        return hermes_bin
+        return lliam_bin
 
     # Local checks failed.  If a previous install attempt already failed,
     # skip the network retry — UNLESS the failure was "cosign_missing" and
@@ -612,9 +612,9 @@ def _background_install(*, log_failures: bool = True):
             _install_failure_reason = ""
             return
 
-        hermes_bin = os.path.join(_hermes_bin_dir(), "tirith")
-        if os.path.isfile(hermes_bin) and os.access(hermes_bin, os.X_OK):
-            _resolved_path = hermes_bin
+        lliam_bin = os.path.join(_hermes_bin_dir(), "tirith")
+        if os.path.isfile(lliam_bin) and os.access(lliam_bin, os.X_OK):
+            _resolved_path = lliam_bin
             _install_failure_reason = ""
             return
 
@@ -682,12 +682,12 @@ def ensure_installed(*, log_failures: bool = True):
         _clear_install_failed()
         return found
 
-    hermes_bin = os.path.join(_hermes_bin_dir(), "tirith")
-    if os.path.isfile(hermes_bin) and os.access(hermes_bin, os.X_OK):
-        _resolved_path = hermes_bin
+    lliam_bin = os.path.join(_hermes_bin_dir(), "tirith")
+    if os.path.isfile(lliam_bin) and os.access(lliam_bin, os.X_OK):
+        _resolved_path = lliam_bin
         _install_failure_reason = ""
         _clear_install_failed()
-        return hermes_bin
+        return lliam_bin
 
     # If previously failed in-memory, check if the cause is now resolved
     if _resolved_path is _INSTALL_FAILED:

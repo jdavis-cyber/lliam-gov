@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 from lliam_cli.config import get_lliam_home, get_env_path, get_project_root, load_config
-from lliam_cli.env_loader import load_hermes_dotenv
+from lliam_cli.env_loader import load_lliam_dotenv
 from lliam_constants import display_lliam_home
 from agent.skill_utils import is_excluded_skill_path
 
@@ -246,7 +246,7 @@ def run_dump(args):
 
     # Load env from .env file so key checks work
     env_path = get_env_path()
-    load_hermes_dotenv(
+    load_lliam_dotenv(
         lliam_home=env_path.parent,
         project_env=get_project_root() / ".env",
     )

@@ -12,7 +12,7 @@ import shutil
 from pathlib import Path
 
 from lliam_cli.config import get_project_root, get_lliam_home, get_env_path
-from lliam_cli.env_loader import load_hermes_dotenv
+from lliam_cli.env_loader import load_lliam_dotenv
 from lliam_constants import display_lliam_home
 from lliam_constants import agent_browser_runnable
 
@@ -22,7 +22,7 @@ _DHH = display_lliam_home()  # user-facing display path (e.g. ~/.hermes or ~/.he
 
 # Load environment variables from ~/.hermes/.env so API key checks work
 _env_path = get_env_path()
-load_hermes_dotenv(lliam_home=_env_path.parent, project_env=PROJECT_ROOT / ".env")
+load_lliam_dotenv(lliam_home=_env_path.parent, project_env=PROJECT_ROOT / ".env")
 
 from lliam_cli.colors import Colors, color
 from lliam_cli.models import _LLIAM_USER_AGENT

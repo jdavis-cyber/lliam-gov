@@ -2624,12 +2624,12 @@ def _build_service_path_dirs(project_root: Path | None = None) -> list[str]:
         candidates.append(str(node_bin))
 
     lliam_home = get_lliam_home()
-    hermes_node = lliam_home / "node" / "bin"
-    if _is_dir(hermes_node):
-        candidates.append(str(hermes_node))
-    hermes_nm = lliam_home / "node_modules" / ".bin"
-    if _is_dir(hermes_nm):
-        candidates.append(str(hermes_nm))
+    lliam_node = lliam_home / "node" / "bin"
+    if _is_dir(lliam_node):
+        candidates.append(str(lliam_node))
+    lliam_nm = lliam_home / "node_modules" / ".bin"
+    if _is_dir(lliam_nm):
+        candidates.append(str(lliam_nm))
 
     return candidates
 

@@ -272,8 +272,8 @@ def setup_isolated_home(enabled: bool) -> Path:
         # hand — it never materializes the secret in a local variable in
         # this module, which both avoids a hand-rolled parser bug and keeps
         # static analysis from tainting the transcript records with the key.
-        from lliam_cli.env_loader import load_hermes_dotenv
-        load_hermes_dotenv(lliam_home=str(Path.home() / ".hermes"))
+        from lliam_cli.env_loader import load_lliam_dotenv
+        load_lliam_dotenv(lliam_home=str(Path.home() / ".hermes"))
 
     cfg = {
         "model": {

@@ -310,7 +310,7 @@ class TestProfileScopedPostSetup:
 
         monkeypatch.setattr(
             web_server,
-            "_spawn_hermes_action",
+            "_spawn_lliam_action",
             lambda subcommand, name: calls.append(list(subcommand)) or _FakeProc(),
         )
         monkeypatch.setattr(
@@ -338,7 +338,7 @@ class TestProfileScopedPostSetup:
 
         monkeypatch.setattr(
             web_server,
-            "_spawn_hermes_action",
+            "_spawn_lliam_action",
             lambda subcommand, name: calls.append(list(subcommand)) or _FakeProc(),
         )
         monkeypatch.setattr(
@@ -366,7 +366,7 @@ class TestProfileScopedGateway:
 
         monkeypatch.setattr(
             web_server,
-            "_spawn_hermes_action",
+            "_spawn_lliam_action",
             lambda subcommand, name: calls.append((list(subcommand), name)) or _FakeProc(),
         )
         web_server._ACTION_PROCS.pop("gateway-restart", None)
@@ -483,7 +483,7 @@ class TestProfileScopedTelegramOnboarding:
 
         monkeypatch.setattr(
             web_server,
-            "_spawn_hermes_action",
+            "_spawn_lliam_action",
             lambda subcommand, name: calls.append((list(subcommand), name)) or _FakeProc(),
         )
         web_server._ACTION_PROCS.pop("gateway-restart", None)

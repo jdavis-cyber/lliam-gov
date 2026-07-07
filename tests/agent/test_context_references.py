@@ -334,9 +334,9 @@ async def test_blocks_sensitive_home_and_hermes_paths(tmp_path: Path, monkeypatc
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
 
-    hermes_env = tmp_path / ".hermes" / ".env"
-    hermes_env.parent.mkdir(parents=True)
-    hermes_env.write_text("API_KEY=super-secret\n", encoding="utf-8")
+    lliam_env = tmp_path / ".hermes" / ".env"
+    lliam_env.parent.mkdir(parents=True)
+    lliam_env.write_text("API_KEY=super-secret\n", encoding="utf-8")
 
     ssh_key = tmp_path / ".ssh" / "id_rsa"
     ssh_key.parent.mkdir(parents=True)

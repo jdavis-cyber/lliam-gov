@@ -351,8 +351,8 @@ def _main() -> int:
     import sys
 
     try:
-        from lliam_cli.env_loader import load_hermes_dotenv
-        load_hermes_dotenv()
+        from lliam_cli.env_loader import load_lliam_dotenv
+        load_lliam_dotenv()
     except Exception:
         pass
 

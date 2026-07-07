@@ -24,9 +24,9 @@ from lliam_constants import (
     reset_lliam_home_override,
     set_lliam_home_override,
 )
-from lliam_cli.env_loader import load_hermes_dotenv
+from lliam_cli.env_loader import load_lliam_dotenv
 from utils import is_truthy_value
-from tools.environments.local import hermes_subprocess_env
+from tools.environments.local import lliam_subprocess_env
 from agent.replay_cleanup import sanitize_replay_history
 from tui_gateway import git_probe
 from tui_gateway.transport import (
@@ -40,7 +40,7 @@ from tui_gateway.transport import (
 logger = logging.getLogger(__name__)
 
 _lliam_home = get_lliam_home()
-load_hermes_dotenv(
+load_lliam_dotenv(
     lliam_home=_lliam_home, project_env=Path(__file__).parent.parent / ".env"
 )
 
@@ -289,7 +289,7 @@ class _SlashWorker:
             cwd=os.getcwd(),
             # slash_worker runs the Hermes agent → needs provider credentials.
             # Tier-1 secrets (gateway/GitHub/infra) are still stripped (#29157).
-            env=hermes_subprocess_env(inherit_credentials=True),
+            env=lliam_subprocess_env(inherit_credentials=True),
         )
         threading.Thread(target=self._drain_stdout, daemon=True).start()
         threading.Thread(target=self._drain_stderr, daemon=True).start()
@@ -11157,7 +11157,7 @@ def _(rid, params: dict) -> dict:
             cwd=os.getcwd(),
             # cli.exec runs `python -m lliam_cli.main` (can drive the agent) →
             # needs provider credentials. Tier-1 secrets still stripped (#29157).
-            env=hermes_subprocess_env(inherit_credentials=True),
+            env=lliam_subprocess_env(inherit_credentials=True),
             stdin=subprocess.DEVNULL,
         )
         parts = [r.stdout or "", r.stderr or ""]

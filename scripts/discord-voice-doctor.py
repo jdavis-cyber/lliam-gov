@@ -176,9 +176,9 @@ def check_env_vars():
 
     # Load .env
     try:
-        from lliam_cli.env_loader import load_hermes_dotenv
+        from lliam_cli.env_loader import load_lliam_dotenv
 
-        load_hermes_dotenv(
+        load_lliam_dotenv(
             lliam_home=ENV_FILE.parent,
             project_env=PROJECT_ROOT / ".env",
         )

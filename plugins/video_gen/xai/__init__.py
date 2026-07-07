@@ -109,9 +109,9 @@ def _resolve_xai_credentials() -> Tuple[str, str]:
 
 def _xai_user_agent() -> str:
     try:
-        from tools.xai_http import hermes_xai_user_agent
+        from tools.xai_http import lliam_xai_user_agent
 
-        return hermes_xai_user_agent()
+        return lliam_xai_user_agent()
     except Exception:
         return "hermes-agent/video_gen"
 

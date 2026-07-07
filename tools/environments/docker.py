@@ -928,11 +928,11 @@ class DockerEnvironment(BaseEnvironment):
         # win over the generic Hermes secret blocklist. Only implicit passthrough
         # keys are filtered.
         forward_keys = explicit_forward_keys | (passthrough_keys - _LLIAM_PROVIDER_ENV_BLOCKLIST)
-        hermes_env = _load_hermes_env_vars() if forward_keys else {}
+        lliam_env = _load_hermes_env_vars() if forward_keys else {}
         for key in sorted(forward_keys):
             value = os.getenv(key)
             if not value:
-                value = hermes_env.get(key)
+                value = lliam_env.get(key)
             if value:
                 exec_env[key] = value
 

@@ -916,14 +916,14 @@ class TestMediaDeliveryDefaultMode:
         self._patch_roots(monkeypatch)
 
         fake_home = tmp_path / "home"
-        hermes_dir = fake_home / ".hermes"
-        hermes_dir.mkdir(parents=True)
-        env_file = hermes_dir / ".env"
+        lliam_dir = fake_home / ".hermes"
+        lliam_dir.mkdir(parents=True)
+        env_file = lliam_dir / ".env"
         env_file.write_text("OPENAI_API_KEY=sk-...")
         monkeypatch.setenv("HOME", str(fake_home))
         monkeypatch.setattr(
             "gateway.platforms.base._HERMES_HOME",
-            hermes_dir,
+            lliam_dir,
         )
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(env_file)) is None
@@ -933,14 +933,14 @@ class TestMediaDeliveryDefaultMode:
         self._patch_roots(monkeypatch)
 
         fake_home = tmp_path / "home"
-        hermes_dir = fake_home / ".hermes"
-        hermes_dir.mkdir(parents=True)
-        config_file = hermes_dir / "config.yaml"
+        lliam_dir = fake_home / ".hermes"
+        lliam_dir.mkdir(parents=True)
+        config_file = lliam_dir / "config.yaml"
         config_file.write_text("model:\n  provider: openai\n")
         monkeypatch.setenv("HOME", str(fake_home))
         monkeypatch.setattr(
             "gateway.platforms.base._HERMES_HOME",
-            hermes_dir,
+            lliam_dir,
         )
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(config_file)) is None
@@ -977,13 +977,13 @@ class TestMediaDeliveryDefaultMode:
         self._patch_roots(monkeypatch)
 
         fake_home = tmp_path / "home"
-        hermes_dir = fake_home / ".hermes"
-        hermes_dir.mkdir(parents=True)
-        token = hermes_dir / "google_token.json"
+        lliam_dir = fake_home / ".hermes"
+        lliam_dir.mkdir(parents=True)
+        token = lliam_dir / "google_token.json"
         token.write_text('{"access_token": "***", "refresh_token": "***"}')
         monkeypatch.setenv("HOME", str(fake_home))
-        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", hermes_dir)
-        monkeypatch.setattr("gateway.platforms.base._HERMES_ROOT", hermes_dir)
+        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", lliam_dir)
+        monkeypatch.setattr("gateway.platforms.base._HERMES_ROOT", lliam_dir)
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(token)) is None
 
@@ -999,13 +999,13 @@ class TestMediaDeliveryDefaultMode:
         monkeypatch.setenv("HERMES_MEDIA_TRUST_RECENT_SECONDS", "600")
 
         fake_home = tmp_path / "home"
-        hermes_dir = fake_home / ".hermes"
-        hermes_dir.mkdir(parents=True)
-        token = hermes_dir / "google_token.json"
+        lliam_dir = fake_home / ".hermes"
+        lliam_dir.mkdir(parents=True)
+        token = lliam_dir / "google_token.json"
         token.write_text('{"access_token": "***"}')  # mtime = now → "recent"
         monkeypatch.setenv("HOME", str(fake_home))
-        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", hermes_dir)
-        monkeypatch.setattr("gateway.platforms.base._HERMES_ROOT", hermes_dir)
+        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", lliam_dir)
+        monkeypatch.setattr("gateway.platforms.base._HERMES_ROOT", lliam_dir)
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(token)) is None
 
@@ -1016,14 +1016,14 @@ class TestMediaDeliveryDefaultMode:
         self._patch_roots(monkeypatch)
 
         fake_home = tmp_path / "home"
-        hermes_dir = fake_home / ".hermes"
-        pairing = hermes_dir / "pairing"
+        lliam_dir = fake_home / ".hermes"
+        pairing = lliam_dir / "pairing"
         pairing.mkdir(parents=True)
         token = pairing / "telegram-approved.json"
         token.write_text('{"approved": ["123"]}')
         monkeypatch.setenv("HOME", str(fake_home))
-        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", hermes_dir)
-        monkeypatch.setattr("gateway.platforms.base._HERMES_ROOT", hermes_dir)
+        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", lliam_dir)
+        monkeypatch.setattr("gateway.platforms.base._HERMES_ROOT", lliam_dir)
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(token)) is None
 
@@ -1033,15 +1033,15 @@ class TestMediaDeliveryDefaultMode:
         matched before the denylist and still delivers.
         """
         fake_home = tmp_path / "home"
-        hermes_dir = fake_home / ".hermes"
-        cache_dir = hermes_dir / "cache" / "documents"
+        lliam_dir = fake_home / ".hermes"
+        cache_dir = lliam_dir / "cache" / "documents"
         cache_dir.mkdir(parents=True)
         artifact = cache_dir / "report.pdf"
         artifact.write_bytes(b"%PDF-1.4")
         self._patch_roots(monkeypatch, cache_dir)
         monkeypatch.setenv("HOME", str(fake_home))
-        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", hermes_dir)
-        monkeypatch.setattr("gateway.platforms.base._HERMES_ROOT", hermes_dir)
+        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", lliam_dir)
+        monkeypatch.setattr("gateway.platforms.base._HERMES_ROOT", lliam_dir)
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(artifact)) == str(artifact.resolve())
 
@@ -1056,13 +1056,13 @@ class TestMediaDeliveryDefaultMode:
         monkeypatch.setenv("HERMES_MEDIA_TRUST_RECENT_SECONDS", "600")
 
         fake_home = tmp_path / "home"
-        hermes_dir = fake_home / ".hermes"
-        hermes_dir.mkdir(parents=True)
-        artifact = hermes_dir / "adhoc_report.pdf"
+        lliam_dir = fake_home / ".hermes"
+        lliam_dir.mkdir(parents=True)
+        artifact = lliam_dir / "adhoc_report.pdf"
         artifact.write_bytes(b"%PDF-1.4")  # fresh mtime
         monkeypatch.setenv("HOME", str(fake_home))
-        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", hermes_dir)
-        monkeypatch.setattr("gateway.platforms.base._HERMES_ROOT", hermes_dir)
+        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", lliam_dir)
+        monkeypatch.setattr("gateway.platforms.base._HERMES_ROOT", lliam_dir)
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(artifact)) == str(artifact.resolve())
 
@@ -1161,16 +1161,16 @@ class TestMediaDeliveryDefaultMode:
         self._patch_roots(monkeypatch)
 
         fake_home = tmp_path / "root"
-        hermes_dir = fake_home / ".hermes"
-        hermes_dir.mkdir(parents=True)
-        env_file = hermes_dir / ".env"
+        lliam_dir = fake_home / ".hermes"
+        lliam_dir.mkdir(parents=True)
+        env_file = lliam_dir / ".env"
         env_file.write_text("OPENROUTER_API_KEY=sk-...")
         monkeypatch.setenv("HOME", str(fake_home))
         monkeypatch.setattr(
             "gateway.platforms.base._MEDIA_DELIVERY_DENIED_PREFIXES",
             (str(fake_home),),
         )
-        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", hermes_dir)
+        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", lliam_dir)
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(env_file)) is None
 

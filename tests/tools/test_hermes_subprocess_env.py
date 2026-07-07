@@ -15,7 +15,7 @@ import os
 from unittest.mock import patch
 
 from tools.environments.local import (
-    hermes_subprocess_env,
+    lliam_subprocess_env,
     _ALWAYS_STRIP_KEYS,
     _LLIAM_PROVIDER_ENV_FORCE_PREFIX,
 )
@@ -48,7 +48,7 @@ def _build(extra=None, *, inherit_credentials=False):
     if extra:
         env.update(extra)
     with patch.dict(os.environ, env, clear=True):
-        return hermes_subprocess_env(inherit_credentials=inherit_credentials)
+        return lliam_subprocess_env(inherit_credentials=inherit_credentials)
 
 
 class TestStripByDefault:
@@ -139,7 +139,7 @@ class TestBrowserPassthroughPattern:
             "TELEGRAM_BOT_TOKEN": "bot-should-go",
         }
         with patch.dict(os.environ, {**_SAFE_SAMPLE, **leaked}, clear=True):
-            env = hermes_subprocess_env(inherit_credentials=False)
+            env = lliam_subprocess_env(inherit_credentials=False)
             for key in _BROWSER_PASSTHROUGH_KEYS:
                 if key in os.environ:
                     env[key] = os.environ[key]

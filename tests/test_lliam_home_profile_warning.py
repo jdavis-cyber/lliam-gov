@@ -43,9 +43,9 @@ class TestGetHermesHomeProfileWarning:
         self, fresh_constants, tmp_path, capsys
     ):
         """active_profile=default → still no warning, returns ~/.lliam."""
-        hermes_dir = tmp_path / ".lliam"
-        hermes_dir.mkdir()
-        (hermes_dir / "active_profile").write_text("default\n")
+        lliam_dir = tmp_path / ".lliam"
+        lliam_dir.mkdir()
+        (lliam_dir / "active_profile").write_text("default\n")
         result = fresh_constants.get_lliam_home()
         assert result == tmp_path / ".lliam"
         assert "HERMES_HOME fallback" not in capsys.readouterr().err
@@ -54,9 +54,9 @@ class TestGetHermesHomeProfileWarning:
         self, fresh_constants, tmp_path, capsys
     ):
         """active_profile=coder + HERMES_HOME unset → warn loudly, still return fallback."""
-        hermes_dir = tmp_path / ".lliam"
-        hermes_dir.mkdir()
-        (hermes_dir / "active_profile").write_text("coder\n")
+        lliam_dir = tmp_path / ".lliam"
+        lliam_dir.mkdir()
+        (lliam_dir / "active_profile").write_text("coder\n")
 
         result = fresh_constants.get_lliam_home()
 
@@ -92,10 +92,10 @@ class TestGetHermesHomeProfileWarning:
         self, fresh_constants, tmp_path, capsys
     ):
         """active_profile that can't be decoded → fall through silently."""
-        hermes_dir = tmp_path / ".lliam"
-        hermes_dir.mkdir()
+        lliam_dir = tmp_path / ".lliam"
+        lliam_dir.mkdir()
         # Write bytes that aren't valid utf-8
-        (hermes_dir / "active_profile").write_bytes(b"\xff\xfe\x00\x00")
+        (lliam_dir / "active_profile").write_bytes(b"\xff\xfe\x00\x00")
 
         result = fresh_constants.get_lliam_home()
 
@@ -107,9 +107,9 @@ class TestGetHermesHomeProfileWarning:
         self, fresh_constants, tmp_path, capsys
     ):
         """Empty active_profile file → treated as default, no warning."""
-        hermes_dir = tmp_path / ".lliam"
-        hermes_dir.mkdir()
-        (hermes_dir / "active_profile").write_text("")
+        lliam_dir = tmp_path / ".lliam"
+        lliam_dir.mkdir()
+        (lliam_dir / "active_profile").write_text("")
 
         result = fresh_constants.get_lliam_home()
 

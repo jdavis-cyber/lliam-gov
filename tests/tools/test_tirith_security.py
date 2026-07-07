@@ -1017,11 +1017,11 @@ class TestDiskFailureMarker:
         from tools.tirith_security import _resolve_tirith_path, _INSTALL_FAILED
         import tempfile
         tmpdir = tempfile.mkdtemp()
-        hermes_bin = os.path.join(tmpdir, "tirith")
+        lliam_bin = os.path.join(tmpdir, "tirith")
         # Create a fake executable
-        with open(hermes_bin, "w") as f:
+        with open(lliam_bin, "w") as f:
             f.write("#!/bin/sh\n")
-        os.chmod(hermes_bin, 0o755)
+        os.chmod(lliam_bin, 0o755)
 
         _tirith_mod._resolved_path = _INSTALL_FAILED
 
@@ -1029,8 +1029,8 @@ class TestDiskFailureMarker:
              patch("tools.tirith_security._hermes_bin_dir", return_value=tmpdir), \
              patch("tools.tirith_security._clear_install_failed") as mock_clear:
             result = _resolve_tirith_path("tirith")
-            assert result == hermes_bin
-            assert _tirith_mod._resolved_path == hermes_bin
+            assert result == lliam_bin
+            assert _tirith_mod._resolved_path == lliam_bin
             mock_clear.assert_called_once()
 
         _tirith_mod._resolved_path = None

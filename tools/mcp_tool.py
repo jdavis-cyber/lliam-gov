@@ -3219,8 +3219,8 @@ def _load_mcp_config() -> Dict[str, dict]:
             return {}
         # Ensure .env vars are available for interpolation
         try:
-            from lliam_cli.env_loader import load_hermes_dotenv
-            load_hermes_dotenv()
+            from lliam_cli.env_loader import load_lliam_dotenv
+            load_lliam_dotenv()
         except Exception:
             pass
         safe_servers: Dict[str, dict] = {}

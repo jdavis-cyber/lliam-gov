@@ -1111,7 +1111,7 @@ class TestWebServerEndpoints:
         # Bypass the managed-externally gate so we reach the docker install check.
         monkeypatch.setattr(web_server, "_dashboard_local_update_managed_externally", lambda: False)
         monkeypatch.setattr(web_server, "detect_install_method", lambda _root: "docker")
-        monkeypatch.setattr(web_server, "_spawn_hermes_action", fail_spawn)
+        monkeypatch.setattr(web_server, "_spawn_lliam_action", fail_spawn)
         web_server._ACTION_PROCS.pop("hermes-update", None)
         web_server._ACTION_RESULTS.pop("hermes-update", None)
 
@@ -1152,7 +1152,7 @@ class TestWebServerEndpoints:
 
         monkeypatch.setattr(web_server, "_dashboard_local_update_managed_externally", lambda: True)
         monkeypatch.setattr(web_server, "detect_install_method", fail_detect)
-        monkeypatch.setattr(web_server, "_spawn_hermes_action", fail_spawn)
+        monkeypatch.setattr(web_server, "_spawn_lliam_action", fail_spawn)
         web_server._ACTION_PROCS.pop("hermes-update", None)
         web_server._ACTION_RESULTS.pop("hermes-update", None)
 
@@ -1192,7 +1192,7 @@ class TestWebServerEndpoints:
             return Proc()
 
         monkeypatch.setattr(web_server, "detect_install_method", lambda _root: "git")
-        monkeypatch.setattr(web_server, "_spawn_hermes_action", fake_spawn)
+        monkeypatch.setattr(web_server, "_spawn_lliam_action", fake_spawn)
         web_server._ACTION_PROCS.pop("hermes-update", None)
         web_server._ACTION_RESULTS.pop("hermes-update", None)
 
@@ -1595,7 +1595,7 @@ class TestWebServerEndpoints:
             from types import SimpleNamespace as NS
             return NS(pid=12345)
 
-        monkeypatch.setattr(ws, "_spawn_hermes_action", fake_spawn)
+        monkeypatch.setattr(ws, "_spawn_lliam_action", fake_spawn)
 
         resp = self.client.post(
             "/api/ops/import", json={"archive": str(archive), "force": True},
@@ -2046,7 +2046,7 @@ class TestWebServerEndpoints:
             restart_calls.append((subcommand, name))
             return FakeRestartProc()
 
-        monkeypatch.setattr(ws, "_spawn_hermes_action", fake_spawn_action)
+        monkeypatch.setattr(ws, "_spawn_lliam_action", fake_spawn_action)
 
         start = self.client.post("/api/messaging/telegram/onboarding/start", json={})
         assert start.status_code == 200
@@ -2116,7 +2116,7 @@ class TestWebServerEndpoints:
             assert name == "gateway-restart"
             raise RuntimeError("supervisor unavailable")
 
-        monkeypatch.setattr(ws, "_spawn_hermes_action", fail_spawn_action)
+        monkeypatch.setattr(ws, "_spawn_lliam_action", fail_spawn_action)
 
         start = self.client.post("/api/messaging/telegram/onboarding/start", json={})
         assert start.status_code == 200
@@ -2182,7 +2182,7 @@ class TestWebServerEndpoints:
         def fail_spawn_action(subcommand, name):
             raise AssertionError("must not spawn a second concurrent restart")
 
-        monkeypatch.setattr(ws, "_spawn_hermes_action", fail_spawn_action)
+        monkeypatch.setattr(ws, "_spawn_lliam_action", fail_spawn_action)
 
         start = self.client.post("/api/messaging/telegram/onboarding/start", json={})
         assert start.status_code == 200
@@ -3341,7 +3341,7 @@ class TestNewEndpoints:
             spawned.append((list(subcommand), name))
             return _FakeProc()
 
-        monkeypatch.setattr(web_server, "_spawn_hermes_action", fake_spawn)
+        monkeypatch.setattr(web_server, "_spawn_lliam_action", fake_spawn)
 
         resp = self.client.post(
             "/api/profiles",

@@ -175,12 +175,12 @@ from lliam_cli.browser_connect import (
     manual_chrome_debug_command,
     try_launch_chrome_debug,
 )
-from lliam_cli.env_loader import load_hermes_dotenv
+from lliam_cli.env_loader import load_lliam_dotenv
 from utils import base_url_host_matches
 
 _lliam_home = get_lliam_home()
 _project_env = Path(__file__).parent / '.env'
-load_hermes_dotenv(lliam_home=_lliam_home, project_env=_project_env)
+load_lliam_dotenv(lliam_home=_lliam_home, project_env=_project_env)
 
 
 _REASONING_TAGS = (

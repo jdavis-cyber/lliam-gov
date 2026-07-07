@@ -512,9 +512,9 @@ _apply_profile_override()
 # Load .env from ~/.hermes/.env first, then project root as dev fallback.
 # User-managed env files should override stale shell exports on restart.
 from lliam_cli.config import get_lliam_home
-from lliam_cli.env_loader import load_hermes_dotenv
+from lliam_cli.env_loader import load_lliam_dotenv
 
-load_hermes_dotenv(project_env=PROJECT_ROOT / ".env")
+load_lliam_dotenv(project_env=PROJECT_ROOT / ".env")
 
 # Bridge security.redact_secrets from config.yaml → HERMES_REDACT_SECRETS env
 # var BEFORE lliam_logging imports agent.redact (which snapshots the flag at
@@ -1187,7 +1187,7 @@ def _exec_in_container(container_info: dict, cli_args: list):
     backend = container_info["backend"]
     container_name = container_info["container_name"]
     exec_user = container_info["exec_user"]
-    hermes_bin = container_info["hermes_bin"]
+    lliam_bin = container_info["hermes_bin"]
 
     runtime = shutil.which(backend)
     if not runtime:
@@ -1257,7 +1257,7 @@ def _exec_in_container(container_info: dict, cli_args: list):
         + tty_flags
         + ["-u", exec_user]
         + env_flags
-        + [container_name, hermes_bin]
+        + [container_name, lliam_bin]
         + cli_args
     )
 

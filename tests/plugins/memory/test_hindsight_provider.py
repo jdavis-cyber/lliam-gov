@@ -553,9 +553,9 @@ class TestPostSetup:
         provider.post_setup(str(lliam_home), {"memory": {}})
 
         coder_env = user_home / ".hindsight" / "profiles" / "coder.env"
-        hermes_env = user_home / ".hindsight" / "profiles" / "hermes.env"
+        lliam_env = user_home / ".hindsight" / "profiles" / "hermes.env"
         assert coder_env.exists()
-        assert not hermes_env.exists()
+        assert not lliam_env.exists()
 
     def test_local_embedded_setup_preserves_existing_key_when_input_left_blank(self, tmp_path, monkeypatch):
         lliam_home = tmp_path / "hermes-home"

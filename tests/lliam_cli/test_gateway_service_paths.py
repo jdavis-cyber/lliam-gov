@@ -22,9 +22,9 @@ def test_service_path_includes_node_modules_when_present(tmp_path):
 
 def test_service_path_includes_hermes_home_node_modules(tmp_path):
     """Service PATH should include ~/.hermes/node_modules/.bin when it exists."""
-    hermes_nm = tmp_path / ".hermes" / "node_modules" / ".bin"
-    hermes_nm.mkdir(parents=True)
+    lliam_nm = tmp_path / ".hermes" / "node_modules" / ".bin"
+    lliam_nm.mkdir(parents=True)
     from lliam_cli.gateway import _build_service_path_dirs
     with patch("lliam_cli.gateway.get_lliam_home", return_value=tmp_path / ".hermes"):
         dirs = _build_service_path_dirs(project_root=tmp_path)
-    assert str(hermes_nm) in dirs
+    assert str(lliam_nm) in dirs
