@@ -112,7 +112,7 @@ python -m pdb path/to/script.py arg1 arg2
 
 ## 方案 3：调试 pytest 测试
 
-hermes 测试运行器和 pytest 均支持以下方式：
+lliam-gov 测试运行器和 pytest 均支持以下方式：
 
 ```bash
 # 在失败时（或任何异常抛出时）进入 pdb：
@@ -297,7 +297,7 @@ nc 127.0.0.1 4444
 参见方案 3。始终添加 `-p no:xdist` 或在不使用 xdist 的情况下运行单个测试。
 
 ### `run_agent.py` / CLI — 一次性运行
-最简单：在可疑行附近添加 `breakpoint()`，然后正常运行 `hermes`。控制权将在暂停点返回到你的终端。
+最简单：在可疑行附近添加 `breakpoint()`，然后正常运行 `lliam-gov`。控制权将在暂停点返回到你的终端。
 
 ### `tui_gateway` 子进程（由 `lliam-gov --tui` 启动）
 gateway 作为 Node TUI 的子进程运行。可选方案：

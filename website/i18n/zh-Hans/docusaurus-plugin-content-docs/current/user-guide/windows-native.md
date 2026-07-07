@@ -121,7 +121,7 @@ Lliam-GOV 的终端工具通过 **Git Bash** 运行命令，与 Claude Code 采�
 
 Python 在 Windows 上的默认 stdio 使用控制台的活动代码页（通常是 cp1252 或 cp437）。Lliam-GOV 的横幅、斜杠命令列表、工具输出、Rich 面板和技能描述均包含 Unicode 字符。若不加干预，任何此类内容都会导致 `UnicodeEncodeError: 'charmap' codec can't encode character…` 崩溃。
 
-修复逻辑位于 `hermes_cli/stdio.py::configure_windows_stdio()`，在每个入口点（`cli.py::main`、`hermes_cli/main.py::main`、`gateway/run.py::main`）的早期调用。它会：
+修复逻辑位于 `lliam_cli/stdio.py::configure_windows_stdio()`，在每个入口点（`cli.py::main`、`lliam_cli/main.py::main`、`gateway/run.py::main`）的早期调用。它会：
 
 1. 通过 `kernel32.SetConsoleCP` / `SetConsoleOutputCP` 将控制台代码页切换为 CP_UTF8（65001）。
 2. 使用 `errors='replace'` 将 `sys.stdout` / `sys.stderr` / `sys.stdin` 重新配置为 UTF-8。
@@ -259,7 +259,7 @@ TELEGRAM_BOT_TOKEN=...
 在 PowerShell 中执行：
 
 ```powershell
-hermes uninstall
+lliam-gov uninstall
 ```
 
 这是干净的卸载路径——移除 schtasks 条目、Startup 文件夹快捷方式、`hermes.cmd` 垫片，删除 `%LOCALAPPDATA%\hermes\hermes-agent\`，并从用户 PATH 中移除相关条目。它会保留 `%USERPROFILE%\.hermes\`（你的配置、认证、技能、会话、日志），以防你需要重新安装。
@@ -267,12 +267,12 @@ hermes uninstall
 彻底清除所有内容：
 
 ```powershell
-hermes uninstall
+lliam-gov uninstall
 Remove-Item -Recurse -Force "$env:USERPROFILE\.hermes"
 Remove-Item -Recurse -Force "$env:LOCALAPPDATA\hermes"
 ```
 
-`hermes uninstall` CLI 子命令还能处理 schtasks 条目以不同任务名注册的情况（旧版安装）——它通过安装路径而非硬编码任务名来搜索。
+`lliam-gov uninstall` CLI 子命令还能处理 schtasks 条目以不同任务名注册的情况（旧版安装）——它通过安装路径而非硬编码任务名来搜索。
 
 ## 进程管理内部机制
 
@@ -286,7 +286,7 @@ Remove-Item -Recurse -Force "$env:LOCALAPPDATA\hermes"
 
 ## 常见问题
 
-**安装后立即出现 `hermes: command not found`。**
+**安装后立即出现 `lliam-gov: command not found`。**
 打开新的 PowerShell 窗口。安装程序已将 `%LOCALAPPDATA%\hermes\bin` 添加到用户 PATH，但现有 shell 需要重启才能获取更新。在此期间可以运行 `& "$env:LOCALAPPDATA\hermes\bin\hermes.cmd"`。
 
 **运行工具时出现 `WinError 193: %1 is not a valid Win32 application`。**
@@ -320,6 +320,6 @@ UTF-8 stdio 垫片未激活。检查 `HERMES_DISABLE_WINDOWS_UTF8` 是否**未**
 
 - **[安装](../getting-started/installation.md)** — 完整安装页面，包括 Linux/macOS/WSL2/Termux。
 - **[Windows（WSL2）指南](./windows-wsl-quickstart.md)** — 如果你需要 POSIX 语义或 dashboard 终端面板。
-- **[CLI 参考](../reference/cli-commands.md)** — 所有 `hermes` 子命令。
+- **[CLI 参考](../reference/cli-commands.md)** — 所有 `lliam-gov` 子命令。
 - **[FAQ](../reference/faq.md)** — 常见的非 Windows 专属问题。
 - **[消息 Gateway](./messaging/index.md)** — 在 Windows 上运行 Telegram/Discord/Slack。

@@ -376,6 +376,8 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
      "skin-name mapping data (hermes->nous) — the default skin's registry key"),
     (r"hermes-audit@|hermes-your-platform|start-open-webui-hermes",
      "example contributor email / doc placeholder toolset / external-tool launcher name — opaque"),
+    (r"get-shit-done-cc --hermes|npx get-shit-done-cc",
+     "external 'get-shit-done-cc' npm tool's --hermes install flag — 3rd-party CLI flag, external"),
     (r"hermes-security", "test host-key/profile fixture — opaque data"),
     (r"hermes_test\b|hermes_kanban|hermes_timezone|hermes_stream_retries",
      "opaque test fixture identifiers seeded as data"),

@@ -23,7 +23,7 @@ Open **PowerShell** (or Windows Terminal) and run:
 iex (irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1)
 ```
 
-No admin rights required. The installer goes to `%LOCALAPPDATA%\hermes\` and adds `hermes` to your **User PATH** — open a new terminal after it finishes.
+No admin rights required. The installer goes to `%LOCALAPPDATA%\hermes\` and adds `lliam-gov` to your **User PATH** — open a new terminal after it finishes.
 
 **Installer options** (requires the scriptblock form to pass parameters):
 
@@ -121,7 +121,7 @@ The installer sets `HERMES_GIT_BASH_PATH` explicitly so fresh PowerShell session
 
 Python's default stdio on Windows uses the console's active code page (usually cp1252 or cp437). Lliam-GOV's banner, slash-command list, tool feed, Rich panels, and skill descriptions all contain Unicode. Without intervention, any of that crashes with `UnicodeEncodeError: 'charmap' codec can't encode character…`.
 
-The fix is in `hermes_cli/stdio.py::configure_windows_stdio()`, called early in every entry point (`cli.py::main`, `hermes_cli/main.py::main`, `gateway/run.py::main`). It:
+The fix is in `lliam_cli/stdio.py::configure_windows_stdio()`, called early in every entry point (`cli.py::main`, `lliam_cli/main.py::main`, `gateway/run.py::main`). It:
 
 1. Flips the console code page to CP_UTF8 (65001) via `kernel32.SetConsoleCP` / `SetConsoleOutputCP`.
 2. Reconfigures `sys.stdout` / `sys.stderr` / `sys.stdin` to UTF-8 with `errors='replace'`.
@@ -259,7 +259,7 @@ These only affect native Windows installs:
 From PowerShell:
 
 ```powershell
-hermes uninstall
+lliam-gov uninstall
 ```
 
 That's the clean path — removes the schtasks entry, Startup folder shortcut, `hermes.cmd` shim, deletes `%LOCALAPPDATA%\hermes\hermes-agent\`, and trims the User PATH. It leaves the rest of `%LOCALAPPDATA%\hermes\` alone (your config, auth, skills, sessions, logs) in case you're reinstalling.
@@ -267,13 +267,13 @@ That's the clean path — removes the schtasks entry, Startup folder shortcut, `
 To nuke everything:
 
 ```powershell
-hermes uninstall
+lliam-gov uninstall
 Remove-Item -Recurse -Force "$env:LOCALAPPDATA\hermes"
 # Also remove a legacy CLI/WSL data dir if you ever used one:
 Remove-Item -Recurse -Force "$env:USERPROFILE\.hermes"
 ```
 
-The `hermes uninstall` CLI subcommand also handles the case where the schtasks entry was registered under a different task name (older installs) — it searches by install path rather than by hardcoded task name.
+The `lliam-gov uninstall` CLI subcommand also handles the case where the schtasks entry was registered under a different task name (older installs) — it searches by install path rather than by hardcoded task name.
 
 ## Process management internals
 
@@ -287,7 +287,7 @@ Consequence: any codepath that said "check if this PID is alive" via `os.kill(pi
 
 ## Common pitfalls
 
-**`hermes: command not found` right after install.**
+**`lliam-gov: command not found` right after install.**
 Open a new PowerShell window. The installer added `%LOCALAPPDATA%\hermes\bin` to User PATH, but existing shells need to be restarted to pick it up. In the meantime you can run `& "$env:LOCALAPPDATA\hermes\bin\hermes.cmd"`.
 
 **`WinError 193: %1 is not a valid Win32 application` when running a tool.**
@@ -312,7 +312,7 @@ The installer provisions Node 22 at `%LOCALAPPDATA%\hermes\node` but your PATH m
 The UTF-8 stdio shim didn't activate. Check that `HERMES_DISABLE_WINDOWS_UTF8` is NOT set (`Get-ChildItem env:HERMES_DISABLE_WINDOWS_UTF8`). If it's empty and you still see `?`, the console host (very old `cmd.exe`) may not support UTF-8 at all — switch to Windows Terminal.
 
 **Gateway can't send Telegram photos — "`BadRequest: payload contains invalid characters`".**
-This is unrelated to Windows but sometimes surfaces first there. Usually it means your file path contains unescaped backslashes in a JSON body. Telegram should be receiving paths Lliam-GOV normalizes, not raw Windows paths — if you're seeing this inside a custom plugin, make sure you're passing the Hermes-provided path, not `str(Path(...))` from user input.
+This is unrelated to Windows but sometimes surfaces first there. Usually it means your file path contains unescaped backslashes in a JSON body. Telegram should be receiving paths Lliam-GOV normalizes, not raw Windows paths — if you're seeing this inside a custom plugin, make sure you're passing the Lliam-GOV-provided path, not `str(Path(...))` from user input.
 
 **"Works on my other machine" encoding weirdness after `git pull`.**
 If you edited Lliam-GOV config or a skill on Windows using a non-UTF-8 editor (Notepad on older Windows versions, some Chinese IMEs), the file may have been saved with a BOM. Lliam-GOV tolerates `utf-8-sig` on most config reads, but a BOM inside a folded YAML scalar (`description: >`) silently breaks YAML parsing. Re-save the file as plain UTF-8 without BOM.
@@ -321,6 +321,6 @@ If you edited Lliam-GOV config or a skill on Windows using a non-UTF-8 editor (N
 
 - **[Installation](../getting-started/installation.md)** — the full install page, including Linux/macOS/WSL2/Termux.
 - **[Windows (WSL2) Guide](./windows-wsl-quickstart.md)** — if you want POSIX semantics or the dashboard terminal pane.
-- **[CLI Reference](../reference/cli-commands.md)** — every `hermes` subcommand.
+- **[CLI Reference](../reference/cli-commands.md)** — every `lliam-gov` subcommand.
 - **[FAQ](../reference/faq.md)** — common non-Windows-specific questions.
 - **[Messaging Gateway](./messaging/index.md)** — running Telegram/Discord/Slack on Windows.

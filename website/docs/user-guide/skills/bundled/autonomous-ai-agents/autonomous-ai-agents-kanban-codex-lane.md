@@ -215,7 +215,7 @@ After kill, inspect `git status --short`, preserve useful patches only if safe, 
 Lliam-GOV must perform this checklist before accepting any Codex lane result:
 
 - [ ] `git -C <WORKTREE> status --short --branch` shows only expected files.
-- [ ] `git -C <WORKTREE> diff --stat` and `git diff` were reviewed by Hermes.
+- [ ] `git -C <WORKTREE> diff --stat` and `git diff` were reviewed by Lliam-GOV.
 - [ ] No secrets, credentials, generated caches, unrelated data, or local artifacts are included.
 - [ ] PMB safety constraints were preserved: no live REST order entry, no market orders, no execution crossing, no fake passive fills/PnL, no risk-gate weakening, no secrets.
 - [ ] Codex commits are small enough to cherry-pick or squash cleanly.
@@ -276,7 +276,7 @@ For tasks that intentionally skip Codex:
 
 ## Common Pitfalls
 
-1. Treating Codex self-report as verification. Always inspect the diff and rerun tests from Hermes.
+1. Treating Codex self-report as verification. Always inspect the diff and rerun tests from Lliam-GOV.
 2. Running Codex in the user's dirty main checkout. Always isolate in a worktree/branch.
 3. Letting Codex own Kanban. Codex may summarize progress, but Lliam-GOV writes board state.
 4. Forgetting PMB safety invariants in the prompt. Missing safety text is a lane setup failure.
