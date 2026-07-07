@@ -98,7 +98,7 @@ def test_gui_forwards_desktop_environment_overrides(tmp_path, monkeypatch):
         cli_main.cmd_gui(_ns(
             fake_boot=True,
             ignore_existing=True,
-            hermes_root=str(lliam_root),
+            lliam_root=str(lliam_root),
             cwd=str(cwd),
         ))
 

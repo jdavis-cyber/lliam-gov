@@ -6,6 +6,7 @@ Handler injected to avoid importing ``main``.
 
 from __future__ import annotations
 
+import argparse
 from typing import Callable
 
 
@@ -43,8 +44,16 @@ def build_gui_parser(subparsers, *, cmd_gui: Callable) -> None:
         help="Force Desktop to ignore any hermes CLI already on PATH during backend resolution",
     )
     gui_parser.add_argument(
+        "--lliam-root",
+        dest="lliam_root",
+        help="Override the Lliam source root used by Desktop (sets LLIAM_DESKTOP_HERMES_ROOT)",
+    )
+    # Deprecated alias kept for one release so existing user scripts don't break.
+    # Hidden from --help; writes to the same dest as --lliam-root.
+    gui_parser.add_argument(
         "--hermes-root",
-        help="Override the Hermes source root used by Desktop (sets LLIAM_DESKTOP_HERMES_ROOT)",
+        dest="lliam_root",
+        help=argparse.SUPPRESS,
     )
     gui_parser.add_argument(
         "--cwd",

@@ -5584,8 +5584,8 @@ def cmd_gui(args: argparse.Namespace):
         env["LLIAM_DESKTOP_BOOT_FAKE"] = "1"
     if getattr(args, "ignore_existing", False):
         env["LLIAM_DESKTOP_IGNORE_EXISTING"] = "1"
-    if getattr(args, "hermes_root", None):
-        env["LLIAM_DESKTOP_HERMES_ROOT"] = str(Path(args.hermes_root).expanduser().resolve())
+    if getattr(args, "lliam_root", None):
+        env["LLIAM_DESKTOP_HERMES_ROOT"] = str(Path(args.lliam_root).expanduser().resolve())
     if getattr(args, "cwd", None):
         env["LLIAM_DESKTOP_CWD"] = str(Path(args.cwd).expanduser().resolve())
 
