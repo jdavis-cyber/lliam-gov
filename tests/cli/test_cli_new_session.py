@@ -76,7 +76,7 @@ class _FakeAgent:
 
 
 def _make_cli(env_overrides=None, config_overrides=None, **kwargs):
-    """Create a HermesCLI instance with minimal mocking."""
+    """Create a LliamCLI instance with minimal mocking."""
     _clean_config = {
         "model": {
             "default": "anthropic/claude-opus-4.6",

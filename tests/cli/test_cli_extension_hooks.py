@@ -1,4 +1,4 @@
-"""Tests for protected HermesCLI TUI extension hooks.
+"""Tests for protected LliamCLI TUI extension hooks.
 
 Verifies that wrapper CLIs can extend the TUI via:
   - _get_extra_tui_widgets()
@@ -17,7 +17,7 @@ from prompt_toolkit.key_binding import KeyBindings
 
 
 def _make_cli(**kwargs):
-    """Create a HermesCLI with prompt_toolkit stubs (same pattern as test_cli_init)."""
+    """Create a LliamCLI with prompt_toolkit stubs (same pattern as test_cli_init)."""
     _clean_config = {
         "model": {
             "default": "anthropic/claude-opus-4.6",

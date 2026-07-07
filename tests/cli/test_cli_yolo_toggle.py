@@ -1,6 +1,6 @@
 """Regression tests for the CLI ``/yolo`` in-chat toggle.
 
-Pre-fix bug (issue #33925): ``cli.HermesCLI._toggle_yolo`` mutated only
+Pre-fix bug (issue #33925): ``cli.LliamCLI._toggle_yolo`` mutated only
 ``os.environ["HERMES_YOLO_MODE"]``. That env var is captured once at
 module-import time into ``tools.approval._YOLO_MODE_FROZEN`` (security
 hardening: stops prompt-injected skills from flipping the bypass mid-run),
@@ -17,9 +17,9 @@ against the same key the toggle writes under.
 
 We test ``_toggle_yolo`` and ``_is_session_yolo_active`` as unbound methods
 against a minimal stand-in object that exposes only the attribute they
-read (``session_id``). This avoids the heavy ``HermesCLI`` construction
+read (``session_id``). This avoids the heavy ``LliamCLI`` construction
 path used in ``test_cli_init.py``, which is incompatible with this test
-file's path layout — ``HermesCLI.__init__`` imports a lot of optional
+file's path layout — ``LliamCLI.__init__`` imports a lot of optional
 state we don't need here.
 """
 
@@ -55,9 +55,9 @@ def _make_stand_in(session_id: str = SESSION_KEY) -> SimpleNamespace:
     ``_toggle_yolo`` and ``_is_session_yolo_active`` are both pure methods
     that only read ``self.session_id`` — no other CLI state is touched.
     Calling them as unbound functions against this stand-in is equivalent
-    to invoking them on a fully-constructed ``HermesCLI`` for the
+    to invoking them on a fully-constructed ``LliamCLI`` for the
     behaviour under test, and avoids the brittle prompt_toolkit / config
-    stubbing required to instantiate ``HermesCLI`` from this test file.
+    stubbing required to instantiate ``LliamCLI`` from this test file.
     """
     return SimpleNamespace(session_id=session_id)
 
@@ -179,7 +179,7 @@ class TestToggleYoloEndToEnd:
 
 class TestIsSessionYoloActiveAttrSafety:
     """The status-bar helper runs against partially-constructed CLI fixtures
-    (tests use ``HermesCLI.__new__(HermesCLI)`` to skip ``__init__``). It must
+    (tests use ``LliamCLI.__new__(LliamCLI)`` to skip ``__init__``). It must
     not raise ``AttributeError`` when ``session_id`` is absent — the
     status-bar builders swallow exceptions silently and lose every field
     after the failure, producing a regression that's hard to track back to

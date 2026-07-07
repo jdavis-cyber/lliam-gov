@@ -786,7 +786,7 @@ class TestWrapperScript:
         assert wrapper.name == "mybot"
         content = wrapper.read_text()
         assert content.startswith("#!/bin/sh")
-        assert "exec /opt/hermes/bin/hermes -p mybot" in content
+        assert "exec /opt/hermes/bin/lliam-gov -p mybot" in content
 
     def test_creates_bat_on_windows(self, profile_env, monkeypatch):
         monkeypatch.setattr("sys.platform", "win32")
@@ -1490,7 +1490,7 @@ class TestEdgeCases:
         # runs the gateway with no profile flag).
         with patch("gateway.status.get_running_pid", return_value=None), patch(
             "gateway.status._read_process_cmdline",
-            return_value="hermes gateway run --replace",
+            return_value="lliam-gov gateway run --replace",
         ):
             assert _check_gateway_running(default_home) is True
 
@@ -1520,7 +1520,7 @@ class TestEdgeCases:
 
     def test_gateway_running_check_rejects_pid_reused_by_other_profile(self, profile_env):
         """Regression (user report): the dashboard showed a NAMED profile's
-        gateway green while ``hermes -p <name> gateway status`` showed it
+        gateway green while ``lliam-gov -p <name> gateway status`` showed it
         stopped.
 
         Per-profile Docker supervision: a named profile (``coder``) left a
@@ -1555,7 +1555,7 @@ class TestEdgeCases:
             "gateway.status._pid_exists", return_value=True
         ), patch("gateway.status._get_process_start_time", return_value=None), patch(
             "gateway.status._read_process_cmdline",
-            return_value="hermes gateway run --replace",
+            return_value="lliam-gov gateway run --replace",
         ):
             assert _check_gateway_running(coder_home) is False
 
@@ -1585,7 +1585,7 @@ class TestEdgeCases:
             "gateway.status._pid_exists", return_value=True
         ), patch("gateway.status._get_process_start_time", return_value=1000), patch(
             "gateway.status._read_process_cmdline",
-            return_value="hermes -p coder gateway run --replace",
+            return_value="lliam-gov -p coder gateway run --replace",
         ):
             assert _check_gateway_running(coder_home) is True
 

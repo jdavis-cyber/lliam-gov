@@ -1,7 +1,7 @@
-"""Tests for cli.HermesCLI._confirm_destructive_slash.
+"""Tests for cli.LliamCLI._confirm_destructive_slash.
 
 Drives the helper directly via __get__ on a SimpleNamespace stand-in so we
-don't have to construct a full HermesCLI (which requires extensive setup).
+don't have to construct a full LliamCLI (which requires extensive setup).
 """
 
 from __future__ import annotations

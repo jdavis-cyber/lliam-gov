@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 
 def _make_cli():
-    """Bare HermesCLI suitable for process_command() tests.
+    """Bare LliamCLI suitable for process_command() tests.
 
     Uses ``__new__`` to skip the heavy __init__; only sets the attributes
     the /exit branch touches.

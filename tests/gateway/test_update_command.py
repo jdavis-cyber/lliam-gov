@@ -52,7 +52,7 @@ class TestHandleUpdateCommand:
         monkeypatch.setenv("HERMES_MANAGED", "homebrew")
 
         # Guard: prevent any accidental fall-through from spawning a real
-        # `hermes update --gateway` against the CI checkout. The managed-install
+        # `lliam-gov update --gateway` against the CI checkout. The managed-install
         # guard should return before Popen is ever reached, but mock it as
         # belt-and-suspenders so a premature return doesn't corrupt the repo.
         with patch("subprocess.Popen") as mock_popen:

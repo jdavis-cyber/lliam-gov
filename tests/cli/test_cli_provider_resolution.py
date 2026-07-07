@@ -129,7 +129,7 @@ def test_lliam_cli_init_does_not_eagerly_resolve_runtime_provider(monkeypatch):
 
     def _unexpected_runtime_resolve(**kwargs):
         calls["count"] += 1
-        raise AssertionError("resolve_runtime_provider should not be called in HermesCLI.__init__")
+        raise AssertionError("resolve_runtime_provider should not be called in LliamCLI.__init__")
 
     monkeypatch.setattr("lliam_cli.runtime_provider.resolve_runtime_provider", _unexpected_runtime_resolve)
     monkeypatch.setattr("lliam_cli.runtime_provider.format_runtime_provider_error", lambda exc: str(exc))

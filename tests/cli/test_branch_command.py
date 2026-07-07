@@ -29,7 +29,7 @@ def session_db(tmp_path):
 
 @pytest.fixture
 def cli_instance(tmp_path, session_db):
-    """Create a minimal HermesCLI-like object for testing _handle_branch_command."""
+    """Create a minimal LliamCLI-like object for testing _handle_branch_command."""
     # We'll mock the CLI enough to test the branch logic without full init
     from unittest.mock import MagicMock
 

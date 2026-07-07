@@ -9,7 +9,7 @@ import pytest
 # ── CLI tests ──────────────────────────────────────────────────────────────
 
 class TestCLIQuickCommands:
-    """Test quick command dispatch in HermesCLI.process_command."""
+    """Test quick command dispatch in LliamCLI.process_command."""
 
     @staticmethod
     def _printed_plain(call_arg):

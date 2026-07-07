@@ -11,7 +11,7 @@ from cli import LliamCLI
 
 
 def _make_cli():
-    """Create a minimal HermesCLI instance for testing."""
+    """Create a minimal LliamCLI instance for testing."""
     cli_obj = LliamCLI.__new__(LliamCLI)
     cli_obj.model = "test-model"
     cli_obj._background_tasks = {}

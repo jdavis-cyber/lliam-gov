@@ -35,7 +35,7 @@ def test_dashboard_slot_reports_down_when_disabled(
 ) -> None:
     """Without HERMES_DASHBOARD, s6-svstat should report the dashboard
     slot as DOWN (not up-with-sleep-infinity, which would
-    false-positive `hermes doctor` and any other health check).
+    false-positive `lliam-gov doctor` and any other health check).
 
     Locks the PR #30136 review item I3 fix: cont-init.d/03-dashboard-toggle
     writes a `down` marker file in the live service-dir when

@@ -6,7 +6,7 @@ reply (``ESC[<row>;<col>R``) arrives on stdin after the input parser has torn
 down. The reply then leaks as literal text (``^[[19;1R``) and the VT100 parser
 can stall, accepting no further keystrokes — the terminal appears frozen.
 
-The recovery path lives in ``HermesCLI._recover_terminal_after_interrupt()``,
+The recovery path lives in ``LliamCLI._recover_terminal_after_interrupt()``,
 which is invoked from ``process_loop``'s ``finally`` block only when
 ``self._last_turn_interrupted`` is set. It must:
   1. Drain stray escape bytes from the OS input buffer (``flush_stdin``).
@@ -29,12 +29,12 @@ from cli import LliamCLI
 
 @pytest.fixture
 def bare_cli():
-    """A HermesCLI with no __init__ — we only exercise the recovery helper."""
+    """A LliamCLI with no __init__ — we only exercise the recovery helper."""
     return object.__new__(LliamCLI)
 
 
 class TestRecoverTerminalAfterInterrupt:
-    """Directly exercise HermesCLI._recover_terminal_after_interrupt()."""
+    """Directly exercise LliamCLI._recover_terminal_after_interrupt()."""
 
     def test_drains_stdin_then_redraws(self, bare_cli):
         """Happy path: flush_stdin runs, then a full redraw is forced."""

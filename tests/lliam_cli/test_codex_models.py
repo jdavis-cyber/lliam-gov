@@ -235,7 +235,7 @@ def test_model_command_uses_existing_codex_session_without_relogin(monkeypatch):
 
 
 def _make_cli(model="anthropic/claude-opus-4.6", **kwargs):
-    """Create a HermesCLI with minimal mocking."""
+    """Create a LliamCLI with minimal mocking."""
     import cli as _cli_mod
     from cli import LliamCLI
 

@@ -2729,14 +2729,14 @@ class TestLegacyLliamUnitDetection:
         ExecStart variants we've seen in the wild:
           - python -m lliam_cli.main gateway run
           - python path/to/lliam_cli/main.py gateway run
-          - hermes gateway run   (direct binary)
+          - lliam-gov gateway run   (direct binary)
           - python path/to/gateway/run.py
         """
         user_dir, _ = self._setup_search_paths(tmp_path, monkeypatch)
         variants = [
             "ExecStart=/venv/bin/python -m lliam_cli.main gateway run --replace",
             "ExecStart=/venv/bin/python /opt/hermes/lliam_cli/main.py gateway run",
-            "ExecStart=/usr/local/bin/hermes gateway run --replace",
+            "ExecStart=/usr/local/bin/lliam-gov gateway run --replace",
             "ExecStart=/venv/bin/python /opt/hermes/gateway/run.py",
         ]
         for i, execstart in enumerate(variants):

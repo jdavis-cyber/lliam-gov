@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 def _make_cli(config_overrides=None, env_overrides=None, **kwargs):
-    """Create a HermesCLI instance with minimal mocking."""
+    """Create a LliamCLI instance with minimal mocking."""
     import cli as _cli_mod
     from cli import LliamCLI
 

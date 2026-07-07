@@ -483,7 +483,7 @@ class TestMCPReloadTimeout:
         """If _reload_mcp hangs, the config watcher times out and returns."""
         import time
 
-        # Create a mock HermesCLI-like object with the needed attributes
+        # Create a mock LliamCLI-like object with the needed attributes
         class FakeCLI:
             _config_mtime = 0.0
             _config_mcp_servers = {}

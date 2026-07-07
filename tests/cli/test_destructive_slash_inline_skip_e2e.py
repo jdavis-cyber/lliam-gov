@@ -1,6 +1,6 @@
 """End-to-end integration test for the destructive-slash inline-skip path.
 
-Drives ``HermesCLI.process_command("/reset now")`` against a minimal stand-in
+Drives ``LliamCLI.process_command("/reset now")`` against a minimal stand-in
 and verifies:
 
 1. ``new_session`` was invoked (the command actually ran)
@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 
 def _make_cli_stub():
-    """Build a minimal HermesCLI-shaped object that can run ``process_command``
+    """Build a minimal LliamCLI-shaped object that can run ``process_command``
     for the destructive-slash branches without spinning up a real TUI."""
     from cli import LliamCLI
 

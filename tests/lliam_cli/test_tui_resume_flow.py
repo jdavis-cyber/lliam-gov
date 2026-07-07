@@ -820,7 +820,7 @@ def test_oneshot_distinguishes_disabled_mcp_from_unknown(monkeypatch, capsys):
 
 
 def test_oneshot_wires_session_db_for_recall(monkeypatch):
-    """hermes -z bypasses HermesCLI, but recall still needs SessionDB."""
+    """lliam-gov -z bypasses LliamCLI, but recall still needs SessionDB."""
     from lliam_cli.oneshot import _run_agent
 
     captured = {}

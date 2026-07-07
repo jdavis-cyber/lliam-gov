@@ -1,7 +1,7 @@
 """Tests for /resume status lines going to stderr in quiet mode (#11793).
 
 The fix in cli._init_agent routes three messages to stderr when
-``tool_progress_mode == "off"`` (set by ``hermes chat --quiet``):
+``tool_progress_mode == "off"`` (set by ``lliam-gov chat --quiet``):
 
   * "Session not found: ..."
   * "↻ Resumed session ... (N user messages, M total messages)"
@@ -18,7 +18,7 @@ from cli import LliamCLI
 
 
 def _make_cli(quiet=False, session_id="20260524_111111_xyz", db=None):
-    """Build a minimal HermesCLI bound to only what _init_agent needs for
+    """Build a minimal LliamCLI bound to only what _init_agent needs for
     the resume code path: _resumed, _session_db, conversation_history,
     session_id, and tool_progress_mode."""
     cli = LliamCLI.__new__(LliamCLI)

@@ -159,7 +159,7 @@ def test_gateway_pid_scan_hides_wmic_and_powershell_windows(monkeypatch):
         captured.append((cmd, kwargs))
         if cmd[0] == "wmic":
             return _Completed(stdout="", returncode=1)
-        return _Completed(stdout="CommandLine=hermes gateway\nProcessId=123\n")
+        return _Completed(stdout="CommandLine=lliam-gov gateway\nProcessId=123\n")
 
     monkeypatch.setattr(gateway, "is_windows", lambda: True)
     monkeypatch.setattr(gateway.shutil, "which", lambda name: name)

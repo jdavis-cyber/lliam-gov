@@ -270,7 +270,7 @@ def test_dispatch_renders_gateway_not_registered_friendly(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ) -> None:
-    """`hermes -p typo gateway start` should print a clear message and
+    """`lliam-gov -p typo gateway start` should print a clear message and
     exit 1 — not dump a traceback at the user."""
     from lliam_cli import gateway as gw
     from lliam_cli.service_manager import GatewayNotRegisteredError
@@ -511,7 +511,7 @@ def test_redirect_short_circuits_supervised_child(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The recursion guard: when the supervised gateway s6-supervise is
-    running execs `hermes gateway run --replace`, the
+    running execs `lliam-gov gateway run --replace`, the
     HERMES_S6_SUPERVISED_CHILD sentinel must short-circuit the redirect
     so the gateway actually starts foreground. Without this guard the
     supervised process would re-dispatch `start` → re-exec `run` → ...

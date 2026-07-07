@@ -6,7 +6,7 @@ Covers:
 - Clean response without interrupt still drives the judge + enqueues.
 
 These tests exercise ``_maybe_continue_goal_after_turn`` directly on a
-minimal ``HermesCLI`` stub (pattern used elsewhere in tests/cli).
+minimal ``LliamCLI`` stub (pattern used elsewhere in tests/cli).
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def lliam_home(tmp_path, monkeypatch):
 
 
 def _make_cli_with_goal(session_id: str, goal_text: str = "build a thing"):
-    """Build a minimal HermesCLI stub with an active goal wired in."""
+    """Build a minimal LliamCLI stub with an active goal wired in."""
     from cli import LliamCLI
     from lliam_cli.goals import GoalManager
 

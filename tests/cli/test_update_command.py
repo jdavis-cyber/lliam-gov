@@ -1,6 +1,6 @@
 """Tests for the /update slash command in the classic CLI and TUI launcher.
 
-Verifies that ``HermesCLI._handle_update_command`` correctly:
+Verifies that ``LliamCLI._handle_update_command`` correctly:
 - Refuses to run under a managed install (Homebrew, Docker, etc.)
 - Sets ``_pending_relaunch`` and returns ``True`` on confirmation
 - Cancels cleanly on a "no"-shaped answer or unrecognized input
@@ -34,7 +34,7 @@ def _make_self(modal_response):
     """Build a minimal stand-in 'self' for ``_handle_update_command``.
 
     Uses the same SimpleNamespace pattern as ``test_destructive_slash_confirm``
-    so we don't need a full ``HermesCLI`` construction.
+    so we don't need a full ``LliamCLI`` construction.
     ``_prompt_text_input_modal`` is stubbed to return *modal_response*
     directly so tests can drive the entire confirmation branch without
     touching stdin or prompt_toolkit internals.

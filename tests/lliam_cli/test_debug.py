@@ -424,11 +424,11 @@ class TestCollectDebugReport:
 
         with patch("lliam_cli.dump.run_dump") as mock_dump:
             mock_dump.side_effect = lambda args: print(
-                "--- hermes dump ---\nversion: 0.8.0\n--- end dump ---"
+                "--- lliam-gov dump ---\nversion: 0.8.0\n--- end dump ---"
             )
             report = collect_debug_report(log_lines=50)
 
-        assert "--- hermes dump ---" in report
+        assert "--- lliam-gov dump ---" in report
         assert "version: 0.8.0" in report
 
     def test_report_includes_agent_log(self, lliam_home):
@@ -569,7 +569,7 @@ class TestRunDebugShare:
         with patch("lliam_cli.dump.run_dump") as mock_dump, \
              patch("lliam_cli.debug.upload_to_pastebin",
                     side_effect=_mock_upload):
-            mock_dump.side_effect = lambda a: print("--- hermes dump ---\nversion: test\n--- end dump ---")
+            mock_dump.side_effect = lambda a: print("--- lliam-gov dump ---\nversion: test\n--- end dump ---")
             run_debug_share(args)
 
         out = capsys.readouterr().out
@@ -588,16 +588,16 @@ class TestRunDebugShare:
 
         # Each log paste should start with the dump header
         agent_paste = uploaded_content[1]
-        assert "--- hermes dump ---" in agent_paste
+        assert "--- lliam-gov dump ---" in agent_paste
         assert "--- full agent.log ---" in agent_paste
         gateway_paste = uploaded_content[2]
-        assert "--- hermes dump ---" in gateway_paste
+        assert "--- lliam-gov dump ---" in gateway_paste
         assert "--- full gateway.log ---" in gateway_paste
         gui_paste = uploaded_content[3]
-        assert "--- hermes dump ---" in gui_paste
+        assert "--- lliam-gov dump ---" in gui_paste
         assert "--- full gui.log ---" in gui_paste
         desktop_paste = uploaded_content[4]
-        assert "--- hermes dump ---" in desktop_paste
+        assert "--- lliam-gov dump ---" in desktop_paste
         assert "--- full desktop.log ---" in desktop_paste
 
     def test_share_keeps_report_and_full_log_on_same_snapshot(self, lliam_home, capsys):

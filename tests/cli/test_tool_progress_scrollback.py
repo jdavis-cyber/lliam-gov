@@ -18,7 +18,7 @@ _UNSET = object()
 
 
 def _make_cli(tool_progress="all", verbose=_UNSET):
-    """Create a HermesCLI instance with minimal mocking."""
+    """Create a LliamCLI instance with minimal mocking."""
     global _cli_mod
     _clean_config = {
         "model": {

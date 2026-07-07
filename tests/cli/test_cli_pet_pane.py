@@ -1,7 +1,7 @@
 """The base-CLI petdex pane: reactive half-block sprite above the prompt.
 
 Mirrors the TUI's PetPane. The methods are tested in isolation via __new__ so
-we don't pay the full HermesCLI.__init__ cost; a synthetic spritesheet exercises
+we don't pay the full LliamCLI.__init__ cost; a synthetic spritesheet exercises
 the real engine decode + half-block fragment building.
 """
 
@@ -55,7 +55,7 @@ def _make_cli():
     cli_obj._pet_frames_cache = {}
     cli_obj._pet_frame_idx = 0
     cli_obj._agent_running = False
-    # Transient-beat + reasoning state (set by HermesCLI.__init__ in production).
+    # Transient-beat + reasoning state (set by LliamCLI.__init__ in production).
     cli_obj._pet_event = ""
     cli_obj._pet_event_until = 0.0
     cli_obj._pet_reasoning = False

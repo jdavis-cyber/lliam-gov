@@ -185,7 +185,7 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"hermes\.service|ai\.hermes\.gateway", "legacy systemd/launchd unit id — detection"),
     (r"s6-setuidgid hermes", "legacy s6 supervision directive — container detection"),
     (r"main-hermes", "legacy tmux/session marker — detection"),
-    (r"hermes gateway|/hermes gateway", "legacy CLI-invocation string matched for detection"),
+    (r"lliam-gov gateway|/lliam-gov gateway", "legacy CLI-invocation string matched for detection"),
     (r"Hermes_Gateway", "legacy scheduled-task name — detection"),
     (r'source_host.*hermes_', "legacy source-host prefix detection"),
     (r'"hermes" units|ai\.\*.*hermes\*|/opt/custom-hermes|username \(e\.g\. hermes\)|'
@@ -469,6 +469,14 @@ KEEP_PATTERNS += [
      "datum / wrapped upstream issue ref — detection or opaque data"),
     (r"hermes-already-has-routines",
      "reference to the kept upstream marketing post filename (in a governance keep-register)"),
+    (r'"lliam-gov -p" in content or "hermes -p" in content|legacy \(hermes\)|'
+     r'legacy_needle = f"hermes -p|pre-rename wrapper body',
+     "profile-wrapper back-compat DETECTION — recognizes both new (lliam-gov) and legacy "
+     "(hermes) wrapper bodies so a re-install cleanly overwrites a pre-rename wrapper"),
+    (r"windows-hermes-resolution\.test\.cjs|hermes\.cmd/\.exe|shadow hermes\.cmd",
+     "descriptive test filename + a Windows shim-shadowing detection fixture — opaque"),
+    (r"'hermes-release'|hermes-release' patched",
+     "self-improvement fixture skill name — opaque test data"),
     # --- Test-fixture data under apps/**/*.test.* (opaque values a test asserts/uses) ---
     (r"pattern=hermes|'hermes-x'|'hermes-y'|\"hermes-x\"|\"hermes-y\"|hermes-probes-ghost-|"
      r"hermes-probes-o|\.mount_Hermes|hermes-execf|Hermes here\.|hermes/test-gui-stuff|"

@@ -381,7 +381,7 @@ class TestTencentTokenhubAuxiliary:
 
 
 class TestTencentTokenhubDoctor:
-    """Verify hermes doctor recognizes Tencent TokenHub env vars."""
+    """Verify lliam-gov doctor recognizes Tencent TokenHub env vars."""
 
     def test_provider_env_hints(self):
         from lliam_cli.doctor import _PROVIDER_ENV_HINTS

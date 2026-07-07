@@ -27,7 +27,7 @@ from unittest.mock import MagicMock, patch
 
 
 def _make_cli():
-    """Create a HermesCLI instance with prompt_toolkit stubbed out."""
+    """Create a LliamCLI instance with prompt_toolkit stubbed out."""
     _clean_config = {
         "model": {
             "default": "anthropic/claude-opus-4.6",

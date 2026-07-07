@@ -1138,7 +1138,7 @@ class TestPgrepKillExpansion:
 
 class TestLaunchctlGatewayLifecycle:
     """launchctl stop/kickstart/bootout/unload against the Hermes service
-    label achieves the same effect as `hermes gateway stop|restart` and
+    label achieves the same effect as `lliam-gov gateway stop|restart` and
     must require the same approval. See issue #33071.
     """
 

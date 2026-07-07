@@ -881,7 +881,7 @@ class TestPreprocessImagesWithVision:
 
     @pytest.fixture
     def cli(self):
-        """Minimal HermesCLI with mocked internals."""
+        """Minimal LliamCLI with mocked internals."""
         with patch("cli.load_cli_config") as mock_cfg:
             mock_cfg.return_value = {
                 "model": {"default": "test/model", "base_url": "http://x", "provider": "auto"},

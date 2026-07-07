@@ -97,9 +97,9 @@ def test_dashboard_builder_two_handlers():
     assert parser.parse_args(["dashboard", "register"]).func is reg
 
 
-# ── deprecated `hermes login` fails gracefully, not with argparse error ────
+# ── deprecated `lliam-gov login` fails gracefully, not with argparse error ────
 #
-# `hermes login` is a removed command; its handler (`login_command` in
+# `lliam-gov login` is a removed command; its handler (`login_command` in
 # `lliam_cli/auth.py`) prints a deprecation notice pointing at `hermes auth` /
 # `hermes model` and exits 0.  Two behavior contracts guard the UX:
 #   1. ANY `--provider <value>` (including ones the user actually wants, like
@@ -130,7 +130,7 @@ def test_login_accepts_any_provider_value(provider):
 
 
 def test_login_subparser_help_is_suppressed():
-    """The deprecated `login` row must not appear in `hermes --help`.
+    """The deprecated `login` row must not appear in `lliam-gov --help`.
 
     Must hold without leaking argparse's literal `==SUPPRESS==` placeholder,
     which `help=argparse.SUPPRESS` emits for a top-level subparser on 3.12+.

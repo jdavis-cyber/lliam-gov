@@ -18,7 +18,7 @@ def _stub_thread() -> threading.Thread:
 
 
 def _make_cli():
-    """Bare-metal HermesCLI for snapshot/build tests (no __init__ side effects)."""
+    """Bare-metal LliamCLI for snapshot/build tests (no __init__ side effects)."""
     cli_obj = LliamCLI.__new__(LliamCLI)
     cli_obj.model = "anthropic/claude-opus-4.6"
     cli_obj.agent = None
@@ -42,7 +42,7 @@ def test_snapshot_counts_live_background_tasks():
 
 
 def test_snapshot_safe_when_background_tasks_attr_missing():
-    """Older HermesCLI instances (tests with __new__, etc.) may lack the attr."""
+    """Older LliamCLI instances (tests with __new__, etc.) may lack the attr."""
     cli_obj = LliamCLI.__new__(LliamCLI)
     cli_obj.model = "x"
     cli_obj.agent = None

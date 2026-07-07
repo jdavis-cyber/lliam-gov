@@ -3916,7 +3916,7 @@ class TestSlashEphemeralAck:
 
     @pytest.mark.asyncio
     async def test_legacy_lliam_slash_stashes_context(self, adapter):
-        """Legacy /hermes <subcommand> also stashes context."""
+        """Legacy /lliam-gov <subcommand> also stashes context."""
         command = {
             "command": "/hermes",
             "text": "help",
