@@ -1386,10 +1386,10 @@ def test_refresh_token_reuse_detection_surfaces_actionable_message():
     """Regression for #15099.
 
     When the Nous Portal server returns ``invalid_grant`` with
-    ``error_description`` containing "reuse detected", Hermes must surface an
+    ``error_description`` containing "reuse detected", Lliam-GOV must surface an
     actionable message explaining that an external process consumed the
     refresh token.  The default opaque "Refresh token reuse detected; please
-    re-authenticate" string led users to report this as a Hermes persistence
+    re-authenticate" string led users to report this as a Lliam-GOV persistence
     bug when the true cause is external RT consumption (monitoring scripts,
     custom self-heal hooks).
     """

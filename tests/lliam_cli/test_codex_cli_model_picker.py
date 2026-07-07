@@ -5,7 +5,7 @@ Covers:
  - Claude Code fallback (tokens only in ~/.claude/.credentials.json)
  - Negative case (no credentials anywhere)
 
-Note: auto-import from ~/.codex/auth.json was removed in #12360 — Hermes
+Note: auto-import from ~/.codex/auth.json was removed in #12360 — Lliam-GOV
 now owns its own openai-codex auth state, and users explicitly adopt
 existing Codex CLI tokens via `lliam-gov auth openai-codex`. The old
 "Codex CLI shared file" discovery tests were removed with that change.
@@ -106,7 +106,7 @@ def test_codex_picker_uses_live_codex_catalog(lliam_auth_only_env, tmp_path, mon
 @pytest.fixture()
 def claude_code_only_env(tmp_path, monkeypatch):
     """Set up an environment where Anthropic credentials only exist in
-    ~/.claude/.credentials.json (Claude Code) — not in env vars or Hermes
+    ~/.claude/.credentials.json (Claude Code) — not in env vars or Lliam-GOV
     auth store."""
     lliam_home = tmp_path / ".hermes"
     lliam_home.mkdir()

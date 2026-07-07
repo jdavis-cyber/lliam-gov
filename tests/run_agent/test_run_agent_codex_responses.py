@@ -647,7 +647,7 @@ def test_run_codex_stream_ignores_completed_response_with_null_output(monkeypatc
 
     The SDK's high-level ``responses.stream(...)`` helper used to reconstruct
     the final Response from that terminal field and raised ``TypeError:
-    'NoneType' object is not iterable``. The Hermes runtime consumes raw
+    'NoneType' object is not iterable``. The Lliam-GOV runtime consumes raw
     ``response.output_item.done`` events instead, so a null terminal ``output``
     must not affect the returned assistant/function-call items.
     """

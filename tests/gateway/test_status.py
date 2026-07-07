@@ -1172,7 +1172,7 @@ class TestTakeoverMarker:
         assert marker_path.exists()
 
     def test_consume_accepts_legacy_marker_without_lliam_home(self, tmp_path, monkeypatch):
-        """Back-compat (#29092): markers written by older Hermes versions have no
+        """Back-compat (#29092): markers written by older Lliam-GOV versions have no
         ``replacer_hermes_home`` field; an absent field is treated as same-home so
         single-profile setups and mixed old/new deployments keep working.
         """

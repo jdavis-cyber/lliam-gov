@@ -689,7 +689,7 @@ class TestSendToPlatformChunking:
                     Platform.SLACK,
                     SimpleNamespace(enabled=True, token="***", extra={}),
                     "C123",
-                    "**hello** from [Hermes](<https://example.com>)",
+                    "**hello** from [Lliam-GOV](<https://example.com>)",
                 )
             )
 
@@ -697,7 +697,7 @@ class TestSendToPlatformChunking:
         send.assert_awaited_once_with(
             "***",
             "C123",
-            "*hello* from <https://example.com|Hermes>",
+            "*hello* from <https://example.com|Lliam-GOV>",
             thread_ts=None,
         )
 

@@ -3,7 +3,7 @@
 Covers the LG-SC-01/02 requirement that the tag-scan chokepoint mirrors the
 loader's nested-aware skill discovery. A re-vendored offensive skill placed in a
 supported *nested* category (``category/name/SKILL.md``) is discoverable by
-Hermes skill registration, so the deny-tag scan must reach it too — a one-level
+Lliam-GOV skill registration, so the deny-tag scan must reach it too — a one-level
 ``*/SKILL.md`` glob would silently miss it under strict posture.
 """
 

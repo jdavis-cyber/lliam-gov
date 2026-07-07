@@ -36,8 +36,8 @@ ACCEPT = [
     "lliam-gov -p gateway gateway run",
     "python -m lliam_cli.main --profile gateway gateway run",
     # quoted Windows paths with spaces (shlex-aware tokenization)
-    r'"C:\Program Files\Hermes\hermes-gateway.exe"',
-    r'"C:\Program Files\Hermes\gateway\run.py" run',
+    r'"C:\Program Files\Lliam-GOV\hermes-gateway.exe"',
+    r'"C:\Program Files\Lliam-GOV\gateway\run.py" run',
     r'"C:\Program Files\Py\pythonw.exe" -m lliam_cli.main gateway run',
 ]
 

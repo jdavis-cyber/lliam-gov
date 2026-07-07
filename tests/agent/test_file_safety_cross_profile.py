@@ -25,7 +25,7 @@ import pytest
 
 @pytest.fixture
 def fake_lliam(tmp_path, monkeypatch):
-    """Build a fake Hermes layout:
+    """Build a fake Lliam-GOV layout:
 
         <tmp>/
           skills/foo/SKILL.md           # default profile

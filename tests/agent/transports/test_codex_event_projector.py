@@ -1,4 +1,4 @@
-"""Tests for CodexEventProjector — codex item/* events → Hermes messages list.
+"""Tests for CodexEventProjector — codex item/* events → Lliam-GOV messages list.
 
 Drives projection against fixture notifications captured from codex 0.130.0
 plus synthetic ones for item types we couldn't auth-test live."""

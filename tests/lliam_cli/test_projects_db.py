@@ -46,12 +46,12 @@ def test_record_discovered_repos_replace_drops_stale_rows(conn):
 
 
 def test_create_get_list(conn):
-    pid = pdb.create_project(conn, name="Hermes Agent", folders=["/tmp/hermes"])
+    pid = pdb.create_project(conn, name="Lliam-GOV Agent", folders=["/tmp/hermes"])
     proj = pdb.get_project(conn, pid)
 
     assert proj is not None
     assert proj.slug == "hermes-agent"
-    assert proj.name == "Hermes Agent"
+    assert proj.name == "Lliam-GOV Agent"
     # First folder becomes primary.
     assert proj.primary_path == "/tmp/hermes"
     assert [f.path for f in proj.folders] == ["/tmp/hermes"]
@@ -63,8 +63,8 @@ def test_create_get_list(conn):
 
 
 def test_slug_collision_disambiguates(conn):
-    pdb.create_project(conn, name="Hermes Agent")
-    pdb.create_project(conn, name="Hermes Agent")
+    pdb.create_project(conn, name="Lliam-GOV Agent")
+    pdb.create_project(conn, name="Lliam-GOV Agent")
     slugs = sorted(p.slug for p in pdb.list_projects(conn))
 
     assert slugs == ["hermes-agent", "hermes-agent-2"]

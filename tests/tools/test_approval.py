@@ -745,7 +745,7 @@ class TestWindowsAbsolutePathFolding:
     Regression: on native Windows the home prefix uses backslash separators
     (``C:\\Users\\alice\\.ssh\\authorized_keys``). Detection stripped backslash
     escapes *before* folding, dissolving those separators, so writes to startup,
-    SSH, and Hermes config/env files returned "safe" without an approval prompt.
+    SSH, and Lliam-GOV config/env files returned "safe" without an approval prompt.
     The OS-specific ``Path.home()`` / ``get_lliam_home()`` tests above only
     exercise this branch on a Windows host; these monkeypatch a Windows-style
     HOME/HERMES_HOME so the fold is verified on the POSIX CI runner too."""
@@ -1137,7 +1137,7 @@ class TestPgrepKillExpansion:
 
 
 class TestLaunchctlGatewayLifecycle:
-    """launchctl stop/kickstart/bootout/unload against the Hermes service
+    """launchctl stop/kickstart/bootout/unload against the Lliam-GOV service
     label achieves the same effect as `lliam-gov gateway stop|restart` and
     must require the same approval. See issue #33071.
     """

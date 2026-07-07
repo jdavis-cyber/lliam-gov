@@ -1,8 +1,8 @@
 """Regression tests for Codex refresh_token self-heal (cross-store rotation).
 
-Hermes keeps its OWN copy of the Codex OAuth token (per profile + top-level),
+Lliam-GOV keeps its OWN copy of the Codex OAuth token (per profile + top-level),
 separate from the Codex CLI's ``~/.codex/auth.json``. OAuth refresh_tokens are
-single-use, so when the Codex CLI (or another Hermes process) rotates the shared
+single-use, so when the Codex CLI (or another Lliam-GOV process) rotates the shared
 token, the frozen copy's refresh_token goes stale and ``refresh_codex_oauth_pure``
 fails with a relogin-required error. ``_refresh_codex_auth_tokens`` must then
 recover by re-importing the canonical token from ``~/.codex/auth.json`` instead of
@@ -147,7 +147,7 @@ def test_reraises_when_imported_token_lacks_refresh_token(monkeypatch):
 
 
 def test_self_heals_missing_singleton_access_token_from_codex_cli(tmp_path, monkeypatch):
-    """Exact cron failure path: Hermes auth has refresh_token but missing access_token."""
+    """Exact cron failure path: Lliam-GOV auth has refresh_token but missing access_token."""
     lliam_home = tmp_path / "hermes"
     codex_home = tmp_path / "codex"
     lliam_home.mkdir()

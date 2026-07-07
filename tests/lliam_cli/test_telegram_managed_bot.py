@@ -76,9 +76,9 @@ class TestGenerateDeepLink:
         link = generate_deep_link(
             manager_bot="Bot",
             suggested_username="test_bot",
-            suggested_name="Hermes & Friends",
+            suggested_name="Lliam-GOV & Friends",
         )
-        assert "Hermes+%26+Friends" in link
+        assert "Lliam-GOV+%26+Friends" in link
 
 
 class TestPairingNonce:

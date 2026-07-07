@@ -1878,7 +1878,7 @@ class TestMcpInvocationResolution:
     """Surface 8 (NousResearch/hermes-agent#47072): instead of hardcoding
     `["mcp"]` as the cua-driver subcommand, we ask the driver via its
     `manifest` JSON (trycua/cua#1961) so a future rename or relocation of
-    the MCP subcommand doesn't require a Hermes patch.
+    the MCP subcommand doesn't require a Lliam-GOV patch.
 
     The discovery hop must NEVER prevent the wrapper from starting — every
     failure mode (no manifest verb, non-zero exit, junk JSON, missing
@@ -1913,7 +1913,7 @@ class TestMcpInvocationResolution:
 
     def test_future_renamed_subcommand_is_honored(self):
         """The whole point: a future cua-driver that exposes `mcp-stdio`
-        instead of `mcp` keeps working without a Hermes patch."""
+        instead of `mcp` keeps working without a Lliam-GOV patch."""
         from unittest.mock import patch
         from tools.computer_use.cua_backend import _resolve_mcp_invocation
 
@@ -2459,7 +2459,7 @@ class TestElementTokenAttachment:
 
 
 class TestSessionLifecycle:
-    """Surface gap (audit June 2026): Hermes never declared a cua-driver
+    """Surface gap (audit June 2026): Lliam-GOV never declared a cua-driver
     session, so the agent-cursor overlay was inert and per-run state
     (config overrides, recording ownership, cursor identity) was shared
     across concurrent runs. Wired now: backend.start() calls
@@ -2494,7 +2494,7 @@ class TestSessionLifecycle:
         from tools.computer_use.cua_backend import CuaDriverBackend
         a = CuaDriverBackend()._session_id
         b = CuaDriverBackend()._session_id
-        assert a != b, "each Hermes run should mint its own session id"
+        assert a != b, "each Lliam-GOV run should mint its own session id"
 
     def test_start_invokes_start_session_with_run_id(self):
         from unittest.mock import MagicMock, patch

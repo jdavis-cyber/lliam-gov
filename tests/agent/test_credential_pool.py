@@ -1669,7 +1669,7 @@ def test_load_pool_api_key_path_skips_oauth_autodiscovery(tmp_path, monkeypatch)
     ANTHROPIC_TOKEN.  That env-var pattern is the explicit signal that the
     user opted into the API-key path and explicitly OUT of the OAuth
     masquerade (Claude Code identity injection + `mcp_` tool-name rewrite
-    + claude-cli user-agent).  Autodiscovered Claude Code / Hermes PKCE
+    + claude-cli user-agent).  Autodiscovered Claude Code / Lliam-GOV PKCE
     tokens from other tools' credential files must NOT be silently mixed
     into the anthropic pool — otherwise rotation on a 401/429 could flip
     the session onto OAuth credentials mid-conversation.

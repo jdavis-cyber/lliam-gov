@@ -1,6 +1,6 @@
 """Tests for the ``pinPeerName`` / ``pinUserPeer`` config flag.
 
-Under a gateway (Telegram, Discord, Slack, ...) Hermes passes the
+Under a gateway (Telegram, Discord, Slack, ...) Lliam-GOV passes the
 platform-native user ID as ``runtime_user_peer_name`` into
 ``HonchoSessionManager``.  By default that ID wins over any configured
 ``peer_name`` so multi-user bots scope memory per user.
@@ -536,7 +536,7 @@ class TestPeerResolutionOrder:
 
 
 class TestCrossPlatformMemoryUnification:
-    """The same physical user talking to Hermes via Telegram AND Discord
+    """The same physical user talking to Lliam-GOV via Telegram AND Discord
     lands on ONE peer when ``pinPeerName`` is opted in.
     """
 

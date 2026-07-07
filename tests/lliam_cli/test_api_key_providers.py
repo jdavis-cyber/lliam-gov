@@ -722,7 +722,7 @@ class TestHasAnyProviderConfigured:
         assert _has_any_provider_configured() is True
 
     def test_claude_code_creds_ignored_on_fresh_install(self, monkeypatch, tmp_path):
-        """Claude Code credentials should NOT skip the wizard when Hermes is unconfigured."""
+        """Claude Code credentials should NOT skip the wizard when Lliam-GOV is unconfigured."""
         from lliam_cli import config as config_module
         from lliam_cli.auth import PROVIDER_REGISTRY
         lliam_home = tmp_path / ".hermes"
@@ -838,7 +838,7 @@ class TestHasAnyProviderConfigured:
         assert _has_any_provider_configured() is False
 
     def test_claude_code_creds_counted_when_lliam_configured(self, monkeypatch, tmp_path):
-        """Claude Code credentials should count when Hermes has been explicitly configured."""
+        """Claude Code credentials should count when Lliam-GOV has been explicitly configured."""
         import yaml
         from lliam_cli import config as config_module
         lliam_home = tmp_path / ".hermes"

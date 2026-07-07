@@ -262,7 +262,7 @@ class TestCronTimezone:
         """_ensure_aware must preserve the absolute instant for naive datetimes.
 
         Regression: the old code used replace(tzinfo=hermes_tz) which shifted
-        absolute time when system-local tz != Hermes tz.  The fix interprets
+        absolute time when system-local tz != Lliam-GOV tz.  The fix interprets
         naive values as system-local wall time, then converts.
         """
         from cron.jobs import _ensure_aware
@@ -288,7 +288,7 @@ class TestCronTimezone:
         )
 
     def test_ensure_aware_normalizes_aware_to_lliam_tz(self):
-        """Already-aware datetimes should be normalized to Hermes tz."""
+        """Already-aware datetimes should be normalized to Lliam-GOV tz."""
         from cron.jobs import _ensure_aware
 
         os.environ["HERMES_TIMEZONE"] = "Asia/Kolkata"
@@ -298,17 +298,17 @@ class TestCronTimezone:
         utc_dt = datetime(2026, 3, 11, 15, 0, 0, tzinfo=timezone.utc)
         result = _ensure_aware(utc_dt)
 
-        # Must be in Hermes tz (Kolkata) but same absolute instant
+        # Must be in Lliam-GOV tz (Kolkata) but same absolute instant
         kolkata = ZoneInfo("Asia/Kolkata")
         assert result.utctimetuple()[:5] == (2026, 3, 11, 15, 0)
         expected_local = utc_dt.astimezone(kolkata)
         assert result == expected_local
 
     def test_ensure_aware_due_job_not_skipped_when_system_ahead(self, tmp_path, monkeypatch):
-        """Reproduce the actual bug: system tz ahead of Hermes tz caused
+        """Reproduce the actual bug: system tz ahead of Lliam-GOV tz caused
         overdue jobs to appear as not-yet-due.
 
-        Scenario: system is Asia/Kolkata (UTC+5:30), Hermes is UTC.
+        Scenario: system is Asia/Kolkata (UTC+5:30), Lliam-GOV is UTC.
         A naive timestamp from 5 minutes ago (local time) should still
         be recognized as due after conversion.
         """
@@ -338,7 +338,7 @@ class TestCronTimezone:
         )
 
     def test_get_due_jobs_naive_cross_timezone(self, tmp_path, monkeypatch):
-        """Naive past timestamps must be detected as due even when Hermes tz
+        """Naive past timestamps must be detected as due even when Lliam-GOV tz
         is behind system local tz — the scenario that triggered #806."""
         import cron.jobs as jobs_module
         monkeypatch.setattr(jobs_module, "CRON_DIR", tmp_path / "cron")

@@ -1,4 +1,4 @@
-"""Tests for the Hermes plugin system (lliam_cli.plugins)."""
+"""Tests for the Lliam-GOV plugin system (lliam_cli.plugins)."""
 
 import logging
 import sys

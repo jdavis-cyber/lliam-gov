@@ -2,7 +2,7 @@
 
 Inspired by Claude Code v2.1.169's ``--safe-mode`` flag (June 2026), which
 disables all customizations (CLAUDE.md, plugins, skills, hooks, MCP) for
-troubleshooting. The Hermes equivalent:
+troubleshooting. The Lliam-GOV equivalent:
 
 * implies ``--ignore-user-config`` (built-in config defaults)
 * implies ``--ignore-rules`` (no AGENTS.md/memory/preloaded-skill injection)

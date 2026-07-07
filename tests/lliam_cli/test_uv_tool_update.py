@@ -141,7 +141,7 @@ class TestRecommendedUpdateCommandForUvTool:
             assert cmd == "uv tool upgrade lliam-gov-agent"
 
     def test_uv_pip_install_keeps_legacy_recommendation(self):
-        """Existing behavior: uv is on PATH but Hermes is a regular pip install."""
+        """Existing behavior: uv is on PATH but Lliam-GOV is a regular pip install."""
         from lliam_cli import config
 
         with patch("shutil.which", return_value="/usr/local/bin/uv"), \

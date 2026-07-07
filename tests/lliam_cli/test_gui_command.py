@@ -40,7 +40,7 @@ def _make_packaged_executable(root: Path, monkeypatch, platform: str = "darwin")
     monkeypatch.setattr(cli_main.sys, "platform", platform)
     desktop_dir = root / "apps" / "desktop"
     if platform == "darwin":
-        exe = desktop_dir / "release" / "mac-arm64" / "Hermes.app" / "Contents" / "MacOS" / "Hermes"
+        exe = desktop_dir / "release" / "mac-arm64" / "Hermes.app" / "Contents" / "MacOS" / "Lliam-GOV"
     elif platform == "win32":
         exe = desktop_dir / "release" / "win-unpacked" / "Hermes.exe"
     else:

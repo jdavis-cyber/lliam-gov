@@ -114,7 +114,7 @@ def test_removes_dangling_symlink_into_lliam_node(fake_home):
 
 
 def test_only_some_links_present(fake_home):
-    """Removes the Hermes links that exist; ignores the ones that don't."""
+    """Removes the Lliam-GOV links that exist; ignores the ones that don't."""
     lliam_home = fake_home / ".hermes"
     node_bin = _make_lliam_node(lliam_home)
     local_bin = fake_home / ".local" / "bin"

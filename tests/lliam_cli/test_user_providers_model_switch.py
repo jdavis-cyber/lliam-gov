@@ -88,7 +88,7 @@ def test_list_authenticated_providers_dedupes_models_when_default_in_list(monkey
 
 def test_list_authenticated_providers_enumerates_dict_format_models(monkeypatch):
     """providers: dict entries with ``models:`` as a dict keyed by model id
-    (canonical Hermes write format) should surface every key in the picker.
+    (canonical Lliam-GOV write format) should surface every key in the picker.
 
     Regression: the ``providers:`` dict path previously only accepted
     list-format ``models:`` and silently dropped dict-format entries,
@@ -389,7 +389,7 @@ def test_list_authenticated_providers_fallback_to_default_only(monkeypatch):
 
 
 def test_list_authenticated_providers_accepts_base_url_and_singular_model(monkeypatch):
-    """providers: dict entries written in canonical Hermes shape
+    """providers: dict entries written in canonical Lliam-GOV shape
     (``base_url`` + singular ``model``) should resolve the same as the
     legacy ``api`` + ``default_model`` shape.
 

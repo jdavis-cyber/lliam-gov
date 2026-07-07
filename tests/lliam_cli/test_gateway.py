@@ -1034,7 +1034,7 @@ def test_scan_gateway_pids_detects_windows_lliam_exe_case_variants(monkeypatch):
             return SimpleNamespace(
                 returncode=0,
                 stdout=(
-                    "CommandLine=C:\\Program Files\\Hermes\\Hermes.EXE gateway run --replace\n"
+                    "CommandLine=C:\\Program Files\\Lliam-GOV\\Hermes.EXE gateway run --replace\n"
                     "ProcessId=2468\n\n"
                 ),
                 stderr="",
