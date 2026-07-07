@@ -315,7 +315,7 @@ class TestEntryPointsImportBootstrap:
 
 class TestHardenImportPath:
     """harden_import_path() must keep a same-named package in the launch
-    directory from shadowing Hermes's own top-level modules — covering both
+    directory from shadowing Lliam-GOV's own top-level modules — covering both
     the relative ('' / '.') and absolute-path forms the cwd can take on
     sys.path (issue #51286)."""
 
@@ -351,12 +351,12 @@ class TestHardenImportPath:
     def test_absolute_cwd_path_loses_to_src_root(self):
         # The real #51286 bug: the launch dir is present as its own absolute
         # path (venv activation / a project on PYTHONPATH), ahead of the
-        # Hermes root.  The guard must relocate Hermes to the front.
+        # Lliam-GOV root.  The guard must relocate Hermes to the front.
         hb = _fresh_import()
         result = self._run(hb, ["/home/user/tg-ws-proxy", "/opt/hermes"])
         assert result[0] == "/opt/hermes"
         # The cwd absolute path may still appear (it can hold legit deps),
-        # but only AFTER the Hermes root.
+        # but only AFTER the Lliam-GOV root.
         assert result.index("/opt/hermes") < result.index("/home/user/tg-ws-proxy")
 
     def test_src_root_not_duplicated(self):

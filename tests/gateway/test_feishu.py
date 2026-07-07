@@ -4084,7 +4084,7 @@ class TestFeishuStripLeadingSelf(unittest.TestCase):
         from plugins.platforms.feishu.adapter import _strip_edge_self_mentions
 
         # Terminal punct after the mention — strip the mention, keep the punct.
-        result = _strip_edge_self_mentions("look up docs @Hermes.", self._make_refs())
+        result = _strip_edge_self_mentions("look up docs @Lliam-GOV.", self._make_refs())
         self.assertEqual(result, "look up docs.")
 
     def test_preserves_trailing_self_before_non_terminal_char(self):
@@ -4569,7 +4569,7 @@ class TestFeishuProcessInboundMessage(unittest.TestCase):
     def test_pure_self_mention_message_is_ignored(self):
         """A message containing only '@Bot' (no body, no media) must not dispatch.
 
-        Regression guard: the rendered '@Hermes' slips past the pre-strip empty
+        Regression guard: the rendered '@Lliam-GOV' slips past the pre-strip empty
         guard; the post-strip guard must catch it.
         """
         adapter = self._build_adapter()

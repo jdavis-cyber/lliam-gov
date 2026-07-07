@@ -106,7 +106,7 @@ def test_maybe_reap_floors_at_60_seconds(monkeypatch):
 
 
 def test_maybe_reap_passes_current_profile_as_filter(monkeypatch):
-    """The reaper must be scoped to the current Hermes profile — a research
+    """The reaper must be scoped to the current Lliam-GOV profile — a research
     profile must NEVER reap default's containers. Verifies the
     profile-filter wiring."""
     _reset_reaper_gate()

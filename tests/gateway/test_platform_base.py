@@ -946,7 +946,7 @@ class TestMediaDeliveryDefaultMode:
         assert BasePlatformAdapter.validate_media_delivery_path(str(config_file)) is None
 
     def test_denylist_blocks_shared_lliam_root_config_for_profiles(self, tmp_path, monkeypatch):
-        """Profile-mode gateways must still block the shared Hermes root config."""
+        """Profile-mode gateways must still block the shared Lliam-GOV root config."""
         self._patch_roots(monkeypatch)
 
         fake_home = tmp_path / "home"

@@ -45,7 +45,7 @@ def test_self_heals_on_stale_refresh_token(monkeypatch):
 
     assert out["access_token"] == "fresh-access"
     assert out["refresh_token"] == "fresh-refresh"
-    # the recovered token was persisted to the Hermes auth store
+    # the recovered token was persisted to the Lliam-GOV auth store
     assert saved["access_token"] == "fresh-access"
 
 

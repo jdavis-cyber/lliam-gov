@@ -193,7 +193,7 @@ class TestCmdUpdatePipUsesUvTool:
 
     @patch("subprocess.run")
     def test_runs_uv_pip_install_when_not_uv_tool(self, mock_run):
-        """Existing behavior preserved when uv is present but Hermes isn't a tool install."""
+        """Existing behavior preserved when uv is present but Lliam-GOV isn't a tool install."""
         from lliam_cli.main import _cmd_update_pip
 
         mock_run.return_value = subprocess.CompletedProcess(["uv"], 0, stdout="", stderr="")

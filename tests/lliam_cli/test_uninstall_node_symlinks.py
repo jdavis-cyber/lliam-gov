@@ -3,7 +3,7 @@
 Regression for #34536: the POSIX installer drops node/npm/npx symlinks in
 ~/.local/bin pointing into $HERMES_HOME/node and prepends ~/.local/bin to
 PATH, shadowing an existing nvm. Uninstall must remove those symlinks, but
-only when they still resolve into the Hermes-managed node dir.
+only when they still resolve into the Lliam-GOV-managed node dir.
 """
 
 import os
@@ -96,7 +96,7 @@ def test_handles_missing_local_bin(fake_home):
 
 
 def test_removes_dangling_symlink_into_lliam_node(fake_home):
-    """A link into the Hermes node dir is removed even if the target file is
+    """A link into the Lliam-GOV node dir is removed even if the target file is
     already gone (dangling) \u2014 the link still shadows PATH."""
     lliam_home = fake_home / ".hermes"
     node_bin = lliam_home / "node" / "bin"

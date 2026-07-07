@@ -175,7 +175,7 @@ class TestApplyProfileOverrideLliamHomeGuard:
 
         Docker Desktop's MCP Toolkit uses `docker mcp gateway run --profile ...`.
         When that argv is passed through `lliam-gov mcp add --args`, the early
-        profile pre-parser must not interpret the Docker profile as a Hermes
+        profile pre-parser must not interpret the Docker profile as a Lliam-GOV
         profile.
         """
         lliam_root = tmp_path / ".hermes"
@@ -206,7 +206,7 @@ class TestApplyProfileOverrideLliamHomeGuard:
         assert sys.argv == argv
 
     def test_profile_after_chat_subcommand_is_still_consumed(self, tmp_path, monkeypatch):
-        """Profile flags historically work after normal Hermes subcommands."""
+        """Profile flags historically work after normal Lliam-GOV subcommands."""
         result = _run_apply_profile_override(
             tmp_path,
             monkeypatch,

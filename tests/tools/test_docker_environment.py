@@ -610,7 +610,7 @@ def test_run_command_tags_task_and_profile_labels(monkeypatch):
     """task_id and the active profile name are surfaced as labels so future
     cross-process reuse logic can filter to a specific (task, profile) pair
     without parsing container names. Profile resolution uses the helper that
-    returns ``"default"`` for the root Hermes home."""
+    returns ``"default"`` for the root Lliam-GOV home."""
     monkeypatch.setattr(docker_env, "find_docker", lambda: "/usr/bin/docker")
     monkeypatch.setattr(docker_env, "_get_active_profile_name", lambda: "research-bot")
     calls = _mock_subprocess_run(monkeypatch)

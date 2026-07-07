@@ -452,7 +452,7 @@ class TestUpdateCommandPlatformGate:
 
         # The gate must NOT have rejected us — anything other than the
         # ``platform_not_messaging`` rejection string is acceptable here.
-        # Later steps may legitimately return success ("Starting Hermes
+        # Later steps may legitimately return success ("Starting Lliam-GOV
         # update…") or fail for environment reasons.
         assert "only available from messaging platforms" not in result
 

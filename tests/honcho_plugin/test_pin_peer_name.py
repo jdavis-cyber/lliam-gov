@@ -818,7 +818,7 @@ class TestPinTransition:
 
 
 class TestProfilePeerUniqueness:
-    """Each Hermes profile can pin to its own unique peerName.
+    """Each Lliam-GOV profile can pin to its own unique peerName.
 
     Profile cloning copies host blocks, but operators routinely diverge them
     afterwards (e.g. `lliam-gov -p partner` pinned to a different person's peer).

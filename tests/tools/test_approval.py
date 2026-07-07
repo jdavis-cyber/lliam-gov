@@ -777,7 +777,7 @@ class TestWindowsAbsolutePathFolding:
         assert key is not None
 
     def test_windows_lliam_home_config_folds(self, monkeypatch):
-        # Hermes home nests under the user home on Windows; it must fold before
+        # Lliam-GOV home nests under the user home on Windows; it must fold before
         # the user-home rewrite eats its prefix.
         monkeypatch.setenv("HOME", r"C:\Users\tester")
         monkeypatch.setenv("HERMES_HOME", r"C:\Users\tester\.hermes")

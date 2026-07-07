@@ -92,7 +92,7 @@ def test_list_authenticated_providers_enumerates_dict_format_models(monkeypatch)
 
     Regression: the ``providers:`` dict path previously only accepted
     list-format ``models:`` and silently dropped dict-format entries,
-    even though Hermes's own writer and downstream readers use dict format.
+    even though Lliam-GOV's own writer and downstream readers use dict format.
     """
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr("lliam_cli.providers.HERMES_OVERLAYS", {})
@@ -394,7 +394,7 @@ def test_list_authenticated_providers_accepts_base_url_and_singular_model(monkey
     legacy ``api`` + ``default_model`` shape.
 
     Regression: section 3 previously only read ``api``/``url`` and
-    ``default_model``, so new-shape entries written by Hermes's own writer
+    ``default_model``, so new-shape entries written by Lliam-GOV's own writer
     surfaced with empty ``api_url`` and no default.
     """
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
