@@ -132,7 +132,7 @@ class TestIgnoreRulesEnvGate:
         # The full __init__ pulls in provider/auth/session DB, so we cheat:
         # create the object via object.__new__ and manually run the assignment
         # the same way the real constructor does.
-        obj = object.__new__(cli.HermesCLI)
+        obj = object.__new__(cli.LliamCLI)
         # Replicate the exact logic from cli.py HermesCLI.__init__:
         ignore_rules = False  # constructor default
         obj.ignore_rules = ignore_rules or os.environ.get("HERMES_IGNORE_RULES") == "1"
@@ -142,7 +142,7 @@ class TestIgnoreRulesEnvGate:
     def test_constructor_flag_alone_enables_ignore_rules(self, monkeypatch):
         monkeypatch.delenv("HERMES_IGNORE_RULES", raising=False)
         import cli
-        obj = object.__new__(cli.HermesCLI)
+        obj = object.__new__(cli.LliamCLI)
         ignore_rules = True  # constructor argument
         obj.ignore_rules = ignore_rules or os.environ.get("HERMES_IGNORE_RULES") == "1"
         assert obj.ignore_rules is True
@@ -150,7 +150,7 @@ class TestIgnoreRulesEnvGate:
     def test_neither_flag_nor_env_leaves_rules_enabled(self, monkeypatch):
         monkeypatch.delenv("HERMES_IGNORE_RULES", raising=False)
         import cli
-        obj = object.__new__(cli.HermesCLI)
+        obj = object.__new__(cli.LliamCLI)
         ignore_rules = False
         obj.ignore_rules = ignore_rules or os.environ.get("HERMES_IGNORE_RULES") == "1"
         assert obj.ignore_rules is False

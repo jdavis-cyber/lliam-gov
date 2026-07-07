@@ -56,8 +56,8 @@ def _make_cli(tool_progress="all", verbose=_UNSET):
         with patch.object(mod, "get_tool_definitions", return_value=[]), \
              patch.dict(mod.__dict__, {"CLI_CONFIG": _clean_config}):
             if verbose is _UNSET:
-                return mod.HermesCLI()
-            return mod.HermesCLI(verbose=verbose)
+                return mod.LliamCLI()
+            return mod.LliamCLI(verbose=verbose)
 
 
 class TestToolProgressScrollback:

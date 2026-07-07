@@ -24,13 +24,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import cli as cli_mod
-from cli import HermesCLI
+from cli import LliamCLI
 
 
 @pytest.fixture
 def bare_cli():
     """A HermesCLI with no __init__ — we only exercise the recovery helper."""
-    return object.__new__(HermesCLI)
+    return object.__new__(LliamCLI)
 
 
 class TestRecoverTerminalAfterInterrupt:
@@ -93,7 +93,7 @@ class TestFinallyBlockWiring:
     """
 
     def test_recovery_is_invoked_behind_interrupt_guard(self):
-        src = inspect.getsource(HermesCLI.run)
+        src = inspect.getsource(LliamCLI.run)
         # The recovery call must be gated on _last_turn_interrupted so it only
         # fires after an actual interrupt, not on every normal turn.
         guard = re.search(
@@ -108,5 +108,5 @@ class TestFinallyBlockWiring:
         )
 
     def test_recovery_helper_exists(self):
-        assert hasattr(HermesCLI, "_recover_terminal_after_interrupt")
-        assert callable(HermesCLI._recover_terminal_after_interrupt)
+        assert hasattr(LliamCLI, "_recover_terminal_after_interrupt")
+        assert callable(LliamCLI._recover_terminal_after_interrupt)

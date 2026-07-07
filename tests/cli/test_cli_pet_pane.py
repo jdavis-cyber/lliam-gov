@@ -14,7 +14,7 @@ import pytest
 from agent.pet import store
 from agent.pet.constants import FRAME_H, FRAME_W
 from agent.pet.render import PetRenderer
-from cli import HermesCLI
+from cli import LliamCLI
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ def boba_like(tmp_path, monkeypatch):
 
 
 def _make_cli():
-    cli_obj = HermesCLI.__new__(HermesCLI)
+    cli_obj = LliamCLI.__new__(LliamCLI)
     cli_obj._app = None
     cli_obj._pet_lock = threading.Lock()
     cli_obj._pet_enabled = False

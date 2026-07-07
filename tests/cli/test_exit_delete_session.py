@@ -15,8 +15,8 @@ def _make_cli():
     Uses ``__new__`` to skip the heavy __init__; only sets the attributes
     the /exit branch touches.
     """
-    from cli import HermesCLI
-    cli = HermesCLI.__new__(HermesCLI)
+    from cli import LliamCLI
+    cli = LliamCLI.__new__(LliamCLI)
     cli.config = {}
     cli.console = MagicMock()
     cli.agent = None

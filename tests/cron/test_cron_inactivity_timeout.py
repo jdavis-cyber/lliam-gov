@@ -304,8 +304,8 @@ class TestSysPathOrdering:
     def test_lliam_time_importable(self):
         """lliam_time should be importable when cron.scheduler loads."""
         # This import would fail if sys.path.insert comes after the import
-        from cron.scheduler import _hermes_now
-        assert callable(_hermes_now)
+        from cron.scheduler import _lliam_now
+        assert callable(_lliam_now)
 
     def test_lliam_constants_importable(self):
         """lliam_constants should be importable from cron context."""

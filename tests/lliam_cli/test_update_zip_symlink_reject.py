@@ -98,9 +98,9 @@ def test_update_via_zip_accepts_normal_member(tmp_path, monkeypatch, capsys):
     fake_root = tmp_path / "install_dir"
     fake_root.mkdir()
 
-    from lliam_cli import main as hermes_main
+    from lliam_cli import main as lliam_main
 
-    monkeypatch.setattr(hermes_main, "PROJECT_ROOT", fake_root)
+    monkeypatch.setattr(lliam_main, "PROJECT_ROOT", fake_root)
 
     args = type("Args", (), {})()
 
@@ -118,7 +118,7 @@ def test_update_via_zip_accepts_normal_member(tmp_path, monkeypatch, capsys):
          patch("subprocess.check_call"):
         fake_run.return_value = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
         try:
-            hermes_main._update_via_zip(args)
+            lliam_main._update_via_zip(args)
         except SystemExit:
             pass
 

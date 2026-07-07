@@ -14,7 +14,7 @@ def _make_cli():
     """Minimal HermesCLI shell exposing prompt fallback helpers."""
     import cli as cli_mod
 
-    obj = object.__new__(cli_mod.HermesCLI)
+    obj = object.__new__(cli_mod.LliamCLI)
     obj._app = MagicMock()
     obj._status_bar_visible = True
     return obj

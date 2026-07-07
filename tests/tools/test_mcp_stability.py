@@ -503,8 +503,8 @@ class TestMCPReloadTimeout:
         # by checking that _check_config_mcp_changes doesn't call
         # _reload_mcp directly (it uses a thread now)
         import inspect
-        from cli import HermesCLI
-        source = inspect.getsource(HermesCLI._check_config_mcp_changes)
+        from cli import LliamCLI
+        source = inspect.getsource(LliamCLI._check_config_mcp_changes)
         # The fix adds threading.Thread for _reload_mcp
         assert "Thread" in source or "thread" in source.lower(), \
             "_check_config_mcp_changes should use a thread for _reload_mcp"

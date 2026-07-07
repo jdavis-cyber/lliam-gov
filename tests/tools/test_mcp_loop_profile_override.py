@@ -72,9 +72,9 @@ def test_oauth_token_paths_follow_override(tmp_path, monkeypatch, mcp_loop):
     monkeypatch.setenv("HERMES_HOME", str(process_home))
 
     async def token_path():
-        from tools.mcp_oauth import HermesTokenStorage
+        from tools.mcp_oauth import LliamTokenStorage
 
-        return str(HermesTokenStorage("probe-srv")._tokens_path())
+        return str(LliamTokenStorage("probe-srv")._tokens_path())
 
     token = set_lliam_home_override(str(profile_home))
     try:

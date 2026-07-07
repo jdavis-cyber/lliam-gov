@@ -54,9 +54,9 @@ class TestSetTokensAbsoluteExpiry:
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
         from mcp.shared.auth import OAuthToken
 
-        from tools.mcp_oauth import HermesTokenStorage
+        from tools.mcp_oauth import LliamTokenStorage
 
-        storage = HermesTokenStorage("srv")
+        storage = LliamTokenStorage("srv")
         before = time.time()
         asyncio.run(
             storage.set_tokens(
@@ -87,9 +87,9 @@ class TestSetTokensAbsoluteExpiry:
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
         from mcp.shared.auth import OAuthToken
 
-        from tools.mcp_oauth import HermesTokenStorage
+        from tools.mcp_oauth import LliamTokenStorage
 
-        storage = HermesTokenStorage("srv")
+        storage = LliamTokenStorage("srv")
         asyncio.run(
             storage.set_tokens(
                 OAuthToken(
@@ -114,9 +114,9 @@ class TestGetTokensReconstructsExpiresIn:
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
         from mcp.shared.auth import OAuthToken
 
-        from tools.mcp_oauth import HermesTokenStorage
+        from tools.mcp_oauth import LliamTokenStorage
 
-        storage = HermesTokenStorage("srv")
+        storage = LliamTokenStorage("srv")
         asyncio.run(
             storage.set_tokens(
                 OAuthToken(
@@ -142,7 +142,7 @@ class TestGetTokensReconstructsExpiresIn:
     ):
         """An already-expired token reloaded from disk must report expires_in=0."""
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-        from tools.mcp_oauth import HermesTokenStorage, _get_token_dir
+        from tools.mcp_oauth import LliamTokenStorage, _get_token_dir
 
         token_dir = _get_token_dir()
         token_dir.mkdir(parents=True, exist_ok=True)
@@ -159,7 +159,7 @@ class TestGetTokensReconstructsExpiresIn:
             )
         )
 
-        storage = HermesTokenStorage("srv")
+        storage = LliamTokenStorage("srv")
         reloaded = asyncio.run(storage.get_tokens())
         assert reloaded is not None
         assert reloaded.expires_in == 0, (
@@ -179,7 +179,7 @@ class TestGetTokensReconstructsExpiresIn:
         legacy-format file (mtime = now) keeps most of its TTL.
         """
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-        from tools.mcp_oauth import HermesTokenStorage, _get_token_dir
+        from tools.mcp_oauth import LliamTokenStorage, _get_token_dir
 
         token_dir = _get_token_dir()
         token_dir.mkdir(parents=True, exist_ok=True)
@@ -201,7 +201,7 @@ class TestGetTokensReconstructsExpiresIn:
 
         os.utime(legacy_path, (stale_time, stale_time))
 
-        storage = HermesTokenStorage("srv")
+        storage = LliamTokenStorage("srv")
         reloaded = asyncio.run(storage.get_tokens())
         assert reloaded is not None
         assert reloaded.expires_in == 0, (
@@ -229,13 +229,13 @@ async def test_initialize_seeds_token_expiry_time_from_stored_tokens(
     from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
     from pydantic import AnyUrl
 
-    from tools.mcp_oauth import HermesTokenStorage
+    from tools.mcp_oauth import LliamTokenStorage
     from tools.mcp_oauth_manager import _HERMES_PROVIDER_CLS, reset_manager_for_tests
 
     assert _HERMES_PROVIDER_CLS is not None
     reset_manager_for_tests()
 
-    storage = HermesTokenStorage("srv")
+    storage = LliamTokenStorage("srv")
     await storage.set_tokens(
         OAuthToken(
             access_token="a",
@@ -294,7 +294,7 @@ async def test_initialize_flags_expired_token_as_invalid(tmp_path, monkeypatch):
     from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata
     from pydantic import AnyUrl
 
-    from tools.mcp_oauth import HermesTokenStorage, _get_token_dir
+    from tools.mcp_oauth import LliamTokenStorage, _get_token_dir
     from tools.mcp_oauth_manager import _HERMES_PROVIDER_CLS, reset_manager_for_tests
 
     assert _HERMES_PROVIDER_CLS is not None
@@ -315,7 +315,7 @@ async def test_initialize_flags_expired_token_as_invalid(tmp_path, monkeypatch):
         )
     )
 
-    storage = HermesTokenStorage("srv")
+    storage = LliamTokenStorage("srv")
     await storage.set_client_info(
         OAuthClientInformationFull(
             client_id="test-client",
@@ -390,13 +390,13 @@ async def test_initialize_prefetches_oauth_metadata_when_missing(
     )
     from pydantic import AnyUrl
 
-    from tools.mcp_oauth import HermesTokenStorage
+    from tools.mcp_oauth import LliamTokenStorage
     from tools.mcp_oauth_manager import _HERMES_PROVIDER_CLS, reset_manager_for_tests
 
     assert _HERMES_PROVIDER_CLS is not None
     reset_manager_for_tests()
 
-    storage = HermesTokenStorage("srv")
+    storage = LliamTokenStorage("srv")
     await storage.set_tokens(
         OAuthToken(
             access_token="a",
@@ -503,7 +503,7 @@ async def test_initialize_skips_prefetch_when_no_tokens(tmp_path, monkeypatch):
     from pydantic import AnyUrl
 
     from tools.mcp_oauth_manager import _HERMES_PROVIDER_CLS, reset_manager_for_tests
-    from tools.mcp_oauth import HermesTokenStorage
+    from tools.mcp_oauth import LliamTokenStorage
 
     assert _HERMES_PROVIDER_CLS is not None
     reset_manager_for_tests()
@@ -525,7 +525,7 @@ async def test_initialize_skips_prefetch_when_no_tokens(tmp_path, monkeypatch):
 
     monkeypatch.setattr(real_httpx, "AsyncClient", patched)
 
-    storage = HermesTokenStorage("srv")  # empty — no tokens on disk
+    storage = LliamTokenStorage("srv")  # empty — no tokens on disk
     metadata = OAuthClientMetadata(
         redirect_uris=[AnyUrl("http://127.0.0.1:12345/callback")],
         client_name="Hermes Agent",

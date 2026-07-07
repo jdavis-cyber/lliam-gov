@@ -214,7 +214,7 @@ def test_cli_show_credits_non_interactive_renders_text_not_modal(monkeypatch, ca
     would survive). Regression for that exact failure.
     """
     import agent.account_usage as account_usage
-    from cli import HermesCLI
+    from cli import LliamCLI
 
     monkeypatch.setattr(
         account_usage,
@@ -228,14 +228,14 @@ def test_cli_show_credits_non_interactive_renders_text_not_modal(monkeypatch, ca
         ),
     )
 
-    cli = HermesCLI.__new__(HermesCLI)
+    cli = LliamCLI.__new__(LliamCLI)
     cli._app = None  # non-interactive, like the slash worker
 
     # Must NOT call the modal in this context.
     def _boom_modal(*a, **k):
         raise AssertionError("modal must not run without a live app")
 
-    monkeypatch.setattr(HermesCLI, "_prompt_text_input_modal", _boom_modal, raising=False)
+    monkeypatch.setattr(LliamCLI, "_prompt_text_input_modal", _boom_modal, raising=False)
 
     cli._show_credits()
 
@@ -249,12 +249,12 @@ def test_cli_show_credits_non_interactive_renders_text_not_modal(monkeypatch, ca
 
 def test_cli_show_credits_logged_out(monkeypatch, capsys):
     import agent.account_usage as account_usage
-    from cli import HermesCLI
+    from cli import LliamCLI
 
     monkeypatch.setattr(
         account_usage, "build_credits_view", lambda *a, **k: CreditsView(logged_in=False)
     )
-    cli = HermesCLI.__new__(HermesCLI)
+    cli = LliamCLI.__new__(LliamCLI)
     cli._app = None
     cli._show_credits()
     assert "Not logged into Nous Portal" in capsys.readouterr().out

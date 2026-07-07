@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 def _make_cli(config_overrides=None, env_overrides=None, **kwargs):
     """Create a HermesCLI instance with minimal mocking."""
     import cli as _cli_mod
-    from cli import HermesCLI
+    from cli import LliamCLI
 
     _clean_config = {
         "model": {
@@ -45,7 +45,7 @@ def _make_cli(config_overrides=None, env_overrides=None, **kwargs):
         patch.dict("os.environ", clean_env, clear=False),
         patch.dict(_cli_mod.__dict__, {"CLI_CONFIG": _clean_config}),
     ):
-        return HermesCLI(**kwargs)
+        return LliamCLI(**kwargs)
 
 
 # ── Sample conversation histories for tests ──────────────────────────

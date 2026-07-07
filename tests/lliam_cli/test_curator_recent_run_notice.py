@@ -31,12 +31,12 @@ def curator_env(tmp_path, monkeypatch, capsys):
     importlib.reload(lliam_constants)
     from agent import curator
     importlib.reload(curator)
-    from lliam_cli import main as hermes_main
-    importlib.reload(hermes_main)
+    from lliam_cli import main as lliam_main
+    importlib.reload(lliam_main)
 
     yield {
         "curator": curator,
-        "main": hermes_main,
+        "main": lliam_main,
         "capsys": capsys,
     }
 

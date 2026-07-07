@@ -154,18 +154,18 @@ def _print_version() -> None:
 
 def _run_check() -> None:
     import acp  # noqa: F401
-    from acp_adapter.server import HermesACPAgent  # noqa: F401
+    from acp_adapter.server import LliamACPAgent  # noqa: F401
 
     print("Hermes ACP check OK")
 
 
 def _run_setup() -> None:
-    from lliam_cli.main import main as hermes_main
+    from lliam_cli.main import main as lliam_main
 
     old_argv = sys.argv[:]
     try:
         sys.argv = [old_argv[0] if old_argv else "hermes", "model"]
-        hermes_main()
+        lliam_main()
     finally:
         sys.argv = old_argv
 
@@ -244,7 +244,7 @@ def main(argv: list[str] | None = None) -> None:
         sys.path.insert(0, project_root)
 
     import acp
-    from .server import HermesACPAgent
+    from .server import LliamACPAgent
 
     # MCP tool discovery from config.yaml — run before asyncio.run() so
     # it's safe to use blocking waits.  (ACP also registers per-session
@@ -257,7 +257,7 @@ def main(argv: list[str] | None = None) -> None:
     except Exception:
         logger.debug("MCP tool discovery failed at ACP startup", exc_info=True)
 
-    agent = HermesACPAgent()
+    agent = LliamACPAgent()
     try:
         asyncio.run(acp.run_agent(agent, use_unstable_protocol=True))
     except KeyboardInterrupt:

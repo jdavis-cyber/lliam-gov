@@ -22,7 +22,7 @@ from unittest.mock import patch
 
 import pytest
 
-from cli import HermesCLI
+from cli import LliamCLI
 
 
 def _bound(fn, instance):
@@ -45,14 +45,14 @@ def _make_self(modal_response):
         _prompt_text_input_modal=lambda **_kw: modal_response,
     )
     self_._normalize_slash_confirm_choice = _bound(
-        HermesCLI._normalize_slash_confirm_choice, self_
+        LliamCLI._normalize_slash_confirm_choice, self_
     )
     return self_
 
 
 def _call(self_):
     """Invoke the real ``_handle_update_command`` on the stub."""
-    return HermesCLI._handle_update_command(self_)
+    return LliamCLI._handle_update_command(self_)
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ def test_managed_install_refuses_and_does_not_set_pending_relaunch(capsys):
         _prompt_text_input_modal=lambda **_kw: pytest.fail("Modal should not be called"),
     )
     self_._normalize_slash_confirm_choice = _bound(
-        HermesCLI._normalize_slash_confirm_choice, self_
+        LliamCLI._normalize_slash_confirm_choice, self_
     )
     with (
         patch("lliam_cli.config.is_managed", return_value=True),

@@ -1650,8 +1650,8 @@ class TestGithubProviderLabeling:
 
 def _make_index_source(skills):
     """Build a HermesIndexSource pre-loaded with a fixed skill list."""
-    from tools.skills_hub import HermesIndexSource
-    src = HermesIndexSource(auth=GitHubAuth())
+    from tools.skills_hub import LliamIndexSource
+    src = LliamIndexSource(auth=GitHubAuth())
     src._index = {"skills": skills}
     src._loaded = True
     return src

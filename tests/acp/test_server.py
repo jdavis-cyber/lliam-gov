@@ -36,7 +36,7 @@ from acp.schema import (
     UserMessageChunk,
 )
 from acp_adapter.auth import TERMINAL_SETUP_AUTH_METHOD_ID
-from acp_adapter.server import HermesACPAgent, HERMES_VERSION
+from acp_adapter.server import LliamACPAgent, HERMES_VERSION
 from acp_adapter.session import SessionManager
 from lliam_state import SessionDB
 
@@ -50,7 +50,7 @@ def mock_manager():
 @pytest.fixture()
 def agent(mock_manager):
     """HermesACPAgent backed by a mock session manager."""
-    return HermesACPAgent(session_manager=mock_manager)
+    return LliamACPAgent(session_manager=mock_manager)
 
 
 @pytest.mark.asyncio
@@ -242,7 +242,7 @@ class TestSessionOps:
         manager = SessionManager(
             agent_factory=lambda: SimpleNamespace(model="gpt-5.4", provider="openai-codex")
         )
-        acp_agent = HermesACPAgent(session_manager=manager)
+        acp_agent = LliamACPAgent(session_manager=manager)
 
         with patch(
             "lliam_cli.models.curated_models_for_provider",
@@ -984,7 +984,7 @@ class TestSessionConfiguration:
         manager = SessionManager(db=SessionDB(tmp_path / "state.db"))
 
         with patch("run_agent.AIAgent", side_effect=fake_agent):
-            acp_agent = HermesACPAgent(session_manager=manager)
+            acp_agent = LliamACPAgent(session_manager=manager)
             state = manager.create_session(cwd="/tmp")
             result = await acp_agent.set_session_model(
                 model_id="anthropic:claude-sonnet-4-6",
@@ -1689,7 +1689,7 @@ class TestSlashCommands:
         manager = SessionManager(db=SessionDB(tmp_path / "state.db"))
 
         with patch("run_agent.AIAgent", side_effect=fake_agent):
-            acp_agent = HermesACPAgent(session_manager=manager)
+            acp_agent = LliamACPAgent(session_manager=manager)
             state = manager.create_session(cwd="/tmp")
             result = acp_agent._cmd_model("anthropic:claude-sonnet-4-6", state)
 

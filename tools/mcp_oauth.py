@@ -244,7 +244,7 @@ def _write_json(path: Path, data: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-class HermesTokenStorage:
+class LliamTokenStorage:
     """Persist OAuth tokens and client registration to JSON files.
 
     File layout::
@@ -690,7 +690,7 @@ def _paste_callback_reader(result: dict) -> None:
 
 def remove_oauth_tokens(server_name: str) -> None:
     """Delete stored OAuth tokens and client info for a server."""
-    storage = HermesTokenStorage(server_name)
+    storage = LliamTokenStorage(server_name)
     storage.remove()
     logger.info("OAuth tokens removed for '%s'", server_name)
 
@@ -756,7 +756,7 @@ def _build_client_metadata(cfg: dict) -> "OAuthClientMetadata":
 
 
 def _maybe_preregister_client(
-    storage: "HermesTokenStorage",
+    storage: "LliamTokenStorage",
     cfg: dict,
     client_metadata: "OAuthClientMetadata",
 ) -> None:
@@ -815,7 +815,7 @@ def build_oauth_auth(
         return None
 
     cfg = dict(oauth_config or {})  # copy — we mutate _resolved_port
-    storage = HermesTokenStorage(server_name)
+    storage = LliamTokenStorage(server_name)
 
     if not _is_interactive() and not storage.has_cached_tokens():
         raise OAuthNonInteractiveError(

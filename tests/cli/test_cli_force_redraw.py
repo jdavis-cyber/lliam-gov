@@ -14,13 +14,13 @@ from unittest.mock import MagicMock
 import pytest
 
 import cli as cli_mod
-from cli import HermesCLI
+from cli import LliamCLI
 
 
 @pytest.fixture
 def bare_cli():
     """A HermesCLI with no __init__ — we only exercise the redraw helper."""
-    cli = object.__new__(HermesCLI)
+    cli = object.__new__(LliamCLI)
     return cli
 
 

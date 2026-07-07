@@ -15,7 +15,7 @@ import time
 import psutil
 
 import cli as cli_mod
-from cli import HermesCLI
+from cli import LliamCLI
 from rich.console import Console
 
 # Env-overridable so the integration test can drive sub-second timing.
@@ -64,7 +64,7 @@ def _start_parent_death_watchdog(original_ppid, parent_create_time) -> None:
     threading.Thread(target=_loop, daemon=True).start()
 
 
-def _run(cli: HermesCLI, command: str) -> str:
+def _run(cli: LliamCLI, command: str) -> str:
     cmd = (command or "").strip()
     if not cmd:
         return ""
@@ -111,7 +111,7 @@ def main():
     _start_parent_death_watchdog(orig_ppid, parent_create_time)
 
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-        cli = HermesCLI(model=args.model or None, compact=True, resume=args.session_key, verbose=False)
+        cli = LliamCLI(model=args.model or None, compact=True, resume=args.session_key, verbose=False)
 
     for raw in sys.stdin:
         line = raw.strip()

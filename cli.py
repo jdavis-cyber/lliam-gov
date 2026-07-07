@@ -3428,7 +3428,7 @@ def save_config_value(key_path: str, value: any) -> bool:
 # HermesCLI Class
 # ============================================================================
 
-class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
+class LliamCLI(CLIAgentSetupMixin, CLICommandsMixin):
     """
     Interactive CLI for the Hermes Agent.
     
@@ -5548,7 +5548,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             if self.show_timestamps:
                 label = f"{label} {datetime.now().strftime('%H:%M')}"
             w = self._scrollback_box_width()
-            fill = w - 2 - HermesCLI._status_bar_display_width(label)
+            fill = w - 2 - LliamCLI._status_bar_display_width(label)
             _cprint(f"\n{_ACCENT}╭─{label}{'─' * max(fill - 1, 0)}╮{_RST}")
 
         self._stream_buf += text
@@ -11759,7 +11759,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                         label = " ⚕ Hermes "
                         if self.show_timestamps:
                             label = f"{label}{datetime.now().strftime('%H:%M')} "
-                        fill = w - 2 - HermesCLI._status_bar_display_width(label)
+                        fill = w - 2 - LliamCLI._status_bar_display_width(label)
                         _cprint(f"\n{_ACCENT}╭─{label}{'─' * max(fill - 1, 0)}╮{_RST}")
                     _cprint(f"{_STREAM_PAD}{sentence.rstrip()}")
 
@@ -14280,7 +14280,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                 term_rows = get_app().output.get_size().rows
             except Exception:
                 term_rows = shutil.get_terminal_size((100, 24)).lines
-            scroll_offset, visible = HermesCLI._compute_model_picker_viewport(
+            scroll_offset, visible = LliamCLI._compute_model_picker_viewport(
                 selected, state.get("_scroll_offset", 0), len(choices), term_rows,
             )
             state["_scroll_offset"] = scroll_offset
@@ -15095,7 +15095,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
 # Main Entry Point
 # ============================================================================
 
-def _run_kanban_goal_loop_q(cli: "HermesCLI", first_response: str) -> None:
+def _run_kanban_goal_loop_q(cli: "LliamCLI", first_response: str) -> None:
     """Drive a kanban goal_mode worker through the Ralph-style goal loop.
 
     Called from the quiet single-query path AFTER the worker's first turn,
@@ -15331,7 +15331,7 @@ def main(
     parsed_skills = _parse_skills_argument(skills)
 
     # Create CLI instance
-    cli = HermesCLI(
+    cli = LliamCLI(
         model=model,
         toolsets=toolsets_list,
         provider=provider,

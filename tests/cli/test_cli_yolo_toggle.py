@@ -30,7 +30,7 @@ from unittest.mock import patch
 import pytest
 
 import tools.approval as approval_module
-from cli import HermesCLI
+from cli import LliamCLI
 
 
 SESSION_KEY = "test-cli-yolo-session"
@@ -76,16 +76,16 @@ class TestToggleYoloIsSessionScoped:
         assert approval_module.is_session_yolo_enabled(SESSION_KEY) is False
 
         with patch("cli._cprint"):
-            HermesCLI._toggle_yolo(stand_in)
+            LliamCLI._toggle_yolo(stand_in)
 
         assert approval_module.is_session_yolo_enabled(SESSION_KEY) is True
 
     def test_toggle_yolo_disables_session_bypass_on_second_call(self):
         stand_in = _make_stand_in()
         with patch("cli._cprint"):
-            HermesCLI._toggle_yolo(stand_in)  # ON
+            LliamCLI._toggle_yolo(stand_in)  # ON
             assert approval_module.is_session_yolo_enabled(SESSION_KEY) is True
-            HermesCLI._toggle_yolo(stand_in)  # OFF
+            LliamCLI._toggle_yolo(stand_in)  # OFF
             assert approval_module.is_session_yolo_enabled(SESSION_KEY) is False
 
     def test_toggle_yolo_does_not_mutate_env_var(self):
@@ -94,7 +94,7 @@ class TestToggleYoloIsSessionScoped:
         (subprocesses, status bars wired to the env, the relaunch flag list)."""
         stand_in = _make_stand_in()
         with patch("cli._cprint"):
-            HermesCLI._toggle_yolo(stand_in)
+            LliamCLI._toggle_yolo(stand_in)
 
         assert os.environ.get("HERMES_YOLO_MODE") is None
 
@@ -105,7 +105,7 @@ class TestToggleYoloIsSessionScoped:
         that resolves against the default key."""
         stand_in = _make_stand_in(session_id="")
         with patch("cli._cprint"):
-            HermesCLI._toggle_yolo(stand_in)
+            LliamCLI._toggle_yolo(stand_in)
 
         assert approval_module.is_session_yolo_enabled("default") is True
 
@@ -117,7 +117,7 @@ class TestToggleYoloIsSessionScoped:
 
         try:
             with patch("cli._cprint"):
-                HermesCLI._toggle_yolo(cli_a)
+                LliamCLI._toggle_yolo(cli_a)
 
             assert approval_module.is_session_yolo_enabled("session-yolo-a") is True
             assert approval_module.is_session_yolo_enabled("session-yolo-b") is False
@@ -133,17 +133,17 @@ class TestIsSessionYoloActiveHelper:
     def test_helper_reflects_toggle(self):
         stand_in = _make_stand_in()
 
-        assert HermesCLI._is_session_yolo_active(stand_in) is False
+        assert LliamCLI._is_session_yolo_active(stand_in) is False
 
         with patch("cli._cprint"):
-            HermesCLI._toggle_yolo(stand_in)
+            LliamCLI._toggle_yolo(stand_in)
 
-        assert HermesCLI._is_session_yolo_active(stand_in) is True
+        assert LliamCLI._is_session_yolo_active(stand_in) is True
 
         with patch("cli._cprint"):
-            HermesCLI._toggle_yolo(stand_in)
+            LliamCLI._toggle_yolo(stand_in)
 
-        assert HermesCLI._is_session_yolo_active(stand_in) is False
+        assert LliamCLI._is_session_yolo_active(stand_in) is False
 
     def test_helper_honors_frozen_yolo_mode(self):
         """``hermes --yolo`` sets ``HERMES_YOLO_MODE`` before tool imports, so
@@ -152,7 +152,7 @@ class TestIsSessionYoloActiveHelper:
         stand_in = _make_stand_in()
 
         with patch.object(approval_module, "_YOLO_MODE_FROZEN", True):
-            assert HermesCLI._is_session_yolo_active(stand_in) is True
+            assert LliamCLI._is_session_yolo_active(stand_in) is True
 
 
 class TestToggleYoloEndToEnd:
@@ -165,7 +165,7 @@ class TestToggleYoloEndToEnd:
         token = approval_module.set_current_session_key(SESSION_KEY)
         try:
             with patch("cli._cprint"):
-                HermesCLI._toggle_yolo(stand_in)  # YOLO ON
+                LliamCLI._toggle_yolo(stand_in)  # YOLO ON
 
             result = approval_module.check_all_command_guards(
                 "rm -rf /tmp/scratch-xyzzy", "local",
@@ -190,7 +190,7 @@ class TestIsSessionYoloActiveAttrSafety:
         from types import SimpleNamespace
         no_attr = SimpleNamespace()
         # Must return False, not raise.
-        assert HermesCLI._is_session_yolo_active(no_attr) is False
+        assert LliamCLI._is_session_yolo_active(no_attr) is False
 
 
 class TestSessionRotationTransfersYolo:
@@ -206,7 +206,7 @@ class TestSessionRotationTransfersYolo:
             approval_module.enable_session_yolo("old-id")
             assert approval_module.is_session_yolo_enabled("old-id") is True
 
-            HermesCLI._transfer_session_yolo(stand_in, "old-id", "new-id")
+            LliamCLI._transfer_session_yolo(stand_in, "old-id", "new-id")
 
             assert approval_module.is_session_yolo_enabled("new-id") is True
             assert approval_module.is_session_yolo_enabled("old-id") is False
@@ -217,7 +217,7 @@ class TestSessionRotationTransfersYolo:
     def test_transfer_is_noop_when_yolo_was_off(self):
         stand_in = _make_stand_in(session_id="old-id")
         try:
-            HermesCLI._transfer_session_yolo(stand_in, "old-id", "new-id")
+            LliamCLI._transfer_session_yolo(stand_in, "old-id", "new-id")
             assert approval_module.is_session_yolo_enabled("new-id") is False
             assert approval_module.is_session_yolo_enabled("old-id") is False
         finally:
@@ -228,7 +228,7 @@ class TestSessionRotationTransfersYolo:
         stand_in = _make_stand_in(session_id="same-id")
         try:
             approval_module.enable_session_yolo("same-id")
-            HermesCLI._transfer_session_yolo(stand_in, "same-id", "same-id")
+            LliamCLI._transfer_session_yolo(stand_in, "same-id", "same-id")
             # Must NOT have been disabled — same-id == same-id is a no-op,
             # not a "disable then re-enable" round-trip.
             assert approval_module.is_session_yolo_enabled("same-id") is True
@@ -239,8 +239,8 @@ class TestSessionRotationTransfersYolo:
         stand_in = _make_stand_in(session_id="x")
         # Both directions of empty input should be safe no-ops; nothing
         # to transfer from "" / to "".
-        HermesCLI._transfer_session_yolo(stand_in, "", "new")
-        HermesCLI._transfer_session_yolo(stand_in, "old", "")
+        LliamCLI._transfer_session_yolo(stand_in, "", "new")
+        LliamCLI._transfer_session_yolo(stand_in, "old", "")
         # Neither key should have been touched.
         assert approval_module.is_session_yolo_enabled("new") is False
         assert approval_module.is_session_yolo_enabled("old") is False

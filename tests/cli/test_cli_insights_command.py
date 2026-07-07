@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from cli import HermesCLI
+from cli import LliamCLI
 
 
 class _InsightsEngineStub:
@@ -18,7 +18,7 @@ class _InsightsEngineStub:
 
 
 def _run_show_insights(command: str):
-    cli_obj = HermesCLI.__new__(HermesCLI)
+    cli_obj = LliamCLI.__new__(LliamCLI)
     db = MagicMock()
     _InsightsEngineStub.calls = []
     with patch("lliam_state.SessionDB", return_value=db), \

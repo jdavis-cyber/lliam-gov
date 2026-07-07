@@ -17,9 +17,9 @@ def _make_voice_cli(**overrides):
     needed.  Only the voice state attributes (from __init__ lines 3749-3758)
     are populated.
     """
-    from cli import HermesCLI
+    from cli import LliamCLI
 
-    cli = HermesCLI.__new__(HermesCLI)
+    cli = LliamCLI.__new__(LliamCLI)
     cli._voice_lock = threading.Lock()
     cli._voice_mode = False
     cli._voice_tts = False
@@ -594,9 +594,9 @@ class TestDisableVoiceModeStopsTTS:
     def test_disable_voice_mode_calls_stop_playback(self):
         """Source check: _disable_voice_mode must call stop_playback()."""
         import inspect
-        from cli import HermesCLI
+        from cli import LliamCLI
 
-        source = inspect.getsource(HermesCLI._disable_voice_mode)
+        source = inspect.getsource(LliamCLI._disable_voice_mode)
         assert "stop_playback" in source, (
             "_disable_voice_mode must call stop_playback()"
         )

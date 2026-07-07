@@ -3634,7 +3634,7 @@ def _load_stale_index_cache() -> Optional[dict]:
     return None
 
 
-class HermesIndexSource(SkillSource):
+class LliamIndexSource(SkillSource):
     """Skill source backed by the centralized Hermes Skills Index.
 
     The index is a JSON catalog published to the docs site and rebuilt
@@ -3836,7 +3836,7 @@ def create_source_router(auth: Optional[GitHubAuth] = None) -> List[SkillSource]
 
     sources: List[SkillSource] = [
         OptionalSkillSource(),        # Official optional skills (highest priority)
-        HermesIndexSource(auth=auth), # Centralized index (search + resolved install paths)
+        LliamIndexSource(auth=auth), # Centralized index (search + resolved install paths)
         SkillsShSource(auth=auth),
         WellKnownSkillSource(),
         UrlSource(),                  # Direct HTTP(S) URL to a SKILL.md file

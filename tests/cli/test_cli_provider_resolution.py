@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from lliam_cli.auth import AuthError
-from lliam_cli import main as hermes_main
+from lliam_cli import main as lliam_main
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +134,7 @@ def test_lliam_cli_init_does_not_eagerly_resolve_runtime_provider(monkeypatch):
     monkeypatch.setattr("lliam_cli.runtime_provider.resolve_runtime_provider", _unexpected_runtime_resolve)
     monkeypatch.setattr("lliam_cli.runtime_provider.format_runtime_provider_error", lambda exc: str(exc))
 
-    shell = cli.HermesCLI(model="gpt-5", compact=True, max_turns=1)
+    shell = cli.LliamCLI(model="gpt-5", compact=True, max_turns=1)
 
     assert shell is not None
     assert calls["count"] == 0
@@ -164,7 +164,7 @@ def test_runtime_resolution_failure_is_not_sticky(monkeypatch):
     monkeypatch.setattr("lliam_cli.runtime_provider.format_runtime_provider_error", lambda exc: str(exc))
     monkeypatch.setattr(cli, "AIAgent", _DummyAgent)
 
-    shell = cli.HermesCLI(model="gpt-5", compact=True, max_turns=1)
+    shell = cli.LliamCLI(model="gpt-5", compact=True, max_turns=1)
 
     assert shell._init_agent() is False
     assert shell._init_agent() is True
@@ -187,7 +187,7 @@ def test_runtime_resolution_rebuilds_agent_on_routing_change(monkeypatch):
     monkeypatch.setattr("lliam_cli.runtime_provider.resolve_runtime_provider", _runtime_resolve)
     monkeypatch.setattr("lliam_cli.runtime_provider.format_runtime_provider_error", lambda exc: str(exc))
 
-    shell = cli.HermesCLI(model="gpt-5", compact=True, max_turns=1)
+    shell = cli.LliamCLI(model="gpt-5", compact=True, max_turns=1)
     shell.provider = "openrouter"
     shell.api_mode = "chat_completions"
     shell.base_url = "https://same-endpoint.example/v1"
@@ -202,7 +202,7 @@ def test_runtime_resolution_rebuilds_agent_on_routing_change(monkeypatch):
 
 def test_cli_turn_routing_uses_primary_when_disabled(monkeypatch):
     cli = _import_cli()
-    shell = cli.HermesCLI(model="gpt-5", compact=True, max_turns=1)
+    shell = cli.LliamCLI(model="gpt-5", compact=True, max_turns=1)
     shell.provider = "openrouter"
     shell.api_mode = "chat_completions"
     shell.base_url = "https://openrouter.ai/api/v1"
@@ -225,7 +225,7 @@ def test_cli_prefers_config_provider_over_stale_env_override(monkeypatch):
     config_copy["model"] = model_copy
     monkeypatch.setattr(cli, "CLI_CONFIG", config_copy)
 
-    shell = cli.HermesCLI(model="fireworks/minimax-m2p5", compact=True, max_turns=1)
+    shell = cli.LliamCLI(model="fireworks/minimax-m2p5", compact=True, max_turns=1)
 
     assert shell.requested_provider == "custom"
 
@@ -260,7 +260,7 @@ def test_codex_provider_replaces_incompatible_default_model(monkeypatch):
         lambda access_token=None: ["gpt-5.2-codex", "gpt-5.1-codex-mini"],
     )
 
-    shell = cli.HermesCLI(compact=True, max_turns=1)
+    shell = cli.LliamCLI(compact=True, max_turns=1)
 
     assert shell._model_is_default is True
     assert shell._ensure_runtime_credentials() is True
@@ -300,7 +300,7 @@ def test_model_flow_nous_prints_subscription_guidance_without_mutating_explicit_
     monkeypatch.setattr("lliam_cli.auth._save_model_choice", lambda model: None)
     monkeypatch.setattr("lliam_cli.auth._update_config_for_provider", lambda provider, url: None)
 
-    hermes_main._model_flow_nous(config, current_model="claude-opus-4-6")
+    lliam_main._model_flow_nous(config, current_model="claude-opus-4-6")
 
     out = capsys.readouterr().out
     assert "Default model set to:" in out
@@ -367,7 +367,7 @@ def test_model_flow_nous_does_not_restore_stale_custom_api_key(tmp_path, monkeyp
         lambda config: None,
     )
 
-    hermes_main._model_flow_nous(stale_config, current_model="glm-5.2")
+    lliam_main._model_flow_nous(stale_config, current_model="glm-5.2")
 
     config = yaml.safe_load(config_path.read_text()) or {}
     model = config.get("model")
@@ -424,7 +424,7 @@ def test_model_flow_openrouter_clears_stale_custom_key(tmp_path, monkeypatch):
     )
     monkeypatch.setattr("lliam_cli.auth.deactivate_provider", lambda: None)
 
-    hermes_main._model_flow_openrouter({}, current_model="glm-5.2")
+    lliam_main._model_flow_openrouter({}, current_model="glm-5.2")
 
     config = yaml.safe_load(config_path.read_text()) or {}
     model = config["model"]
@@ -459,7 +459,7 @@ def test_model_flow_anthropic_clears_stale_custom_key_and_mode(tmp_path, monkeyp
     )
     monkeypatch.setattr("lliam_cli.auth.deactivate_provider", lambda: None)
 
-    hermes_main._model_flow_anthropic({}, current_model="glm-5.2")
+    lliam_main._model_flow_anthropic({}, current_model="glm-5.2")
 
     config = yaml.safe_load(config_path.read_text()) or {}
     model = config["model"]
@@ -517,7 +517,7 @@ def test_model_flow_nous_offers_tool_gateway_prompt_when_unconfigured(monkeypatc
     monkeypatch.setattr("lliam_cli.auth._prompt_model_selection", lambda model_ids, current_model="", pricing=None, **kw: "claude-opus-4-6")
     monkeypatch.setattr("lliam_cli.auth._save_model_choice", lambda model: None)
     monkeypatch.setattr("lliam_cli.auth._update_config_for_provider", lambda provider, url: None)
-    hermes_main._model_flow_nous(config, current_model="claude-opus-4-6")
+    lliam_main._model_flow_nous(config, current_model="claude-opus-4-6")
 
     # The per-tool Tool Gateway checklist was offered.
     assert "title" in captured
@@ -557,7 +557,7 @@ def test_codex_provider_uses_config_model(monkeypatch):
         lambda access_token=None: ["gpt-5.2-codex"],
     )
 
-    shell = cli.HermesCLI(compact=True, max_turns=1)
+    shell = cli.LliamCLI(compact=True, max_turns=1)
 
     assert shell._ensure_runtime_credentials() is True
     assert shell.provider == "openai-codex"
@@ -600,7 +600,7 @@ def test_codex_config_model_not_replaced_by_normalization(monkeypatch):
         lambda access_token=None: ["gpt-5.4", "gpt-5.3-codex"],
     )
 
-    shell = cli.HermesCLI(compact=True, max_turns=1)
+    shell = cli.LliamCLI(compact=True, max_turns=1)
 
     # Config model is NOT the global default — user made a deliberate choice
     assert shell._model_is_default is False
@@ -630,7 +630,7 @@ def test_codex_provider_preserves_explicit_codex_model(monkeypatch):
     monkeypatch.setattr("lliam_cli.runtime_provider.resolve_runtime_provider", _runtime_resolve)
     monkeypatch.setattr("lliam_cli.runtime_provider.format_runtime_provider_error", lambda exc: str(exc))
 
-    shell = cli.HermesCLI(model="gpt-5.1-codex-mini", compact=True, max_turns=1)
+    shell = cli.LliamCLI(model="gpt-5.1-codex-mini", compact=True, max_turns=1)
 
     assert shell._model_is_default is False
     assert shell._ensure_runtime_credentials() is True
@@ -657,7 +657,7 @@ def test_codex_provider_strips_provider_prefix_from_model(monkeypatch):
     monkeypatch.setattr("lliam_cli.runtime_provider.resolve_runtime_provider", _runtime_resolve)
     monkeypatch.setattr("lliam_cli.runtime_provider.format_runtime_provider_error", lambda exc: str(exc))
 
-    shell = cli.HermesCLI(model="openai/gpt-5.3-codex", compact=True, max_turns=1)
+    shell = cli.LliamCLI(model="openai/gpt-5.3-codex", compact=True, max_turns=1)
 
     assert shell._ensure_runtime_credentials() is True
     assert shell.model == "gpt-5.3-codex"
@@ -678,10 +678,10 @@ def test_cmd_model_falls_back_to_auto_on_invalid_provider(monkeypatch, capsys):
         return "openrouter"
 
     monkeypatch.setattr("lliam_cli.auth.resolve_provider", _resolve_provider)
-    monkeypatch.setattr(hermes_main, "_prompt_provider_choice", lambda choices, **kwargs: len(choices) - 1)
+    monkeypatch.setattr(lliam_main, "_prompt_provider_choice", lambda choices, **kwargs: len(choices) - 1)
     monkeypatch.setattr("sys.stdin", type("FakeTTY", (), {"isatty": lambda self: True})())
 
-    hermes_main.cmd_model(SimpleNamespace())
+    lliam_main.cmd_model(SimpleNamespace())
     output = capsys.readouterr().out
 
     assert "Warning:" in output
@@ -722,7 +722,7 @@ def test_model_flow_custom_saves_verified_v1_base_url(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
     monkeypatch.setattr("lliam_cli.secret_prompt.masked_secret_prompt", lambda _prompt="": next(answers))
 
-    hermes_main._model_flow_custom({})
+    lliam_main._model_flow_custom({})
     output = capsys.readouterr().out
 
     assert "Saving the working base URL instead" in output
@@ -780,7 +780,7 @@ def test_model_flow_custom_persists_selected_api_mode(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
     monkeypatch.setattr("lliam_cli.secret_prompt.masked_secret_prompt", lambda _prompt="": "test-key")
 
-    hermes_main._model_flow_custom({"model": {"provider": "custom"}})
+    lliam_main._model_flow_custom({"model": {"provider": "custom"}})
 
     assert saved_cfg["model"]["provider"] == "custom"
     assert saved_cfg["model"]["base_url"] == "https://codex.example.com/v1"
@@ -790,7 +790,7 @@ def test_model_flow_custom_persists_selected_api_mode(monkeypatch):
 
 
 def test_cmd_model_forwards_nous_login_tls_options(monkeypatch):
-    monkeypatch.setattr(hermes_main, "_require_tty", lambda *a: None)
+    monkeypatch.setattr(lliam_main, "_require_tty", lambda *a: None)
     monkeypatch.setattr(
         "lliam_cli.config.load_config",
         lambda: {"model": {"default": "gpt-5", "provider": "nous"}},
@@ -800,7 +800,7 @@ def test_cmd_model_forwards_nous_login_tls_options(monkeypatch):
     monkeypatch.setattr("lliam_cli.config.save_env_value", lambda key, value: None)
     monkeypatch.setattr("lliam_cli.auth.resolve_provider", lambda requested, **kwargs: "nous")
     monkeypatch.setattr("lliam_cli.auth.get_provider_auth_state", lambda provider_id: None)
-    monkeypatch.setattr(hermes_main, "_prompt_provider_choice", lambda choices, **kwargs: 0)
+    monkeypatch.setattr(lliam_main, "_prompt_provider_choice", lambda choices, **kwargs: 0)
 
     captured = {}
 
@@ -816,7 +816,7 @@ def test_cmd_model_forwards_nous_login_tls_options(monkeypatch):
 
     monkeypatch.setattr("lliam_cli.auth._login_nous", _fake_login)
 
-    hermes_main.cmd_model(
+    lliam_main.cmd_model(
         SimpleNamespace(
             portal_url="https://portal.nousresearch.com",
             inference_url="https://inference.nousresearch.com/v1",

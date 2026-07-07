@@ -3,11 +3,11 @@
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-from cli import HermesCLI
+from cli import LliamCLI
 
 
 def _make_cli(session_id="20260524_000001_abc123"):
-    cli_obj = HermesCLI.__new__(HermesCLI)
+    cli_obj = LliamCLI.__new__(LliamCLI)
     cli_obj.session_id = session_id
     # _print_exit_summary requires a populated conversation history (msg_count > 0)
     # to print the resume hint at all. One synthetic user turn is enough.

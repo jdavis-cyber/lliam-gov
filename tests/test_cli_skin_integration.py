@@ -1,12 +1,12 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from cli import HermesCLI, _build_compact_banner, _rich_text_from_ansi
+from cli import LliamCLI, _build_compact_banner, _rich_text_from_ansi
 from lliam_cli.skin_engine import get_active_skin, set_active_skin
 
 
 def _make_cli_stub():
-    cli = HermesCLI.__new__(HermesCLI)
+    cli = LliamCLI.__new__(LliamCLI)
     cli._sudo_state = None
     cli._secret_state = None
     cli._approval_state = None

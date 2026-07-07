@@ -44,10 +44,10 @@ def test_main_check_prints_ok_without_starting_server(monkeypatch, capsys):
 def test_main_setup_runs_model_configuration(monkeypatch):
     calls = {}
 
-    def fake_hermes_main():
+    def fake_lliam_main():
         calls["argv"] = sys.argv[:]
 
-    monkeypatch.setattr("lliam_cli.main.main", fake_hermes_main)
+    monkeypatch.setattr("lliam_cli.main.main", fake_lliam_main)
     # Pretend stdin is not a TTY so the follow-up browser prompt is skipped.
     # That keeps this test focused on the model-setup wiring; the
     # browser-prompt path has its own test below.

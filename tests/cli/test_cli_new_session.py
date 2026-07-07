@@ -118,7 +118,7 @@ def _make_cli(env_overrides=None, config_overrides=None, **kwargs):
         with patch.object(_cli_mod, "get_tool_definitions", return_value=[]), patch.dict(
             _cli_mod.__dict__, {"CLI_CONFIG": _clean_config}
         ):
-            return _cli_mod.HermesCLI(**kwargs)
+            return _cli_mod.LliamCLI(**kwargs)
 
 
 def _prepare_cli_with_active_session(tmp_path):

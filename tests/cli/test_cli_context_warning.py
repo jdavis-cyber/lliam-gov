@@ -25,8 +25,8 @@ def cli_obj(_isolate):
         "terminal": {},
     }), patch("cli.get_tool_definitions", return_value=[]), \
          patch("cli.build_welcome_banner"):
-        from cli import HermesCLI
-        obj = HermesCLI.__new__(HermesCLI)
+        from cli import LliamCLI
+        obj = LliamCLI.__new__(LliamCLI)
         obj.model = "test-model"
         obj.enabled_toolsets = ["hermes-core"]
         obj.compact = False

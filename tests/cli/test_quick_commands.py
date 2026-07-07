@@ -18,8 +18,8 @@ class TestCLIQuickCommands:
         return str(call_arg)
 
     def _make_cli(self, quick_commands):
-        from cli import HermesCLI
-        cli = HermesCLI.__new__(HermesCLI)
+        from cli import LliamCLI
+        cli = LliamCLI.__new__(LliamCLI)
         cli.config = {"quick_commands": quick_commands}
         cli.console = MagicMock()
         cli.agent = None

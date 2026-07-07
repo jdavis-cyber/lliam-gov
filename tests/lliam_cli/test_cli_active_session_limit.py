@@ -1,4 +1,4 @@
-from cli import HermesCLI
+from cli import LliamCLI
 from lliam_cli.active_sessions import (
     active_session_registry_snapshot,
     try_acquire_active_session,
@@ -16,7 +16,7 @@ def test_cli_claim_active_session_respects_global_limit(tmp_path, monkeypatch):
     assert message is None
     assert held is not None
 
-    cli = object.__new__(HermesCLI)
+    cli = object.__new__(LliamCLI)
     cli.session_id = "new-cli-session"
     cli.config = cfg
     cli._active_session_lease = None
