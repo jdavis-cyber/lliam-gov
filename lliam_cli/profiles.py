@@ -374,7 +374,10 @@ def check_alias_collision(name: str) -> Optional[str]:
             if existing_path == str(expected):
                 try:
                     content = expected.read_text()
-                    if "lliam-gov -p" in content:
+                    # Recognize both the new (lliam-gov) and legacy (hermes)
+                    # wrapper bodies as ours so a re-install cleanly overwrites
+                    # a pre-rename wrapper.
+                    if "lliam-gov -p" in content or "hermes -p" in content:
                         return None  # it's our wrapper, safe to overwrite
                 except Exception:
                     pass
@@ -422,7 +425,7 @@ def create_wrapper_script(name: str, target: Optional[str] = None) -> Optional[P
     else:
         wrapper_path = wrapper_dir / canon
         try:
-            lliam_exe = shutil.which("hermes") or "hermes"
+            lliam_exe = shutil.which("lliam-gov") or "lliam-gov"
             wrapper_path.write_text(f'#!/bin/sh\nexec {shlex.quote(lliam_exe)} -p {profile} "$@"\n')
             wrapper_path.chmod(wrapper_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
             return wrapper_path
@@ -445,9 +448,9 @@ def remove_wrapper_script(name: str) -> bool:
     for wrapper_path in candidates:
         if wrapper_path.exists():
             try:
-                # Verify it's our wrapper before removing
+                # Verify it's our wrapper before removing (new + legacy body).
                 content = wrapper_path.read_text()
-                if "lliam-gov -p" in content:
+                if "lliam-gov -p" in content or "hermes -p" in content:
                     wrapper_path.unlink()
                     return True
             except Exception:
@@ -505,6 +508,7 @@ def find_alias_for_profile(profile_name: str) -> Optional[str]:
     canon = normalize_profile_name(profile_name)
     is_windows = sys.platform == "win32"
     needle = f"lliam-gov -p {canon}"
+    legacy_needle = f"hermes -p {canon}"  # pre-rename wrapper body
 
     custom: Optional[str] = None
     profile_named: Optional[str] = None
@@ -520,7 +524,7 @@ def find_alias_for_profile(profile_name: str) -> Optional[str]:
             content = entry.read_text()
         except (OSError, UnicodeDecodeError):
             continue
-        if needle not in content:
+        if needle not in content and legacy_needle not in content:
             continue
         alias = entry.stem if is_windows else entry.name
         if alias == canon:
