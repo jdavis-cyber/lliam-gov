@@ -76,7 +76,7 @@ class TestDoctorCommandInstallation:
         # Create the command link dir with correct symlink
         cmd_link_dir = tmp_path / ".local" / "bin"
         cmd_link_dir.mkdir(parents=True)
-        cmd_link = cmd_link_dir / "hermes"
+        cmd_link = cmd_link_dir / "lliam-gov"
         cmd_link.symlink_to(lliam_bin)
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -110,7 +110,7 @@ class TestDoctorCommandInstallation:
         assert "Created symlink" in out
 
         # Verify the symlink was actually created
-        cmd_link = tmp_path / ".local" / "bin" / "hermes"
+        cmd_link = tmp_path / ".local" / "bin" / "lliam-gov"
         assert cmd_link.is_symlink()
         assert cmd_link.resolve() == lliam_bin.resolve()
 
@@ -121,7 +121,7 @@ class TestDoctorCommandInstallation:
         # Create a symlink pointing to the wrong target
         cmd_link_dir = tmp_path / ".local" / "bin"
         cmd_link_dir.mkdir(parents=True)
-        cmd_link = cmd_link_dir / "hermes"
+        cmd_link = cmd_link_dir / "lliam-gov"
         wrong_target = tmp_path / "wrong_hermes"
         wrong_target.write_text("#!/usr/bin/env python\n")
         cmd_link.symlink_to(wrong_target)
@@ -139,7 +139,7 @@ class TestDoctorCommandInstallation:
         # Create a symlink pointing to wrong target
         cmd_link_dir = tmp_path / ".local" / "bin"
         cmd_link_dir.mkdir(parents=True)
-        cmd_link = cmd_link_dir / "hermes"
+        cmd_link = cmd_link_dir / "lliam-gov"
         wrong_target = tmp_path / "wrong_hermes"
         wrong_target.write_text("#!/usr/bin/env python\n")
         cmd_link.symlink_to(wrong_target)
@@ -198,7 +198,7 @@ class TestDoctorCommandInstallation:
         lliam_bin = project / ".venv" / "bin" / "hermes"
         cmd_link_dir = tmp_path / ".local" / "bin"
         cmd_link_dir.mkdir(parents=True)
-        cmd_link = cmd_link_dir / "hermes"
+        cmd_link = cmd_link_dir / "lliam-gov"
         cmd_link.symlink_to(lliam_bin)
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -214,7 +214,7 @@ class TestDoctorCommandInstallation:
 
         cmd_link_dir = tmp_path / ".local" / "bin"
         cmd_link_dir.mkdir(parents=True)
-        cmd_link = cmd_link_dir / "hermes"
+        cmd_link = cmd_link_dir / "lliam-gov"
         cmd_link.write_text("#!/bin/sh\nexec python -m lliam_cli.main \"$@\"\n")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)

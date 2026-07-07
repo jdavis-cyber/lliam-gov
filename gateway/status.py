@@ -241,7 +241,11 @@ def _gateway_command_subcommand(command: str | None) -> str | None:
     has_gateway_entry = (
         "lliam_cli.main" in joined
         or "lliam_cli/main.py" in joined
-        or any(t.rsplit("/", 1)[-1] in ("hermes", "hermes.exe") for t in tokens)
+        or any(
+            t.rsplit("/", 1)[-1]
+            in ("lliam-gov", "lliam-gov.exe", "hermes", "hermes.exe")
+            for t in tokens
+        )
     )
     if not has_gateway_entry:
         return None

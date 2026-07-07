@@ -141,7 +141,7 @@ class TestBlueBubblesHelpers:
         adapter = _make_adapter(monkeypatch, require_mention=True)
 
         assert adapter.require_mention is True
-        assert adapter._message_matches_mention_patterns("Lliam-GOV, summarize this")
+        assert adapter._message_matches_mention_patterns("Hermes, summarize this")
         assert adapter._message_matches_mention_patterns("@Hermes agent help")
         assert not adapter._message_matches_mention_patterns("casual family chatter")
         assert not adapter._message_matches_mention_patterns("antihermes should not match")
@@ -154,14 +154,14 @@ class TestBlueBubblesHelpers:
         )
 
         assert adapter._message_matches_mention_patterns("Amos what is next?")
-        assert not adapter._message_matches_mention_patterns("Lliam-GOV what is next?")
+        assert not adapter._message_matches_mention_patterns("Hermes what is next?")
 
     def test_clean_mention_text_strips_leading_wake_word(self, monkeypatch):
         adapter = _make_adapter(monkeypatch, require_mention=True)
 
-        assert adapter._clean_mention_text("Lliam-GOV, summarize this") == "summarize this"
+        assert adapter._clean_mention_text("Hermes, summarize this") == "summarize this"
         assert adapter._clean_mention_text("Hermes agent: summarize this") == "summarize this"
-        assert adapter._clean_mention_text("please ask Lliam-GOV about this") == "please ask Lliam-GOV about this"
+        assert adapter._clean_mention_text("please ask Hermes about this") == "please ask Hermes about this"
 
 
 class _FakeBlueBubblesRequest:
@@ -221,7 +221,7 @@ class TestBlueBubblesMentionGating:
             "type": "new-message",
             "data": {
                 "guid": "msg-2",
-                "text": "Lliam-GOV, summarize this",
+                "text": "Hermes, summarize this",
                 "handle": {"address": "+15555550100"},
                 "isFromMe": False,
                 "isGroup": True,

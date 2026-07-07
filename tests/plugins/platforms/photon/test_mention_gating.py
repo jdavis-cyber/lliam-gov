@@ -79,7 +79,7 @@ async def test_group_message_passes_and_strips_wake_word(monkeypatch: pytest.Mon
     adapter = _make_adapter(monkeypatch, extra={"require_mention": True})
     captured = _capture(adapter, monkeypatch)
 
-    await adapter._dispatch_inbound(_group_payload("Lliam-GOV what's the weather"))
+    await adapter._dispatch_inbound(_group_payload("Hermes what's the weather"))
     assert len(captured) == 1
     # Leading wake word stripped before dispatch.
     assert captured[0].text == "what's the weather"
