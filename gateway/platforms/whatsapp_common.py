@@ -423,11 +423,11 @@ def resolve_whatsapp_bridge_dir() -> Path:
     from pathlib import Path as _Path
 
     # Default location in install tree (may be read-only)
-    from lliam_constants import get_hermes_home
+    from lliam_constants import get_lliam_home
     install_bridge = _Path(__file__).resolve().parents[2] / "scripts" / "whatsapp-bridge"
 
     # Try HERMES_HOME location first
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
     hermes_home_bridge = hermes_home / "scripts" / "whatsapp-bridge"
 
     # Check if install dir is writable

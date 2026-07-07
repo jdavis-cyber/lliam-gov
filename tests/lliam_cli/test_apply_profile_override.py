@@ -29,7 +29,7 @@ def _run_apply_profile_override(
     """
     # When HERMES_HOME is unset the profile store lives under the platform
     # default home. Post-rename that default is ``~/.lliam`` (see
-    # lliam_constants.get_default_hermes_root); when HERMES_HOME is provided it
+    # lliam_constants.get_default_lliam_root); when HERMES_HOME is provided it
     # IS the store root. Create active_profile/profiles where the production
     # code will actually read them.
     hermes_root = Path(hermes_home) if hermes_home is not None else tmp_path / ".lliam"

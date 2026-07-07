@@ -21,7 +21,7 @@ def server():
         "sys.modules",
         {
             "lliam_constants": MagicMock(
-                get_hermes_home=MagicMock(return_value="/tmp/hermes_test_compaction")
+                get_lliam_home=MagicMock(return_value="/tmp/hermes_test_compaction")
             ),
             "lliam_cli.env_loader": MagicMock(),
             "lliam_cli.banner": MagicMock(),

@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Callable
 from enum import Enum
 
-from lliam_cli.config import get_hermes_home
+from lliam_cli.config import get_lliam_home
 from utils import env_int, is_truthy_value
 
 logger = logging.getLogger(__name__)
@@ -522,7 +522,7 @@ class GatewayConfig:
     quick_commands: Dict[str, Any] = field(default_factory=dict)
     
     # Storage paths
-    sessions_dir: Path = field(default_factory=lambda: get_hermes_home() / "sessions")
+    sessions_dir: Path = field(default_factory=lambda: get_lliam_home() / "sessions")
     
     # Delivery settings
     always_log_local: bool = True  # Always save cron outputs to local files
@@ -694,7 +694,7 @@ class GatewayConfig:
         if "default_reset_policy" in data:
             default_policy = SessionResetPolicy.from_dict(data["default_reset_policy"])
         
-        sessions_dir = get_hermes_home() / "sessions"
+        sessions_dir = get_lliam_home() / "sessions"
         if "sessions_dir" in data:
             sessions_dir = Path(data["sessions_dir"])
         
@@ -797,7 +797,7 @@ def load_gateway_config() -> GatewayConfig:
     3. ~/.hermes/gateway.json (legacy — provides defaults under config.yaml)
     4. Built-in defaults
     """
-    _home = get_hermes_home()
+    _home = get_lliam_home()
     gw_data: dict = {}
 
     # Legacy fallback: gateway.json provides the base layer.

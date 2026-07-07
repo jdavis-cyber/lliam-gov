@@ -296,10 +296,10 @@ class GatewaySlashCommandsMixin:
 
     async def _handle_profile_command(self, event: MessageEvent) -> str:
         """Handle /profile — show active profile name and home directory."""
-        from lliam_constants import display_hermes_home
+        from lliam_constants import display_lliam_home
         from lliam_cli.profiles import get_active_profile_name
 
-        display = display_hermes_home()
+        display = display_lliam_home()
         profile_name = get_active_profile_name()
 
         lines = [
@@ -1752,7 +1752,7 @@ class GatewaySlashCommandsMixin:
     async def _handle_personality_command(self, event: MessageEvent) -> str:
         """Handle /personality command - list or set a personality."""
         from gateway.run import _hermes_home, _load_gateway_config
-        from lliam_constants import display_hermes_home
+        from lliam_constants import display_lliam_home
 
         args = event.get_command_args().strip().lower()
         config_path = _hermes_home / 'config.yaml'
@@ -1765,7 +1765,7 @@ class GatewaySlashCommandsMixin:
             personalities = {}
 
         if not personalities:
-            return t("gateway.personality.none_configured", path=display_hermes_home())
+            return t("gateway.personality.none_configured", path=display_lliam_home())
 
         if not args:
             lines = [t("gateway.personality.header")]

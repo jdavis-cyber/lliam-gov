@@ -711,8 +711,8 @@ def camofox_vision(question: str, annotate: bool = False,
         )
 
         # Save screenshot to cache
-        from lliam_constants import get_hermes_home
-        screenshots_dir = get_hermes_home() / "browser_screenshots"
+        from lliam_constants import get_lliam_home
+        screenshots_dir = get_lliam_home() / "browser_screenshots"
         screenshots_dir.mkdir(parents=True, exist_ok=True)
         screenshot_path = str(screenshots_dir / f"browser_screenshot_{uuid.uuid4().hex[:8]}.png")
 

@@ -29,7 +29,7 @@ from gateway.restart import (
 )
 from lliam_cli.config import (
     get_env_value,
-    get_hermes_home,
+    get_lliam_home,
     is_managed,
     managed_error,
     read_raw_config,
@@ -37,7 +37,7 @@ from lliam_cli.config import (
     write_platform_config_field,
 )
 
-# display_hermes_home is imported lazily at call sites to avoid ImportError
+# display_lliam_home is imported lazily at call sites to avoid ImportError
 # when lliam_constants is cached from a pre-update version during `hermes update`.
 from lliam_cli.setup import (
     print_header,
@@ -342,7 +342,7 @@ def _scan_gateway_pids(
         looks_like_gateway_command_line,
         looks_like_gateway_runtime_command_line,
     )
-    current_home = str(get_hermes_home().resolve())
+    current_home = str(get_lliam_home().resolve())
     current_home_lc = current_home.lower()
     current_profile_arg = _profile_arg(current_home)
     current_profile_name = (
@@ -930,7 +930,7 @@ def _sync_hermes_home_from_systemd_unit(system: bool) -> None:
     """When acting on a system-scope unit, adopt its ``HERMES_HOME``.
 
     Under ``sudo``, ``HERMES_HOME`` is stripped and ``HOME=/root``, so
-    :func:`get_hermes_home` falls back to ``/root/.hermes`` — the wrong
+    :func:`get_lliam_home` falls back to ``/root/.hermes`` — the wrong
     profile. The unit file pins ``HERMES_HOME`` for the actual gateway
     process, so we mirror that into our own environment to make
     ``read_runtime_status`` / ``get_running_pid`` read the correct files.
@@ -1672,10 +1672,10 @@ def _profile_suffix() -> str:
     """
     import hashlib
     import re
-    from lliam_constants import get_default_hermes_root
+    from lliam_constants import get_default_lliam_root
 
-    home = get_hermes_home().resolve()
-    default = get_default_hermes_root().resolve()
+    home = get_lliam_home().resolve()
+    default = get_default_lliam_root().resolve()
     if home == default:
         return ""
     # Detect <root>/profiles/<name> pattern → use the profile name
@@ -1699,18 +1699,18 @@ def _profile_arg(hermes_home: str | None = None, default_root: str | Path | None
 
     Args:
         hermes_home: Optional explicit HERMES_HOME path. Defaults to the current
-            ``get_hermes_home()`` value. Should be passed when generating a
+            ``get_lliam_home()`` value. Should be passed when generating a
             service definition for a different user (e.g. system service).
         default_root: Optional Hermes root to compare against. Used when
             generating a system service for another user from a sudo/root
-            process, where ``Path.home()`` and ``get_default_hermes_root()``
+            process, where ``Path.home()`` and ``get_default_lliam_root()``
             refer to root but the target profile lives under the service user.
     """
     import re
-    from lliam_constants import get_default_hermes_root
+    from lliam_constants import get_default_lliam_root
 
-    home = Path(hermes_home or str(get_hermes_home())).resolve()
-    default = Path(default_root).resolve() if default_root else get_default_hermes_root().resolve()
+    home = Path(hermes_home or str(get_lliam_home())).resolve()
+    default = Path(default_root).resolve() if default_root else get_default_lliam_root().resolve()
     if home == default:
         return ""
     profiles_root = (default / "profiles").resolve()
@@ -2571,7 +2571,7 @@ def _remap_path_for_user(path: str, target_home_dir: str) -> str:
 def _hermes_home_for_target_user(target_home_dir: str) -> str:
     """Remap the current HERMES_HOME to the equivalent under a target user's home.
 
-    When installing a system service via sudo, get_hermes_home() resolves to
+    When installing a system service via sudo, get_lliam_home() resolves to
     root's home.  This translates it to the target user's equivalent path
     (post-rename default leaf is ``.lliam``):
       /root/.lliam                     → /home/alice/.lliam
@@ -2583,7 +2583,7 @@ def _hermes_home_for_target_user(target_home_dir: str) -> str:
     # Derive the default-home leaf (``.lliam``) from the constants module so this
     # stays correct through the rename instead of hardcoding the old ``.hermes``.
     default_leaf = get_default_home_leaf()
-    current_hermes = get_hermes_home().resolve()
+    current_hermes = get_lliam_home().resolve()
     current_default = (Path.home() / default_leaf).resolve()
     target_default = Path(target_home_dir) / default_leaf
 
@@ -2623,7 +2623,7 @@ def _build_service_path_dirs(project_root: Path | None = None) -> list[str]:
     if _is_dir(node_bin):
         candidates.append(str(node_bin))
 
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
     hermes_node = hermes_home / "node" / "bin"
     if _is_dir(hermes_node):
         candidates.append(str(hermes_node))
@@ -2654,7 +2654,7 @@ def _stable_service_working_dir() -> str:
     cannot be resolved (it always can in practice).
     """
     try:
-        home = get_hermes_home()
+        home = get_lliam_home()
         if home and Path(home).is_dir():
             return str(Path(home).resolve())
     except Exception:
@@ -2743,7 +2743,7 @@ StandardError=journal
 WantedBy=multi-user.target
 """
 
-    hermes_home = str(get_hermes_home().resolve())
+    hermes_home = str(get_lliam_home().resolve())
     profile_arg = _profile_arg(hermes_home)
     path_entries.extend(_build_user_local_paths(Path.home(), path_entries))
     path_entries.extend(_build_wsl_interop_paths(path_entries))
@@ -3703,7 +3703,7 @@ def _launchctl_domain_unsupported(returncode: int) -> bool:
 
 
 def _launchd_unsupported_marker_path() -> Path:
-    return get_hermes_home() / ".gateway-launchd-unsupported"
+    return get_lliam_home() / ".gateway-launchd-unsupported"
 
 
 def _write_launchd_unsupported_marker() -> None:
@@ -3760,7 +3760,7 @@ def _spawn_detached_gateway() -> bool:
     """
     from lliam_cli._subprocess_compat import windows_detach_popen_kwargs
 
-    log_dir = get_hermes_home() / "logs"
+    log_dir = get_lliam_home() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     out_path = log_dir / "gateway.log"
     err_path = log_dir / "gateway.error.log"
@@ -3790,7 +3790,7 @@ def _launchd_fallback_to_detached(reason: str, *, exit_on_failure: bool = True) 
     launched, prints the manual workaround and (by default) exits non-zero so
     the failure surfaces instead of silently doing nothing.
     """
-    from lliam_constants import display_hermes_home as _dhh
+    from lliam_constants import display_lliam_home as _dhh
 
     _write_launchd_unsupported_marker()
     print(f"⚠ launchd cannot manage the gateway on this macOS version ({reason}).")
@@ -3816,8 +3816,8 @@ def generate_launchd_plist() -> str:
     # _stable_service_working_dir() for the rationale (same rot risk applies
     # to launchd's WorkingDirectory as to systemd's).
     working_dir = _stable_service_working_dir()
-    hermes_home = str(get_hermes_home().resolve())
-    log_dir = get_hermes_home() / "logs"
+    hermes_home = str(get_lliam_home().resolve())
+    log_dir = get_lliam_home() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     label = get_launchd_label()
     profile_arg = _profile_arg(hermes_home)
@@ -4038,7 +4038,7 @@ def launchd_install(force: bool = False):
     print()
     print("Next steps:")
     print("  lliam-gov gateway status             # Check status")
-    from lliam_constants import display_hermes_home as _dhh
+    from lliam_constants import display_lliam_home as _dhh
 
     print(f"  tail -f {_dhh()}/logs/gateway.log  # View logs")
 
@@ -4352,7 +4352,7 @@ def launchd_status(deep: bool = False):
             print(f"  Note: a detached gateway process is running (PID {fallback_pid})")
 
     if deep:
-        log_file = get_hermes_home() / "logs" / "gateway.log"
+        log_file = get_lliam_home() / "logs" / "gateway.log"
         if log_file.exists():
             print()
             print("Recent logs:")
@@ -4422,8 +4422,8 @@ def _guard_named_profile_under_multiplexer(force: bool = False) -> None:
         return  # default profile (or unrecognized) — this guard doesn't apply
 
     try:
-        from lliam_constants import get_default_hermes_root
-        default_root = get_default_hermes_root()
+        from lliam_constants import get_default_lliam_root
+        default_root = get_default_lliam_root()
         # (b) Is the default-profile gateway running?
         from gateway.status import get_running_pid as _default_running_pid  # noqa
     except Exception:
@@ -4681,7 +4681,7 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False, fo
         if getenv_compat("GATEWAY_EXIT_DIAG", "1") != "1":
             return
         try:
-            from lliam_constants import get_hermes_home as _ghh
+            from lliam_constants import get_lliam_home as _ghh
 
             log_dir = _ghh() / "logs"
             log_dir.mkdir(parents=True, exist_ok=True)
@@ -5050,7 +5050,7 @@ def _platform_status(platform: dict) -> str:
     val = get_env_value(token_var)
     if token_var == "WHATSAPP_ENABLED":
         if val and val.lower() == "true":
-            session_file = get_hermes_home() / "whatsapp" / "session" / "creds.json"
+            session_file = get_lliam_home() / "whatsapp" / "session" / "creds.json"
             if session_file.exists():
                 return "configured + paired"
             return "enabled, not paired"
@@ -5437,7 +5437,7 @@ def _setup_weixin():
     import asyncio
 
     try:
-        credentials = asyncio.run(qr_login(str(get_hermes_home())))
+        credentials = asyncio.run(qr_login(str(get_lliam_home())))
     except KeyboardInterrupt:
         print()
         print_warning("  Weixin setup cancelled.")
@@ -6147,7 +6147,7 @@ def gateway_setup():
                     "  To enable systemd: add systemd=true to /etc/wsl.conf, then 'wsl --shutdown'"
                 )
             elif is_termux():
-                from lliam_constants import display_hermes_home as _dhh
+                from lliam_constants import display_lliam_home as _dhh
 
                 print_info("  Termux does not use systemd/launchd services.")
                 print_info("  Run in foreground: lliam-gov gateway run")

@@ -58,7 +58,7 @@ def fake_hermes(tmp_path, monkeypatch):
     # Monkeypatch the resolver functions used by file_safety so each test
     # can choose which profile is "active".
     import lliam_constants
-    monkeypatch.setattr(lliam_constants, "get_default_hermes_root", lambda: root)
+    monkeypatch.setattr(lliam_constants, "get_default_lliam_root", lambda: root)
 
     # The reloads below ensure get_cross_profile_warning/classify see the patched root.
     import agent.file_safety as fs

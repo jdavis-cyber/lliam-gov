@@ -46,13 +46,13 @@ from lliam_cli._subprocess_compat import windows_hide_flags
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from lliam_cli.config import get_hermes_home
+from lliam_cli.config import get_lliam_home
 
 logger = logging.getLogger(__name__)
 
 
 # Checkpoint file for crash recovery (gateway only)
-CHECKPOINT_PATH = get_hermes_home() / "processes.json"
+CHECKPOINT_PATH = get_lliam_home() / "processes.json"
 
 # Limits
 MAX_OUTPUT_CHARS = 200_000      # 200KB rolling output buffer

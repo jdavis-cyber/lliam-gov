@@ -39,7 +39,7 @@ from typing import List, Optional
 # the module) fail with ModuleNotFoundError for lliam_time et al.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from lliam_cli._subprocess_compat import windows_hide_flags
 from lliam_cli.config import load_config, _expand_env_vars
 from lliam_time import now as _hermes_now
@@ -364,7 +364,7 @@ def _get_hermes_home() -> Path:
     (its .env, config.yaml, scripts, skills). Do not freeze this at import or
     anchor it at the shared default root — either re-breaks profile isolation.
     """
-    return _hermes_home or get_hermes_home()
+    return _hermes_home or get_lliam_home()
 
 
 def _get_lock_paths() -> tuple[Path, Path]:

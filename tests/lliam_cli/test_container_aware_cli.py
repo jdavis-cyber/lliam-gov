@@ -105,7 +105,7 @@ def test_get_container_exec_info_defaults():
         )
 
         with patch("lliam_constants.is_container", return_value=False), \
-             patch.dict(get_container_exec_info.__globals__, {"get_hermes_home": lambda: hermes_home}), \
+             patch.dict(get_container_exec_info.__globals__, {"get_lliam_home": lambda: hermes_home}), \
              patch.dict(os.environ, {}, clear=False):
             os.environ.pop("HERMES_DEV", None)
             info = get_container_exec_info()

@@ -186,8 +186,8 @@ _MODELS_DEV_TO_PROVIDER: Optional[Dict[str, str]] = None
 
 def _get_cache_path() -> Path:
     """Return path to disk cache file."""
-    from lliam_constants import get_hermes_home
-    return get_hermes_home() / "models_dev_cache.json"
+    from lliam_constants import get_lliam_home
+    return get_lliam_home() / "models_dev_cache.json"
 
 
 def _load_disk_cache() -> Dict[str, Any]:

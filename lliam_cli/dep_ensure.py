@@ -58,8 +58,8 @@ def _has_system_browser() -> bool:
 
 
 def _has_hermes_agent_browser() -> bool:
-    from lliam_constants import get_hermes_home
-    home = get_hermes_home()
+    from lliam_constants import get_lliam_home
+    home = get_lliam_home()
     if _IS_WINDOWS:
         # npm -g --prefix puts .cmd shims directly in the prefix dir on Windows
         return (home / "node" / "agent-browser.cmd").is_file()
@@ -133,7 +133,7 @@ def ensure_dependency(
             return False
 
     if shell == "powershell":
-        from lliam_constants import get_hermes_home
+        from lliam_constants import get_lliam_home
         ps_bin = shutil.which("powershell") or shutil.which("pwsh")
         if not ps_bin:
             if interactive:
@@ -144,7 +144,7 @@ def ensure_dependency(
             "-ExecutionPolicy", "Bypass",
             "-File", str(script),
             "-Ensure", dep,
-            "-HermesHome", str(get_hermes_home()),
+            "-HermesHome", str(get_lliam_home()),
         ]
     else:
         cmd = ["bash", str(script), "--ensure", dep]

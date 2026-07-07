@@ -21,7 +21,7 @@ import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from lliam_cli.profiles import _get_default_hermes_home
 from plugins.plugin_utils import SingletonSlot
 from typing import Any, TYPE_CHECKING
@@ -88,7 +88,7 @@ def resolve_config_path() -> Path:
 
     Returns the global path if none exist (for first-time setup writes).
     """
-    local_path = get_hermes_home() / "honcho.json"
+    local_path = get_lliam_home() / "honcho.json"
     if local_path.exists():
         return local_path
 

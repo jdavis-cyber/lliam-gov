@@ -40,7 +40,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 
 from lliam_cli.colors import Colors, color
 
@@ -188,7 +188,7 @@ def gui_install_summary(hermes_home: "Path | None" = None) -> dict:
     forward it to the renderer via IPC (paths as strings, booleans for the
     high-level questions the UI gates options on).
     """
-    home: Path = hermes_home if hermes_home is not None else get_hermes_home()
+    home: Path = hermes_home if hermes_home is not None else get_lliam_home()
 
     source_artifacts = [p for p in source_built_gui_artifacts(home) if p.exists()]
     packaged = [p for p in packaged_gui_app_paths() if p.exists()]
@@ -239,7 +239,7 @@ def uninstall_gui(hermes_home: "Path | None" = None, *, remove_userdata: bool = 
 
     Returns the list of paths actually removed.
     """
-    home: Path = hermes_home if hermes_home is not None else get_hermes_home()
+    home: Path = hermes_home if hermes_home is not None else get_lliam_home()
 
     removed: list[Path] = []
 

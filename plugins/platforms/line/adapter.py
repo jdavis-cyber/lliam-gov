@@ -1296,8 +1296,8 @@ class LineAdapter(BasePlatformAdapter):
             return web.Response(status=404, text="not found")
 
         try:
-            from lliam_constants import get_hermes_home
-            hermes_home = Path(get_hermes_home()).resolve()
+            from lliam_constants import get_lliam_home
+            hermes_home = Path(get_lliam_home()).resolve()
         except Exception:
             hermes_home = Path.home().joinpath(".hermes").resolve()
 

@@ -2,7 +2,7 @@
 
 Skill scripts may run outside the Hermes process (e.g. system Python,
 nix env, CI) where ``lliam_constants`` is not importable.  This module
-provides the same ``get_hermes_home()`` and ``display_hermes_home()``
+provides the same ``get_lliam_home()`` and ``display_lliam_home()``
 contracts as ``lliam_constants`` without requiring it on ``sys.path``.
 
 When ``lliam_constants`` IS available it is used directly so that any
@@ -20,22 +20,22 @@ import os
 from pathlib import Path
 
 try:
-    from lliam_constants import display_hermes_home as display_hermes_home
-    from lliam_constants import get_hermes_home as get_hermes_home
+    from lliam_constants import display_lliam_home as display_lliam_home
+    from lliam_constants import get_lliam_home as get_lliam_home
 except (ModuleNotFoundError, ImportError):
 
-    def get_hermes_home() -> Path:
+    def get_lliam_home() -> Path:
         """Return the Hermes home directory (default: ~/.hermes).
 
-        Mirrors ``lliam_constants.get_hermes_home()``."""
+        Mirrors ``lliam_constants.get_lliam_home()``."""
         val = os.environ.get("HERMES_HOME", "").strip()
         return Path(val) if val else Path.home() / ".hermes"
 
-    def display_hermes_home() -> str:
+    def display_lliam_home() -> str:
         """Return a user-friendly ``~/``-shortened display string.
 
-        Mirrors ``lliam_constants.display_hermes_home()``."""
-        home = get_hermes_home()
+        Mirrors ``lliam_constants.display_lliam_home()``."""
+        home = get_lliam_home()
         try:
             return "~/" + str(home.relative_to(Path.home()))
         except ValueError:

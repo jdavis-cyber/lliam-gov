@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 
 from lliam_cli.colors import Colors, color
 
@@ -421,8 +421,8 @@ def _is_windows() -> bool:
 def _is_default_hermes_home(hermes_home: Path) -> bool:
     """Return True when ``hermes_home`` points at the default (non-profile) root."""
     try:
-        from lliam_constants import get_default_hermes_root
-        return hermes_home.resolve() == get_default_hermes_root().resolve()
+        from lliam_constants import get_default_lliam_root
+        return hermes_home.resolve() == get_default_lliam_root().resolve()
     except Exception:
         return False
 
@@ -506,7 +506,7 @@ def run_gui_uninstall(args):
         uninstall_gui,
     )
 
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
     summary = gui_install_summary(hermes_home)
     skip_confirm = bool(getattr(args, "yes", False))
 
@@ -573,7 +573,7 @@ def run_uninstall(args):
     - Keep data: removes code but keeps ~/.hermes/ for future reinstall
     """
     project_root = get_project_root()
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
 
     # Detect named profiles when uninstalling from the default root —
     # offer to clean them up too instead of leaving zombie HERMES_HOMEs

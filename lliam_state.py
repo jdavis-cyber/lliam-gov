@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 
 from agent.memory_manager import sanitize_context
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ def _delete_delegate_children(conn, parent_ids: List[str]) -> List[str]:
 
 T = TypeVar("T")
 
-DEFAULT_DB_PATH = get_hermes_home() / "state.db"
+DEFAULT_DB_PATH = get_lliam_home() / "state.db"
 
 SCHEMA_VERSION = 16
 

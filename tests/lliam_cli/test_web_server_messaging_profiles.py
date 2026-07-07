@@ -14,10 +14,10 @@ import yaml
 @pytest.fixture
 def isolated_profiles(tmp_path, monkeypatch, _isolate_hermes_home):
     """Isolated default home + one named profile, each with its own .env."""
-    from lliam_constants import get_hermes_home
+    from lliam_constants import get_lliam_home
     from lliam_cli import profiles
 
-    default_home = get_hermes_home()
+    default_home = get_lliam_home()
     profiles_root = default_home / "profiles"
     worker_home = profiles_root / "worker_alpha"
     for home in (default_home, worker_home):
@@ -42,10 +42,10 @@ def client(monkeypatch, isolated_profiles):
         pytest.skip("fastapi/starlette not installed")
 
     import lliam_state
-    from lliam_constants import get_hermes_home
+    from lliam_constants import get_lliam_home
     from lliam_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
 
-    monkeypatch.setattr(lliam_state, "DEFAULT_DB_PATH", get_hermes_home() / "state.db")
+    monkeypatch.setattr(lliam_state, "DEFAULT_DB_PATH", get_lliam_home() / "state.db")
     # The dashboard process's os.environ may carry root-install credentials;
     # make sure the scoped path never falls back to them.
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)

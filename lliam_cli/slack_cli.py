@@ -163,9 +163,9 @@ def slack_manifest_command(args) -> int:
         if isinstance(write_target, bool) and write_target:
             # --write with no value → default location
             try:
-                from lliam_constants import get_hermes_home
+                from lliam_constants import get_lliam_home
 
-                target = Path(get_hermes_home()) / "slack-manifest.json"
+                target = Path(get_lliam_home()) / "slack-manifest.json"
             except Exception:
                 target = Path(os.environ.get("HERMES_HOME") or str(Path.home() / ".hermes")) / "slack-manifest.json"
         else:

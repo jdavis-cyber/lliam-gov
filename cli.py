@@ -168,7 +168,7 @@ _COMMAND_SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧
 
 # Load .env from ~/.hermes/.env first, then project root as dev fallback.
 # User-managed env files should override stale shell exports on restart.
-from lliam_constants import get_hermes_home, display_hermes_home
+from lliam_constants import get_lliam_home, display_lliam_home
 from lliam_cli.browser_connect import (
     DEFAULT_BROWSER_CDP_URL,
     is_browser_debug_ready,
@@ -178,7 +178,7 @@ from lliam_cli.browser_connect import (
 from lliam_cli.env_loader import load_hermes_dotenv
 from utils import base_url_host_matches
 
-_hermes_home = get_hermes_home()
+_hermes_home = get_lliam_home()
 _project_env = Path(__file__).parent / '.env'
 load_hermes_dotenv(hermes_home=_hermes_home, project_env=_project_env)
 
@@ -1599,7 +1599,7 @@ def _run_state_db_auto_maintenance(session_db) -> None:
         return
     try:
         from lliam_cli.config import load_config as _load_full_config
-        from lliam_constants import get_hermes_home as _get_hermes_home
+        from lliam_constants import get_lliam_home as _get_hermes_home
         _hermes_home_maint = _get_hermes_home()
 
         # One-time prune of empty TUI ghost sessions.
@@ -6042,7 +6042,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         """
         from lliam_cli.clipboard import save_clipboard_image
 
-        img_dir = get_hermes_home() / "images"
+        img_dir = get_lliam_home() / "images"
         self._image_counter += 1
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         img_path = img_dir / f"clip_{ts}_{self._image_counter}.png"
@@ -6293,7 +6293,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             "Hermes CLI Status",
             "",
             f"Session ID: {self.session_id}",
-            f"Path: {display_hermes_home()}",
+            f"Path: {display_lliam_home()}",
         ]
         if title:
             lines.append(f"Title: {title}")
@@ -6681,7 +6681,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         if getattr(self, "conversation_history", None):
             return False
         try:
-            from lliam_constants import get_hermes_home as _ghh
+            from lliam_constants import get_lliam_home as _ghh
             return self._session_db.delete_session_if_empty(
                 session_id, sessions_dir=_ghh() / "sessions"
             )
@@ -6863,7 +6863,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             return
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        saved_dir = get_hermes_home() / "sessions" / "saved"
+        saved_dir = get_lliam_home() / "sessions" / "saved"
         try:
             saved_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
@@ -8064,7 +8064,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             print("  To start the gateway:")
             print("    python cli.py --gateway")
             print()
-            print(f"  Configuration file: {display_hermes_home()}/config.yaml")
+            print(f"  Configuration file: {display_lliam_home()}/config.yaml")
             print()
             
         except Exception as e:
@@ -8074,7 +8074,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             print("    1. Set environment variables:")
             print("       TELEGRAM_BOT_TOKEN=your_token")
             print("       DISCORD_BOT_TOKEN=your_token")
-            print(f"    2. Or configure settings in {display_hermes_home()}/config.yaml")
+            print(f"    2. Or configure settings in {display_lliam_home()}/config.yaml")
             print()
     
     def process_command(self, command: str) -> bool:
@@ -8435,7 +8435,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                 if not user_entries:
                     print("No user plugins installed.")
                     print("  Install one: hermes plugins install owner/repo")
-                    print(f"  Or drop a plugin directory into {display_hermes_home()}/plugins/")
+                    print(f"  Or drop a plugin directory into {display_lliam_home()}/plugins/")
                     if bundled_count:
                         print(f"  ({bundled_count} bundled plugins available — see: hermes plugins list)")
                 else:
@@ -15050,7 +15050,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                 # and SQLite history. Ported from google-gemini/gemini-cli#19332.
                 if getattr(self, '_delete_session_on_exit', False):
                     try:
-                        from lliam_constants import get_hermes_home as _ghh
+                        from lliam_constants import get_lliam_home as _ghh
                         _sessions_dir = _ghh() / "sessions"
                         _sid = self.agent.session_id
                         if self._session_db.delete_session(_sid, sessions_dir=_sessions_dir):

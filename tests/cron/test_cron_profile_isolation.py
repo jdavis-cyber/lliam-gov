@@ -26,7 +26,7 @@ def _set_profile_env(monkeypatch, root: Path, profile_home: Path) -> None:
     import lliam_constants
 
     monkeypatch.setattr(
-        lliam_constants, "_get_platform_default_hermes_home", lambda: root
+        lliam_constants, "_get_platform_default_lliam_home", lambda: root
     )
     monkeypatch.setenv("HERMES_HOME", str(profile_home))
 
@@ -43,10 +43,10 @@ def test_cron_storage_anchors_at_profile_home(tmp_path, monkeypatch):
     import lliam_constants
 
     # Sanity: the override is wired the way the gateway sees it.
-    assert lliam_constants.get_hermes_home().resolve() == profile_home.resolve()
-    assert lliam_constants.get_default_hermes_root().resolve() == root.resolve()
+    assert lliam_constants.get_lliam_home().resolve() == profile_home.resolve()
+    assert lliam_constants.get_default_lliam_root().resolve() == root.resolve()
 
-    # cron/jobs.py computes HERMES_DIR from get_hermes_home() at import, so a
+    # cron/jobs.py computes HERMES_DIR from get_lliam_home() at import, so a
     # fresh import under this env anchors the store at <profile>/cron.
     import cron.jobs as jobs
 
@@ -111,7 +111,7 @@ def test_cron_storage_unaffected_when_no_profile(tmp_path, monkeypatch):
     import lliam_constants
 
     monkeypatch.setattr(
-        lliam_constants, "_get_platform_default_hermes_home", lambda: root
+        lliam_constants, "_get_platform_default_lliam_home", lambda: root
     )
     monkeypatch.setenv("HERMES_HOME", str(root))
 

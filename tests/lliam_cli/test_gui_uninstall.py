@@ -239,7 +239,7 @@ def test_run_uninstall_yes_keep_data_is_non_interactive(tmp_path, monkeypatch):
 
     # Stub every destructive external so the test only exercises the control
     # flow + the real GUI sweep (which is safe inside tmp_path).
-    monkeypatch.setattr(uninstall, "get_hermes_home", lambda: hermes_home)
+    monkeypatch.setattr(uninstall, "get_lliam_home", lambda: hermes_home)
     monkeypatch.setattr(uninstall, "get_project_root", lambda: fake_code)
     monkeypatch.setattr(uninstall, "uninstall_gateway_service", lambda: False)
     monkeypatch.setattr(uninstall, "remove_path_from_shell_configs", lambda: [])
@@ -273,7 +273,7 @@ def test_run_uninstall_yes_full_wipes_home(tmp_path, monkeypatch):
     fake_code = tmp_path / "checkout"
     fake_code.mkdir()
 
-    monkeypatch.setattr(uninstall, "get_hermes_home", lambda: hermes_home)
+    monkeypatch.setattr(uninstall, "get_lliam_home", lambda: hermes_home)
     monkeypatch.setattr(uninstall, "get_project_root", lambda: fake_code)
     monkeypatch.setattr(uninstall, "uninstall_gateway_service", lambda: False)
     monkeypatch.setattr(uninstall, "remove_path_from_shell_configs", lambda: [])
@@ -308,11 +308,11 @@ def test_uninstall_module_main_gui_mode(tmp_path, monkeypatch):
     (hermes_home / "desktop-build-stamp.json").write_text("{}")
     (hermes_home / "config.yaml").write_text("x: 1\n")
 
-    monkeypatch.setattr(uninstall, "get_hermes_home", lambda: hermes_home)
+    monkeypatch.setattr(uninstall, "get_lliam_home", lambda: hermes_home)
     from lliam_cli import gui_uninstall as gu_mod
     monkeypatch.setattr(gu_mod, "packaged_gui_app_paths", lambda: [])
     monkeypatch.setattr(gu_mod, "desktop_userdata_dir", lambda: tmp_path / "none")
-    monkeypatch.setattr(gu_mod, "get_hermes_home", lambda: hermes_home)
+    monkeypatch.setattr(gu_mod, "get_lliam_home", lambda: hermes_home)
     monkeypatch.setattr("builtins.input", lambda *a, **k: pytest.fail("prompted in module main"))
 
     rc = uninstall.main(["--mode", "gui"])

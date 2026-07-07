@@ -127,8 +127,8 @@ def _get_token_dir() -> Path:
     Layout: ``HERMES_HOME/mcp-tokens/``
     """
     try:
-        from lliam_constants import get_hermes_home
-        base = Path(get_hermes_home())
+        from lliam_constants import get_lliam_home
+        base = Path(get_lliam_home())
     except ImportError:
         base = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
     return base / "mcp-tokens"

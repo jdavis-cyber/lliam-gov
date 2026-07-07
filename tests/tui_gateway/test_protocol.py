@@ -22,7 +22,7 @@ def _restore_stdout():
 @pytest.fixture()
 def server():
     with patch.dict("sys.modules", {
-        "lliam_constants": MagicMock(get_hermes_home=MagicMock(return_value="/tmp/hermes_test")),
+        "lliam_constants": MagicMock(get_lliam_home=MagicMock(return_value="/tmp/hermes_test")),
         "lliam_cli.env_loader": MagicMock(),
         "lliam_cli.banner": MagicMock(),
         "lliam_state": MagicMock(),

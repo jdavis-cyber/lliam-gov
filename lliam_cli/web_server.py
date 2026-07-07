@@ -54,7 +54,7 @@ from lliam_cli.config import (
     clear_model_endpoint_credentials,
     get_config_path,
     get_env_path,
-    get_hermes_home,
+    get_lliam_home,
     load_config,
     load_env,
     read_raw_config,
@@ -1295,7 +1295,7 @@ def _media_serve_roots() -> list[Path]:
     key or a screenshot outside the cache) merely because the suffix passes the
     allowlist.
     """
-    home = get_hermes_home()
+    home = get_lliam_home()
     roots = [home / "images", home / "screenshots", home / "cache"]
     out: list[Path] = []
     for root in roots:
@@ -1387,9 +1387,9 @@ def _default_hermes_root_is_opt_data() -> bool:
     if not raw:
         return False
     try:
-        from lliam_constants import get_default_hermes_root
+        from lliam_constants import get_default_lliam_root
 
-        root = get_default_hermes_root().expanduser().resolve(strict=False)
+        root = get_default_lliam_root().expanduser().resolve(strict=False)
     except (OSError, RuntimeError):
         root = Path(raw).expanduser().resolve(strict=False)
     return root == _HOSTED_MANAGED_FILES_ROOT
@@ -1925,7 +1925,7 @@ async def get_status(profile: Optional[str] = None):
     # Use the config-only (contextvar) scope, NOT _profile_scope: this handler
     # awaits the remote-health probe, and _profile_scope swaps process-global
     # skills-module attributes that a concurrent request would cross-restore
-    # across that await. Status only resolves get_hermes_home() at call time
+    # across that await. Status only resolves get_lliam_home() at call time
     # (config/env/gateway state), which the task-local contextvar covers.
     if requested_profile and requested_profile.lower() != "current":
         status_scope = _config_profile_scope(requested_profile)
@@ -2103,7 +2103,7 @@ async def get_status(profile: Optional[str] = None):
         # envelope — the same loopback/gated split ``should_require_auth`` draws.
         if not auth_required:
             status.update({
-                "hermes_home": str(get_hermes_home()),
+                "hermes_home": str(get_lliam_home()),
                 "config_path": str(get_config_path()),
                 "env_path": str(get_env_path()),
                 "gateway_pid": gateway_pid,
@@ -2196,7 +2196,7 @@ async def get_system_stats():
             "percent": vm.percent,
         }
         try:
-            du = psutil.disk_usage(str(get_hermes_home()))
+            du = psutil.disk_usage(str(get_lliam_home()))
             info["disk"] = {
                 "total": du.total,
                 "used": du.used,
@@ -2435,7 +2435,7 @@ async def run_debug_share_endpoint(body: DebugShareRequest | None = None):
 # the dashboard can tail them back to the user.
 # ---------------------------------------------------------------------------
 
-_ACTION_LOG_DIR: Path = get_hermes_home() / "logs"
+_ACTION_LOG_DIR: Path = get_lliam_home() / "logs"
 
 # Short ``name`` (from the URL) → absolute log file path.
 _ACTION_LOG_FILES: Dict[str, str] = {
@@ -2877,7 +2877,7 @@ async def check_hermes_update(force: bool = False):
 
         if force:
             try:
-                (get_hermes_home() / ".update_check").unlink()
+                (get_lliam_home() / ".update_check").unlink()
             except OSError:
                 pass
 
@@ -3536,7 +3536,7 @@ def _normalize_config_for_web(config: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _memory_provider_config_path(provider: MemoryProvider) -> Path:
-    return get_hermes_home() / provider.name / "config.json"
+    return get_lliam_home() / provider.name / "config.json"
 
 
 def _read_memory_provider_file(provider: MemoryProvider) -> Dict[str, Any]:
@@ -7885,7 +7885,7 @@ async def prune_sessions_endpoint(body: SessionPrune):
     """Delete ended sessions older than N days (mirrors `hermes sessions prune`)."""
     if body.older_than_days < 1:
         raise HTTPException(status_code=400, detail="older_than_days must be >= 1")
-    profile_home = _cron_profile_home(body.profile)[1] if body.profile else get_hermes_home()
+    profile_home = _cron_profile_home(body.profile)[1] if body.profile else get_lliam_home()
     db = _open_session_db_for_profile(body.profile)
     try:
         sessions_dir = profile_home / "sessions"
@@ -7917,7 +7917,7 @@ async def get_logs(
     log_name = LOG_FILES.get(file)
     if not log_name:
         raise HTTPException(status_code=400, detail=f"Unknown log file: {file}")
-    log_path = get_hermes_home() / "logs" / log_name
+    log_path = get_lliam_home() / "logs" / log_name
     if not log_path.exists():
         return {"file": file, "lines": []}
 
@@ -8147,14 +8147,14 @@ def _call_cron_for_profile(target_profile: Optional[str], func_name: str, *args,
     with _CRON_PROFILE_LOCK:
         from cron import jobs as cron_jobs
         from lliam_constants import (
-            reset_hermes_home_override,
-            set_hermes_home_override,
+            reset_lliam_home_override,
+            set_lliam_home_override,
         )
 
         old_cron_dir = cron_jobs.CRON_DIR
         old_jobs_file = cron_jobs.JOBS_FILE
         old_output_dir = cron_jobs.OUTPUT_DIR
-        token = set_hermes_home_override(str(home))
+        token = set_lliam_home_override(str(home))
         cron_jobs.CRON_DIR = home / "cron"
         cron_jobs.JOBS_FILE = cron_jobs.CRON_DIR / "jobs.json"
         cron_jobs.OUTPUT_DIR = cron_jobs.CRON_DIR / "output"
@@ -8164,7 +8164,7 @@ def _call_cron_for_profile(target_profile: Optional[str], func_name: str, *args,
             cron_jobs.CRON_DIR = old_cron_dir
             cron_jobs.JOBS_FILE = old_jobs_file
             cron_jobs.OUTPUT_DIR = old_output_dir
-            reset_hermes_home_override(token)
+            reset_lliam_home_override(token)
 
     if isinstance(result, list):
         return [_annotate_cron_job(j, profile_name, home) for j in result]
@@ -9333,7 +9333,7 @@ async def get_memory_status():
         _log.exception("discover_memory_providers failed")
 
     # Built-in memory file sizes (so the UI can show what a reset would erase).
-    mem_dir = get_hermes_home() / "memories"
+    mem_dir = get_lliam_home() / "memories"
     files = {}
     for fname, key in (("MEMORY.md", "memory"), ("USER.md", "user")):
         path = mem_dir / fname
@@ -9376,7 +9376,7 @@ async def reset_memory(body: MemoryReset):
     if target not in {"all", "memory", "user"}:
         raise HTTPException(status_code=400, detail="target must be all, memory, or user")
 
-    mem_dir = get_hermes_home() / "memories"
+    mem_dir = get_lliam_home() / "memories"
     deleted = []
     targets = []
     if target in {"all", "memory"}:
@@ -9640,7 +9640,7 @@ async def list_checkpoints():
     # total size so the dashboard can show what a prune would reclaim; the
     # actual prune is a spawned action so confirmation/pruning logic stays
     # in one place (the CLI).
-    cp_dir = get_hermes_home() / "checkpoints"
+    cp_dir = get_lliam_home() / "checkpoints"
     sessions = []
     total_bytes = 0
     if cp_dir.is_dir():
@@ -10257,16 +10257,16 @@ def _write_profile_model(profile_dir: Path, provider: str, model: str) -> None:
     Clears any stale ``base_url`` / ``context_length`` the same way
     ``POST /api/model/set`` does, since the new model may differ.
     """
-    from lliam_constants import set_hermes_home_override, reset_hermes_home_override
+    from lliam_constants import set_lliam_home_override, reset_lliam_home_override
 
-    token = set_hermes_home_override(str(profile_dir))
+    token = set_lliam_home_override(str(profile_dir))
     try:
         provider, model = _normalize_main_model_assignment(provider, model)
         cfg = load_config()
         cfg["model"] = _apply_main_model_assignment(cfg.get("model", {}), provider, model)
         save_config(cfg)
     finally:
-        reset_hermes_home_override(token)
+        reset_lliam_home_override(token)
 
 
 def _write_profile_mcp_servers(profile_dir: Path, servers: List["MCPServerCreate"]) -> int:
@@ -10281,11 +10281,11 @@ def _write_profile_mcp_servers(profile_dir: Path, servers: List["MCPServerCreate
     but batched so the whole profile-create write is a single config save.
     Returns the number of servers written.
     """
-    from lliam_constants import set_hermes_home_override, reset_hermes_home_override
+    from lliam_constants import set_lliam_home_override, reset_lliam_home_override
     from lliam_cli.mcp_security import validate_mcp_server_entry
 
     written = 0
-    token = set_hermes_home_override(str(profile_dir))
+    token = set_lliam_home_override(str(profile_dir))
     try:
         cfg = load_config()
         mcp = cfg.setdefault("mcp_servers", {})
@@ -10322,7 +10322,7 @@ def _write_profile_mcp_servers(profile_dir: Path, servers: List["MCPServerCreate
             cfg.pop("mcp_servers", None)
             save_config(cfg)
     finally:
-        reset_hermes_home_override(token)
+        reset_lliam_home_override(token)
     return written
 
 
@@ -10337,12 +10337,12 @@ def _disable_unselected_skills(profile_dir: Path, keep: List[str]) -> int:
     install.) Scoped to the profile via the HERMES_HOME override. Returns the
     number of skills newly disabled.
     """
-    from lliam_constants import set_hermes_home_override, reset_hermes_home_override
+    from lliam_constants import set_lliam_home_override, reset_lliam_home_override
     from lliam_cli.skills_config import get_disabled_skills, save_disabled_skills
 
     keep_set = {s.strip() for s in keep if s and s.strip()}
     disabled_count = 0
-    token = set_hermes_home_override(str(profile_dir))
+    token = set_lliam_home_override(str(profile_dir))
     try:
         installed: List[str] = []
         skills_root = profile_dir / "skills"
@@ -10358,7 +10358,7 @@ def _disable_unselected_skills(profile_dir: Path, keep: List[str]) -> int:
         if disabled_count:
             save_disabled_skills(cfg, disabled)
     finally:
-        reset_hermes_home_override(token)
+        reset_lliam_home_override(token)
     return disabled_count
 
 
@@ -10733,8 +10733,8 @@ def _profile_scope(profile: Optional[str]):
 
     Two seams must be redirected for skills/toolsets endpoints:
 
-    1. ``load_config``/``save_config`` resolve ``get_hermes_home()`` at call
-       time — the context-local override from ``set_hermes_home_override``
+    1. ``load_config``/``save_config`` resolve ``get_lliam_home()`` at call
+       time — the context-local override from ``set_lliam_home_override``
        reaches them (same pattern as ``_write_profile_model``).
     2. ``tools.skills_tool`` and ``tools.skill_manager_tool`` bind
        ``SKILLS_DIR`` at import time, so the override CANNOT reach them.
@@ -10744,7 +10744,7 @@ def _profile_scope(profile: Optional[str]):
 
     ``profile`` of None/""/"current" means "the dashboard's own profile" —
     config resolution is untouched, but the skill-module globals are still
-    retargeted to the *current* ``get_hermes_home()`` so writes land in the
+    retargeted to the *current* ``get_lliam_home()`` so writes land in the
     live home even when the import-time binding is stale (e.g. the process
     imported the modules before a HERMES_HOME override, or under test
     isolation).
@@ -10752,19 +10752,19 @@ def _profile_scope(profile: Optional[str]):
     requested = (profile or "").strip()
 
     from lliam_constants import (
-        get_hermes_home,
-        set_hermes_home_override,
-        reset_hermes_home_override,
+        get_lliam_home,
+        set_lliam_home_override,
+        reset_lliam_home_override,
     )
     from tools import skills_tool as _skills_tool
     from tools import skill_manager_tool as _skill_mgr
 
     token = None
     if not requested or requested.lower() == "current":
-        profile_dir = get_hermes_home()
+        profile_dir = get_lliam_home()
     else:
         profile_dir = _resolve_profile_dir(requested)
-        token = set_hermes_home_override(str(profile_dir))
+        token = set_lliam_home_override(str(profile_dir))
 
     with _SKILLS_PROFILE_LOCK:
         old_home = _skills_tool.HERMES_HOME
@@ -10783,7 +10783,7 @@ def _profile_scope(profile: Optional[str]):
             _skill_mgr.HERMES_HOME = old_mgr_home
             _skill_mgr.SKILLS_DIR = old_mgr_skills_dir
             if token is not None:
-                reset_hermes_home_override(token)
+                reset_lliam_home_override(token)
 
 
 @contextmanager
@@ -10791,13 +10791,13 @@ def _config_profile_scope(profile: Optional[str]):
     """Await-safe, config-only profile scope for handlers that ``await``.
 
     Unlike ``_profile_scope`` this touches ONLY the context-local
-    ``set_hermes_home_override`` contextvar — it does NOT swap the
+    ``set_lliam_home_override`` contextvar — it does NOT swap the
     process-global ``skills_tool``/``skill_manager`` module attributes.
     Those globals are shared across all event-loop tasks, so holding them
     across an ``await`` lets a concurrent skills request restore THIS
     request's profile dir on its ``finally`` (cross-contamination). The
     contextvar override is task-local and survives an ``await`` cleanly,
-    which is all endpoints that resolve ``get_hermes_home()`` at call time
+    which is all endpoints that resolve ``get_lliam_home()`` at call time
     (config, env, gateway status) actually need.
 
     None/""/"current" means the dashboard's own profile — no override.
@@ -10808,16 +10808,16 @@ def _config_profile_scope(profile: Optional[str]):
         return
 
     from lliam_constants import (
-        set_hermes_home_override,
-        reset_hermes_home_override,
+        set_lliam_home_override,
+        reset_lliam_home_override,
     )
 
     profile_dir = _resolve_profile_dir(requested)
-    token = set_hermes_home_override(str(profile_dir))
+    token = set_lliam_home_override(str(profile_dir))
     try:
         yield profile_dir
     finally:
-        reset_hermes_home_override(token)
+        reset_lliam_home_override(token)
 
 
 class SkillToggle(BaseModel):
@@ -11858,7 +11858,7 @@ def _resolve_chat_argv(
     `profile` (when set) scopes the ENTIRE chat to that profile by pointing
     ``HERMES_HOME`` at the profile dir in the child env. Every spawned
     process (the TUI and the ``tui_gateway.entry`` it launches) resolves
-    ``get_hermes_home()`` from that env var at its own import, so the child
+    ``get_lliam_home()`` from that env var at its own import, so the child
     binds the profile's config, skills, memory, and state.db from the start
     — the same propagation ``hermes -p <name>`` performs. The in-process
     ``HERMES_TUI_GATEWAY_URL`` attach is SKIPPED for scoped chats: the
@@ -12761,7 +12761,7 @@ def _discover_user_themes() -> list:
     to the frontend, so the client can apply them without a secondary
     round-trip or a built-in stub.
     """
-    themes_dir = get_hermes_home() / "dashboard-themes"
+    themes_dir = get_lliam_home() / "dashboard-themes"
     if not themes_dir.is_dir():
         return []
     result = []
@@ -12923,7 +12923,7 @@ def _discover_dashboard_plugins() -> list:
     from lliam_cli.plugins import get_bundled_plugins_dir
     bundled_root = get_bundled_plugins_dir()
     search_dirs = [
-        (get_hermes_home() / "plugins", "user"),
+        (get_lliam_home() / "plugins", "user"),
         (bundled_root / "memory", "bundled"),
         (bundled_root, "bundled"),
     ]
@@ -13082,7 +13082,7 @@ def _merged_plugins_hub() -> Dict[str, Any]:
     config = load_config()
     hidden_plugins: list = cfg_get(config, "dashboard", "hidden_plugins", default=[]) or []
 
-    plugins_root_resolved = (get_hermes_home() / "plugins").resolve()
+    plugins_root_resolved = (get_lliam_home() / "plugins").resolve()
     rows: List[Dict[str, Any]] = []
 
     for name, version, description, source, dir_str, key in _discover_all_plugins():

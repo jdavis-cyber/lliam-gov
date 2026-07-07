@@ -30,9 +30,9 @@ def has_xai_credentials() -> bool:
     if os.environ.get("XAI_API_KEY", "").strip():
         return True
     try:
-        from lliam_constants import get_hermes_home
+        from lliam_constants import get_lliam_home
 
-        auth_path = get_hermes_home() / "auth.json"
+        auth_path = get_lliam_home() / "auth.json"
         if not auth_path.exists():
             return False
         store = json.loads(auth_path.read_text())

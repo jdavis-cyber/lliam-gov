@@ -373,7 +373,7 @@ def kanban_home() -> Path:
 
     1. ``HERMES_KANBAN_HOME`` env var when set and non-empty (explicit
        override for tests and unusual deployments).
-    2. ``get_default_hermes_root()``, which already returns ``<root>``
+    2. ``get_default_lliam_root()``, which already returns ``<root>``
        when ``HERMES_HOME`` is ``<root>/profiles/<name>``, and returns
        ``HERMES_HOME`` directly for Docker / custom deployments.
 
@@ -385,8 +385,8 @@ def kanban_home() -> Path:
     override = getenv_compat("KANBAN_HOME", "").strip()
     if override:
         return Path(override).expanduser()
-    from lliam_constants import get_default_hermes_root
-    return get_default_hermes_root()
+    from lliam_constants import get_default_lliam_root
+    return get_default_lliam_root()
 
 
 def boards_root() -> Path:
@@ -7638,16 +7638,16 @@ def _resolve_worker_cli_toolsets(hermes_home: Optional[str]) -> Optional[list[st
     if not hermes_home:
         return None
     try:
-        from lliam_constants import reset_hermes_home_override, set_hermes_home_override
+        from lliam_constants import reset_lliam_home_override, set_lliam_home_override
         from lliam_cli.config import load_config
         from lliam_cli.tools_config import _get_platform_tools
 
-        token = set_hermes_home_override(hermes_home)
+        token = set_lliam_home_override(hermes_home)
         try:
             cfg = load_config()
             toolsets = sorted(_get_platform_tools(cfg, "cli"))
         finally:
-            reset_hermes_home_override(token)
+            reset_lliam_home_override(token)
         return toolsets or None
     except Exception as exc:
         _log.debug(
@@ -7692,7 +7692,7 @@ def _default_spawn(
     # config.  Without this, `env = dict(os.environ)` copies only the parent's
     # env, and when the child process starts `hermes -p <name>` the
     # _apply_profile_override() runs *before* lliam_constants is imported.
-    # If HERMES_HOME is absent from the child's env, get_hermes_home() falls
+    # If HERMES_HOME is absent from the child's env, get_lliam_home() falls
     # back to Path.home() / ".hermes" (the DEFAULT profile root), ignoring the
     # profile-specific config entirely.  Fixes profile-scoped fallback_providers
     # being invisible to kanban workers.
@@ -7751,7 +7751,7 @@ def _default_spawn(
     # Pin the shared board + workspaces root the dispatcher resolved, so
     # that even when the worker activates a profile (`hermes -p <name>`
     # rewrites HERMES_HOME), its kanban paths still match the
-    # dispatcher's. Belt-and-braces with the `get_default_hermes_root()`
+    # dispatcher's. Belt-and-braces with the `get_default_lliam_root()`
     # resolution in `kanban_home()` — symmetric resolution is the norm,
     # but unusual symlink / Docker layouts are caught here too.
     env["LLIAM_KANBAN_DB"] = str(kanban_db_path(board=board))
@@ -8550,8 +8550,8 @@ def list_profiles_on_disk() -> list[str]:
     path).
     """
     try:
-        from lliam_constants import get_default_hermes_root
-        default_root = get_default_hermes_root()
+        from lliam_constants import get_default_lliam_root
+        default_root = get_default_lliam_root()
         profiles_dir = default_root / "profiles"
     except Exception:
         return []

@@ -12,7 +12,7 @@ persisted entity the user creates and names. It anchors:
   of the random ``wt/<task-id>`` fallback.
 
 Scope: **per-profile**, stored at ``$HERMES_HOME/projects.db`` (resolved via
-``get_hermes_home()``), mirroring sessions / config / cron. This deliberately
+``get_lliam_home()``), mirroring sessions / config / cron. This deliberately
 differs from kanban, whose board DB is root-anchored and shared across
 profiles. A Project may *bind* a kanban board (``board_slug``) so the two
 systems agree on the repo + branch convention without merging their stores.
@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 
 from lliam_cli.sqlite_util import add_column_if_missing as _add_column_if_missing, write_txn
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -44,10 +44,10 @@ from lliam_constants import get_hermes_home
 def projects_db_path() -> Path:
     """The per-profile projects DB path (``$HERMES_HOME/projects.db``).
 
-    Profile-aware: ``get_hermes_home()`` already points at the active profile's
+    Profile-aware: ``get_lliam_home()`` already points at the active profile's
     home. Tests pass an explicit ``db_path`` to :func:`connect`.
     """
-    return get_hermes_home() / "projects.db"
+    return get_lliam_home() / "projects.db"
 
 
 # ---------------------------------------------------------------------------

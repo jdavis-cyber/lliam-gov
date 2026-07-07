@@ -328,7 +328,7 @@ def get_managed_system() -> Optional[str]:
             return "NixOS"
         return _MANAGED_SYSTEM_NAMES.get(normalized, raw)
 
-    managed_marker = get_hermes_home() / ".managed"
+    managed_marker = get_lliam_home() / ".managed"
     if managed_marker.exists():
         return "NixOS"
     return None
@@ -430,7 +430,7 @@ def detect_install_method(project_root: Optional[Path] = None) -> str:
     #    container, and honouring it wrongly blocks ``hermes update``.
     try:
         method = (
-            (get_hermes_home() / ".install_method")
+            (get_lliam_home() / ".install_method")
             .read_text(encoding="utf-8")
             .strip()
             .lower()
@@ -641,7 +641,7 @@ def get_container_exec_info() -> Optional[dict]:
     if is_container():
         return None
 
-    container_mode_file = get_hermes_home() / ".container-mode"
+    container_mode_file = get_lliam_home() / ".container-mode"
 
     try:
         info = {}
@@ -673,12 +673,12 @@ def get_container_exec_info() -> Optional[dict]:
 # =============================================================================
 
 # Re-export from lliam_constants — canonical definition lives there.
-from lliam_constants import get_hermes_home  # noqa: F811,E402
+from lliam_constants import get_lliam_home  # noqa: F811,E402
 from utils import atomic_replace
 
 def get_config_path() -> Path:
     """Get the main config file path."""
-    return get_hermes_home() / "config.yaml"
+    return get_lliam_home() / "config.yaml"
 
 
 def _gov_overlay_path(config_path: Path) -> Optional[Path]:
@@ -710,7 +710,7 @@ def _gov_overlay_path(config_path: Path) -> Optional[Path]:
 
 def get_env_path() -> Path:
     """Get the .env file path (for API keys)."""
-    return get_hermes_home() / ".env"
+    return get_lliam_home() / ".env"
 
 def get_project_root() -> Path:
     """Get the project installation directory."""
@@ -878,7 +878,7 @@ def ensure_hermes_home():
     setgid + group-writable (2770). We skip mkdir and set umask(0o007) so
     any files created (e.g. SOUL.md) are group-writable (0660).
     """
-    home = get_hermes_home()
+    home = get_lliam_home()
     if is_managed():
         old_umask = os.umask(0o007)
         try:
@@ -1814,7 +1814,7 @@ DEFAULT_CONFIG = {
         "pet": {
             "enabled": False,
             # Active pet slug; resolved against installed pets in
-            # get_hermes_home()/pets/. Empty → first installed pet.
+            # get_lliam_home()/pets/. Empty → first installed pet.
             "slug": "",
             # Terminal render protocol for CLI/TUI:
             #   auto  — detect kitty/iTerm2/sixel, else unicode half-blocks
@@ -5187,7 +5187,7 @@ def migrate_config(interactive: bool = True, quiet: bool = False) -> Dict[str, A
             # Scan ``$HERMES_HOME/plugins/`` for currently installed user plugins.
             grandfathered: List[str] = []
             try:
-                user_plugins_dir = get_hermes_home() / "plugins"
+                user_plugins_dir = get_lliam_home() / "plugins"
                 if user_plugins_dir.is_dir():
                     for child in sorted(user_plugins_dir.iterdir()):
                         if not child.is_dir():
@@ -5248,7 +5248,7 @@ def migrate_config(interactive: bool = True, quiet: bool = False) -> Dict[str, A
     #      migration still benefit).
     if current_ver < 23:
         try:
-            curator_dir = get_hermes_home() / "logs" / "curator"
+            curator_dir = get_lliam_home() / "logs" / "curator"
             curator_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             results["warnings"].append(f"Could not create {curator_dir}: {e}")

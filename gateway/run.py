@@ -1261,9 +1261,9 @@ _ensure_ssl_certs()
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Resolve Hermes home directory (respects HERMES_HOME override)
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from utils import atomic_json_write, atomic_yaml_write, base_url_host_matches, is_truthy_value
-_hermes_home = get_hermes_home()
+_hermes_home = get_lliam_home()
 
 # Load environment variables from ~/.hermes/.env first.
 # User-managed env files should override stale shell exports on restart.
@@ -1374,7 +1374,7 @@ def _profile_runtime_scope(profile_home: "Path"):
     """Scope config/skills/memory AND credentials to a profile for one turn.
 
     Combines the two seams the multiplexer needs:
-      1. ``set_hermes_home_override`` — redirects ``get_hermes_home()`` (config,
+      1. ``set_lliam_home_override`` — redirects ``get_lliam_home()`` (config,
          skills, memory, SOUL, sessions) to the profile's home. Contextvar, so
          it propagates into the agent worker thread via ``copy_context()``.
       2. ``set_secret_scope`` — installs the profile's ``.env`` secrets as the
@@ -1388,20 +1388,20 @@ def _profile_runtime_scope(profile_home: "Path"):
     returns an isolated dict — which is what keeps subprocesses (MCP, kanban)
     from inheriting cross-profile secrets.
     """
-    from lliam_constants import set_hermes_home_override, reset_hermes_home_override
+    from lliam_constants import set_lliam_home_override, reset_lliam_home_override
     from agent.secret_scope import (
         build_profile_secret_scope,
         set_secret_scope,
         reset_secret_scope,
     )
 
-    home_token = set_hermes_home_override(str(profile_home))
+    home_token = set_lliam_home_override(str(profile_home))
     secret_token = set_secret_scope(build_profile_secret_scope(Path(profile_home)))
     try:
         yield
     finally:
         reset_secret_scope(secret_token)
-        reset_hermes_home_override(home_token)
+        reset_lliam_home_override(home_token)
 
 
 _DOCKER_VOLUME_SPEC_RE = re.compile(r"^(?P<host>.+):(?P<container>/[^:]+?)(?::(?P<options>[^:]+))?$")
@@ -15246,8 +15246,8 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             name = (source.profile or "").strip() or get_active_profile_name() or "default"
             return get_profile_dir(name)
         except Exception:
-            from lliam_constants import get_hermes_home
-            return get_hermes_home()
+            from lliam_constants import get_lliam_home
+            return get_lliam_home()
 
     async def _run_agent_inner(
         self,
@@ -18337,7 +18337,7 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
             # remove_pid_file() is a no-op when the PID doesn't match.
             # Force-unlink to cover the old-process-crashed case.
             try:
-                (get_hermes_home() / "gateway.pid").unlink(missing_ok=True)
+                (get_lliam_home() / "gateway.pid").unlink(missing_ok=True)
             except Exception:
                 pass
             # Clean up any takeover marker the old process didn't consume
@@ -18361,7 +18361,7 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
             except Exception:
                 pass
         else:
-            hermes_home = str(get_hermes_home())
+            hermes_home = str(get_lliam_home())
             logger.error(
                 "Another gateway instance is already running (PID %d, HERMES_HOME=%s). "
                 "Use 'lliam-gov gateway restart' to replace it, or 'lliam-gov gateway stop' first.",

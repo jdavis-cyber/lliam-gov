@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import IO, Callable, Protocol
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from lliam_cli._subprocess_compat import windows_hide_flags
 from tools.interrupt import is_interrupted
 
@@ -90,7 +90,7 @@ def get_sandbox_dir() -> Path:
     if custom:
         p = Path(custom)
     else:
-        p = get_hermes_home() / "sandboxes"
+        p = get_lliam_home() / "sandboxes"
     p.mkdir(parents=True, exist_ok=True)
     return p
 

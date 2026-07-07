@@ -83,8 +83,8 @@ def _setup_isolated_home(tmp_path, monkeypatch, *, warn):
         "lliam_cli.model_switch.switch_model",
         lambda **kw: _fake_switch_result(),
     )
-    monkeypatch.setattr("lliam_constants.get_hermes_home", lambda: hermes_home)
-    monkeypatch.setattr("lliam_cli.config.get_hermes_home", lambda: hermes_home)
+    monkeypatch.setattr("lliam_constants.get_lliam_home", lambda: hermes_home)
+    monkeypatch.setattr("lliam_cli.config.get_lliam_home", lambda: hermes_home)
     monkeypatch.setattr(
         "lliam_cli.model_cost_guard.expensive_model_warning",
         (lambda *a, **kw: _fake_warning()) if warn else (lambda *a, **kw: None),

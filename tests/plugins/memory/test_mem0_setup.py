@@ -169,7 +169,7 @@ class TestPostSetup:
 
     def test_platform_flag_mode(self, tmp_path, monkeypatch):
         monkeypatch.setattr("sys.argv", ["hermes", "--mode", "platform", "--api-key", "sk-test"])
-        monkeypatch.setattr("plugins.memory.mem0._setup.get_hermes_home", lambda: tmp_path)
+        monkeypatch.setattr("plugins.memory.mem0._setup.get_lliam_home", lambda: tmp_path)
         _inject_fake_lliam_cli(monkeypatch)
         config = {"memory": {}}
         post_setup(str(tmp_path), config)
@@ -183,7 +183,7 @@ class TestPostSetup:
         monkeypatch.setattr("sys.argv", [
             "hermes", "--mode", "oss", "--oss-llm-key", "sk-oai",
         ])
-        monkeypatch.setattr("plugins.memory.mem0._setup.get_hermes_home", lambda: tmp_path)
+        monkeypatch.setattr("plugins.memory.mem0._setup.get_lliam_home", lambda: tmp_path)
         _inject_fake_lliam_cli(monkeypatch)
         monkeypatch.setattr("plugins.memory.mem0._setup._install_provider_deps", lambda l, e, v: None)
         config = {"memory": {}}
@@ -206,7 +206,7 @@ class TestDryRun:
 
     def test_dry_run_platform_no_files(self, tmp_path, monkeypatch):
         monkeypatch.setattr("sys.argv", ["hermes", "--mode", "platform", "--api-key", "sk-test", "--dry-run"])
-        monkeypatch.setattr("plugins.memory.mem0._setup.get_hermes_home", lambda: tmp_path)
+        monkeypatch.setattr("plugins.memory.mem0._setup.get_lliam_home", lambda: tmp_path)
         _inject_fake_lliam_cli(monkeypatch)
         config = {"memory": {}}
         post_setup(str(tmp_path), config)
@@ -218,7 +218,7 @@ class TestDryRun:
         monkeypatch.setattr("sys.argv", [
             "hermes", "--mode", "oss", "--oss-llm-key", "sk-oai", "--dry-run",
         ])
-        monkeypatch.setattr("plugins.memory.mem0._setup.get_hermes_home", lambda: tmp_path)
+        monkeypatch.setattr("plugins.memory.mem0._setup.get_lliam_home", lambda: tmp_path)
         _inject_fake_lliam_cli(monkeypatch)
         monkeypatch.setattr("plugins.memory.mem0._setup._install_provider_deps", lambda l, e, v: None)
         config = {"memory": {}}

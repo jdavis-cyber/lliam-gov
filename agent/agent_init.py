@@ -49,7 +49,7 @@ from agent.tool_guardrails import (
 )
 from lliam_cli.config import cfg_get
 from lliam_cli.timeouts import get_provider_request_timeout
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from utils import base_url_host_matches, is_truthy_value
 
 # Use the same logger name as run_agent so tests patching ``run_agent.logger``
@@ -1115,7 +1115,7 @@ def init_agent(
         os.environ["LLIAM_SESSION_ID"] = agent.session_id
 
     # Session logs go into ~/.hermes/sessions/ alongside gateway sessions
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
     agent.logs_dir = hermes_home / "sessions"
     agent.logs_dir.mkdir(parents=True, exist_ok=True)
     # Per-session JSON snapshot writer (~/.hermes/sessions/session_{sid}.json)
@@ -1239,7 +1239,7 @@ def init_agent(
                     _init_kwargs = {
                         "session_id": agent.session_id,
                         "platform": platform or "cli",
-                        "hermes_home": str(get_hermes_home()),
+                        "hermes_home": str(get_lliam_home()),
                         "agent_context": "primary",
                     }
                     if _init_kwargs["platform"] == "cli":
@@ -1738,7 +1738,7 @@ def init_agent(
         try:
             agent.context_compressor.on_session_start(
                 agent.session_id,
-                hermes_home=str(get_hermes_home()),
+                hermes_home=str(get_lliam_home()),
                 platform=agent.platform or "cli",
                 model=agent.model,
                 context_length=getattr(agent.context_compressor, "context_length", 0),

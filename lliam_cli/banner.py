@@ -13,7 +13,7 @@ import threading
 import time
 from pathlib import Path
 from urllib.parse import urlparse
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 # rich and prompt_toolkit are imported lazily (inside the functions that use
@@ -306,7 +306,7 @@ def check_for_updates() -> Optional[int]:
     if behind but the count is unknown, ``0`` if up-to-date, or ``None`` if
     the check failed or doesn't apply. Cached for 6 hours.
     """
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
     cache_file = hermes_home / ".update_check"
     embedded_rev = getenv_compat("REVISION") or None
 
@@ -380,7 +380,7 @@ def _resolve_repo_dir() -> Optional[Path]:
     """
     repo_dir = Path(__file__).parent.parent.resolve()
     if not (repo_dir / ".git").exists():
-        hermes_home = get_hermes_home()
+        hermes_home = get_lliam_home()
         repo_dir = hermes_home / "hermes-agent"
     return repo_dir if (repo_dir / ".git").exists() else None
 

@@ -32,7 +32,7 @@ except ImportError:  # pragma: no cover - non-Windows
     msvcrt = None
 from datetime import datetime, timedelta
 from pathlib import Path
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from typing import Optional, Dict, List, Any, Tuple, Union
 
 logger = logging.getLogger(__name__)
@@ -55,14 +55,14 @@ except ImportError:
 # profile's jobs under that same HERMES_HOME — so a job authored in profile
 # `coder` lives in `~/.hermes/profiles/coder/cron/jobs.json` and executes with
 # `coder`'s `.env`, `config.yaml`, and skills. We deliberately anchor on
-# `get_hermes_home()` (the active profile home), NOT `get_default_hermes_root()`
+# `get_lliam_home()` (the active profile home), NOT `get_default_lliam_root()`
 # (the shared root). Anchoring at the root would funnel every profile's jobs
 # into one shared `jobs.json` and run them under whatever HERMES_HOME the
 # ticker process happens to have — leaking config/credentials/skills across
 # profiles (the security boundary #4707 was filed for). Do NOT change this to
 # the default root: that re-breaks per-profile isolation. See also the dynamic
 # `_get_hermes_home()` / `_get_lock_paths()` resolution in cron/scheduler.py.
-HERMES_DIR = get_hermes_home().resolve()
+HERMES_DIR = get_lliam_home().resolve()
 CRON_DIR = HERMES_DIR / "cron"
 JOBS_FILE = CRON_DIR / "jobs.json"
 # Heartbeat file the in-process ticker touches on every loop iteration. The
@@ -761,7 +761,7 @@ def _resolve_default_model_snapshot() -> Optional[str]:
         import yaml
         from lliam_cli.config import _expand_env_vars
 
-        cfg_path = get_hermes_home() / "config.yaml"
+        cfg_path = get_lliam_home() / "config.yaml"
         if not cfg_path.exists():
             return None
         with cfg_path.open(encoding="utf-8") as f:

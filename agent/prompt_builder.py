@@ -13,7 +13,7 @@ import contextvars
 from collections import OrderedDict
 from pathlib import Path
 
-from lliam_constants import get_hermes_home, get_skills_dir, is_wsl
+from lliam_constants import get_lliam_home, get_skills_dir, is_wsl
 from typing import Optional
 
 from agent.runtime_cwd import resolve_agent_cwd
@@ -1259,7 +1259,7 @@ _SKILLS_SNAPSHOT_VERSION = 1
 
 
 def _skills_prompt_snapshot_path() -> Path:
-    return get_hermes_home() / ".skills_prompt_snapshot.json"
+    return get_lliam_home() / ".skills_prompt_snapshot.json"
 
 
 def clear_skills_system_prompt_cache(*, clear_snapshot: bool = False) -> None:
@@ -1806,7 +1806,7 @@ def load_soul_md(context_length: Optional[int] = None) -> Optional[str]:
     except Exception as e:
         logger.debug("Could not ensure HERMES_HOME before loading SOUL.md: %s", e)
 
-    soul_path = get_hermes_home() / "SOUL.md"
+    soul_path = get_lliam_home() / "SOUL.md"
     if not soul_path.exists():
         return None
     try:

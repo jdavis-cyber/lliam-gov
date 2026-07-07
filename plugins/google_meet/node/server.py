@@ -30,12 +30,12 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from plugins.google_meet.node import protocol as _proto
 
 
 def _default_token_path() -> Path:
-    return Path(get_hermes_home()) / "workspace" / "meetings" / "node_token.json"
+    return Path(get_lliam_home()) / "workspace" / "meetings" / "node_token.json"
 
 
 class NodeServer:

@@ -34,7 +34,7 @@ import threading
 import time
 import urllib.request
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +164,7 @@ _MARKER_TTL = 86400  # 24 hours
 
 def _get_hermes_home() -> str:
     """Return the Hermes home directory, respecting HERMES_HOME env var."""
-    return str(get_hermes_home())
+    return str(get_lliam_home())
 
 
 def _failure_marker_path() -> str:

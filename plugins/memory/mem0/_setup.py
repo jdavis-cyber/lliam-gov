@@ -13,7 +13,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 
 from ._oss_providers import (
     LLM_PROVIDERS,

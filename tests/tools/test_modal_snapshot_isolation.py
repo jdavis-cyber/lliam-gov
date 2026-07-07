@@ -65,7 +65,7 @@ def _install_modal_test_modules(
     hermes_home = tmp_path / "hermes-home"
     os.environ["HERMES_HOME"] = str(hermes_home)
     sys.modules["lliam_cli.config"] = types.SimpleNamespace(
-        get_hermes_home=lambda: hermes_home,
+        get_lliam_home=lambda: hermes_home,
     )
 
     tools_package = types.ModuleType("tools")

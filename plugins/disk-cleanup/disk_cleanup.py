@@ -29,11 +29,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    from lliam_constants import get_hermes_home
+    from lliam_constants import get_lliam_home
 except Exception:  # pragma: no cover — plugin may load before constants resolves
     import os
 
-    def get_hermes_home() -> Path:  # type: ignore[no-redef]
+    def get_lliam_home() -> Path:  # type: ignore[no-redef]
         val = (os.environ.get("HERMES_HOME") or "").strip()
         return Path(val).resolve() if val else (Path.home() / ".hermes").resolve()
 
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 def get_state_dir() -> Path:
     """State dir — separate from ``$HERMES_HOME/logs/``."""
-    return get_hermes_home() / "disk-cleanup"
+    return get_lliam_home() / "disk-cleanup"
 
 
 def get_tracked_file() -> Path:
@@ -68,7 +68,7 @@ def is_safe_path(path: Path) -> bool:
 
     Rejects Windows mounts (``/mnt/c`` etc.) and any system directory.
     """
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
     try:
         path.resolve().relative_to(hermes_home)
         return True
@@ -173,7 +173,7 @@ def _is_protected_cron_path(p: Path) -> bool:
     # Lazily build the set once per process so HERMES_HOME is resolved
     # exactly once.
     if not _PROTECTED_CRON_PATHS:
-        hermes_home = get_hermes_home()
+        hermes_home = get_lliam_home()
         for parent in ("cron", "cronjobs"):
             base = hermes_home / parent
             _PROTECTED_CRON_PATHS.add(str(base))
@@ -363,7 +363,7 @@ def quick() -> Dict[str, Any]:
     # durable state trees.  Some installs place the Hermes checkout, venv,
     # and desktop build under HERMES_HOME; a full rglob over that tree can
     # stall the gateway event loop for minutes.
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
     empty_removed = 0
     sweep_stack: List[Tuple[Path, bool]] = []
     try:
@@ -550,7 +550,7 @@ def guess_category(path: Path) -> Optional[str]:
         return None
 
     # Skip the state dir itself, logs, memory files, sessions, config.
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
     try:
         rel = path.resolve().relative_to(hermes_home)
         top = rel.parts[0] if rel.parts else ""

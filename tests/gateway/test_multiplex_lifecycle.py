@@ -49,7 +49,7 @@ class TestNamedProfileMultiplexerGuard:
         from lliam_cli import gateway as gw
         monkeypatch.setattr(gw, "_profile_suffix", lambda: "coder")
         monkeypatch.setattr(
-            "lliam_constants.get_default_hermes_root", lambda: tmp_path
+            "lliam_constants.get_default_lliam_root", lambda: tmp_path
         )
         # No gateway.pid in tmp_path => no running default gateway => no raise.
         gw._guard_named_profile_under_multiplexer(force=False)

@@ -39,7 +39,7 @@ import re
 import shutil
 import tempfile
 from pathlib import Path
-from lliam_constants import get_hermes_home, display_hermes_home
+from lliam_constants import get_lliam_home, display_lliam_home
 from typing import Dict, Any, List, Optional, Tuple
 
 from utils import atomic_replace, is_truthy_value
@@ -105,7 +105,7 @@ import yaml
 
 
 # All skills live in ~/.hermes/skills/ (single source of truth)
-HERMES_HOME = get_hermes_home()
+HERMES_HOME = get_lliam_home()
 SKILLS_DIR = HERMES_HOME / "skills"
 
 MAX_NAME_LENGTH = 64
@@ -524,13 +524,13 @@ def _find_skill_in_other_profiles(name: str) -> List[Tuple[str, Path]]:
     """
     matches: List[Tuple[str, Path]] = []
     try:
-        from lliam_constants import get_default_hermes_root
+        from lliam_constants import get_default_lliam_root
         from agent.skill_utils import is_excluded_skill_path
     except Exception:
         return matches
 
     try:
-        root = get_default_hermes_root()
+        root = get_default_lliam_root()
     except Exception:
         return matches
 
@@ -1307,7 +1307,7 @@ SKILL_MANAGE_SCHEMA = {
     "description": (
         "Manage skills (create, update, delete). Skills are your procedural "
         "memory — reusable approaches for recurring task types. "
-        f"New skills go to {display_hermes_home()}/skills/; existing skills can be modified wherever they live.\n\n"
+        f"New skills go to {display_lliam_home()}/skills/; existing skills can be modified wherever they live.\n\n"
         "Actions: create (full SKILL.md + optional category), "
         "patch (old_string/new_string — preferred for fixes), "
         "edit (full SKILL.md rewrite — major overhauls only), "

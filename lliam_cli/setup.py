@@ -133,7 +133,7 @@ def _set_reasoning_effort(config: Dict[str, Any], effort: str) -> None:
 from lliam_cli.config import (
     cfg_get,
     DEFAULT_CONFIG,
-    get_hermes_home,
+    get_lliam_home,
     get_config_path,
     get_env_path,
     load_config,
@@ -143,7 +143,7 @@ from lliam_cli.config import (
     get_env_value,
     ensure_hermes_home,
 )
-# display_hermes_home imported lazily at call sites (stale-module safety during hermes update)
+# display_lliam_home imported lazily at call sites (stale-module safety during hermes update)
 
 from lliam_cli.colors import Colors, color
 
@@ -602,7 +602,7 @@ def _print_setup_summary(config: dict, hermes_home):
         print_warning(
             "Some tools are disabled. Run 'lliam-gov setup tools' to configure them,"
         )
-        from lliam_constants import display_hermes_home as _dhh
+        from lliam_constants import display_lliam_home as _dhh
         print_warning(f"or edit {_dhh()}/.env directly to add the missing API keys.")
         print()
 
@@ -626,7 +626,7 @@ def _print_setup_summary(config: dict, hermes_home):
     print()
 
     # Show file locations prominently
-    from lliam_constants import display_hermes_home as _dhh
+    from lliam_constants import display_lliam_home as _dhh
     print(color(f"📁 All your files are in {_dhh()}/:", Colors.CYAN, Colors.BOLD))
     print()
     print(f"   {color('Settings:', Colors.YELLOW)}  {get_config_path()}")
@@ -1064,7 +1064,7 @@ def _setup_tts_provider(config: dict):
                     save_env_value("XAI_API_KEY", api_key)
                     print_success("xAI TTS API key saved")
                 else:
-                    from lliam_constants import display_hermes_home as _dhh
+                    from lliam_constants import display_lliam_home as _dhh
                     print_warning(
                         "No xAI API key provided for TTS. Configure XAI_API_KEY "
                         f"via hermes setup model or {_dhh()}/.env to use xAI TTS. "
@@ -1684,7 +1684,7 @@ def _setup_telegram_auto_result():
 
     profile_name: str | None = None
     try:
-        profile_name = _profile_name_from_hermes_home(Path(get_hermes_home()))
+        profile_name = _profile_name_from_hermes_home(Path(get_lliam_home()))
     except Exception:
         pass
 
@@ -1944,7 +1944,7 @@ def _setup_webhooks():
     save_env_value("WEBHOOK_ENABLED", "true")
     print()
     print_success("Webhooks enabled! Next steps:")
-    from lliam_constants import display_hermes_home as _dhh
+    from lliam_constants import display_lliam_home as _dhh
     print_info(f"   1. Define webhook routes in {_dhh()}/config.yaml")
     print_info("   2. Point your service (GitHub, GitLab, etc.) at:")
     print_info("      http://your-server:8644/webhooks/<route-name>")
@@ -2734,7 +2734,7 @@ def run_setup_wizard(args):
     quick_requested = bool(getattr(args, "quick", False))
 
     config = load_config()
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
 
     # Back up existing config before setup modifies it (#3522)
     config_path = get_config_path()

@@ -47,7 +47,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from utils import env_var_enabled
 from lliam_cli.config import cfg_get
 from lliam_cli.middleware import OBSERVER_SCHEMA_VERSION, VALID_MIDDLEWARE
@@ -1238,7 +1238,7 @@ class PluginManager:
         manifests.extend(bundled_platforms)
 
         # 2. User plugins (~/.hermes/plugins/)
-        user_dir = get_hermes_home() / "plugins"
+        user_dir = get_lliam_home() / "plugins"
         logger.debug("Scanning user plugins: %s", user_dir)
         user_manifests = self._scan_directory(user_dir, source="user")
         logger.debug("  user: %d manifest(s)", len(user_manifests))

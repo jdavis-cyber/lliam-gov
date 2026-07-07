@@ -11,8 +11,8 @@ from typing import Optional
 def _hermes_home_path() -> Path:
     """Resolve the active HERMES_HOME (profile-aware) without circular imports."""
     try:
-        from lliam_constants import get_hermes_home  # local import to avoid cycles
-        return get_hermes_home()
+        from lliam_constants import get_lliam_home  # local import to avoid cycles
+        return get_lliam_home()
     except Exception:
         return Path(os.path.expanduser("~/.hermes"))
 
@@ -20,8 +20,8 @@ def _hermes_home_path() -> Path:
 def _hermes_root_path() -> Path:
     """Resolve the Hermes root dir (always the parent of any profile, never per-profile)."""
     try:
-        from lliam_constants import get_default_hermes_root  # local import to avoid cycles
-        return get_default_hermes_root()
+        from lliam_constants import get_default_lliam_root  # local import to avoid cycles
+        return get_default_lliam_root()
     except Exception:
         return Path(os.path.expanduser("~/.hermes"))
 

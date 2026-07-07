@@ -10,7 +10,7 @@ import yaml
 from lliam_cli.config import (
     DEFAULT_CONFIG,
     check_config_version,
-    get_hermes_home,
+    get_lliam_home,
     ensure_hermes_home,
     get_compatible_custom_providers,
     _explicit_config_paths,
@@ -34,12 +34,12 @@ class TestGetHermesHome:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("HERMES_HOME", None)
             os.environ.pop("LLIAM_HOME", None)
-            home = get_hermes_home()
+            home = get_lliam_home()
             assert home == Path.home() / ".lliam"
 
     def test_env_override(self):
         with patch.dict(os.environ, {"HERMES_HOME": "/custom/path"}):
-            home = get_hermes_home()
+            home = get_lliam_home()
             assert home == Path("/custom/path")
 
 

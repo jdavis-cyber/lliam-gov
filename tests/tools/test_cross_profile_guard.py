@@ -38,7 +38,7 @@ def fake_hermes(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(sec_home))
 
     import lliam_constants
-    monkeypatch.setattr(lliam_constants, "get_default_hermes_root", lambda: root)
+    monkeypatch.setattr(lliam_constants, "get_default_lliam_root", lambda: root)
 
     import agent.file_safety as fs
     monkeypatch.setattr(fs, "_hermes_home_path", lambda: sec_home)

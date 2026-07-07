@@ -21,7 +21,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from typing import Any, Dict, List, Optional, Tuple
 from utils import base_url_host_matches, normalize_proxy_env_vars
 
@@ -1380,7 +1380,7 @@ _OAUTH_TOKEN_URLS = [
 _OAUTH_TOKEN_URL = _OAUTH_TOKEN_URLS[0]
 _OAUTH_REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback"
 _OAUTH_SCOPES = "org:create_api_key user:profile user:inference"
-_HERMES_OAUTH_FILE = get_hermes_home() / ".anthropic_oauth.json"
+_HERMES_OAUTH_FILE = get_lliam_home() / ".anthropic_oauth.json"
 
 
 def _generate_pkce() -> tuple:

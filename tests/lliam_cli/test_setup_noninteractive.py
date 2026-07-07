@@ -74,7 +74,7 @@ class TestNonInteractiveSetup:
         with (
             patch("lliam_cli.setup.ensure_hermes_home"),
             patch("lliam_cli.setup.load_config", return_value={}),
-            patch("lliam_cli.setup.get_hermes_home", return_value="/tmp/.hermes"),
+            patch("lliam_cli.setup.get_lliam_home", return_value="/tmp/.hermes"),
             patch("lliam_cli.auth.get_active_provider", side_effect=AssertionError("wizard continued")),
             patch("builtins.input", side_effect=AssertionError("input should not be called")),
         ):
@@ -92,7 +92,7 @@ class TestNonInteractiveSetup:
         with (
             patch("lliam_cli.setup.ensure_hermes_home"),
             patch("lliam_cli.setup.load_config", return_value={}),
-            patch("lliam_cli.setup.get_hermes_home", return_value="/tmp/.hermes"),
+            patch("lliam_cli.setup.get_lliam_home", return_value="/tmp/.hermes"),
             patch("lliam_cli.auth.get_active_provider", side_effect=AssertionError("wizard continued")),
             patch("sys.stdin") as mock_stdin,
             patch("builtins.input", side_effect=AssertionError("input should not be called")),

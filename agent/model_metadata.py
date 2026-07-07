@@ -115,8 +115,8 @@ _ENDPOINT_MODEL_CACHE_TTL = 300
 
 def _get_model_metadata_cache_path() -> Path:
     """Return path to the OpenRouter model metadata disk cache."""
-    from lliam_constants import get_hermes_home
-    return get_hermes_home() / "cache" / "openrouter_model_metadata.json"
+    from lliam_constants import get_lliam_home
+    return get_lliam_home() / "cache" / "openrouter_model_metadata.json"
 
 
 def _model_metadata_disk_cache_age_seconds() -> Optional[float]:
@@ -909,8 +909,8 @@ def _resolve_endpoint_context_length(
 
 def _get_context_cache_path() -> Path:
     """Return path to the persistent context length cache file."""
-    from lliam_constants import get_hermes_home
-    return get_hermes_home() / "context_length_cache.yaml"
+    from lliam_constants import get_lliam_home
+    return get_lliam_home() / "context_length_cache.yaml"
 
 
 def _load_context_cache() -> Dict[str, int]:

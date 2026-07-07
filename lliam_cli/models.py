@@ -797,8 +797,8 @@ _nous_recommended_cache: dict[str, tuple[dict[str, Any], float]] = {}
 
 def _nous_recommended_disk_path() -> "Path":
     """Disk path for the persisted recommended-models cache."""
-    from lliam_constants import get_hermes_home
-    return get_hermes_home() / "cache" / "nous_recommended_cache.json"
+    from lliam_constants import get_lliam_home
+    return get_lliam_home() / "cache" / "nous_recommended_cache.json"
 
 
 def _read_nous_recommended_disk(base: str) -> dict[str, Any] | None:
@@ -2502,8 +2502,8 @@ _PROVIDER_MODELS_CACHE_TTL = 3600  # 1h
 
 
 def _provider_models_cache_path() -> Path:
-    from lliam_constants import get_hermes_home
-    return get_hermes_home() / "provider_models_cache.json"
+    from lliam_constants import get_lliam_home
+    return get_lliam_home() / "provider_models_cache.json"
 
 
 def _credential_fingerprint(provider: str) -> str:
@@ -2539,9 +2539,9 @@ def _credential_fingerprint(provider: str) -> str:
 
     # OAuth / external-file mtimes that change on re-auth
     try:
-        from lliam_constants import get_hermes_home
+        from lliam_constants import get_lliam_home
         for rel in ("auth.json", "credentials.json"):
-            p = get_hermes_home() / rel
+            p = get_lliam_home() / rel
             try:
                 parts.append(f"{rel}@{p.stat().st_mtime_ns}")
             except FileNotFoundError:
@@ -3548,8 +3548,8 @@ def _strip_ollama_cloud_suffix(model_id: str) -> str:
 
 def _ollama_cloud_cache_path() -> Path:
     """Return the path for the Ollama Cloud model cache."""
-    from lliam_constants import get_hermes_home
-    return get_hermes_home() / "ollama_cloud_models_cache.json"
+    from lliam_constants import get_lliam_home
+    return get_lliam_home() / "ollama_cloud_models_cache.json"
 
 
 def _load_ollama_cloud_cache(*, ignore_ttl: bool = False) -> Optional[dict]:

@@ -234,8 +234,8 @@ def _load_hermes_env() -> None:
         load_dotenv = None  # type: ignore[assignment]
 
     try:
-        from lliam_cli.config import get_hermes_home
-        home = get_hermes_home()
+        from lliam_cli.config import get_lliam_home
+        home = get_lliam_home()
     except Exception:
         return
 

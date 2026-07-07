@@ -385,8 +385,8 @@ class ResponseStore:
         self._max_size = max_size
         if db_path is None:
             try:
-                from lliam_cli.config import get_hermes_home
-                db_path = str(get_hermes_home() / "response_store.db")
+                from lliam_cli.config import get_lliam_home
+                db_path = str(get_lliam_home() / "response_store.db")
             except Exception:
                 db_path = ":memory:"
         self._db_path: Optional[str] = db_path if db_path != ":memory:" else None

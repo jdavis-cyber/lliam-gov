@@ -140,9 +140,9 @@ class TestGetSubprocessHome:
         monkeypatch.setenv("HERMES_HOME", str(root))
 
         from lliam_constants import (
-            get_hermes_home,
-            reset_hermes_home_override,
-            set_hermes_home_override,
+            get_lliam_home,
+            reset_lliam_home_override,
+            set_lliam_home_override,
         )
 
         ready = threading.Event()
@@ -152,23 +152,23 @@ class TestGetSubprocessHome:
         def read_from_other_thread():
             ready.set()
             release.wait(timeout=5)
-            seen.append(str(get_hermes_home()))
+            seen.append(str(get_lliam_home()))
 
         thread = threading.Thread(target=read_from_other_thread)
         thread.start()
         assert ready.wait(timeout=5)
 
-        token = set_hermes_home_override(profile)
+        token = set_lliam_home_override(profile)
         try:
-            assert get_hermes_home() == profile
+            assert get_lliam_home() == profile
             release.set()
             thread.join(timeout=5)
         finally:
-            reset_hermes_home_override(token)
+            reset_lliam_home_override(token)
             release.set()
 
         assert seen == [str(root)]
-        assert get_hermes_home() == root
+        assert get_lliam_home() == root
 
 
 # ---------------------------------------------------------------------------
@@ -247,14 +247,14 @@ class TestMakeRunEnvHomeInjection:
         monkeypatch.setenv("HOME", "/root")
         monkeypatch.setenv("PATH", "/usr/bin:/bin")
 
-        from lliam_constants import reset_hermes_home_override, set_hermes_home_override
+        from lliam_constants import reset_lliam_home_override, set_lliam_home_override
         from tools.environments.local import _make_run_env
 
-        token = set_hermes_home_override(profile)
+        token = set_lliam_home_override(profile)
         try:
             result = _make_run_env({})
         finally:
-            reset_hermes_home_override(token)
+            reset_lliam_home_override(token)
 
         assert result["HERMES_HOME"] == str(profile)
         assert result["HOME"] == str(profile / "home")
@@ -321,14 +321,14 @@ class TestSanitizeSubprocessEnvHomeInjection:
         monkeypatch.setenv("HERMES_HOME", str(root))
 
         base_env = {"HOME": "/root", "PATH": "/usr/bin"}
-        from lliam_constants import reset_hermes_home_override, set_hermes_home_override
+        from lliam_constants import reset_lliam_home_override, set_lliam_home_override
         from tools.environments.local import _sanitize_subprocess_env
 
-        token = set_hermes_home_override(profile)
+        token = set_lliam_home_override(profile)
         try:
             result = _sanitize_subprocess_env(base_env)
         finally:
-            reset_hermes_home_override(token)
+            reset_lliam_home_override(token)
 
         assert result["HERMES_HOME"] == str(profile)
         assert result["HOME"] == str(profile / "home")

@@ -858,9 +858,9 @@ class SlackAdapter(BasePlatformAdapter):
         bot_tokens = [t.strip() for t in raw_token.split(",") if t.strip()]
 
         # Also load tokens from OAuth token file
-        from lliam_constants import get_hermes_home
+        from lliam_constants import get_lliam_home
 
-        tokens_file = get_hermes_home() / "slack_tokens.json"
+        tokens_file = get_lliam_home() / "slack_tokens.json"
         if tokens_file.exists():
             try:
                 saved = json.loads(tokens_file.read_text(encoding="utf-8"))
@@ -4109,14 +4109,14 @@ def interactive_setup() -> None:
         paste-into-Slack instructions. Failures are non-fatal."""
         try:
             from lliam_cli.slack_cli import _build_full_manifest
-            from lliam_constants import get_hermes_home
+            from lliam_constants import get_lliam_home
             import json as _json
 
             manifest = _build_full_manifest(
                 bot_name="Hermes",
                 bot_description="Your Hermes agent on Slack",
             )
-            target = Path(get_hermes_home()) / "slack-manifest.json"
+            target = Path(get_lliam_home()) / "slack-manifest.json"
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(
                 _json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",

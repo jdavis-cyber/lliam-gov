@@ -468,9 +468,9 @@ def _apply_profile_override() -> None:
     # the "Docker & Profiles & Dashboard" report.
     if profile_name is None and not getenv_compat("S6_SUPERVISED_CHILD"):
         try:
-            from lliam_constants import get_default_hermes_root
+            from lliam_constants import get_default_lliam_root
 
-            active_path = get_default_hermes_root() / "active_profile"
+            active_path = get_default_lliam_root() / "active_profile"
             if active_path.exists():
                 name = active_path.read_text().strip()
                 if name and name != "default":
@@ -511,7 +511,7 @@ _apply_profile_override()
 
 # Load .env from ~/.hermes/.env first, then project root as dev fallback.
 # User-managed env files should override stale shell exports on restart.
-from lliam_cli.config import get_hermes_home
+from lliam_cli.config import get_lliam_home
 from lliam_cli.env_loader import load_hermes_dotenv
 
 load_hermes_dotenv(project_env=PROJECT_ROOT / ".env")
@@ -529,7 +529,7 @@ _FORCE_IPV4_EARLY = False
 try:
     import yaml as _yaml_early
 
-    _cfg_path = get_hermes_home() / "config.yaml"
+    _cfg_path = get_lliam_home() / "config.yaml"
     if _cfg_path.exists():
         with open(_cfg_path, encoding="utf-8") as _f:
             _early_cfg_raw = _yaml_early.safe_load(_f) or {}
@@ -711,7 +711,7 @@ def _termux_bundled_skills_fingerprint() -> str:
 
 
 def _termux_bundled_skills_stamp_path() -> Path:
-    return get_hermes_home() / "skills" / ".termux_bundled_sync_stamp"
+    return get_lliam_home() / "skills" / ".termux_bundled_sync_stamp"
 
 
 def _termux_bundled_skills_sync_needed() -> bool:
@@ -780,7 +780,7 @@ def _relative_time(ts) -> str:
 
 def _has_any_provider_configured() -> bool:
     """Check if at least one inference provider is usable."""
-    from lliam_cli.config import get_env_path, get_hermes_home, load_config
+    from lliam_cli.config import get_env_path, get_lliam_home, load_config
     from lliam_cli.auth import get_auth_status
 
     # Determine whether Hermes itself has been explicitly configured (model
@@ -846,7 +846,7 @@ def _has_any_provider_configured() -> bool:
         pass
 
     # Check for Nous Portal OAuth credentials
-    auth_file = get_hermes_home() / "auth.json"
+    auth_file = get_lliam_home() / "auth.json"
     if auth_file.exists():
         try:
             import json
@@ -2429,7 +2429,7 @@ def cmd_whatsapp(args):
     """Set up WhatsApp: choose mode, configure, install bridge, pair via QR."""
     _require_tty("whatsapp")
     from lliam_cli.config import get_env_value, save_env_value
-    from lliam_constants import find_node_executable, with_hermes_node_path
+    from lliam_constants import find_node_executable, with_lliam_node_path
 
     print()
     print("⚕ WhatsApp Setup")
@@ -2557,7 +2557,7 @@ def cmd_whatsapp(args):
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                env=with_hermes_node_path(),
+                env=with_lliam_node_path(),
             )
         except KeyboardInterrupt:
             print("\n  ✗ Install cancelled")
@@ -2573,7 +2573,7 @@ def cmd_whatsapp(args):
         print("✓ Bridge dependencies already installed")
 
     # ── Step 5: Check for existing session ───────────────────────────────
-    session_dir = get_hermes_home() / "whatsapp" / "session"
+    session_dir = get_lliam_home() / "whatsapp" / "session"
     session_dir.mkdir(parents=True, exist_ok=True)
 
     if (session_dir / "creds.json").exists():
@@ -2622,7 +2622,7 @@ def cmd_whatsapp(args):
                 str(session_dir),
             ],
             cwd=str(bridge_dir),
-            env=with_hermes_node_path(),
+            env=with_lliam_node_path(),
         )
     except KeyboardInterrupt:
         pass
@@ -4104,7 +4104,7 @@ def _run_anthropic_oauth_flow(save_env_value):
         ):
             use_anthropic_claude_code_credentials(save_fn=save_env_value)
             print("  ✓ Claude Code credentials linked.")
-            from lliam_constants import display_hermes_home as _dhh_fn
+            from lliam_constants import display_lliam_home as _dhh_fn
 
             print(
                 f"    Hermes will use Claude's credential store directly instead of copying a setup-token into {_dhh_fn()}/.env."
@@ -4522,9 +4522,9 @@ def _gateway_prompt(prompt_text: str, default: str = "", timeout: float = 300.0)
     """
     import json as _json
     import uuid as _uuid
-    from lliam_constants import get_hermes_home
+    from lliam_constants import get_lliam_home
 
-    home = get_hermes_home()
+    home = get_lliam_home()
     prompt_path = home / ".update_prompt.json"
     response_path = home / ".update_response"
 
@@ -4836,7 +4836,7 @@ def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
             encoding = getattr(sys.stdout, "encoding", None) or "ascii"
             print(text.encode(encoding, errors="replace").decode(encoding, errors="replace"))
 
-    from lliam_constants import find_node_executable, with_hermes_node_path
+    from lliam_constants import find_node_executable, with_lliam_node_path
 
     npm = find_node_executable("npm")
     if not npm:
@@ -4844,7 +4844,7 @@ def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
             _say("Web UI frontend not built and npm is not available.")
             _say("Install Node.js, then run:  cd web && npm install && npm run build")
         return not fatal
-    build_env = with_hermes_node_path()
+    build_env = with_lliam_node_path()
     _say("→ Building web UI...")
 
     def _relay(result: "subprocess.CompletedProcess") -> None:
@@ -5021,8 +5021,8 @@ def _compute_desktop_content_hash(project_root: Path) -> str:
 
 def _desktop_stamp_path() -> Path:
     """Return the path to the desktop build stamp file under $HERMES_HOME."""
-    from lliam_constants import get_hermes_home
-    return get_hermes_home() / "desktop-build-stamp.json"
+    from lliam_constants import get_lliam_home
+    return get_lliam_home() / "desktop-build-stamp.json"
 
 
 def _desktop_build_needed(desktop_dir: Path, project_root: Path, *, source_mode: bool) -> bool:
@@ -5277,7 +5277,7 @@ def _redownload_electron_dist(
     installer = electron_dir / "install.js"
     if not installer.is_file():
         return False
-    from lliam_constants import find_node_executable, with_hermes_node_path
+    from lliam_constants import find_node_executable, with_lliam_node_path
 
     node = find_node_executable("node")
     if not node:
@@ -5290,7 +5290,7 @@ def _redownload_electron_dist(
     except OSError:
         pass
 
-    dl_env = with_hermes_node_path(env)
+    dl_env = with_lliam_node_path(env)
     if mirror:
         dl_env["ELECTRON_MIRROR"] = mirror
     try:
@@ -5576,10 +5576,10 @@ def cmd_gui(args: argparse.Namespace):
     except Exception:
         pass
 
-    from lliam_constants import find_node_executable, with_hermes_node_path
+    from lliam_constants import find_node_executable, with_lliam_node_path
 
-    # with_hermes_node_path() copies os.environ when called with no arg.
-    env = with_hermes_node_path()
+    # with_lliam_node_path() copies os.environ when called with no arg.
+    env = with_lliam_node_path()
     if getattr(args, "fake_boot", False):
         env["LLIAM_DESKTOP_BOOT_FAKE"] = "1"
     if getattr(args, "ignore_existing", False):
@@ -6712,17 +6712,17 @@ def _count_commits_between(git_cmd: list[str], cwd: Path, base: str, head: str) 
 
 def _should_skip_upstream_prompt() -> bool:
     """Check if user previously declined to add upstream."""
-    from lliam_constants import get_hermes_home
+    from lliam_constants import get_lliam_home
 
-    return (get_hermes_home() / SKIP_UPSTREAM_PROMPT_FILE).exists()
+    return (get_lliam_home() / SKIP_UPSTREAM_PROMPT_FILE).exists()
 
 
 def _mark_skip_upstream_prompt():
     """Create marker file to skip future upstream prompts."""
     try:
-        from lliam_constants import get_hermes_home
+        from lliam_constants import get_lliam_home
 
-        (get_hermes_home() / SKIP_UPSTREAM_PROMPT_FILE).touch()
+        (get_lliam_home() / SKIP_UPSTREAM_PROMPT_FILE).touch()
     except Exception:
         pass
 
@@ -6869,9 +6869,9 @@ def _invalidate_update_cache():
     """
     homes = []
     # Default profile home (Docker-aware — uses /opt/data in Docker)
-    from lliam_constants import get_default_hermes_root
+    from lliam_constants import get_default_lliam_root
 
-    default_home = get_default_hermes_root()
+    default_home = get_default_lliam_root()
     homes.append(default_home)
     # Named profiles under <root>/profiles/
     profiles_root = default_home / "profiles"
@@ -7967,7 +7967,7 @@ def _ensure_uv_for_termux(pip_cmd: list[str]) -> str | None:
 
 
 def _update_node_dependencies() -> None:
-    from lliam_constants import find_node_executable, with_hermes_node_path
+    from lliam_constants import find_node_executable, with_lliam_node_path
 
     npm = find_node_executable("npm")
     if not npm:
@@ -7986,7 +7986,7 @@ def _update_node_dependencies() -> None:
     print("→ Updating Node.js dependencies...")
     extra_args = ["--no-fund", "--no-audit", "--progress=false"]
 
-    nixos_env = with_hermes_node_path(_nixos_build_env())
+    nixos_env = with_lliam_node_path(_nixos_build_env())
 
     # Step 1: root install (no workspace recursion).
     # NOTE: capture_output=False here is deliberate (#18840) — optional
@@ -8155,8 +8155,8 @@ def _install_hangup_protection(gateway_mode: bool = False):
     # tolerance.  Any failure here is non-fatal; we just skip the wrap.
     try:
         # Late-bound import so tests can monkeypatch
-        # lliam_cli.config.get_hermes_home to simulate setup failure.
-        from lliam_cli.config import get_hermes_home as _get_hermes_home
+        # lliam_cli.config.get_lliam_home to simulate setup failure.
+        from lliam_cli.config import get_lliam_home as _get_hermes_home
 
         logs_dir = _get_hermes_home() / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
@@ -8598,13 +8598,13 @@ def _run_pre_update_backup(args) -> None:
         size_bytes /= 1024
         size_str = f"{size_bytes:.1f} {unit}"
 
-    # Render path using display_hermes_home so the user sees ~/.hermes/...
+    # Render path using display_lliam_home so the user sees ~/.hermes/...
     try:
-        from lliam_constants import get_hermes_home, display_hermes_home
+        from lliam_constants import get_lliam_home, display_lliam_home
 
-        home = get_hermes_home()
+        home = get_lliam_home()
         try:
-            display_path = f"{display_hermes_home()}/{out_path.relative_to(home)}"
+            display_path = f"{display_lliam_home()}/{out_path.relative_to(home)}"
         except ValueError:
             display_path = str(out_path)
     except Exception:
@@ -9466,7 +9466,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
 
         # Clear stale .pyc bytecode cache — prevents ImportError on gateway
         # restart when updated source references names that didn't exist in
-        # the old bytecode (e.g. get_hermes_home added to lliam_constants).
+        # the old bytecode (e.g. get_lliam_home added to lliam_constants).
         removed = _clear_bytecode_cache(PROJECT_ROOT)
         if removed:
             print(
@@ -9579,7 +9579,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 tail = "\n".join((build_result.stdout or "").strip().splitlines()[-15:])
                 if tail:
                     print(tail)
-                from lliam_constants import display_hermes_home as _dhh
+                from lliam_constants import display_lliam_home as _dhh
                 print(f"  Full build log: {_dhh()}/logs/update.log")
             else:
                 print("  ✓ Desktop app up to date")
@@ -9606,7 +9606,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # After git pull, source files on disk are newer than cached Python
         # modules in this process.  Reload lliam_constants so that any lazy
         # import executed below (skills sync, gateway restart) sees new
-        # attributes like display_hermes_home() added since the last release.
+        # attributes like display_lliam_home() added since the last release.
         try:
             import importlib
             import lliam_constants as _hc
@@ -9911,7 +9911,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # before we attempt the restart — ensures the new gateway sees it
         # regardless of how we die.
         if gateway_mode:
-            _exit_code_path = get_hermes_home() / ".update_exit_code"
+            _exit_code_path = get_lliam_home() / ".update_exit_code"
             try:
                 _exit_code_path.write_text("0")
             except OSError:
@@ -10702,14 +10702,14 @@ def cmd_profile(args):
         _is_wrapper_dir_in_path,
         _get_wrapper_dir,
     )
-    from lliam_constants import display_hermes_home
+    from lliam_constants import display_lliam_home
 
     action = getattr(args, "profile_action", None)
 
     if action is None:
         # Bare `hermes profile` — show current profile status
         profile_name = get_active_profile_name()
-        dhh = display_hermes_home()
+        dhh = display_lliam_home()
         print(f"\nActive profile: {profile_name}")
         print(f"Path:           {dhh}")
 
@@ -10938,7 +10938,7 @@ def cmd_profile(args):
         if name and not text_value and not auto_flag:
             try:
                 if _profiles_mod.normalize_profile_name(name) == "default":
-                    from lliam_constants import get_hermes_home as _hh
+                    from lliam_constants import get_lliam_home as _hh
                     profile_dir = Path(_hh())
                 else:
                     profile_dir = _profiles_mod.get_profile_dir(name)
@@ -10961,7 +10961,7 @@ def cmd_profile(args):
         if text_value:
             try:
                 if _profiles_mod.normalize_profile_name(name) == "default":
-                    from lliam_constants import get_hermes_home as _hh
+                    from lliam_constants import get_lliam_home as _hh
                     profile_dir = Path(_hh())
                 else:
                     profile_dir = _profiles_mod.get_profile_dir(name)
@@ -11607,13 +11607,13 @@ def cmd_dashboard(args):
         # HERMES_HOME falls back to $HOME/.hermes = /opt/data/.hermes — an
         # empty, auto-seeded home where the dashboard sees only the default
         # profile and the install-method stamp is missing (so the Docker
-        # update-button guard also misfires).  get_default_hermes_root()
+        # update-button guard also misfires).  get_default_lliam_root()
         # returns the root for both layouts: ~/.hermes for a standard install
         # and /opt/data for Docker (it strips a trailing profiles/<name>).
         # See the support report for the double-mount workaround this avoids.
         try:
-            from lliam_constants import get_default_hermes_root
-            env["HERMES_HOME"] = str(get_default_hermes_root())
+            from lliam_constants import get_default_lliam_root
+            env["HERMES_HOME"] = str(get_default_lliam_root())
         except Exception:
             # Best-effort: if root resolution fails, fall back to the prior
             # behaviour (drop HERMES_HOME) rather than block the reroute.
@@ -12153,9 +12153,9 @@ def cmd_memory(args):
         print("\n  ✓ Memory provider: built-in only")
         print("  Saved to config.yaml\n")
     elif sub == "reset":
-        from lliam_constants import get_hermes_home, display_hermes_home
+        from lliam_constants import get_lliam_home, display_lliam_home
 
-        mem_dir = get_hermes_home() / "memories"
+        mem_dir = get_lliam_home() / "memories"
         target = getattr(args, "target", "all")
         files_to_reset = []
         if target in {"all", "memory"}:
@@ -12169,7 +12169,7 @@ def cmd_memory(args):
         ]
         if not existing:
             print(
-                f"\n  Nothing to reset — no memory files found in {display_hermes_home()}/memories/\n"
+                f"\n  Nothing to reset — no memory files found in {display_lliam_home()}/memories/\n"
             )
             return
 
@@ -12196,7 +12196,7 @@ def cmd_memory(args):
         print(
             f"\n  Memory reset complete. New sessions will start with a blank slate."
         )
-        print(f"  Files were in: {display_hermes_home()}/memories/\n")
+        print(f"  Files were in: {display_lliam_home()}/memories/\n")
     else:
         from lliam_cli.memory_setup import memory_command
 
@@ -13220,7 +13220,7 @@ def main():
                 ):
                     print("Cancelled.")
                     return
-            sessions_dir = get_hermes_home() / "sessions"
+            sessions_dir = get_lliam_home() / "sessions"
             if db.delete_session(resolved_session_id, sessions_dir=sessions_dir):
                 print(f"Deleted session '{resolved_session_id}'.")
             else:
@@ -13235,7 +13235,7 @@ def main():
                 ):
                     print("Cancelled.")
                     return
-            sessions_dir = get_hermes_home() / "sessions"
+            sessions_dir = get_lliam_home() / "sessions"
             count = db.prune_sessions(
                 older_than_days=days, source=args.source, sessions_dir=sessions_dir
             )

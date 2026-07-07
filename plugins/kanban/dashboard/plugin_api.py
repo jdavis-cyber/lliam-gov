@@ -2155,9 +2155,9 @@ def update_profile_description(profile_name: str, payload: DescribeBody):
         from lliam_cli import profiles as profiles_mod
         canon = profiles_mod.normalize_profile_name(profile_name)
         if canon == "default":
-            from lliam_constants import get_hermes_home  # type: ignore
+            from lliam_constants import get_lliam_home  # type: ignore
             from pathlib import Path as _Path
-            profile_dir = _Path(get_hermes_home())
+            profile_dir = _Path(get_lliam_home())
         else:
             profile_dir = profiles_mod.get_profile_dir(canon)
         if not profile_dir.is_dir():

@@ -214,7 +214,7 @@ class TestCreateJobSnapshot:
         jobs = self._isolate_storage(monkeypatch)
         (tmp_path / "config.yaml").write_text("model:\n  default: llama-3.3-70b:free\n")
         monkeypatch.setattr(
-            "cron.jobs.get_hermes_home", lambda: tmp_path, raising=True
+            "cron.jobs.get_lliam_home", lambda: tmp_path, raising=True
         )
         with patch(
             "lliam_cli.runtime_provider.resolve_runtime_provider",
@@ -229,7 +229,7 @@ class TestCreateJobSnapshot:
         jobs = self._isolate_storage(monkeypatch)
         (tmp_path / "config.yaml").write_text("model:\n  default: llama-3.3-70b:free\n")
         monkeypatch.setattr(
-            "cron.jobs.get_hermes_home", lambda: tmp_path, raising=True
+            "cron.jobs.get_lliam_home", lambda: tmp_path, raising=True
         )
         with patch(
             "lliam_cli.runtime_provider.resolve_runtime_provider",

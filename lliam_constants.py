@@ -16,29 +16,29 @@ from pathlib import Path
 
 _profile_fallback_warned: bool = False
 _UNSET = object()
-_HERMES_HOME_OVERRIDE: ContextVar[str | object] = ContextVar(
-    "_HERMES_HOME_OVERRIDE", default=_UNSET
+_LLIAM_HOME_OVERRIDE: ContextVar[str | object] = ContextVar(
+    "_LLIAM_HOME_OVERRIDE", default=_UNSET
 )
 
 
-def set_hermes_home_override(path: str | Path | None) -> Token:
+def set_lliam_home_override(path: str | Path | None) -> Token:
     """Set a context-local Hermes home override and return its reset token.
 
     This is for in-process, per-task scoping.  It deliberately does not mutate
     ``os.environ`` because that is shared by every thread in the process.
     """
     value: str | object = _UNSET if path is None else str(path)
-    return _HERMES_HOME_OVERRIDE.set(value)
+    return _LLIAM_HOME_OVERRIDE.set(value)
 
 
-def reset_hermes_home_override(token: Token) -> None:
+def reset_lliam_home_override(token: Token) -> None:
     """Restore the previous context-local Hermes home override."""
-    _HERMES_HOME_OVERRIDE.reset(token)
+    _LLIAM_HOME_OVERRIDE.reset(token)
 
 
-def get_hermes_home_override() -> str | None:
+def get_lliam_home_override() -> str | None:
     """Return the active context-local Hermes home override, if any."""
-    override = _HERMES_HOME_OVERRIDE.get()
+    override = _LLIAM_HOME_OVERRIDE.get()
     if override is _UNSET or not override:
         return None
     return str(override)
@@ -57,7 +57,7 @@ def _get_platform_default_home(name: str) -> Path:
     return Path.home() / f".{name}"
 
 
-def _get_platform_default_hermes_home() -> Path:
+def _get_platform_default_lliam_home() -> Path:
     """Return the platform-native default home path (post-rename: ``~/.lliam``).
 
     The name is historical (kept until the R.2 file rename); the returned path
@@ -76,10 +76,10 @@ def get_default_home_leaf() -> str:
     user's home in ``lliam_cli/gateway.py``) without hardcoding the leaf or
     reaching into the private platform helper.
     """
-    return _get_platform_default_hermes_home().name
+    return _get_platform_default_lliam_home().name
 
 
-def get_hermes_home() -> Path:
+def get_lliam_home() -> Path:
     """Return the Hermes home directory (default: platform-native path).
 
     Reads HERMES_HOME env var, falls back to the platform-native default.
@@ -95,7 +95,7 @@ def get_hermes_home() -> Path:
     template in ``lliam_cli/gateway.py`` and the kanban dispatcher in
     ``lliam_cli/kanban_db.py``).  See https://github.com/NousResearch/hermes-agent/issues/18594.
     """
-    override = get_hermes_home_override()
+    override = get_lliam_home_override()
     if override:
         return Path(override)
 
@@ -114,7 +114,7 @@ def get_hermes_home() -> Path:
     global _profile_fallback_warned
     if not _profile_fallback_warned:
         try:
-            fallback_home = _get_platform_default_hermes_home()
+            fallback_home = _get_platform_default_lliam_home()
             active_path = fallback_home / "active_profile"
             active = active_path.read_text().strip() if active_path.exists() else ""
         except (UnicodeDecodeError, OSError):
@@ -140,13 +140,13 @@ def get_hermes_home() -> Path:
             except Exception:
                 pass
 
-    return _get_platform_default_hermes_home()
+    return _get_platform_default_lliam_home()
 
 
 def get_legacy_home_for_migration() -> Path:
     """Return the pre-rename home to migrate FROM (never as the live home).
 
-    Resolution mirrors :func:`get_hermes_home`'s base-home derivation so the
+    Resolution mirrors :func:`get_lliam_home`'s base-home derivation so the
     one-time migration copies from the correct legacy location:
 
     * ``HERMES_HOME`` if explicitly set — the effective home already IS this
@@ -156,11 +156,11 @@ def get_legacy_home_for_migration() -> Path:
     * otherwise the legacy platform default (``~/.hermes`` /
       ``%LOCALAPPDATA%\\hermes``).
 
-    A context-local override (``set_hermes_home_override``) takes precedence,
-    matching :func:`get_hermes_home`, so isolated in-process scopes migrate to
+    A context-local override (``set_lliam_home_override``) takes precedence,
+    matching :func:`get_lliam_home`, so isolated in-process scopes migrate to
     the same isolated home they read from.
     """
-    override = get_hermes_home_override()
+    override = get_lliam_home_override()
     if override:
         return Path(override)
     val = os.environ.get("HERMES_HOME", "").strip()
@@ -174,16 +174,16 @@ def run_startup_migration() -> None:
 
     Call this ONCE at CLI/app startup, before any home access — never at module
     import time. Resolves the SAME old/new homes the rest of the process uses
-    (:func:`get_legacy_home_for_migration` and :func:`get_hermes_home`) and
+    (:func:`get_legacy_home_for_migration` and :func:`get_lliam_home`) and
     delegates the copy-once / idempotent / old==new-guard logic to
     :func:`lliam_cli.migrate_home.migrate_if_needed`.
     """
     from lliam_cli import migrate_home
 
-    migrate_home.migrate_if_needed(get_legacy_home_for_migration(), get_hermes_home())
+    migrate_home.migrate_if_needed(get_legacy_home_for_migration(), get_lliam_home())
 
 
-def get_default_hermes_root() -> Path:
+def get_default_lliam_root() -> Path:
     """Return the root Hermes directory for profile-level operations.
 
     In standard deployments this is the platform-native Hermes home
@@ -199,12 +199,12 @@ def get_default_hermes_root() -> Path:
     (``/opt/data/profiles/coder``) layouts.
 
     Honors LLIAM_HOME first, then legacy HERMES_HOME (same precedence as
-    :func:`get_hermes_home`), so a custom/Docker root set via either var
+    :func:`get_lliam_home`), so a custom/Docker root set via either var
     resolves consistently.
     """
     from lliam_cli.env_compat import getenv_compat
 
-    native_home = _get_platform_default_hermes_home()
+    native_home = _get_platform_default_lliam_home()
     env_home = getenv_compat("HOME") or ""
     if not env_home:
         return native_home
@@ -258,7 +258,7 @@ def get_optional_skills_dir(default: Path | None = None) -> Path:
         return packaged
     if default is not None:
         return default
-    return get_hermes_home() / "optional-skills"
+    return get_lliam_home() / "optional-skills"
 
 
 def get_optional_mcps_dir(default: Path | None = None) -> Path:
@@ -277,7 +277,7 @@ def get_optional_mcps_dir(default: Path | None = None) -> Path:
         return packaged
     if default is not None:
         return default
-    return get_hermes_home() / "optional-mcps"
+    return get_lliam_home() / "optional-mcps"
 
 
 def get_bundled_skills_dir(default: Path | None = None) -> Path:
@@ -297,10 +297,10 @@ def get_bundled_skills_dir(default: Path | None = None) -> Path:
         return packaged
     if default is not None:
         return default
-    return get_hermes_home() / "skills"
+    return get_lliam_home() / "skills"
 
 
-def get_hermes_dir(new_subpath: str, old_name: str) -> Path:
+def get_lliam_dir(new_subpath: str, old_name: str) -> Path:
     """Resolve a Hermes subdirectory with backward compatibility.
 
     New installs get the consolidated layout (e.g. ``cache/images``).
@@ -323,14 +323,14 @@ def get_hermes_dir(new_subpath: str, old_name: str) -> Path:
         Absolute ``Path`` — legacy location if it exists with content,
         otherwise the new location.
     """
-    home = get_hermes_home()
+    home = get_lliam_home()
     old_path = home / old_name
     if _legacy_path_has_content(old_path):
         return old_path
     return home / new_subpath
 
 
-def iter_hermes_node_dirs(home: Path | None = None) -> list[Path]:
+def iter_lliam_node_dirs(home: Path | None = None) -> list[Path]:
     """Return Hermes-managed Node.js directories in preferred lookup order.
 
     Windows installs from ``scripts/install.ps1`` unpack portable Node directly
@@ -338,7 +338,7 @@ def iter_hermes_node_dirs(home: Path | None = None) -> list[Path]:
     ``$HERMES_HOME/node/bin``. Include both shapes on every platform so mixed
     or migrated installs still work.
     """
-    root = home or get_hermes_home()
+    root = home or get_lliam_home()
     dirs = [root / "node"]
     bin_dir = root / "node" / "bin"
     # NOTE: keep this ordering in sync with hermesManagedNodePathEntries() in
@@ -375,7 +375,7 @@ def node_tool_runnable(path: str | None) -> bool:
     Hermes-managed Node trees live under ``$HERMES_HOME/node`` (or a profile's
     ``HERMES_HOME``). A partial upgrade or interrupted install can leave
     ``bin/npm`` behind while ``lib/cli.js`` is missing — the wrapper exists but
-    immediately throws ``MODULE_NOT_FOUND``. ``find_hermes_node_executable``
+    immediately throws ``MODULE_NOT_FOUND``. ``find_lliam_node_executable``
     used to trust file presence alone, so ``hermes update`` would pick that
     broken npm and fail the Node refresh / web UI build.
 
@@ -398,19 +398,19 @@ def node_tool_runnable(path: str | None) -> bool:
             [path, "--version"],
             capture_output=True,
             timeout=10,
-            env=with_hermes_node_path(),
+            env=with_lliam_node_path(),
         )
     except (OSError, subprocess.TimeoutExpired, ValueError):
         return False
     return result.returncode == 0
 
 
-def hermes_managed_node_tree_present(home: Path | None = None) -> bool:
+def lliam_managed_node_tree_present(home: Path | None = None) -> bool:
     """Return True when any Hermes-managed node/npm/npx shim exists on disk."""
     names = set()
     for command in ("node", "npm", "npx"):
         names.update(_candidate_node_command_names(command))
-    for directory in iter_hermes_node_dirs(home):
+    for directory in iter_lliam_node_dirs(home):
         for name in names:
             candidate = directory / name
             if candidate.is_file() and (
@@ -437,7 +437,7 @@ def _heal_managed_node_windows() -> bool:
     else:
         return False
 
-    home = get_hermes_home()
+    home = get_lliam_home()
     index_url = f"https://nodejs.org/dist/latest-v{_HERMES_NODE_TARGET_MAJOR}.x/"
     try:
         with urllib.request.urlopen(index_url, timeout=60) as response:
@@ -482,7 +482,7 @@ def _heal_managed_node_windows() -> bool:
     return node_tool_runnable(str(target / "node.exe"))
 
 
-def heal_hermes_managed_node() -> bool:
+def heal_lliam_managed_node() -> bool:
     """Redownload Hermes-managed Node when the tree exists but is broken.
 
     Runs at most once per process. POSIX installs shell out to
@@ -492,7 +492,7 @@ def heal_hermes_managed_node() -> bool:
     global _managed_node_heal_attempted
     if _managed_node_heal_attempted:
         return False
-    if not hermes_managed_node_tree_present():
+    if not lliam_managed_node_tree_present():
         return False
     _managed_node_heal_attempted = True
 
@@ -511,7 +511,7 @@ def heal_hermes_managed_node() -> bool:
                 "-c",
                 f'source "{_NODE_BOOTSTRAP_SCRIPT}" && heal_managed_node',
             ],
-            env={**os.environ, "HERMES_HOME": str(get_hermes_home())},
+            env={**os.environ, "HERMES_HOME": str(get_lliam_home())},
             capture_output=True,
             timeout=300,
             check=False,
@@ -521,11 +521,11 @@ def heal_hermes_managed_node() -> bool:
     return result.returncode == 0
 
 
-def find_hermes_node_executable(command: str) -> str | None:
+def find_lliam_node_executable(command: str) -> str | None:
     """Return a Hermes-managed Node/npm executable path, healing broken trees."""
     names = _candidate_node_command_names(command)
     broken_present = False
-    for directory in iter_hermes_node_dirs():
+    for directory in iter_lliam_node_dirs():
         for name in names:
             candidate = directory / name
             if candidate.is_file() and (
@@ -535,8 +535,8 @@ def find_hermes_node_executable(command: str) -> str | None:
                 if node_tool_runnable(resolved):
                     return resolved
                 broken_present = True
-    if broken_present and heal_hermes_managed_node():
-        for directory in iter_hermes_node_dirs():
+    if broken_present and heal_lliam_managed_node():
+        for directory in iter_lliam_node_dirs():
             for name in names:
                 candidate = directory / name
                 if candidate.is_file() and (
@@ -584,20 +584,20 @@ def find_node_executable(command: str) -> str | None:
     tree exists but cannot be healed, returns ``None`` instead of falling back
     to system npm on PATH.
     """
-    managed = find_hermes_node_executable(command)
+    managed = find_lliam_node_executable(command)
     if managed:
         return managed
-    if hermes_managed_node_tree_present():
+    if lliam_managed_node_tree_present():
         return None
     return find_node_executable_on_path(command)
 
 
-def with_hermes_node_path(env: dict[str, str] | None = None) -> dict[str, str]:
+def with_lliam_node_path(env: dict[str, str] | None = None) -> dict[str, str]:
     """Return *env* with Hermes-managed Node directories prepended to PATH."""
     merged = dict(os.environ if env is None else env)
     existing = merged.get("PATH", "")
     parts = [p for p in existing.split(os.pathsep) if p]
-    managed = [str(path) for path in iter_hermes_node_dirs() if path.is_dir()]
+    managed = [str(path) for path in iter_lliam_node_dirs() if path.is_dir()]
     for entry in reversed(managed):
         if entry not in parts:
             parts.insert(0, entry)
@@ -643,7 +643,7 @@ def agent_browser_runnable(path: str | None) -> bool:
             [path, "--version"],
             capture_output=True,
             timeout=10,
-            env=with_hermes_node_path(),
+            env=with_lliam_node_path(),
         )
     except (OSError, subprocess.TimeoutExpired, ValueError):
         return False
@@ -699,7 +699,7 @@ def _legacy_path_has_content(path: Path) -> bool:
     return True
 
 
-def display_hermes_home() -> str:
+def display_lliam_home() -> str:
     """Return a user-friendly display string for the current HERMES_HOME.
 
     Uses ``~/`` shorthand for readability::
@@ -710,9 +710,9 @@ def display_hermes_home() -> str:
 
     Use this in **user-facing** print/log messages instead of hardcoding
     ``~/.hermes``.  For code that needs a real ``Path``, use
-    :func:`get_hermes_home` instead.
+    :func:`get_lliam_home` instead.
     """
-    home = get_hermes_home()
+    home = get_lliam_home()
     try:
         return "~/" + str(home.relative_to(Path.home()))
     except ValueError:
@@ -752,7 +752,7 @@ def _norm_home_path(path: str | None) -> str:
 
 def _profile_home_path(env: dict[str, str] | None = None) -> str | None:
     """Return ``{HERMES_HOME}/home`` when the profile-home directory exists."""
-    hermes_home = get_hermes_home_override() or (env or {}).get("HERMES_HOME") or os.getenv("HERMES_HOME")
+    hermes_home = get_lliam_home_override() or (env or {}).get("HERMES_HOME") or os.getenv("HERMES_HOME")
     if not hermes_home:
         return None
     profile_home = os.path.join(hermes_home, "home")
@@ -983,21 +983,21 @@ def is_container() -> bool:
 def get_config_path() -> Path:
     """Return the path to ``config.yaml`` under HERMES_HOME.
 
-    Replaces the ``get_hermes_home() / "config.yaml"`` pattern repeated
+    Replaces the ``get_lliam_home() / "config.yaml"`` pattern repeated
     in 7+ files (skill_utils.py, lliam_logging.py, lliam_time.py, etc.).
     """
-    return get_hermes_home() / "config.yaml"
+    return get_lliam_home() / "config.yaml"
 
 
 def get_skills_dir() -> Path:
     """Return the path to the skills directory under HERMES_HOME."""
-    return get_hermes_home() / "skills"
+    return get_lliam_home() / "skills"
 
 
 
 def get_env_path() -> Path:
     """Return the path to the ``.env`` file under HERMES_HOME."""
-    return get_hermes_home() / ".env"
+    return get_lliam_home() / ".env"
 
 
 # ─── Network Preferences ─────────────────────────────────────────────────────

@@ -555,7 +555,7 @@ def test_get_status_config_returns_summary(monkeypatch, tmp_path):
     monkeypatch.setenv("SUPERMEMORY_API_KEY", "test-key")
     monkeypatch.setattr("plugins.memory.supermemory._SupermemoryClient", FakeClient)
     monkeypatch.setattr(
-        "lliam_constants.get_hermes_home",
+        "lliam_constants.get_lliam_home",
         lambda: tmp_path,
     )
     result = SupermemoryMemoryProvider().get_status_config({})

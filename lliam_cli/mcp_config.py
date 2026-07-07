@@ -21,10 +21,10 @@ from lliam_cli.config import (
     save_config,
     get_env_value,
     save_env_value,
-    get_hermes_home,  # noqa: F401 — used by test mocks
+    get_lliam_home,  # noqa: F401 — used by test mocks
 )
 from lliam_cli.colors import Colors, color
-from lliam_constants import display_hermes_home
+from lliam_constants import display_lliam_home
 from lliam_cli.mcp_security import validate_mcp_server_entry
 from tools.mcp_tool import _ENV_VAR_PATTERN
 
@@ -407,7 +407,7 @@ def cmd_mcp_add(args):
                     if api_key:
                         api_key = _strip_bearer_prefix(api_key)
                         save_env_value(env_key, api_key)
-                        _success(f"Saved to {display_hermes_home()}/.env as {env_key}")
+                        _success(f"Saved to {display_lliam_home()}/.env as {env_key}")
 
                 # Set header with env var interpolation
                 if api_key or existing_key:
@@ -494,7 +494,7 @@ def cmd_mcp_add(args):
     server_config["enabled"] = True
     if _save_mcp_server(name, server_config):
         print()
-        _success(f"Saved '{name}' to {display_hermes_home()}/config.yaml ({tool_count}/{total} tools enabled)")
+        _success(f"Saved '{name}' to {display_lliam_home()}/config.yaml ({tool_count}/{total} tools enabled)")
         _info("Start a new session to use these tools.")
 
 

@@ -503,10 +503,10 @@ def _get_session_db() -> Optional[Any]:
     non-standard launchers can still use the GoalManager.
     """
     try:
-        from lliam_constants import get_hermes_home
+        from lliam_constants import get_lliam_home
         from lliam_state import SessionDB
 
-        home = str(get_hermes_home())
+        home = str(get_lliam_home())
     except Exception as exc:  # pragma: no cover
         logger.debug("GoalManager: SessionDB bootstrap failed (%s)", exc)
         return None

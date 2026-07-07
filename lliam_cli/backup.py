@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from lliam_constants import get_default_hermes_root, get_hermes_home, display_hermes_home
+from lliam_constants import get_default_lliam_root, get_lliam_home, display_lliam_home
 
 logger = logging.getLogger(__name__)
 
@@ -291,7 +291,7 @@ def _format_size(nbytes: int) -> str:
 
 def run_backup(args) -> None:
     """Create a zip backup of the Hermes home directory."""
-    hermes_root = get_default_hermes_root()
+    hermes_root = get_default_lliam_root()
 
     if not hermes_root.is_dir():
         print(f"Error: Hermes home directory not found at {hermes_root}")
@@ -316,7 +316,7 @@ def run_backup(args) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Collect files
-    print(f"Scanning {display_hermes_home()} ...")
+    print(f"Scanning {display_lliam_home()} ...")
     files_to_add: list[tuple[Path, Path]] = []  # (absolute, relative)
     skipped_dirs = set()
 
@@ -438,7 +438,7 @@ def run_backup(args) -> None:
     if external_to_add:
         print(
             f"\n  Included {len(external_to_add)} memory-provider file(s) "
-            f"stored outside {display_hermes_home()}."
+            f"stored outside {display_lliam_home()}."
         )
 
     if skipped_external:
@@ -531,7 +531,7 @@ def run_import(args) -> None:
         print(f"Error: Not a valid zip file: {zip_path}")
         sys.exit(1)
 
-    hermes_root = get_default_hermes_root()
+    hermes_root = get_default_lliam_root()
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         # Validate
@@ -545,7 +545,7 @@ def run_import(args) -> None:
         file_count = len(members)
 
         print(f"Backup contains {file_count} files")
-        print(f"Target: {display_hermes_home()}")
+        print(f"Target: {display_lliam_home()}")
 
         if prefix:
             print(f"Detected archive prefix: {prefix!r} (will be stripped)")
@@ -658,12 +658,12 @@ def run_import(args) -> None:
         # Summary
         print()
         print(f"Import complete: {restored} files restored in {elapsed:.1f}s")
-        print(f"  Target: {display_hermes_home()}")
+        print(f"  Target: {display_lliam_home()}")
 
         if restored_external:
             print(
                 f"\n  Restored {restored_external} memory-provider file(s) to "
-                f"their original location(s) outside {display_hermes_home()}."
+                f"their original location(s) outside {display_lliam_home()}."
             )
 
         if errors:
@@ -786,7 +786,7 @@ _QUICK_DEFAULT_KEEP = 20
 
 
 def _quick_snapshot_root(hermes_home: Optional[Path] = None) -> Path:
-    home = hermes_home or get_hermes_home()
+    home = hermes_home or get_lliam_home()
     return home / _QUICK_SNAPSHOTS_DIR
 
 
@@ -803,7 +803,7 @@ def create_quick_snapshot(
     Returns:
         Snapshot ID (timestamp-based), or None if no files found.
     """
-    home = hermes_home or get_hermes_home()
+    home = hermes_home or get_lliam_home()
     root = _quick_snapshot_root(home)
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -923,7 +923,7 @@ def restore_quick_snapshot(
     Overwrites current state files with the snapshot's copies.
     Returns True if at least one file was restored.
     """
-    home = hermes_home or get_hermes_home()
+    home = hermes_home or get_lliam_home()
     root = _quick_snapshot_root(home)
 
     # Security: reject snapshot_id values that contain path separators or
@@ -1057,7 +1057,7 @@ def restore_cron_jobs_if_emptied(
     if not snapshot_id:
         return None
 
-    home = hermes_home or get_hermes_home()
+    home = hermes_home or get_lliam_home()
     live_path = home / _CRON_JOBS_REL
 
     live_count = _count_cron_jobs(live_path)
@@ -1135,7 +1135,7 @@ def run_quick_backup(args) -> None:
     if snap_id:
         print(f"State snapshot created: {snap_id}")
         snaps = list_quick_snapshots()
-        print(f"  {len(snaps)} snapshot(s) stored in {display_hermes_home()}/state-snapshots/")
+        print(f"  {len(snaps)} snapshot(s) stored in {display_lliam_home()}/state-snapshots/")
         print(f"  Restore with: /snapshot restore {snap_id}")
     else:
         print("No state files found to snapshot.")
@@ -1222,7 +1222,7 @@ _PRE_UPDATE_DEFAULT_KEEP = 5
 
 
 def _pre_update_backup_dir(hermes_home: Optional[Path] = None) -> Path:
-    home = hermes_home or get_hermes_home()
+    home = hermes_home or get_lliam_home()
     return home / _PRE_UPDATE_BACKUPS_DIR
 
 
@@ -1277,7 +1277,7 @@ def create_pre_update_backup(
     found or the backup could not be created.  Never raises — the caller
     (``hermes update``) should continue even if the backup fails.
     """
-    hermes_root = hermes_home or get_default_hermes_root()
+    hermes_root = hermes_home or get_default_lliam_root()
     if not hermes_root.is_dir():
         return None
 
@@ -1352,7 +1352,7 @@ def create_pre_migration_backup(
     to back up (fresh install) or the write failed.  Never raises — the
     caller decides whether to abort or proceed.
     """
-    hermes_root = hermes_home or get_default_hermes_root()
+    hermes_root = hermes_home or get_default_lliam_root()
     if not hermes_root.is_dir():
         return None
 

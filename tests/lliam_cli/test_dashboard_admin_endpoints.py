@@ -16,14 +16,14 @@ def _client():
     except ImportError:
         pytest.skip("fastapi/starlette not installed")
     import lliam_state
-    from lliam_constants import get_hermes_home
+    from lliam_constants import get_lliam_home
     from lliam_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
 
     client = TestClient(app)
     client.headers[_SESSION_HEADER_NAME] = _SESSION_TOKEN
     # Keep the state DB under the isolated HERMES_HOME for any handler that
     # touches it.
-    lliam_state.DEFAULT_DB_PATH = get_hermes_home() / "state.db"
+    lliam_state.DEFAULT_DB_PATH = get_lliam_home() / "state.db"
     return client, _SESSION_HEADER_NAME
 
 
@@ -166,9 +166,9 @@ class TestMemoryEndpoints:
     @pytest.fixture(autouse=True)
     def _setup(self, _isolate_hermes_home):
         self.client, _ = _client()
-        from lliam_constants import get_hermes_home
+        from lliam_constants import get_lliam_home
 
-        (get_hermes_home() / "memories").mkdir(parents=True, exist_ok=True)
+        (get_lliam_home() / "memories").mkdir(parents=True, exist_ok=True)
 
     def test_status_and_select(self):
         data = self.client.get("/api/memory").json()
@@ -183,9 +183,9 @@ class TestMemoryEndpoints:
         assert r.status_code == 400
 
     def test_reset_targets(self):
-        from lliam_constants import get_hermes_home
+        from lliam_constants import get_lliam_home
 
-        mem = get_hermes_home() / "memories"
+        mem = get_lliam_home() / "memories"
         (mem / "MEMORY.md").write_text("notes")
         (mem / "USER.md").write_text("user")
 
@@ -870,9 +870,9 @@ class TestDebugShareEndpoint:
     @pytest.fixture(autouse=True)
     def _setup(self, _isolate_hermes_home):
         self.client, self.header = _client()
-        from lliam_constants import get_hermes_home
+        from lliam_constants import get_lliam_home
 
-        logs = get_hermes_home() / "logs"
+        logs = get_lliam_home() / "logs"
         logs.mkdir(parents=True, exist_ok=True)
         (logs / "agent.log").write_text("agent line\n")
         (logs / "errors.log").write_text("err line\n")

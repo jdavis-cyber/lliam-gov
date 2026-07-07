@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from plugins.memory.honcho.client import _host_block, profile_host_key, resolve_active_host, resolve_config_path, HOST
 from lliam_cli.config import cfg_get
 
@@ -257,7 +257,7 @@ def _local_config_path() -> Path:
     its own config file.  The global ~/.honcho/config.json is only used as
     a read fallback (via resolve_config_path) for cross-app interop.
     """
-    return get_hermes_home() / "honcho.json"
+    return get_lliam_home() / "honcho.json"
 
 
 def _read_config() -> dict:

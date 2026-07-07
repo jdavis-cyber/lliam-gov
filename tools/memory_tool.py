@@ -30,7 +30,7 @@ import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 from typing import Dict, Any, List, Optional
 
 from utils import atomic_replace
@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 # happened after the first import.
 def get_memory_dir() -> Path:
     """Return the profile-scoped memories directory."""
-    return get_hermes_home() / "memories"
+    return get_lliam_home() / "memories"
 
 ENTRY_DELIMITER = "\n§\n"
 

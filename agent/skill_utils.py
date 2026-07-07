@@ -473,9 +473,9 @@ def get_external_skills_dirs() -> List[Path]:
     if not isinstance(raw_dirs, list):
         return []
 
-    from lliam_constants import get_hermes_home
+    from lliam_constants import get_lliam_home
 
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
     local_skills = get_skills_dir().resolve()
     seen: Set[Path] = set()
     result = []

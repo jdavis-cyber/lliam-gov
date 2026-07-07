@@ -13,9 +13,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from lliam_cli.config import get_hermes_home, get_env_path, get_project_root, load_config
+from lliam_cli.config import get_lliam_home, get_env_path, get_project_root, load_config
 from lliam_cli.env_loader import load_hermes_dotenv
-from lliam_constants import display_hermes_home
+from lliam_constants import display_lliam_home
 from agent.skill_utils import is_excluded_skill_path
 
 
@@ -252,7 +252,7 @@ def run_dump(args):
     )
 
     project_root = get_project_root()
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
 
     try:
         from lliam_cli import __version__
@@ -320,7 +320,7 @@ def run_dump(args):
     lines.append(f"python:           {sys.version.split()[0]}")
     lines.append(f"openai_sdk:       {openai_ver}")
     lines.append(f"profile:          {profile}")
-    lines.append(f"hermes_home:      {display_hermes_home()}")
+    lines.append(f"hermes_home:      {display_lliam_home()}")
     lines.append(f"model:            {model}")
     lines.append(f"provider:         {provider}")
     lines.append(f"terminal:         {backend}")

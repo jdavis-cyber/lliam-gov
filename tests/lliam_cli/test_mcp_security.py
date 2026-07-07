@@ -286,7 +286,7 @@ def test_dashboard_mcp_add_rejects_dangerous_entry():
 def test_profile_mcp_write_skips_dangerous_entry(tmp_path):
     from lliam_cli.config import load_config
     from lliam_cli.web_server import MCPServerCreate, _write_profile_mcp_servers
-    from lliam_constants import reset_hermes_home_override, set_hermes_home_override
+    from lliam_constants import reset_lliam_home_override, set_lliam_home_override
 
     profile_dir = tmp_path / "profile"
     profile_dir.mkdir()
@@ -298,10 +298,10 @@ def test_profile_mcp_write_skips_dangerous_entry(tmp_path):
     written = _write_profile_mcp_servers(profile_dir, servers)
 
     assert written == 1
-    token = set_hermes_home_override(str(profile_dir))
+    token = set_lliam_home_override(str(profile_dir))
     try:
         config = load_config()
     finally:
-        reset_hermes_home_override(token)
+        reset_lliam_home_override(token)
     assert "evil" not in config.get("mcp_servers", {})
     assert "clean" in config.get("mcp_servers", {})

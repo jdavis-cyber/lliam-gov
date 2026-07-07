@@ -95,8 +95,8 @@ FACT_FEEDBACK_SCHEMA = {
 # ---------------------------------------------------------------------------
 
 def _load_plugin_config() -> dict:
-    from lliam_constants import get_hermes_home
-    config_path = get_hermes_home() / "config.yaml"
+    from lliam_constants import get_lliam_home
+    config_path = get_lliam_home() / "config.yaml"
     if not config_path.exists():
         return {}
     try:
@@ -146,8 +146,8 @@ class HolographicMemoryProvider(MemoryProvider):
             pass
 
     def get_config_schema(self):
-        from lliam_constants import display_hermes_home
-        _default_db = f"{display_hermes_home()}/memory_store.db"
+        from lliam_constants import display_lliam_home
+        _default_db = f"{display_lliam_home()}/memory_store.db"
         return [
             {"key": "db_path", "description": "SQLite database path", "default": _default_db},
             {"key": "auto_extract", "description": "Auto-extract facts at session end", "default": "false", "choices": ["true", "false"]},
@@ -156,8 +156,8 @@ class HolographicMemoryProvider(MemoryProvider):
         ]
 
     def initialize(self, session_id: str, **kwargs) -> None:
-        from lliam_constants import get_hermes_home
-        _hermes_home = str(get_hermes_home())
+        from lliam_constants import get_lliam_home
+        _hermes_home = str(get_lliam_home())
         _default_db = _hermes_home + "/memory_store.db"
         db_path = self._config.get("db_path", _default_db)
         # Expand $HERMES_HOME in user-supplied paths so config values like

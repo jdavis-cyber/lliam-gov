@@ -58,7 +58,7 @@ def fresh_home(tmp_path, monkeypatch):
         "HERMES_KANBAN_BOARD",
     ):
         monkeypatch.delenv(var, raising=False)
-    # Also reset lliam_constants cache so get_default_hermes_root() re-reads.
+    # Also reset lliam_constants cache so get_default_lliam_root() re-reads.
     try:
         import lliam_constants
         lliam_constants._cached_default_hermes_root = None  # type: ignore[attr-defined]

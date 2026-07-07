@@ -34,7 +34,7 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 
 
 # Methods clients send as periodic liveness probes. They are not part of the
@@ -102,7 +102,7 @@ def _load_env() -> None:
     """Load .env from HERMES_HOME (default ``~/.hermes``)."""
     from lliam_cli.env_loader import load_hermes_dotenv
 
-    hermes_home = get_hermes_home()
+    hermes_home = get_lliam_home()
     loaded = load_hermes_dotenv(hermes_home=hermes_home)
     if loaded:
         for env_file in loaded:

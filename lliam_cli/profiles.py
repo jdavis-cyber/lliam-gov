@@ -262,8 +262,8 @@ def _get_default_hermes_home() -> Path:
     In Docker/custom deployments where HERMES_HOME is outside ``~/.hermes``
     (e.g. ``/opt/data``), returns HERMES_HOME directly.
     """
-    from lliam_constants import get_default_hermes_root
-    return get_default_hermes_root()
+    from lliam_constants import get_default_lliam_root
+    return get_default_lliam_root()
 
 
 def _get_active_profile_path() -> Path:
@@ -469,16 +469,16 @@ def _migrate_profile_config_if_outdated(profile_dir: Path) -> None:
         return
 
     try:
-        from lliam_constants import reset_hermes_home_override, set_hermes_home_override
+        from lliam_constants import reset_lliam_home_override, set_lliam_home_override
         from lliam_cli.config import check_config_version, migrate_config
 
-        token = set_hermes_home_override(str(profile_dir))
+        token = set_lliam_home_override(str(profile_dir))
         try:
             current_ver, latest_ver = check_config_version()
             if current_ver < latest_ver:
                 migrate_config(interactive=False, quiet=True)
         finally:
-            reset_hermes_home_override(token)
+            reset_lliam_home_override(token)
     except Exception:
         # Profile creation should not fail because an old copied config could
         # not be migrated. The next `hermes doctor --fix` can still surface the
@@ -823,7 +823,7 @@ def profiles_to_serve(multiplex: bool) -> List[Tuple[str, Path]]:
     :func:`list_profiles`. It runs on gateway startup and must stay cheap.
 
     The returned ``hermes_home`` is the path to pass to
-    ``set_hermes_home_override`` when scoping a turn to that profile.
+    ``set_lliam_home_override`` when scoping a turn to that profile.
     """
     active = get_active_profile_name() or "default"
     if not multiplex:
@@ -904,8 +904,8 @@ def create_profile(
     if clone_from is not None or clone_all or clone_config:
         if clone_from is None:
             # Default: clone from active profile
-            from lliam_constants import get_hermes_home
-            source_dir = get_hermes_home()
+            from lliam_constants import get_lliam_home
+            source_dir = get_lliam_home()
         else:
             clone_from = normalize_profile_name(clone_from)
             validate_profile_name(clone_from)
@@ -1510,8 +1510,8 @@ def get_active_profile_name() -> str:
     Returns the profile name if HERMES_HOME points into ``~/.hermes/profiles/<name>``.
     Returns ``"custom"`` if HERMES_HOME is set to an unrecognized path.
     """
-    from lliam_constants import get_hermes_home
-    hermes_home = get_hermes_home()
+    from lliam_constants import get_lliam_home
+    hermes_home = get_lliam_home()
     resolved = hermes_home.resolve()
 
     default_resolved = _get_default_hermes_home().resolve()

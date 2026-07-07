@@ -118,9 +118,9 @@ def _setup_isolated_home(tmp_path, monkeypatch, model_yaml_value):
         "lliam_cli.model_switch.resolve_display_context_length",
         lambda *a, **k: 272000,
     )
-    # save_config writes to ``get_hermes_home() / config.yaml`` — point it here.
-    monkeypatch.setattr("lliam_constants.get_hermes_home", lambda: hermes_home)
-    monkeypatch.setattr("lliam_cli.config.get_hermes_home", lambda: hermes_home)
+    # save_config writes to ``get_lliam_home() / config.yaml`` — point it here.
+    monkeypatch.setattr("lliam_constants.get_lliam_home", lambda: hermes_home)
+    monkeypatch.setattr("lliam_cli.config.get_lliam_home", lambda: hermes_home)
     return cfg_path
 
 

@@ -309,5 +309,5 @@ class TestSysPathOrdering:
 
     def test_lliam_constants_importable(self):
         """lliam_constants should be importable from cron context."""
-        from lliam_constants import get_hermes_home
-        assert callable(get_hermes_home)
+        from lliam_constants import get_lliam_home
+        assert callable(get_lliam_home)

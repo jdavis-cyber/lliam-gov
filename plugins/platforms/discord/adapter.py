@@ -190,10 +190,10 @@ class _DiscordNonConversationalMessageTracker:
         self._ids: dict[str, None] = dict.fromkeys(self._load())
 
     def _state_path(self) -> _Path:
-        from lliam_constants import get_hermes_home
+        from lliam_constants import get_lliam_home
 
         return (
-            get_hermes_home()
+            get_lliam_home()
             / _DISCORD_COMMAND_SYNC_STATE_SUBDIR
             / _DISCORD_NONCONVERSATIONAL_STATE_FILENAME
         )
@@ -1321,9 +1321,9 @@ class DiscordAdapter(BasePlatformAdapter):
         logger.info("[%s] Disconnected", self.name)
 
     def _command_sync_state_path(self) -> _Path:
-        from lliam_constants import get_hermes_home
+        from lliam_constants import get_lliam_home
 
-        directory = get_hermes_home() / _DISCORD_COMMAND_SYNC_STATE_SUBDIR
+        directory = get_lliam_home() / _DISCORD_COMMAND_SYNC_STATE_SUBDIR
         try:
             directory.mkdir(parents=True, exist_ok=True)
         except Exception:
@@ -6206,8 +6206,8 @@ def _define_discord_view_classes() -> None:
 
             # Write response file
             try:
-                from lliam_constants import get_hermes_home
-                home = get_hermes_home()
+                from lliam_constants import get_lliam_home
+                home = get_lliam_home()
                 response_path = home / ".update_response"
                 tmp = response_path.with_suffix(".tmp")
                 tmp.write_text(answer)

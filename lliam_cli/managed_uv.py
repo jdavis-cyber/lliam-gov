@@ -19,7 +19,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def managed_uv_path() -> Path:
     Windows.  The directory may not exist yet — callers should use
     ``ensure_uv()`` to bootstrap it.
     """
-    home = get_hermes_home()
+    home = get_lliam_home()
     if platform.system() == "Windows":
         return home / "bin" / "uv.exe"
     return home / "bin" / "uv"

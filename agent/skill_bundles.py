@@ -51,7 +51,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-from lliam_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def _bundles_dir() -> Path:
     override = getenv_compat("BUNDLES_DIR")
     if override:
         return Path(override).expanduser()
-    return get_hermes_home() / "skill-bundles"
+    return get_lliam_home() / "skill-bundles"
 
 
 def _slugify(name: str) -> str:

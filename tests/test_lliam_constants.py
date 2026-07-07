@@ -9,25 +9,25 @@ import lliam_constants
 from lliam_constants import (
     VALID_REASONING_EFFORTS,
     agent_browser_runnable,
-    find_hermes_node_executable,
+    find_lliam_node_executable,
     find_node_executable,
     find_node_executable_on_path,
-    get_default_hermes_root,
-    get_hermes_dir,
-    get_hermes_home,
-    heal_hermes_managed_node,
-    hermes_managed_node_tree_present,
-    iter_hermes_node_dirs,
+    get_default_lliam_root,
+    get_lliam_dir,
+    get_lliam_home,
+    heal_lliam_managed_node,
+    lliam_managed_node_tree_present,
+    iter_lliam_node_dirs,
     is_container,
     node_tool_runnable,
     parse_reasoning_effort,
     secure_parent_dir,
-    with_hermes_node_path,
+    with_lliam_node_path,
 )
 
 
 class TestGetDefaultHermesRoot:
-    """Tests for get_default_hermes_root() — Docker/custom deployment awareness."""
+    """Tests for get_default_lliam_root() — Docker/custom deployment awareness."""
 
     def test_no_hermes_home_returns_native(self, tmp_path, monkeypatch):
         """When neither home var is set, returns the new default ~/.lliam."""
@@ -35,7 +35,7 @@ class TestGetDefaultHermesRoot:
         monkeypatch.delenv("LLIAM_HOME", raising=False)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        assert get_default_hermes_root() == tmp_path / ".lliam"
+        assert get_default_lliam_root() == tmp_path / ".lliam"
 
     def test_hermes_home_is_native(self, tmp_path, monkeypatch):
         """When HERMES_HOME = ~/.hermes, returns ~/.hermes."""
@@ -43,7 +43,7 @@ class TestGetDefaultHermesRoot:
         native.mkdir()
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setenv("HERMES_HOME", str(native))
-        assert get_default_hermes_root() == native
+        assert get_default_lliam_root() == native
 
     def test_hermes_home_is_profile(self, tmp_path, monkeypatch):
         """When HERMES_HOME is a profile under ~/.hermes, returns ~/.hermes."""
@@ -52,7 +52,7 @@ class TestGetDefaultHermesRoot:
         profile.mkdir(parents=True)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setenv("HERMES_HOME", str(profile))
-        assert get_default_hermes_root() == native
+        assert get_default_lliam_root() == native
 
     def test_hermes_home_is_docker(self, tmp_path, monkeypatch):
         """When HERMES_HOME points outside ~/.hermes (Docker), returns HERMES_HOME."""
@@ -60,7 +60,7 @@ class TestGetDefaultHermesRoot:
         docker_home.mkdir(parents=True)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setenv("HERMES_HOME", str(docker_home))
-        assert get_default_hermes_root() == docker_home
+        assert get_default_lliam_root() == docker_home
 
     def test_hermes_home_is_custom_path(self, tmp_path, monkeypatch):
         """Any HERMES_HOME outside ~/.hermes is treated as the root."""
@@ -68,7 +68,7 @@ class TestGetDefaultHermesRoot:
         custom.mkdir()
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setenv("HERMES_HOME", str(custom))
-        assert get_default_hermes_root() == custom
+        assert get_default_lliam_root() == custom
 
     def test_docker_profile_active(self, tmp_path, monkeypatch):
         """When a Docker profile is active (HERMES_HOME=<root>/profiles/<name>),
@@ -78,7 +78,7 @@ class TestGetDefaultHermesRoot:
         profile.mkdir(parents=True)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setenv("HERMES_HOME", str(profile))
-        assert get_default_hermes_root() == docker_root
+        assert get_default_lliam_root() == docker_root
 
     def test_no_hermes_home_returns_localappdata_root_on_windows(self, tmp_path, monkeypatch):
         """Native Windows falls back to %LOCALAPPDATA%\\lliam, not ~/.lliam."""
@@ -89,7 +89,7 @@ class TestGetDefaultHermesRoot:
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "Home")
         monkeypatch.setattr(lliam_constants.sys, "platform", "win32")
 
-        assert get_default_hermes_root() == local_appdata / "lliam"
+        assert get_default_lliam_root() == local_appdata / "lliam"
 
     def test_no_hermes_home_uses_windows_path_when_localappdata_missing(self, tmp_path, monkeypatch):
         """Windows fallback still uses AppData/Local/lliam without LOCALAPPDATA."""
@@ -100,11 +100,11 @@ class TestGetDefaultHermesRoot:
         monkeypatch.setattr(Path, "home", lambda: home)
         monkeypatch.setattr(lliam_constants.sys, "platform", "win32")
 
-        assert get_default_hermes_root() == home / "AppData" / "Local" / "lliam"
+        assert get_default_lliam_root() == home / "AppData" / "Local" / "lliam"
 
 
 class TestGetHermesHome:
-    """Tests for get_hermes_home() platform-aware fallback."""
+    """Tests for get_lliam_home() platform-aware fallback."""
 
     def test_windows_fallback_uses_localappdata(self, tmp_path, monkeypatch):
         """When no home var is set on Windows, use %LOCALAPPDATA%\\lliam."""
@@ -116,7 +116,7 @@ class TestGetHermesHome:
         monkeypatch.setattr(lliam_constants.sys, "platform", "win32")
         monkeypatch.setattr(lliam_constants, "_profile_fallback_warned", False)
 
-        assert get_hermes_home() == local_appdata / "lliam"
+        assert get_lliam_home() == local_appdata / "lliam"
 
 
 class TestHermesManagedNode:
@@ -129,7 +129,7 @@ class TestHermesManagedNode:
         monkeypatch.setattr(lliam_constants.sys, "platform", "win32")
         monkeypatch.setenv("HERMES_HOME", str(home))
 
-        assert iter_hermes_node_dirs() == [node_dir, bin_dir]
+        assert iter_lliam_node_dirs() == [node_dir, bin_dir]
 
     def test_windows_finds_npm_cmd_before_path(self, tmp_path, monkeypatch):
         home = tmp_path / "hermes"
@@ -141,7 +141,7 @@ class TestHermesManagedNode:
         monkeypatch.setenv("HERMES_HOME", str(home))
         monkeypatch.setattr(lliam_constants, "node_tool_runnable", lambda path: True)
 
-        assert find_hermes_node_executable("npm") == str(npm_cmd)
+        assert find_lliam_node_executable("npm") == str(npm_cmd)
 
     def test_windows_path_fallback_prefers_npm_cmd(self, tmp_path, monkeypatch):
         bin_dir = tmp_path / "nodejs"
@@ -185,14 +185,14 @@ class TestHermesManagedNode:
         monkeypatch.setenv("HERMES_HOME", str(home))
         monkeypatch.setenv("PATH", str(bin_dir))
         monkeypatch.setattr(lliam_constants, "_managed_node_heal_attempted", False)
-        monkeypatch.setattr(lliam_constants, "heal_hermes_managed_node", lambda: False)
+        monkeypatch.setattr(lliam_constants, "heal_lliam_managed_node", lambda: False)
         monkeypatch.setattr(
             lliam_constants,
             "node_tool_runnable",
             lambda path: False,
         )
 
-        assert hermes_managed_node_tree_present() is True
+        assert lliam_managed_node_tree_present() is True
         assert find_node_executable("npm") is None
         assert find_node_executable("npm") != str(path_npm)
 
@@ -205,7 +205,7 @@ class TestHermesManagedNode:
         monkeypatch.setattr(lliam_constants.sys, "platform", "win32")
         monkeypatch.setenv("HERMES_HOME", str(home))
 
-        env = with_hermes_node_path({"PATH": "system-node"})
+        env = with_lliam_node_path({"PATH": "system-node"})
         parts = env["PATH"].split(os.pathsep)
 
         assert parts[:2] == [str(node_dir), str(bin_dir)]
@@ -257,7 +257,7 @@ class TestNodeToolRunnable:
             broken_npm.chmod(0o755)
             return True
 
-        monkeypatch.setattr(lliam_constants, "heal_hermes_managed_node", _heal)
+        monkeypatch.setattr(lliam_constants, "heal_lliam_managed_node", _heal)
 
         resolved = find_node_executable("npm")
         assert heal_called["value"] is True
@@ -284,9 +284,9 @@ class TestNodeToolRunnable:
             broken_npm.chmod(0o755)
             return True
 
-        monkeypatch.setattr(lliam_constants, "heal_hermes_managed_node", _heal)
+        monkeypatch.setattr(lliam_constants, "heal_lliam_managed_node", _heal)
 
-        assert find_hermes_node_executable("npm") == str(healed_npm)
+        assert find_lliam_node_executable("npm") == str(healed_npm)
         assert find_node_executable("npm") == str(healed_npm)
         assert find_node_executable("npm") != str(good_npm)
 
@@ -303,7 +303,7 @@ class TestNodeToolRunnable:
         monkeypatch.setenv("HERMES_HOME", str(profile_home))
         monkeypatch.setenv("PATH", str(system_bin))
         monkeypatch.setattr(lliam_constants, "_managed_node_heal_attempted", False)
-        monkeypatch.setattr(lliam_constants, "heal_hermes_managed_node", lambda: False)
+        monkeypatch.setattr(lliam_constants, "heal_lliam_managed_node", lambda: False)
 
         assert find_node_executable("npm") is None
 
@@ -617,7 +617,7 @@ class TestAgentBrowserRunnable:
 
 
 class TestGetHermesDir:
-    """Tests for ``get_hermes_dir(new_subpath, old_name)``.
+    """Tests for ``get_lliam_dir(new_subpath, old_name)``.
 
     Contract: prefer the legacy ``<old_name>/`` location, but only when
     it has content. An empty legacy stub must fall through to the new
@@ -630,7 +630,7 @@ class TestGetHermesDir:
 
     def test_neither_exists_returns_new(self, tmp_path, monkeypatch):
         self._set_home(tmp_path, monkeypatch)
-        result = get_hermes_dir("platforms/pairing", "pairing")
+        result = get_lliam_dir("platforms/pairing", "pairing")
         assert result == tmp_path / "platforms/pairing"
 
     def test_legacy_populated_returns_legacy(self, tmp_path, monkeypatch):
@@ -638,7 +638,7 @@ class TestGetHermesDir:
         legacy = tmp_path / "image_cache"
         legacy.mkdir()
         (legacy / "cached.png").write_bytes(b"x")
-        result = get_hermes_dir("cache/images", "image_cache")
+        result = get_lliam_dir("cache/images", "image_cache")
         assert result == legacy
 
     def test_legacy_populated_with_subdir_returns_legacy(self, tmp_path, monkeypatch):
@@ -647,7 +647,7 @@ class TestGetHermesDir:
         legacy = tmp_path / "matrix" / "store"
         legacy.mkdir(parents=True)
         (legacy / "session").mkdir()  # subdir, not a file
-        result = get_hermes_dir("platforms/matrix/store", "matrix/store")
+        result = get_lliam_dir("platforms/matrix/store", "matrix/store")
         assert result == legacy
 
     def test_legacy_empty_returns_new(self, tmp_path, monkeypatch):
@@ -665,7 +665,7 @@ class TestGetHermesDir:
         new = tmp_path / "platforms" / "pairing"
         new.mkdir(parents=True)
         (new / "telegram-approved.json").write_text("[]")
-        result = get_hermes_dir("platforms/pairing", "pairing")
+        result = get_lliam_dir("platforms/pairing", "pairing")
         assert result == new
 
     def test_legacy_empty_and_new_missing_returns_new(self, tmp_path, monkeypatch):
@@ -679,7 +679,7 @@ class TestGetHermesDir:
         self._set_home(tmp_path, monkeypatch)
         legacy = tmp_path / "audio_cache"
         legacy.mkdir()
-        result = get_hermes_dir("cache/audio", "audio_cache")
+        result = get_lliam_dir("cache/audio", "audio_cache")
         assert result == tmp_path / "cache/audio"
 
     def test_legacy_is_file_treated_as_content(self, tmp_path, monkeypatch):
@@ -691,7 +691,7 @@ class TestGetHermesDir:
         self._set_home(tmp_path, monkeypatch)
         legacy = tmp_path / "image_cache"
         legacy.write_bytes(b"sentinel")
-        result = get_hermes_dir("cache/images", "image_cache")
+        result = get_lliam_dir("cache/images", "image_cache")
         assert result == legacy
 
     def test_unreadable_legacy_dir_kept(self, tmp_path, monkeypatch):
@@ -715,7 +715,7 @@ class TestGetHermesDir:
             return real_iterdir(self)
 
         monkeypatch.setattr(Path, "iterdir", boom)
-        result = get_hermes_dir(
+        result = get_lliam_dir(
             "platforms/whatsapp/session", "whatsapp/session"
         )
         assert result == legacy
@@ -747,7 +747,7 @@ class TestGetHermesDir:
             return real_lstat(self)
 
         monkeypatch.setattr(Path, "lstat", boom)
-        result = get_hermes_dir("platforms/pairing", "pairing")
+        result = get_lliam_dir("platforms/pairing", "pairing")
         assert result == legacy
 
     def test_dangling_legacy_symlink_returns_new(self, tmp_path, monkeypatch):
@@ -765,7 +765,7 @@ class TestGetHermesDir:
         new = tmp_path / "platforms" / "pairing"
         new.mkdir(parents=True)
         (new / "discord-approved.json").write_text("[]")
-        result = get_hermes_dir("platforms/pairing", "pairing")
+        result = get_lliam_dir("platforms/pairing", "pairing")
         assert result == new
 
     def test_symlink_to_populated_dir_returns_legacy(self, tmp_path, monkeypatch):
@@ -776,7 +776,7 @@ class TestGetHermesDir:
         (real / "cached.png").write_bytes(b"x")
         legacy = tmp_path / "image_cache"
         legacy.symlink_to(real)
-        result = get_hermes_dir("cache/images", "image_cache")
+        result = get_lliam_dir("cache/images", "image_cache")
         assert result == legacy
 
     def test_symlink_to_empty_dir_returns_new(self, tmp_path, monkeypatch):
@@ -786,5 +786,5 @@ class TestGetHermesDir:
         empty.mkdir()
         legacy = tmp_path / "audio_cache"
         legacy.symlink_to(empty)
-        result = get_hermes_dir("cache/audio", "audio_cache")
+        result = get_lliam_dir("cache/audio", "audio_cache")
         assert result == tmp_path / "cache/audio"

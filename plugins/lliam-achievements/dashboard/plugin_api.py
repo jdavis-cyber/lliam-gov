@@ -22,10 +22,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 try:
-    from lliam_constants import get_hermes_home
+    from lliam_constants import get_lliam_home
 except ImportError:
     import os as _os
-    def get_hermes_home() -> Path:  # type: ignore[misc]
+    def get_lliam_home() -> Path:  # type: ignore[misc]
         val = (_os.environ.get("HERMES_HOME") or "").strip()
         return Path(val) if val else Path.home() / ".hermes"
 
@@ -166,7 +166,7 @@ def _state_dir() -> Path:
     path and simply starts fresh — achievement state is derived/cosmetic, never
     load-bearing, so we never crash the dashboard over it.
     """
-    home = get_hermes_home()
+    home = get_lliam_home()
     new_dir = home / "plugins" / _PLUGIN_ID
     if not new_dir.exists():
         legacy_dir = home / "plugins" / _LEGACY_PLUGIN_ID

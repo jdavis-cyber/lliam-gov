@@ -51,7 +51,7 @@ def _isolate_hermes_home(tmp_path, monkeypatch):
     hh.mkdir()
     monkeypatch.setenv("HERMES_HOME", str(hh))
     monkeypatch.setattr(
-        "lliam_cli.config.get_hermes_home", lambda: hh
+        "lliam_cli.config.get_lliam_home", lambda: hh
     )
     monkeypatch.setattr(
         "lliam_cli.config.get_config_path", lambda: hh / "config.yaml"
@@ -59,9 +59,9 @@ def _isolate_hermes_home(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "lliam_cli.config.get_env_path", lambda: hh / ".env"
     )
-    # mcp_catalog grabs get_hermes_home() lazily through lliam_constants
+    # mcp_catalog grabs get_lliam_home() lazily through lliam_constants
     monkeypatch.setattr(
-        "lliam_constants.get_hermes_home", lambda: hh
+        "lliam_constants.get_lliam_home", lambda: hh
     )
     return hh
 
