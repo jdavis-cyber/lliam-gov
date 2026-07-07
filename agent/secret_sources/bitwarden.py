@@ -206,7 +206,7 @@ class FetchResult:
 # ---------------------------------------------------------------------------
 
 
-def _hermes_bin_dir() -> Path:
+def _lliam_bin_dir() -> Path:
     """Where Hermes stores its managed binaries.  Profile-aware."""
     from lliam_constants import get_lliam_home
 
@@ -223,7 +223,7 @@ def find_bws(*, install_if_missing: bool = False) -> Optional[Path]:
     When ``install_if_missing`` is True and neither resolves, this calls
     :func:`install_bws` to download and verify the pinned version.
     """
-    managed = _hermes_bin_dir() / _platform_binary_name()
+    managed = _lliam_bin_dir() / _platform_binary_name()
     if managed.exists() and os.access(managed, os.X_OK):
         return managed
 
@@ -295,7 +295,7 @@ def install_bws(*, force: bool = False) -> Path:
     path catch these; the user-facing ``hermes secrets bitwarden setup``
     surface lets them propagate so the wizard can show a clear error.
     """
-    bin_dir = _hermes_bin_dir()
+    bin_dir = _lliam_bin_dir()
     bin_dir.mkdir(parents=True, exist_ok=True)
     target = bin_dir / _platform_binary_name()
 

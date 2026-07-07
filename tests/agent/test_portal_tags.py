@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-def test_hermes_client_tag_includes_current_version():
+def test_lliam_client_tag_includes_current_version():
     """The client tag must reflect lliam_cli.__version__ verbatim."""
     from lliam_cli import __version__
     from agent.portal_tags import lliam_client_tag
@@ -11,7 +11,7 @@ def test_hermes_client_tag_includes_current_version():
     assert lliam_client_tag() == f"client=hermes-client-v{__version__}"
 
 
-def test_hermes_client_tag_format():
+def test_lliam_client_tag_format():
     """The client tag has the exact shape Nous Portal expects."""
     from agent.portal_tags import lliam_client_tag
 

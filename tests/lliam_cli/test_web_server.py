@@ -1098,7 +1098,7 @@ class TestWebServerEndpoints:
         resp = self.client.post("/api/audio/speak", json={"text": "   "})
         assert resp.status_code == 400
 
-    def test_update_hermes_returns_docker_guidance_without_spawning(self, monkeypatch):
+    def test_update_lliam_returns_docker_guidance_without_spawning(self, monkeypatch):
         import lliam_cli.web_server as web_server
 
         spawned = False
@@ -1134,7 +1134,7 @@ class TestWebServerEndpoints:
         assert status_data["pid"] is None
         assert any("docker pull nousresearch/hermes-agent:latest" in line for line in status_data["lines"])
 
-    def test_update_hermes_returns_managed_runtime_guidance_without_spawning(self, monkeypatch):
+    def test_update_lliam_returns_managed_runtime_guidance_without_spawning(self, monkeypatch):
         import lliam_cli.web_server as web_server
 
         spawned = False
@@ -1176,7 +1176,7 @@ class TestWebServerEndpoints:
         assert status_data["pid"] is None
         assert any("managed outside this dashboard" in line for line in status_data["lines"])
 
-    def test_update_hermes_spawns_on_non_docker_install(self, monkeypatch):
+    def test_update_lliam_spawns_on_non_docker_install(self, monkeypatch):
         import lliam_cli.web_server as web_server
 
         class Proc:
@@ -3174,7 +3174,7 @@ class TestNewEndpoints:
         assert resp.status_code == 200
         assert resp.json()["command"] == "coder setup"
 
-    def test_profile_setup_command_uses_hermes_for_default_profile(self):
+    def test_profile_setup_command_uses_lliam_for_default_profile(self):
         from lliam_constants import get_lliam_home
 
         get_lliam_home().mkdir(parents=True, exist_ok=True)

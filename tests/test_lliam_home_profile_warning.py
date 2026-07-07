@@ -30,7 +30,7 @@ def fresh_constants(monkeypatch, tmp_path):
     return lliam_constants
 
 
-class TestGetHermesHomeProfileWarning:
+class TestGetLliamHomeProfileWarning:
     def test_classic_mode_no_active_profile_no_warning(
         self, fresh_constants, tmp_path, capsys
     ):
@@ -74,7 +74,7 @@ class TestGetHermesHomeProfileWarning:
         err2 = capsys.readouterr().err
         assert "HERMES_HOME fallback" not in err2
 
-    def test_hermes_home_set_suppresses_warning(
+    def test_lliam_home_set_suppresses_warning(
         self, fresh_constants, tmp_path, capsys, monkeypatch
     ):
         """Even if active_profile is 'coder', setting HERMES_HOME suppresses warning."""

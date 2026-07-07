@@ -1382,7 +1382,7 @@ def _local_dashboard_request(request: Request) -> bool:
     return host in local_hosts or client_host in local_hosts
 
 
-def _default_hermes_root_is_opt_data() -> bool:
+def _default_lliam_root_is_opt_data() -> bool:
     raw = os.environ.get("HERMES_HOME", "").strip()
     if not raw:
         return False
@@ -1410,7 +1410,7 @@ def _dashboard_local_update_managed_externally() -> bool:
     externally managed unless their apply path is proven safe inside the
     running container filesystem.
     """
-    if _default_hermes_root_is_opt_data():
+    if _default_lliam_root_is_opt_data():
         return True
     try:
         from lliam_constants import is_container
@@ -1444,7 +1444,7 @@ def _managed_files_policy(request: Request, *, create_root: bool = True) -> Mana
     # and still expect the Files page to browse their local home directory. Lock
     # to /opt/data only when the installation's Hermes root is actually /opt/data
     # (the container/hosted layout) or when HERMES_DASHBOARD_FILES_ROOT is set.
-    if _default_hermes_root_is_opt_data():
+    if _default_lliam_root_is_opt_data():
         root = _ensure_managed_root(_HOSTED_MANAGED_FILES_ROOT) if create_root else _HOSTED_MANAGED_FILES_ROOT
         return ManagedFilesPolicy(default_path=root, locked_root=root, can_change_path=False)
 
@@ -2721,7 +2721,7 @@ async def gateway_drain(request: Request):
 
 
 @app.post("/api/hermes/update")
-async def update_hermes():
+async def update_lliam():
     """Kick off ``hermes update`` in the background."""
     if _dashboard_local_update_managed_externally():
         message = (
@@ -2813,7 +2813,7 @@ def _recent_upstream_commits(n: int = 20) -> List[Dict[str, Any]]:
 
 
 @app.get("/api/hermes/update/check")
-async def check_hermes_update(force: bool = False):
+async def check_lliam_update(force: bool = False):
     """Report whether a Hermes update is available, without applying it.
 
     Powers the dashboard's "check before you update" flow: the System page
@@ -5941,17 +5941,17 @@ def _anthropic_oauth_status() -> Dict[str, Any]:
     """
     try:
         from agent.anthropic_adapter import (
-            read_hermes_oauth_credentials,
+            read_lliam_oauth_credentials,
             _LLIAM_OAUTH_FILE,
         )
     except ImportError:
-        read_hermes_oauth_credentials = None  # type: ignore
+        read_lliam_oauth_credentials = None  # type: ignore
         _LLIAM_OAUTH_FILE = None  # type: ignore
 
     lliam_creds = None
-    if read_hermes_oauth_credentials:
+    if read_lliam_oauth_credentials:
         try:
-            lliam_creds = read_hermes_oauth_credentials()
+            lliam_creds = read_lliam_oauth_credentials()
         except Exception:
             lliam_creds = None
     if lliam_creds and lliam_creds.get("accessToken"):
@@ -10184,7 +10184,7 @@ def _fallback_profile_dicts(profiles_mod) -> List[Dict[str, Any]]:
             return default
 
     profiles: List[Dict[str, Any]] = []
-    default_home = profiles_mod._get_default_hermes_home()
+    default_home = profiles_mod._get_default_lliam_home()
     if default_home.is_dir():
         model, provider = _safe(lambda: profiles_mod._read_config_model(default_home), (None, None))
         profiles.append({

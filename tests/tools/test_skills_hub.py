@@ -1657,7 +1657,7 @@ def _make_index_source(skills):
     return src
 
 
-class TestHermesIndexSearch:
+class TestLliamIndexSearch:
     def test_search_matches_identifier_and_provider(self):
         # NVIDIA skill whose name/description does NOT contain "nvidia" — only
         # the identifier and the provider label do. The old substring-only

@@ -56,7 +56,7 @@ def _run_apply_profile_override(
     return os.environ.get("HERMES_HOME")
 
 
-class TestApplyProfileOverrideHermesHomeGuard:
+class TestApplyProfileOverrideLliamHomeGuard:
     """Regression guard for issue #22502.
 
     Verifies that HERMES_HOME pointing to the hermes root does NOT suppress
@@ -64,7 +64,7 @@ class TestApplyProfileOverrideHermesHomeGuard:
     profile directory IS trusted as-is.
     """
 
-    def test_hermes_home_at_root_with_active_profile_is_redirected(
+    def test_lliam_home_at_root_with_active_profile_is_redirected(
         self, tmp_path, monkeypatch
     ):
         """HERMES_HOME=/root/.hermes + active_profile=coder must redirect
@@ -92,7 +92,7 @@ class TestApplyProfileOverrideHermesHomeGuard:
             f"Expected HERMES_HOME to end with 'coder', got: {result!r}"
         )
 
-    def test_hermes_home_already_profile_dir_is_trusted(self, tmp_path, monkeypatch):
+    def test_lliam_home_already_profile_dir_is_trusted(self, tmp_path, monkeypatch):
         """HERMES_HOME=.../profiles/coder must not be overridden even when
         active_profile says something different.
 
@@ -117,7 +117,7 @@ class TestApplyProfileOverrideHermesHomeGuard:
             "HERMES_HOME must remain unchanged when already pointing to a profile dir"
         )
 
-    def test_hermes_home_unset_reads_active_profile(self, tmp_path, monkeypatch):
+    def test_lliam_home_unset_reads_active_profile(self, tmp_path, monkeypatch):
         """Classic case: HERMES_HOME unset + active_profile=coder must set
         HERMES_HOME to the profile directory (existing behaviour must not regress).
         """
@@ -155,7 +155,7 @@ class TestApplyProfileOverrideHermesHomeGuard:
         assert os.environ.get("HERMES_HOME") == str(profile_dir)
         assert sys.argv == ["hermes", "gateway", "install", "--system"]
 
-    def test_hermes_home_unset_default_profile_no_redirect(self, tmp_path, monkeypatch):
+    def test_lliam_home_unset_default_profile_no_redirect(self, tmp_path, monkeypatch):
         """active_profile=default must not redirect HERMES_HOME."""
         lliam_root = tmp_path / ".hermes"
         lliam_root.mkdir(parents=True, exist_ok=True)

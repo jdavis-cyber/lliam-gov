@@ -46,8 +46,8 @@ def lliam_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(home))
     # Some modules cache get_lliam_home; clear if needed.
     import lliam_constants
-    if hasattr(lliam_constants, "_HERMES_HOME_CACHE"):
-        lliam_constants._HERMES_HOME_CACHE = None  # type: ignore[attr-defined]
+    if hasattr(lliam_constants, "_LLIAM_HOME_CACHE"):
+        lliam_constants._LLIAM_HOME_CACHE = None  # type: ignore[attr-defined]
     return home
 
 

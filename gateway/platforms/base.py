@@ -936,8 +936,8 @@ def cache_video_from_bytes(data: bytes, ext: str = ".mp4") -> str:
 
 DOCUMENT_CACHE_DIR = get_lliam_dir("cache/documents", "document_cache")
 SCREENSHOT_CACHE_DIR = get_lliam_dir("cache/screenshots", "browser_screenshots")
-_HERMES_HOME = get_lliam_home()
-_HERMES_ROOT = get_default_lliam_root()
+_LLIAM_HOME = get_lliam_home()
+_LLIAM_ROOT = get_default_lliam_root()
 MEDIA_DELIVERY_ALLOW_DIRS_ENV = "HERMES_MEDIA_ALLOW_DIRS"
 MEDIA_DELIVERY_TRUST_RECENT_ENV = "HERMES_MEDIA_TRUST_RECENT_FILES"
 MEDIA_DELIVERY_TRUST_RECENT_SECONDS_ENV = "HERMES_MEDIA_TRUST_RECENT_SECONDS"
@@ -954,18 +954,18 @@ MEDIA_DELIVERY_SAFE_ROOTS = (
     VIDEO_CACHE_DIR,
     DOCUMENT_CACHE_DIR,
     SCREENSHOT_CACHE_DIR,
-    _HERMES_HOME / "image_cache",
-    _HERMES_HOME / "audio_cache",
-    _HERMES_HOME / "video_cache",
-    _HERMES_HOME / "document_cache",
-    _HERMES_HOME / "browser_screenshots",
+    _LLIAM_HOME / "image_cache",
+    _LLIAM_HOME / "audio_cache",
+    _LLIAM_HOME / "video_cache",
+    _LLIAM_HOME / "document_cache",
+    _LLIAM_HOME / "browser_screenshots",
     # Canonical cache layout — listed alongside the legacy *_cache dirs so
     # generated artifacts deliver on installs that have both (#31733).
-    _HERMES_HOME / "cache" / "images",
-    _HERMES_HOME / "cache" / "audio",
-    _HERMES_HOME / "cache" / "videos",
-    _HERMES_HOME / "cache" / "documents",
-    _HERMES_HOME / "cache" / "screenshots",
+    _LLIAM_HOME / "cache" / "images",
+    _LLIAM_HOME / "cache" / "audio",
+    _LLIAM_HOME / "cache" / "videos",
+    _LLIAM_HOME / "cache" / "documents",
+    _LLIAM_HOME / "cache" / "screenshots",
 )
 
 # Default recency window for trusting freshly-produced files (seconds).
@@ -1037,7 +1037,7 @@ def _profile_cache_roots() -> List[Path]:
     denied prefix and $HOME is not that prefix). See issue #31733.
     """
     roots: List[Path] = []
-    profiles_dir = _HERMES_ROOT / "profiles"
+    profiles_dir = _LLIAM_ROOT / "profiles"
     try:
         profile_dirs = [p for p in profiles_dir.iterdir() if p.is_dir()]
     except OSError:
@@ -1142,7 +1142,7 @@ def _media_delivery_denied_paths() -> List[Path]:
     _ROOT_CREDENTIAL_DIRS = (
         "pairing",
     )
-    for lliam_root in (_HERMES_HOME, _HERMES_ROOT):
+    for lliam_root in (_LLIAM_HOME, _LLIAM_ROOT):
         for rel in _ROOT_CREDENTIAL_FILES:
             denied.append(lliam_root / rel)
         for rel in _ROOT_CREDENTIAL_DIRS:
@@ -4976,7 +4976,7 @@ class BasePlatformAdapter(ABC):
             # fresher run's callbacks.
             _callback_generation = getattr(
                 interrupt_event,
-                "_hermes_run_generation",
+                "_lliam_run_generation",
                 None,
             )
             if hasattr(self, "pop_post_delivery_callback"):

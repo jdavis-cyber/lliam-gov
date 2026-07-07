@@ -82,7 +82,7 @@ def test_manager_remove_evicts_cache(tmp_path, monkeypatch):
     assert p1 is not p2
 
 
-def test_hermes_provider_subclass_exists():
+def test_lliam_provider_subclass_exists():
     """HermesMCPOAuthProvider is defined and subclasses OAuthClientProvider."""
     from tools.mcp_oauth_manager import _LLIAM_PROVIDER_CLS
     from mcp.client.auth.oauth2 import OAuthClientProvider
@@ -134,7 +134,7 @@ async def test_disk_watch_invalidates_on_mtime_change(tmp_path, monkeypatch):
     assert provider._initialized is False
 
 
-def test_manager_builds_hermes_provider_subclass(tmp_path, monkeypatch):
+def test_manager_builds_lliam_provider_subclass(tmp_path, monkeypatch):
     """get_or_build_provider returns HermesMCPOAuthProvider, not plain OAuthClientProvider."""
     from tools.mcp_oauth_manager import (
         MCPOAuthManager, _LLIAM_PROVIDER_CLS, reset_manager_for_tests,

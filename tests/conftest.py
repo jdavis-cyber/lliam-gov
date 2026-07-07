@@ -168,7 +168,7 @@ def _looks_like_credential(name: str) -> bool:
 
 # HERMES_* vars that change test behavior by being set. Unset all of these
 # unconditionally — individual tests that need them set do so explicitly.
-_HERMES_BEHAVIORAL_VARS = frozenset({
+_LLIAM_BEHAVIORAL_VARS = frozenset({
     "HERMES_YOLO_MODE",
     "HERMES_INTERACTIVE",
     "HERMES_QUIET",
@@ -339,7 +339,7 @@ def _hermetic_environment(tmp_path, monkeypatch):
             monkeypatch.delenv(name, raising=False)
 
     # 2. Blank behavioral HERMES_* vars that could change test semantics.
-    for name in _HERMES_BEHAVIORAL_VARS:
+    for name in _LLIAM_BEHAVIORAL_VARS:
         monkeypatch.delenv(name, raising=False)
 
     # 3. Redirect HERMES_HOME to a per-test tempdir. Code that reads
@@ -352,13 +352,13 @@ def _hermetic_environment(tmp_path, monkeypatch):
     #    fixture. Any code in the codebase reading ``~/.hermes/*`` via
     #    ``Path.home() / ".hermes"`` instead of ``get_lliam_home()``
     #    is a bug to fix at the callsite.
-    fake_hermes_home = tmp_path / "hermes_test"
-    fake_hermes_home.mkdir()
-    (fake_hermes_home / "sessions").mkdir()
-    (fake_hermes_home / "cron").mkdir()
-    (fake_hermes_home / "memories").mkdir()
-    (fake_hermes_home / "skills").mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(fake_hermes_home))
+    fake_lliam_home = tmp_path / "hermes_test"
+    fake_lliam_home.mkdir()
+    (fake_lliam_home / "sessions").mkdir()
+    (fake_lliam_home / "cron").mkdir()
+    (fake_lliam_home / "memories").mkdir()
+    (fake_lliam_home / "skills").mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(fake_lliam_home))
 
     # 4. Deterministic locale / timezone / hashseed. CI runs in UTC with
     #    C.UTF-8 locale; local dev often doesn't. Pin everything.
@@ -652,7 +652,7 @@ def _live_system_guard(request, monkeypatch):
         monkeypatch.setattr(_os, "killpg", _guarded_killpg)
 
     # ── Subprocess command-string inspection (whole-line) ──────────
-    _HERMES_TOKENS = (
+    _LLIAM_TOKENS = (
         "hermes-gateway",
         "hermes.service",
         "lliam_cli.main gateway",
@@ -686,7 +686,7 @@ def _live_system_guard(request, monkeypatch):
 
     def _matches_lliam_gateway(cmd_str: str) -> bool:
         low = cmd_str.lower()
-        return any(tok in low for tok in _HERMES_TOKENS)
+        return any(tok in low for tok in _LLIAM_TOKENS)
 
     def _is_blocked_systemctl(cmd) -> bool:
         cmd_str = _cmd_to_string(cmd)

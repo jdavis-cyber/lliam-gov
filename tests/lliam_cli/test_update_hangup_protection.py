@@ -186,8 +186,8 @@ class TestInstallHangupProtection:
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
         # Clear cached get_lliam_home if present
         import lliam_cli.config as _cfg
-        if hasattr(_cfg, "_HERMES_HOME_CACHE"):
-            _cfg._HERMES_HOME_CACHE = None  # type: ignore[attr-defined]
+        if hasattr(_cfg, "_LLIAM_HOME_CACHE"):
+            _cfg._LLIAM_HOME_CACHE = None  # type: ignore[attr-defined]
 
         original_handler = signal.getsignal(signal.SIGHUP)
         state = _install_hangup_protection(gateway_mode=False)
@@ -203,8 +203,8 @@ class TestInstallHangupProtection:
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
         # Nuke any cached home path
         import lliam_cli.config as _cfg
-        if hasattr(_cfg, "_HERMES_HOME_CACHE"):
-            _cfg._HERMES_HOME_CACHE = None  # type: ignore[attr-defined]
+        if hasattr(_cfg, "_LLIAM_HOME_CACHE"):
+            _cfg._LLIAM_HOME_CACHE = None  # type: ignore[attr-defined]
 
         prev_out, prev_err = sys.stdout, sys.stderr
         state = _install_hangup_protection(gateway_mode=False)
@@ -233,8 +233,8 @@ class TestInstallHangupProtection:
     def test_logs_dir_created_if_missing(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
         import lliam_cli.config as _cfg
-        if hasattr(_cfg, "_HERMES_HOME_CACHE"):
-            _cfg._HERMES_HOME_CACHE = None  # type: ignore[attr-defined]
+        if hasattr(_cfg, "_LLIAM_HOME_CACHE"):
+            _cfg._LLIAM_HOME_CACHE = None  # type: ignore[attr-defined]
 
         # No logs/ dir yet.
         assert not (tmp_path / "logs").exists()
@@ -289,8 +289,8 @@ class TestFinalizeUpdateOutput:
     def test_restores_streams_and_closes_log(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
         import lliam_cli.config as _cfg
-        if hasattr(_cfg, "_HERMES_HOME_CACHE"):
-            _cfg._HERMES_HOME_CACHE = None  # type: ignore[attr-defined]
+        if hasattr(_cfg, "_LLIAM_HOME_CACHE"):
+            _cfg._LLIAM_HOME_CACHE = None  # type: ignore[attr-defined]
 
         prev_out = sys.stdout
         state = _install_hangup_protection(gateway_mode=False)

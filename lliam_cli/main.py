@@ -449,9 +449,9 @@ def _apply_profile_override() -> None:
     # still read active_profile — the user may have switched profiles via
     # `hermes profile use` and the gateway should honour that choice.
     # See issue #22502.
-    hermes_home_env = os.environ.get("HERMES_HOME", "")
-    if profile_name is None and hermes_home_env:
-        if Path(hermes_home_env).parent.name == "profiles":
+    lliam_home_env = os.environ.get("HERMES_HOME", "")
+    if profile_name is None and lliam_home_env:
+        if Path(lliam_home_env).parent.name == "profiles":
             return
 
     # 2. If no flag, check active_profile in the hermes root.
@@ -11275,8 +11275,8 @@ def _render_distribution_plan(plan) -> None:
         print(f"  {mf.description}")
     if mf.author:
         print(f"  Author:   {mf.author}")
-    if mf.hermes_requires:
-        print(f"  Requires: Hermes {mf.hermes_requires}")
+    if mf.lliam_requires:
+        print(f"  Requires: Hermes {mf.lliam_requires}")
     print(f"  Source:   {plan.provenance}")
     print(f"  Target:   {plan.target_dir}")
     if plan.existing:

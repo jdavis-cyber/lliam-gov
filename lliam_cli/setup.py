@@ -141,7 +141,7 @@ from lliam_cli.config import (
     save_env_value,
     remove_env_value,
     get_env_value,
-    ensure_hermes_home,
+    ensure_lliam_home,
 )
 # display_lliam_home imported lazily at call sites (stale-module safety during hermes update)
 
@@ -1684,14 +1684,14 @@ def _setup_telegram_auto_result():
 
     profile_name: str | None = None
     try:
-        profile_name = _profile_name_from_hermes_home(Path(get_lliam_home()))
+        profile_name = _profile_name_from_lliam_home(Path(get_lliam_home()))
     except Exception:
         pass
 
     return auto_setup_telegram_bot_result(profile_name=profile_name)
 
 
-def _profile_name_from_hermes_home(lliam_home) -> str | None:
+def _profile_name_from_lliam_home(lliam_home) -> str | None:
     """Return the active profile name when HERMES_HOME is a profile dir."""
     if lliam_home.parent.name == "profiles":
         return lliam_home.name
@@ -2723,7 +2723,7 @@ def run_setup_wizard(args):
     if is_managed():
         managed_error("run setup wizard")
         return
-    ensure_hermes_home()
+    ensure_lliam_home()
 
     reset_requested = bool(getattr(args, "reset", False))
     if reset_requested:

@@ -170,7 +170,7 @@ class DistributionManifest:
     name: str
     version: str = "0.1.0"
     description: str = ""
-    hermes_requires: str = ""
+    lliam_requires: str = ""
     author: str = ""
     license: str = ""
     env_requires: List[EnvRequirement] = field(default_factory=list)
@@ -203,7 +203,7 @@ class DistributionManifest:
             name=name,
             version=str(data.get("version") or "0.1.0"),
             description=str(data.get("description") or ""),
-            hermes_requires=str(data.get("hermes_requires") or ""),
+            lliam_requires=str(data.get("hermes_requires") or ""),
             author=str(data.get("author") or ""),
             license=str(data.get("license") or ""),
             env_requires=env_requires,
@@ -219,8 +219,8 @@ class DistributionManifest:
         }
         if self.description:
             out["description"] = self.description
-        if self.hermes_requires:
-            out["hermes_requires"] = self.hermes_requires
+        if self.lliam_requires:
+            out["hermes_requires"] = self.lliam_requires
         if self.author:
             out["author"] = self.author
         if self.license:
@@ -507,7 +507,7 @@ def plan_install(
         )
 
     # Version check up-front so we fail fast
-    check_lliam_requires(manifest.hermes_requires, lliam_version)
+    check_lliam_requires(manifest.lliam_requires, lliam_version)
 
     # Resolve target profile name
     target_name = override_name or manifest.name

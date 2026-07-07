@@ -1745,9 +1745,9 @@ def list_authenticated_providers(
             try:
                 from agent.anthropic_adapter import (
                     read_claude_code_credentials,
-                    read_hermes_oauth_credentials,
+                    read_lliam_oauth_credentials,
                 )
-                lliam_creds = read_hermes_oauth_credentials()
+                lliam_creds = read_lliam_oauth_credentials()
                 cc_creds = read_claude_code_credentials()
                 if (lliam_creds and lliam_creds.get("accessToken")) or \
                    (cc_creds and cc_creds.get("accessToken")):

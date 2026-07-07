@@ -126,7 +126,7 @@ def test_ioc_blocklist_rejects_attacker_ip():
     assert "indicator-of-compromise" in warnings[0].lower()
 
 
-def test_save_rejects_hermes_0day_persistence_entry():
+def test_save_rejects_lliam_0day_persistence_entry():
     from lliam_cli.config import load_config
     from lliam_cli.mcp_config import _save_mcp_server
 

@@ -31,7 +31,7 @@ def _reset_lliam_time_cache():
 # lliam_time.now() — core helper
 # =========================================================================
 
-class TestHermesTimeNow:
+class TestLliamTimeNow:
     """Test the timezone-aware now() helper."""
 
     def setup_method(self):
@@ -287,7 +287,7 @@ class TestCronTimezone:
             f"Absolute time shifted: expected {expected_utc}, got {actual_utc}"
         )
 
-    def test_ensure_aware_normalizes_aware_to_hermes_tz(self):
+    def test_ensure_aware_normalizes_aware_to_lliam_tz(self):
         """Already-aware datetimes should be normalized to Hermes tz."""
         from cron.jobs import _ensure_aware
 

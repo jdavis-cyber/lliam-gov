@@ -37,7 +37,7 @@ class TestEarlyMouseDisable:
 
         mock_write.assert_called_once_with(1, EXPECTED)
 
-    def test_writes_disable_sequence_when_hermes_tui_env_set(self, monkeypatch):
+    def test_writes_disable_sequence_when_lliam_tui_env_set(self, monkeypatch):
         monkeypatch.setattr(sys, "argv", ["hermes"])
         monkeypatch.setenv("HERMES_TUI", "1")
         monkeypatch.delenv("HERMES_TUI_NO_EARLY_DISABLE", raising=False)

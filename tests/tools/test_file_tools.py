@@ -432,7 +432,7 @@ class TestSearchHints:
 class TestSensitivePathCheck:
     """Verify that _check_sensitive_path blocks writes to protected locations."""
 
-    def test_hermes_config_blocked_for_write_file(self, tmp_path, monkeypatch):
+    def test_lliam_config_blocked_for_write_file(self, tmp_path, monkeypatch):
         fake_config = tmp_path / "config.yaml"
         monkeypatch.setattr("tools.file_tools._lliam_config_resolved", str(fake_config))
         monkeypatch.setattr("tools.file_tools._lliam_config_resolved_loaded", True)
@@ -442,7 +442,7 @@ class TestSensitivePathCheck:
         assert "error" in result
         assert "Hermes config" in result["error"]
 
-    def test_hermes_config_blocked_via_tilde_path(self, tmp_path, monkeypatch):
+    def test_lliam_config_blocked_via_tilde_path(self, tmp_path, monkeypatch):
         fake_config = tmp_path / "config.yaml"
         monkeypatch.setattr("tools.file_tools._lliam_config_resolved", str(fake_config))
         monkeypatch.setattr("tools.file_tools._lliam_config_resolved_loaded", True)
@@ -452,7 +452,7 @@ class TestSensitivePathCheck:
         assert "error" in result
         assert "Hermes config" in result["error"]
 
-    def test_hermes_config_blocked_for_patch(self, tmp_path, monkeypatch):
+    def test_lliam_config_blocked_for_patch(self, tmp_path, monkeypatch):
         fake_config = tmp_path / "config.yaml"
         fake_config.write_text("approvals:\n  mode: manual\n")
         monkeypatch.setattr("tools.file_tools._lliam_config_resolved", str(fake_config))

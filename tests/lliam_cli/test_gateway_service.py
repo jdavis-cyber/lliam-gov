@@ -378,7 +378,7 @@ class TestTempHomeServiceDefinitionGuard:
         )
         assert gateway_cli._temp_home_in_service_definition(plist) is None
 
-    def test_accepts_unit_without_hermes_home(self):
+    def test_accepts_unit_without_lliam_home(self):
         unit = "[Service]\nExecStart=/usr/bin/python -m lliam_cli.main gateway run\n"
         assert gateway_cli._temp_home_in_service_definition(unit) is None
 
@@ -476,7 +476,7 @@ class TestGeneratedSystemdUnits:
             "_system_service_identity",
             lambda run_as_user=None: ("alice", "alice", "/home/alice"),
         )
-        monkeypatch.setattr(gateway_cli, "_hermes_home_for_target_user", lambda home: "/home/alice/.hermes")
+        monkeypatch.setattr(gateway_cli, "_lliam_home_for_target_user", lambda home: "/home/alice/.hermes")
         monkeypatch.setenv("PATH", "/usr/local/bin:/mnt/c/WINDOWS/system32")
         monkeypatch.setattr(gateway_cli.shutil, "which", lambda cmd: None)
 
@@ -1923,7 +1923,7 @@ class TestDetectVenvDir:
         assert result is None
 
 
-class TestSystemUnitHermesHome:
+class TestSystemUnitLliamHome:
     """HERMES_HOME in system units must reference the target user, not root."""
 
     def test_system_unit_uses_target_user_home_not_calling_user(self, monkeypatch):
@@ -1965,7 +1965,7 @@ class TestSystemUnitHermesHome:
         assert 'HERMES_HOME=/home/alice/.lliam/profiles/coder' in unit
         assert '/root/' not in unit
 
-    def test_system_unit_preserves_custom_hermes_home(self, monkeypatch):
+    def test_system_unit_preserves_custom_lliam_home(self, monkeypatch):
         # Custom HERMES_HOME not under any user's home — keep as-is
         monkeypatch.setattr(Path, "home", staticmethod(lambda: Path("/root")))
         monkeypatch.setenv("HERMES_HOME", "/opt/hermes-shared")
@@ -1990,29 +1990,29 @@ class TestSystemUnitHermesHome:
         assert f'HERMES_HOME={lliam_home}' in unit
 
 
-class TestHermesHomeForTargetUser:
-    """Unit tests for _hermes_home_for_target_user()."""
+class TestLliamHomeForTargetUser:
+    """Unit tests for _lliam_home_for_target_user()."""
 
     def test_remaps_default_home(self, monkeypatch):
         monkeypatch.setattr(Path, "home", staticmethod(lambda: Path("/root")))
         monkeypatch.delenv("HERMES_HOME", raising=False)
         monkeypatch.delenv("LLIAM_HOME", raising=False)
 
-        result = gateway_cli._hermes_home_for_target_user("/home/alice")
+        result = gateway_cli._lliam_home_for_target_user("/home/alice")
         assert result == "/home/alice/.lliam"
 
     def test_remaps_profile_path(self, monkeypatch):
         monkeypatch.setattr(Path, "home", staticmethod(lambda: Path("/root")))
         monkeypatch.setenv("HERMES_HOME", "/root/.lliam/profiles/coder")
 
-        result = gateway_cli._hermes_home_for_target_user("/home/alice")
+        result = gateway_cli._lliam_home_for_target_user("/home/alice")
         assert result == "/home/alice/.lliam/profiles/coder"
 
     def test_keeps_custom_path(self, monkeypatch):
         monkeypatch.setattr(Path, "home", staticmethod(lambda: Path("/root")))
         monkeypatch.setenv("HERMES_HOME", "/opt/hermes")
 
-        result = gateway_cli._hermes_home_for_target_user("/home/alice")
+        result = gateway_cli._lliam_home_for_target_user("/home/alice")
         assert result == "/opt/hermes"
 
     def test_noop_when_same_user(self, monkeypatch):
@@ -2020,7 +2020,7 @@ class TestHermesHomeForTargetUser:
         monkeypatch.delenv("HERMES_HOME", raising=False)
         monkeypatch.delenv("LLIAM_HOME", raising=False)
 
-        result = gateway_cli._hermes_home_for_target_user("/home/alice")
+        result = gateway_cli._lliam_home_for_target_user("/home/alice")
         assert result == "/home/alice/.lliam"
 
 
@@ -2310,7 +2310,7 @@ class TestPreflightUserSystemd:
 class TestProfileArg:
     """Tests for _profile_arg — returns '--profile <name>' for named profiles."""
 
-    def test_default_hermes_home_returns_empty(self, tmp_path, monkeypatch):
+    def test_default_lliam_home_returns_empty(self, tmp_path, monkeypatch):
         """Default ~/.hermes should not produce a --profile flag."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
@@ -2601,7 +2601,7 @@ class TestDockerAwareGateway:
         assert "lliam-gov gateway run" in out
 
 
-class TestLegacyHermesUnitDetection:
+class TestLegacyLliamUnitDetection:
     """Tests for _find_legacy_hermes_units / has_legacy_hermes_units.
 
     These guard against the scenario that tripped Luis in April 2026: an
@@ -2635,7 +2635,7 @@ class TestLegacyHermesUnitDetection:
         )
         return user_dir, system_dir
 
-    def test_detects_legacy_hermes_service_in_user_scope(self, tmp_path, monkeypatch):
+    def test_detects_legacy_lliam_service_in_user_scope(self, tmp_path, monkeypatch):
         user_dir, _ = self._setup_search_paths(tmp_path, monkeypatch)
         legacy = user_dir / "hermes.service"
         legacy.write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
@@ -2649,7 +2649,7 @@ class TestLegacyHermesUnitDetection:
         assert is_system is False
         assert gateway_cli.has_legacy_lliam_units() is True
 
-    def test_detects_legacy_hermes_service_in_system_scope(self, tmp_path, monkeypatch):
+    def test_detects_legacy_lliam_service_in_system_scope(self, tmp_path, monkeypatch):
         _, system_dir = self._setup_search_paths(tmp_path, monkeypatch)
         legacy = system_dir / "hermes.service"
         legacy.write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
@@ -2662,7 +2662,7 @@ class TestLegacyHermesUnitDetection:
         assert path == legacy
         assert is_system is True
 
-    def test_ignores_profile_unit_hermes_gateway_coder(self, tmp_path, monkeypatch):
+    def test_ignores_profile_unit_lliam_gateway_coder(self, tmp_path, monkeypatch):
         """CRITICAL: profile units must NOT be flagged as legacy.
 
         Teknium's concern — ``hermes-gateway-coder.service`` is our standard
@@ -2687,7 +2687,7 @@ class TestLegacyHermesUnitDetection:
         assert results == []
         assert gateway_cli.has_legacy_lliam_units() is False
 
-    def test_ignores_unrelated_hermes_service(self, tmp_path, monkeypatch):
+    def test_ignores_unrelated_lliam_service(self, tmp_path, monkeypatch):
         """Third-party ``hermes.service`` that isn't ours stays untouched.
 
         If a user has some other package named ``hermes`` installed as a
@@ -2788,7 +2788,7 @@ class TestLegacyHermesUnitDetection:
         assert results == []
 
 
-class TestRemoveLegacyHermesUnits:
+class TestRemoveLegacyLliamUnits:
     """Tests for remove_legacy_hermes_units (the migration action)."""
 
     _OUR_UNIT_TEXT = (
@@ -3126,7 +3126,7 @@ class TestLegacyLaunchdJobDetection:
 
         assert gateway_cli._find_legacy_launchd_jobs() == []
 
-    def test_has_legacy_hermes_units_stays_systemd_only(self, tmp_path, monkeypatch):
+    def test_has_legacy_lliam_units_stays_systemd_only(self, tmp_path, monkeypatch):
         """A launchd-only find must NOT trip the systemd-flow check — every
         has_legacy_hermes_units caller is a systemd install/start/setup path
         that can only remove systemd units. launchd cleanup goes through
@@ -3742,7 +3742,7 @@ class TestServiceWorkingDirIsStable:
     deleted checkout can't crash-loop the unit on CHDIR (status=200).
     """
 
-    def test_stable_working_dir_uses_hermes_home(self, tmp_path, monkeypatch):
+    def test_stable_working_dir_uses_lliam_home(self, tmp_path, monkeypatch):
         home = tmp_path / ".hermes"
         home.mkdir()
         monkeypatch.setattr(gateway_cli, "get_lliam_home", lambda: home)
@@ -3754,7 +3754,7 @@ class TestServiceWorkingDirIsStable:
         monkeypatch.setattr(gateway_cli, "get_lliam_home", lambda: missing)
         assert gateway_cli._stable_service_working_dir() == str(gateway_cli.PROJECT_ROOT)
 
-    def test_user_unit_workingdirectory_is_hermes_home_not_checkout(self, tmp_path, monkeypatch):
+    def test_user_unit_workingdirectory_is_lliam_home_not_checkout(self, tmp_path, monkeypatch):
         home = tmp_path / ".hermes"
         home.mkdir()
         monkeypatch.setattr(gateway_cli, "get_lliam_home", lambda: home)
@@ -3766,7 +3766,7 @@ class TestServiceWorkingDirIsStable:
         # The bug class: never pin cwd inside a transient worktree checkout.
         assert "/.worktrees/" not in value
 
-    def test_launchd_workingdirectory_is_hermes_home(self, tmp_path, monkeypatch):
+    def test_launchd_workingdirectory_is_lliam_home(self, tmp_path, monkeypatch):
         import re
 
         home = tmp_path / ".hermes"

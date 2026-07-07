@@ -30,7 +30,7 @@ class TestWriteDenyExactPaths:
         assert _is_write_denied(path) is True
 
 
-    def test_hermes_env(self):
+    def test_lliam_env(self):
         # ``.env`` under the active HERMES_HOME (profile-aware, not just
         # ``~/.hermes``) must be write-denied. The hermetic test conftest
         # points HERMES_HOME at a tempdir — resolve via get_lliam_home()
@@ -39,7 +39,7 @@ class TestWriteDenyExactPaths:
         path = str(get_lliam_home() / ".env")
         assert _is_write_denied(path) is True
 
-    def test_hermes_root_env_when_running_under_profile(self, tmp_path, monkeypatch):
+    def test_lliam_root_env_when_running_under_profile(self, tmp_path, monkeypatch):
         """Top-level ``<root>/.env`` stays write-denied even when running under
         a profile (#15981).
 
@@ -120,7 +120,7 @@ class TestWriteAllowed:
     def test_project_file(self):
         assert _is_write_denied("/home/user/project/main.py") is False
 
-    def test_hermes_control_files_requested_writable(self):
+    def test_lliam_control_files_requested_writable(self):
         from lliam_constants import get_lliam_home
 
         home = get_lliam_home()

@@ -364,7 +364,7 @@ class TestTeePattern:
         assert dangerous is True
         assert key is not None
 
-    def test_tee_hermes_env(self):
+    def test_tee_lliam_env(self):
         dangerous, key, desc = detect_dangerous_command("echo x | tee ~/.hermes/.env")
         assert dangerous is True
         assert key is not None
@@ -375,12 +375,12 @@ class TestTeePattern:
         assert dangerous is True
         assert key is not None
 
-    def test_tee_custom_hermes_home_env(self):
+    def test_tee_custom_lliam_home_env(self):
         dangerous, key, desc = detect_dangerous_command("echo x | tee $HERMES_HOME/.env")
         assert dangerous is True
         assert key is not None
 
-    def test_tee_quoted_custom_hermes_home_env(self):
+    def test_tee_quoted_custom_lliam_home_env(self):
         dangerous, key, desc = detect_dangerous_command('echo x | tee "$HERMES_HOME/.env"')
         assert dangerous is True
         assert key is not None
@@ -396,7 +396,7 @@ class TestTeePattern:
         assert key is None
 
 
-class TestHermesConfigWriteProtection:
+class TestLliamConfigWriteProtection:
     """Terminal-side pairing for the file_tools write_file/patch deny on
     ~/.hermes/config.yaml (#14639). config.yaml IS the security policy
     (approvals.mode/yolo live there, mtime-keyed cache reloads mid-session),
@@ -431,7 +431,7 @@ class TestHermesConfigWriteProtection:
         dangerous, key, desc = detect_dangerous_command("sed --in-place 's/manual/off/' ~/.hermes/config.yaml")
         assert dangerous is True
 
-    def test_sed_in_place_absolute_hermes_home_config(self):
+    def test_sed_in_place_absolute_lliam_home_config(self):
         config_path = get_lliam_home() / "config.yaml"
         dangerous, key, desc = detect_dangerous_command(
             f"sed -i 's/manual/off/' {config_path}"
@@ -439,7 +439,7 @@ class TestHermesConfigWriteProtection:
         assert dangerous is True
         assert "hermes config" in desc.lower() or "in-place" in desc.lower()
 
-    def test_sed_in_place_absolute_hermes_home_env(self):
+    def test_sed_in_place_absolute_lliam_home_env(self):
         env_path = get_lliam_home() / ".env"
         dangerous, key, desc = detect_dangerous_command(
             f"sed -i 's/API_KEY=.*/API_KEY=x/' {env_path}"
@@ -447,7 +447,7 @@ class TestHermesConfigWriteProtection:
         assert dangerous is True
         assert "hermes config" in desc.lower() or "in-place" in desc.lower()
 
-    def test_custom_hermes_home(self):
+    def test_custom_lliam_home(self):
         dangerous, key, desc = detect_dangerous_command("echo x | tee $HERMES_HOME/config.yaml")
         assert dangerous is True
 
@@ -460,7 +460,7 @@ class TestHermesConfigWriteProtection:
         assert dangerous is True
         assert "in-place" in desc.lower() or "perl" in desc.lower()
 
-    def test_perl_in_place_absolute_hermes_home_config(self):
+    def test_perl_in_place_absolute_lliam_home_config(self):
         config_path = get_lliam_home() / "config.yaml"
         dangerous, key, desc = detect_dangerous_command(
             f"perl -i -pe 's/approvals.mode: on/approvals.mode: off/' {config_path}"
@@ -474,7 +474,7 @@ class TestHermesConfigWriteProtection:
         )
         assert dangerous is True
 
-    def test_ruby_in_place_absolute_hermes_home_env(self):
+    def test_ruby_in_place_absolute_lliam_home_env(self):
         env_path = get_lliam_home() / ".env"
         dangerous, key, desc = detect_dangerous_command(
             f"ruby -i -pe 'gsub(/API_KEY=.*/, \"API_KEY=x\")' {env_path}"
@@ -556,7 +556,7 @@ class TestFindExecFullPathRm:
 class TestSensitiveRedirectPattern:
     """Detect shell redirection writes to sensitive user-managed paths."""
 
-    def test_redirect_to_custom_hermes_home_env(self):
+    def test_redirect_to_custom_lliam_home_env(self):
         dangerous, key, desc = detect_dangerous_command("echo x > $HERMES_HOME/.env")
         assert dangerous is True
         assert key is not None
@@ -689,7 +689,7 @@ class TestSensitiveCopyMovePattern:
         dangerous, key, desc = detect_dangerous_command("cp /tmp/e ~/.bashrc")
         assert dangerous is True
 
-    def test_cp_to_hermes_config(self):
+    def test_cp_to_lliam_config(self):
         dangerous, key, desc = detect_dangerous_command("cp /tmp/evil.yaml ~/.hermes/config.yaml")
         assert dangerous is True
 
@@ -776,7 +776,7 @@ class TestWindowsAbsolutePathFolding:
         assert dangerous is True
         assert key is not None
 
-    def test_windows_hermes_home_config_folds(self, monkeypatch):
+    def test_windows_lliam_home_config_folds(self, monkeypatch):
         # Hermes home nests under the user home on Windows; it must fold before
         # the user-home rewrite eats its prefix.
         monkeypatch.setenv("HOME", r"C:\Users\tester")
@@ -943,14 +943,14 @@ class TestGatewayProtection:
         assert dangerous is True
         assert "stop/restart" in desc
 
-    def test_pkill_hermes_detected(self):
+    def test_pkill_lliam_detected(self):
         """pkill targeting hermes/gateway processes must be caught."""
         cmd = 'pkill -f "cli.py --gateway"'
         dangerous, key, desc = detect_dangerous_command(cmd)
         assert dangerous is True
         assert "self-termination" in desc
 
-    def test_killall_hermes_detected(self):
+    def test_killall_lliam_detected(self):
         cmd = "killall hermes"
         dangerous, key, desc = detect_dangerous_command(cmd)
         assert dangerous is True
@@ -1109,7 +1109,7 @@ class TestPgrepKillExpansion:
         dangerous, _, _ = detect_dangerous_command(cmd)
         assert dangerous is True
 
-    def test_pkill_hermes_still_detected(self):
+    def test_pkill_lliam_still_detected(self):
         """Existing pkill pattern must not regress."""
         cmd = "pkill -9 hermes"
         dangerous, _, _ = detect_dangerous_command(cmd)
@@ -1142,23 +1142,23 @@ class TestLaunchctlGatewayLifecycle:
     must require the same approval. See issue #33071.
     """
 
-    def test_launchctl_stop_hermes_detected(self):
+    def test_launchctl_stop_lliam_detected(self):
         cmd = "launchctl stop ai.hermes.gateway"
         dangerous, _, desc = detect_dangerous_command(cmd)
         assert dangerous is True
         assert "launchd" in desc.lower() or "hermes" in desc.lower()
 
-    def test_launchctl_kickstart_hermes_detected(self):
+    def test_launchctl_kickstart_lliam_detected(self):
         cmd = "launchctl kickstart -k system/ai.hermes.gateway"
         dangerous, _, _ = detect_dangerous_command(cmd)
         assert dangerous is True
 
-    def test_launchctl_bootout_hermes_detected(self):
+    def test_launchctl_bootout_lliam_detected(self):
         cmd = "launchctl bootout system/ai.hermes.gateway"
         dangerous, _, _ = detect_dangerous_command(cmd)
         assert dangerous is True
 
-    def test_launchctl_unload_hermes_detected(self):
+    def test_launchctl_unload_lliam_detected(self):
         cmd = "launchctl unload ~/Library/LaunchAgents/ai.hermes.gateway.plist"
         dangerous, _, _ = detect_dangerous_command(cmd)
         assert dangerous is True

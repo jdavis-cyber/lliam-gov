@@ -80,7 +80,7 @@ def test_all_invalid_reports_each_and_the_zero_state():
     assert any("zero valid toolsets" in w for w in warnings)
 
 
-def test_real_validate_toolset_treats_lliam_cli_valid_and_hermes_invalid():
+def test_real_validate_toolset_treats_lliam_cli_valid_and_lliam_invalid():
     # Ties the helper to reality: the canonical registry check agrees that
     # `hermes-cli` is the real toolset and `hermes` is not (the #38798 crux).
     from toolsets import validate_toolset

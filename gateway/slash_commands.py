@@ -3971,7 +3971,7 @@ class GatewaySlashCommandsMixin:
         files are written so either the current gateway process or the next one
         can notify the user when the update finishes.
         """
-        from gateway.run import _lliam_home, _resolve_hermes_bin
+        from gateway.run import _lliam_home, _resolve_lliam_bin
         import json
         import shutil
         import subprocess
@@ -4000,7 +4000,7 @@ class GatewaySlashCommandsMixin:
         if not git_dir.exists():
             return t("gateway.update.not_git_repo")
 
-        lliam_cmd = _resolve_hermes_bin()
+        lliam_cmd = _resolve_lliam_bin()
         if not lliam_cmd:
             return t("gateway.update.hermes_cmd_not_found")
 
@@ -4082,9 +4082,9 @@ class GatewaySlashCommandsMixin:
                     **windows_detach_popen_kwargs(),
                 )
             else:
-                hermes_cmd_str = " ".join(shlex.quote(part) for part in lliam_cmd)
+                lliam_cmd_str = " ".join(shlex.quote(part) for part in lliam_cmd)
                 update_cmd = (
-                    f"PYTHONUNBUFFERED=1 {hermes_cmd_str} update --gateway"
+                    f"PYTHONUNBUFFERED=1 {lliam_cmd_str} update --gateway"
                     f" > {shlex.quote(str(output_path))} 2>&1; "
                     # Avoid `status=$?`: `status` is a read-only special parameter
                     # in zsh, and this command string is copied/reused in macOS/zsh

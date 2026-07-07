@@ -345,10 +345,10 @@ class TestSetupTelegramAuto:
         assert seen["profile_name"] == "oracle"
 
     def test_profile_name_from_home_path_handles_windows_separators(self):
-        from lliam_cli.setup import _profile_name_from_hermes_home
+        from lliam_cli.setup import _profile_name_from_lliam_home
 
         assert (
-            _profile_name_from_hermes_home(
+            _profile_name_from_lliam_home(
                 PureWindowsPath(r"C:\Users\test\AppData\Local\hermes\profiles\oracle")
             )
             == "oracle"

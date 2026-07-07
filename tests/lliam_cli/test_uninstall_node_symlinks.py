@@ -35,7 +35,7 @@ def _make_lliam_node(lliam_home: Path) -> Path:
     return node_bin
 
 
-def test_removes_symlinks_pointing_into_hermes_node(fake_home):
+def test_removes_symlinks_pointing_into_lliam_node(fake_home):
     lliam_home = fake_home / ".hermes"
     node_bin = _make_lliam_node(lliam_home)
     local_bin = fake_home / ".local" / "bin"
@@ -95,7 +95,7 @@ def test_handles_missing_local_bin(fake_home):
     assert uninstall.remove_node_symlinks(lliam_home) == []
 
 
-def test_removes_dangling_symlink_into_hermes_node(fake_home):
+def test_removes_dangling_symlink_into_lliam_node(fake_home):
     """A link into the Hermes node dir is removed even if the target file is
     already gone (dangling) \u2014 the link still shadows PATH."""
     lliam_home = fake_home / ".hermes"

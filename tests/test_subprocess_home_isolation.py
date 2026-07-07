@@ -35,7 +35,7 @@ class TestGetSubprocessHome:
         monkeypatch.delenv("TERMINAL_HOME_MODE", raising=False)
         monkeypatch.delenv("HERMES_REAL_HOME", raising=False)
 
-    def test_returns_none_when_hermes_home_unset(self, monkeypatch):
+    def test_returns_none_when_lliam_home_unset(self, monkeypatch):
         monkeypatch.delenv("HERMES_HOME", raising=False)
         from lliam_constants import get_subprocess_home
         assert get_subprocess_home() is None
@@ -226,7 +226,7 @@ class TestMakeRunEnvHomeInjection:
 
         assert result["HOME"] == "/root"
 
-    def test_no_injection_when_hermes_home_unset(self, monkeypatch):
+    def test_no_injection_when_lliam_home_unset(self, monkeypatch):
         monkeypatch.delenv("HERMES_HOME", raising=False)
         monkeypatch.setenv("HOME", "/home/user")
         monkeypatch.setenv("PATH", "/usr/bin:/bin")

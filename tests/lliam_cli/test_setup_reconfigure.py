@@ -55,7 +55,7 @@ def _enter_existing_install_patches(stack, **extra):
     """
     # Unconditional mocks (no return values to assert against).
     for target, kwargs in [
-        ("lliam_cli.setup.ensure_hermes_home", {}),
+        ("lliam_cli.setup.ensure_lliam_home", {}),
         ("lliam_cli.setup.is_interactive_stdin", {"return_value": True}),
         ("lliam_cli.config.is_managed", {"return_value": False}),
         ("lliam_cli.setup.load_config", {"return_value": {}}),
@@ -76,7 +76,7 @@ def _enter_existing_install_patches(stack, **extra):
 
 def _enter_fresh_install_patches(stack, **extra):
     for target, kwargs in [
-        ("lliam_cli.setup.ensure_hermes_home", {}),
+        ("lliam_cli.setup.ensure_lliam_home", {}),
         ("lliam_cli.setup.is_interactive_stdin", {"return_value": True}),
         ("lliam_cli.config.is_managed", {"return_value": False}),
         ("lliam_cli.setup.load_config", {"return_value": {}}),

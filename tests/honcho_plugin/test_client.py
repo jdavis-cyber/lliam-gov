@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from lliam_cli.profiles import _get_default_hermes_home
+from lliam_cli.profiles import _get_default_lliam_home
 
 import pytest
 
@@ -341,7 +341,7 @@ class TestResolveSessionName:
 
 
 class TestResolveConfigPath:
-    def test_prefers_hermes_home_when_exists(self, tmp_path):
+    def test_prefers_lliam_home_when_exists(self, tmp_path):
         lliam_home = tmp_path / "hermes"
         lliam_home.mkdir()
         local_cfg = lliam_home / "honcho.json"
@@ -368,10 +368,10 @@ class TestResolveConfigPath:
 
         result = resolve_config_path()
 
-        assert _get_default_hermes_home() == default_home
+        assert _get_default_lliam_home() == default_home
         assert result == default_cfg
 
-    def test_falls_back_to_global_without_hermes_home_env(self, tmp_path):
+    def test_falls_back_to_global_without_lliam_home_env(self, tmp_path):
         fake_home = tmp_path / "fakehome"
         fake_home.mkdir()
 
@@ -435,7 +435,7 @@ class TestResolveActiveHost:
         assert profile_host_key("coder") == "hermes_coder"
         assert profile_host_key("default") == "hermes"
 
-    def test_default_returns_hermes(self):
+    def test_default_returns_lliam(self):
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("HERMES_HONCHO_HOST", None)
             os.environ.pop("HERMES_HOME", None)
@@ -451,13 +451,13 @@ class TestResolveActiveHost:
             with patch("lliam_cli.profiles.get_active_profile_name", return_value="coder"):
                 assert resolve_active_host() == "hermes_coder"
 
-    def test_default_profile_returns_hermes(self):
+    def test_default_profile_returns_lliam(self):
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("HERMES_HONCHO_HOST", None)
             with patch("lliam_cli.profiles.get_active_profile_name", return_value="default"):
                 assert resolve_active_host() == "hermes"
 
-    def test_custom_profile_returns_hermes(self):
+    def test_custom_profile_returns_lliam(self):
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("HERMES_HONCHO_HOST", None)
             with patch("lliam_cli.profiles.get_active_profile_name", return_value="custom"):
@@ -635,7 +635,7 @@ class TestGetHonchoClient:
         not importlib.util.find_spec("honcho"),
         reason="honcho SDK not installed"
     )
-    def test_hermes_config_timeout_override_used_when_config_timeout_missing(self):
+    def test_lliam_config_timeout_override_used_when_config_timeout_missing(self):
         fake_honcho = MagicMock(name="Honcho")
         cfg = HonchoClientConfig(
             api_key="test-key",
@@ -677,7 +677,7 @@ class TestGetHonchoClient:
         not importlib.util.find_spec("honcho"),
         reason="honcho SDK not installed"
     )
-    def test_hermes_request_timeout_alias_used(self):
+    def test_lliam_request_timeout_alias_used(self):
         fake_honcho = MagicMock(name="Honcho")
         cfg = HonchoClientConfig(
             api_key="test-key",

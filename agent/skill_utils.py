@@ -555,14 +555,14 @@ def extract_skill_conditions(frontmatter: Dict[str, Any]) -> Dict[str, List]:
     # Handle cases where metadata is not a dict (e.g., a string from malformed YAML)
     if not isinstance(metadata, dict):
         metadata = {}
-    hermes = metadata.get("hermes") or {}
-    if not isinstance(hermes, dict):
-        hermes = {}
+    lliam = metadata.get("hermes") or {}
+    if not isinstance(lliam, dict):
+        lliam = {}
     return {
-        "fallback_for_toolsets": hermes.get("fallback_for_toolsets", []),
-        "requires_toolsets": hermes.get("requires_toolsets", []),
-        "fallback_for_tools": hermes.get("fallback_for_tools", []),
-        "requires_tools": hermes.get("requires_tools", []),
+        "fallback_for_toolsets": lliam.get("fallback_for_toolsets", []),
+        "requires_toolsets": lliam.get("requires_toolsets", []),
+        "fallback_for_tools": lliam.get("fallback_for_tools", []),
+        "requires_tools": lliam.get("requires_tools", []),
     }
 
 
@@ -588,10 +588,10 @@ def extract_skill_config_vars(frontmatter: Dict[str, Any]) -> List[Dict[str, Any
     metadata = frontmatter.get("metadata")
     if not isinstance(metadata, dict):
         return []
-    hermes = metadata.get("hermes")
-    if not isinstance(hermes, dict):
+    lliam = metadata.get("hermes")
+    if not isinstance(lliam, dict):
         return []
-    raw = hermes.get("config")
+    raw = lliam.get("config")
     if not raw:
         return []
     if isinstance(raw, dict):

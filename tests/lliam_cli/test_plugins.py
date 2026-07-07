@@ -63,9 +63,9 @@ def _make_plugin_dir(base: Path, name: str, *, register_body: str = "pass",
         # Config is always read from HERMES_HOME (not from the project
         # dir for project plugins), so that's where we opt in.
         import os
-        hermes_home_str = os.environ.get("HERMES_HOME")
-        if hermes_home_str:
-            lliam_home = Path(hermes_home_str)
+        lliam_home_str = os.environ.get("HERMES_HOME")
+        if lliam_home_str:
+            lliam_home = Path(lliam_home_str)
         else:
             lliam_home = base.parent
         lliam_home.mkdir(parents=True, exist_ok=True)

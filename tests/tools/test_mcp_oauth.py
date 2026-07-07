@@ -36,7 +36,7 @@ def _set_interactive_stdin(monkeypatch, *, is_tty: bool = True) -> None:
 # HermesTokenStorage
 # ---------------------------------------------------------------------------
 
-class TestHermesTokenStorage:
+class TestLliamTokenStorage:
     def test_roundtrip_tokens(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
         storage = LliamTokenStorage("test-server")

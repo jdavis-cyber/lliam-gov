@@ -113,7 +113,7 @@ def test_build_gateway_argv_uses_base_pythonw_for_uv_venv_launcher(monkeypatch, 
 
 
 class TestStableWindowsGatewayWorkingDir:
-    def test_stable_gateway_working_dir_uses_hermes_home(self, tmp_path, monkeypatch):
+    def test_stable_gateway_working_dir_uses_lliam_home(self, tmp_path, monkeypatch):
         home = tmp_path / ".hermes"
         home.mkdir()
         monkeypatch.setattr("lliam_cli.config.get_lliam_home", lambda: home)
@@ -126,7 +126,7 @@ class TestStableWindowsGatewayWorkingDir:
         assert gateway_windows._stable_gateway_working_dir(project) == str(project)
 
 
-def test_write_task_script_anchors_cmd_cd_at_hermes_home(monkeypatch, tmp_path):
+def test_write_task_script_anchors_cmd_cd_at_lliam_home(monkeypatch, tmp_path):
     project = tmp_path / "project"
     lliam_home = tmp_path / "hermes-home"
     lliam_home.mkdir()

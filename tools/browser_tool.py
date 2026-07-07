@@ -191,10 +191,10 @@ def _discover_homebrew_node_dirs() -> tuple[str, ...]:
 def _browser_candidate_path_dirs() -> list[str]:
     """Return ordered browser CLI PATH candidates shared by discovery and execution."""
     lliam_home = get_lliam_home()
-    hermes_node_bin = str(lliam_home / "node" / "bin")
-    hermes_node_root = str(lliam_home / "node")
-    hermes_nm_bin = str(lliam_home / "node_modules" / ".bin")
-    return [hermes_node_bin, hermes_node_root, hermes_nm_bin, *list(_discover_homebrew_node_dirs()), *_SANE_PATH_DIRS]
+    lliam_node_bin = str(lliam_home / "node" / "bin")
+    lliam_node_root = str(lliam_home / "node")
+    lliam_nm_bin = str(lliam_home / "node_modules" / ".bin")
+    return [lliam_node_bin, lliam_node_root, lliam_nm_bin, *list(_discover_homebrew_node_dirs()), *_SANE_PATH_DIRS]
 
 
 def _merge_browser_path(existing_path: str = "") -> str:

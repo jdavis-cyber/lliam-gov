@@ -333,7 +333,7 @@ def test_register_send_subparser_is_reusable():
 # ---------------------------------------------------------------------------
 
 
-def test_load_hermes_env_bridges_config_yaml_scalars(tmp_path, monkeypatch):
+def test_load_lliam_env_bridges_config_yaml_scalars(tmp_path, monkeypatch):
     """Top-level config.yaml scalars should be bridged into os.environ.
 
     This mirrors the gateway/run.py bootstrap behavior: without this, running
@@ -367,7 +367,7 @@ def test_load_hermes_env_bridges_config_yaml_scalars(tmp_path, monkeypatch):
     assert os.environ.get("TELEGRAM_HOME_CHANNEL") == "5550001111"
 
 
-def test_load_hermes_env_does_not_override_existing(tmp_path, monkeypatch):
+def test_load_lliam_env_does_not_override_existing(tmp_path, monkeypatch):
     """Existing env vars must not be clobbered by config.yaml values."""
     import os
 
@@ -387,7 +387,7 @@ def test_load_hermes_env_does_not_override_existing(tmp_path, monkeypatch):
     assert os.environ.get("TELEGRAM_HOME_CHANNEL") == "env_value"
 
 
-def test_load_hermes_env_handles_missing_files(tmp_path, monkeypatch):
+def test_load_lliam_env_handles_missing_files(tmp_path, monkeypatch):
     """No .env or config.yaml should be a silent no-op, not an exception."""
     lliam_home = tmp_path / ".hermes"
     lliam_home.mkdir()

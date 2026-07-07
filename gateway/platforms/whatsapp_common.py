@@ -428,7 +428,7 @@ def resolve_whatsapp_bridge_dir() -> Path:
 
     # Try HERMES_HOME location first
     lliam_home = get_lliam_home()
-    hermes_home_bridge = lliam_home / "scripts" / "whatsapp-bridge"
+    lliam_home_bridge = lliam_home / "scripts" / "whatsapp-bridge"
 
     # Check if install dir is writable
     try:
@@ -443,17 +443,17 @@ def resolve_whatsapp_bridge_dir() -> Path:
         return install_bridge
 
     # Install dir is read-only, mirror to HERMES_HOME if needed
-    if hermes_home_bridge.exists():
-        return hermes_home_bridge
+    if lliam_home_bridge.exists():
+        return lliam_home_bridge
 
     # Mirror the bridge source to HERMES_HOME
     try:
-        hermes_home_bridge.parent.mkdir(parents=True, exist_ok=True)
+        lliam_home_bridge.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(
             install_bridge,
-            hermes_home_bridge,
+            lliam_home_bridge,
             dirs_exist_ok=False,
         )
-        return hermes_home_bridge
+        return lliam_home_bridge
     except Exception:
         return install_bridge

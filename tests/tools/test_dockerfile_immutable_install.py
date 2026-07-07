@@ -12,7 +12,7 @@ def _dockerfile_text() -> str:
     return DOCKERFILE.read_text()
 
 
-def test_dockerfile_makes_opt_hermes_readonly_for_hermes_user() -> None:
+def test_dockerfile_makes_opt_lliam_readonly_for_lliam_user() -> None:
     text = _dockerfile_text()
 
     # --chmod on the source COPY bakes read-only perms at copy time instead
@@ -40,7 +40,7 @@ def test_dockerfile_disables_runtime_install_mutations() -> None:
     assert "HERMES_TUI_DIR=/opt/hermes/ui-tui" in text
 
 
-def test_dockerfile_does_not_chown_install_trees_to_hermes() -> None:
+def test_dockerfile_does_not_chown_install_trees_to_lliam() -> None:
     text = _dockerfile_text()
     forbidden_patterns = (
         r"chown\s+-R\s+hermes:hermes\s+/opt/hermes/\.venv",

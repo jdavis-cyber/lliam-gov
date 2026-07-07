@@ -61,7 +61,7 @@ def fresh_home(tmp_path, monkeypatch):
     # Also reset lliam_constants cache so get_default_lliam_root() re-reads.
     try:
         import lliam_constants
-        lliam_constants._cached_default_hermes_root = None  # type: ignore[attr-defined]
+        lliam_constants._cached_default_lliam_root = None  # type: ignore[attr-defined]
     except Exception:
         pass
     # Kanban module-level init cache must not leak between tests.

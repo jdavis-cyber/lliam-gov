@@ -63,7 +63,7 @@ def test_stage2_discovers_chromium_binary(
     )
 
 
-def test_stage2_browser_path_accessible_to_hermes_user(
+def test_stage2_browser_path_accessible_to_lliam_user(
     built_image: str, container_name: str,
 ) -> None:
     """The discovered browser binary must be accessible to the

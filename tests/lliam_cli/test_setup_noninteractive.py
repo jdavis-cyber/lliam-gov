@@ -72,7 +72,7 @@ class TestNonInteractiveSetup:
         args = _make_setup_args(non_interactive=True)
 
         with (
-            patch("lliam_cli.setup.ensure_hermes_home"),
+            patch("lliam_cli.setup.ensure_lliam_home"),
             patch("lliam_cli.setup.load_config", return_value={}),
             patch("lliam_cli.setup.get_lliam_home", return_value="/tmp/.hermes"),
             patch("lliam_cli.auth.get_active_provider", side_effect=AssertionError("wizard continued")),
@@ -90,7 +90,7 @@ class TestNonInteractiveSetup:
         args = _make_setup_args(non_interactive=False)
 
         with (
-            patch("lliam_cli.setup.ensure_hermes_home"),
+            patch("lliam_cli.setup.ensure_lliam_home"),
             patch("lliam_cli.setup.load_config", return_value={}),
             patch("lliam_cli.setup.get_lliam_home", return_value="/tmp/.hermes"),
             patch("lliam_cli.auth.get_active_provider", side_effect=AssertionError("wizard continued")),

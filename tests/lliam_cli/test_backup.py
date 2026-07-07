@@ -526,7 +526,7 @@ class TestImport:
         assert (lliam_home / "skills" / "my-skill" / "SKILL.md").read_text() == "# My Skill\n"
         assert (lliam_home / "profiles" / "coder" / "config.yaml").exists()
 
-    def test_strips_hermes_prefix(self, tmp_path, monkeypatch):
+    def test_strips_lliam_prefix(self, tmp_path, monkeypatch):
         """Import strips .hermes/ prefix if all entries share it."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
@@ -564,7 +564,7 @@ class TestImport:
         with pytest.raises(SystemExit):
             run_import(args)
 
-    def test_rejects_non_hermes_zip(self, tmp_path, monkeypatch):
+    def test_rejects_non_lliam_zip(self, tmp_path, monkeypatch):
         """Import rejects a zip that doesn't look like a hermes backup."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
@@ -921,7 +921,7 @@ class TestValidation:
             ok, reason = _validate_backup_zip(zf)
         assert not ok
 
-    def test_detect_prefix_hermes(self):
+    def test_detect_prefix_lliam(self):
         """Detects .hermes/ prefix wrapping all entries."""
         import io
         from lliam_cli.backup import _detect_prefix
@@ -967,7 +967,7 @@ class TestValidation:
 # ---------------------------------------------------------------------------
 
 class TestBackupEdgeCases:
-    def test_nonexistent_hermes_home(self, tmp_path, monkeypatch):
+    def test_nonexistent_lliam_home(self, tmp_path, monkeypatch):
         """Backup exits when hermes home doesn't exist."""
         fake_home = tmp_path / "nonexistent" / ".hermes"
         monkeypatch.setenv("HERMES_HOME", str(fake_home))
@@ -1017,7 +1017,7 @@ class TestBackupEdgeCases:
         # Should have .tar.zip suffix
         assert (tmp_path / "mybackup.tar.zip").exists()
 
-    def test_empty_hermes_home(self, tmp_path, monkeypatch):
+    def test_empty_lliam_home(self, tmp_path, monkeypatch):
         """Backup handles empty hermes home (no files to back up)."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
@@ -1091,7 +1091,7 @@ class TestBackupEdgeCases:
             # The pre-1980 file should be skipped, not crash the backup
             assert "ancient.txt" not in names
 
-    def test_skips_output_zip_inside_hermes(self, tmp_path, monkeypatch):
+    def test_skips_output_zip_inside_lliam(self, tmp_path, monkeypatch):
         """Backup skips its own output zip if it's inside hermes root."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
@@ -2188,7 +2188,7 @@ class TestPreMigrationBackup:
         assert not any("__pycache__" in n for n in names)
         assert "gateway.pid" not in names
 
-    def test_restorable_with_hermes_import(self, lliam_home, tmp_path):
+    def test_restorable_with_lliam_import(self, lliam_home, tmp_path):
         """The zip produced by pre-migration backup must be a valid Hermes
         backup — `hermes import` should accept it."""
         from lliam_cli.backup import create_pre_migration_backup, _validate_backup_zip
@@ -2222,7 +2222,7 @@ class TestPreMigrationBackup:
         remaining = sorted((lliam_home / "backups").glob("pre-migration-*.zip"))
         assert len(remaining) <= 3, f"expected <=3 backups retained, got {len(remaining)}"
 
-    def test_missing_hermes_home_returns_none(self, tmp_path):
+    def test_missing_lliam_home_returns_none(self, tmp_path):
         """Fresh install with no ~/.hermes yet — nothing to back up."""
         from lliam_cli.backup import create_pre_migration_backup
         missing = tmp_path / "does-not-exist"

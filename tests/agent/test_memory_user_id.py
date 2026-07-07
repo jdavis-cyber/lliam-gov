@@ -188,7 +188,7 @@ class TestMem0UserIdScoping:
 
         assert provider._user_id == "custom-default"
 
-    def test_no_user_id_no_config_uses_hermes_user(self):
+    def test_no_user_id_no_config_uses_lliam_user(self):
         """Without user_id or config override, should default to 'hermes-user'."""
         from plugins.memory.mem0 import Mem0MemoryProvider
 

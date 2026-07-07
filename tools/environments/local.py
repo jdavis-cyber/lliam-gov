@@ -207,7 +207,7 @@ _LLIAM_PROVIDER_ENV_BLOCKLIST = _build_provider_env_blocklist()
 _ACTIVE_VENV_MARKER_VARS = ("VIRTUAL_ENV", "CONDA_PREFIX")
 
 
-def _inject_context_hermes_home(env: dict) -> None:
+def _inject_context_lliam_home(env: dict) -> None:
     """Bridge the context-local Hermes home override into subprocess env."""
     try:
         from lliam_constants import get_lliam_home_override
@@ -241,7 +241,7 @@ def _sanitize_subprocess_env(base_env: dict | None, extra_env: dict | None = Non
         elif key not in _LLIAM_PROVIDER_ENV_BLOCKLIST or _is_passthrough(key):
             sanitized[key] = value
 
-    _inject_context_hermes_home(sanitized)
+    _inject_context_lliam_home(sanitized)
 
     from lliam_constants import apply_subprocess_home_env
     apply_subprocess_home_env(sanitized)
@@ -336,7 +336,7 @@ def lliam_subprocess_env(*, inherit_credentials: bool = False) -> dict[str, str]
     # Windows UTF-8 safety for spawned processes (#31420).
     env.setdefault("PYTHONUTF8", "1")
 
-    _inject_context_hermes_home(env)
+    _inject_context_lliam_home(env)
     from lliam_constants import apply_subprocess_home_env
     apply_subprocess_home_env(env)
 
@@ -458,10 +458,10 @@ _SANE_PATH = (
 # Cached directory containing the ``hermes`` console-script.
 # ``_SENTINEL`` distinguishes "not resolved yet" from a resolved ``None``.
 _SENTINEL = object()
-_HERMES_BIN_DIR: "str | None | object" = _SENTINEL
+_LLIAM_BIN_DIR: "str | None | object" = _SENTINEL
 
 
-def _resolve_hermes_bin_dir() -> str | None:
+def _resolve_lliam_bin_dir() -> str | None:
     """Return the directory holding the ``hermes`` console-script, or None.
 
     The terminal tool runs in a freshly-spawned subshell whose PATH is the
@@ -484,9 +484,9 @@ def _resolve_hermes_bin_dir() -> str | None:
       3. The directory of ``sys.executable`` — the running interpreter's
          venv ``bin``/``Scripts`` is where its console-scripts live.
     """
-    global _HERMES_BIN_DIR
-    if _HERMES_BIN_DIR is not _SENTINEL:
-        return _HERMES_BIN_DIR  # type: ignore[return-value]
+    global _LLIAM_BIN_DIR
+    if _LLIAM_BIN_DIR is not _SENTINEL:
+        return _LLIAM_BIN_DIR  # type: ignore[return-value]
 
     candidate: str | None = None
 
@@ -514,7 +514,7 @@ def _resolve_hermes_bin_dir() -> str | None:
     if candidate and not os.path.isdir(candidate):
         candidate = None
 
-    _HERMES_BIN_DIR = candidate
+    _LLIAM_BIN_DIR = candidate
     return candidate
 
 
@@ -525,7 +525,7 @@ def _prepend_lliam_bin_dir(existing_path: str) -> str:
     that already contains the dir is returned unchanged. Returns the input
     unchanged when the install dir can't be resolved.
     """
-    bin_dir = _resolve_hermes_bin_dir()
+    bin_dir = _resolve_lliam_bin_dir()
     if not bin_dir:
         return existing_path
     sep = os.pathsep
@@ -624,7 +624,7 @@ def _make_run_env(env: dict) -> dict:
         # launched without it on PATH (systemd, service managers, cron, etc.).
         run_env[path_key] = _prepend_lliam_bin_dir(new_path)
 
-    _inject_context_hermes_home(run_env)
+    _inject_context_lliam_home(run_env)
 
     from lliam_constants import apply_subprocess_home_env
     apply_subprocess_home_env(run_env)
@@ -852,7 +852,7 @@ class LocalEnvironment(BaseEnvironment):
         )
         if not _IS_WINDOWS:
             try:
-                proc._hermes_pgid = os.getpgid(proc.pid)
+                proc._lliam_pgid = os.getpgid(proc.pid)
             except ProcessLookupError:
                 pass
 
@@ -900,7 +900,7 @@ class LocalEnvironment(BaseEnvironment):
                 try:
                     pgid = os.getpgid(proc.pid)
                 except ProcessLookupError:
-                    pgid = getattr(proc, "_hermes_pgid", None)
+                    pgid = getattr(proc, "_lliam_pgid", None)
                     if pgid is None:
                         raise
 

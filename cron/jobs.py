@@ -383,8 +383,8 @@ def parse_schedule(schedule: str) -> Dict[str, Any]:
             # the configured zone makes "20:07" mean 20:07 on the same clock the
             # scheduler checks against (#51021).
             if dt.tzinfo is None:
-                hermes_tz = _lliam_now().tzinfo
-                dt = dt.replace(tzinfo=hermes_tz)
+                lliam_tz = _lliam_now().tzinfo
+                dt = dt.replace(tzinfo=lliam_tz)
             return {
                 "kind": "once",
                 "run_at": dt.isoformat(),

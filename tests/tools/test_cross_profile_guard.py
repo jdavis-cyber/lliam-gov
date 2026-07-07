@@ -41,8 +41,8 @@ def fake_lliam(tmp_path, monkeypatch):
     monkeypatch.setattr(lliam_constants, "get_default_lliam_root", lambda: root)
 
     import agent.file_safety as fs
-    monkeypatch.setattr(fs, "_hermes_home_path", lambda: sec_home)
-    monkeypatch.setattr(fs, "_hermes_root_path", lambda: root)
+    monkeypatch.setattr(fs, "_lliam_home_path", lambda: sec_home)
+    monkeypatch.setattr(fs, "_lliam_root_path", lambda: root)
 
     return {
         "root": root,
@@ -93,7 +93,7 @@ class TestWriteFileCrossProfileGuard:
         assert not result.get("error"), f"cross_profile=True must succeed: {result}"
         assert target.read_text() == "user-directed override"
 
-    def test_non_hermes_path_unaffected(self, fake_lliam, tmp_path):
+    def test_non_lliam_path_unaffected(self, fake_lliam, tmp_path):
         from tools.file_tools import write_file_tool
         target = tmp_path / "outside" / "main.py"
         target.parent.mkdir()
@@ -232,8 +232,8 @@ class TestSystemPromptActiveProfile:
         about ~/.hermes/profiles/<name>/."""
         # Don't set HERMES_HOME — falls back to default.
         import agent.file_safety as fs
-        monkeypatch.setattr(fs, "_hermes_home_path", lambda: tmp_path / "fake")
-        monkeypatch.setattr(fs, "_hermes_root_path", lambda: tmp_path / "fake")
+        monkeypatch.setattr(fs, "_lliam_home_path", lambda: tmp_path / "fake")
+        monkeypatch.setattr(fs, "_lliam_root_path", lambda: tmp_path / "fake")
 
         from agent.file_safety import _resolve_active_profile_name
         assert _resolve_active_profile_name() == "default"

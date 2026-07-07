@@ -79,7 +79,7 @@ class TestSandboxRequirements(unittest.TestCase):
         self.assertIn("code", EXECUTE_CODE_SCHEMA["parameters"]["required"])
 
 
-class TestHermesToolsGeneration(unittest.TestCase):
+class TestLliamToolsGeneration(unittest.TestCase):
     def test_generates_all_allowed_tools(self):
         src = generate_lliam_tools_module(list(SANDBOX_ALLOWED_TOOLS))
         for tool in SANDBOX_ALLOWED_TOOLS:
@@ -788,7 +788,7 @@ class TestEnvVarFiltering(unittest.TestCase):
         child_env = self._get_child_env()
         self.assertIn("HOME", child_env)
 
-    def test_hermes_rpc_socket_injected(self):
+    def test_lliam_rpc_socket_injected(self):
         # rename R.8a: the parent now injects the new LLIAM_ name.
         child_env = self._get_child_env()
         self.assertIn("LLIAM_RPC_SOCKET", child_env)

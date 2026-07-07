@@ -460,8 +460,8 @@ def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None
     # approvals.mode and other security settings live here; a malicious or
     # prompt-injected agent could silently disable exec approval by writing to
     # this file.
-    hermes_config = _get_lliam_config_resolved()
-    if hermes_config and (resolved == hermes_config or normalized == hermes_config):
+    lliam_config = _get_lliam_config_resolved()
+    if lliam_config and (resolved == lliam_config or normalized == lliam_config):
         return (
             f"Refusing to write to Hermes config file: {filepath}\n"
             "Agent cannot modify security-sensitive configuration. "

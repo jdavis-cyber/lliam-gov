@@ -124,7 +124,7 @@ class TestBrowserConsoleToolsetWiring:
         from toolsets import TOOLSETS
         assert "browser_console" in TOOLSETS["browser"]["tools"]
 
-    def test_in_hermes_core_tools(self):
+    def test_in_lliam_core_tools(self):
         from toolsets import _LLIAM_CORE_TOOLS
         assert "browser_console" in _LLIAM_CORE_TOOLS
 

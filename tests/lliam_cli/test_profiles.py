@@ -30,7 +30,7 @@ from lliam_cli.profiles import (
     export_profile,
     import_profile,
     _get_profiles_root,
-    _get_default_hermes_home,
+    _get_default_lliam_home,
     seed_profile_skills,
     has_bundled_skills_opt_out,
     NO_BUNDLED_SKILLS_MARKER,
@@ -133,7 +133,7 @@ class TestValidateProfileName:
 class TestGetProfileDir:
     """Tests for get_profile_dir()."""
 
-    def test_default_returns_hermes_home(self, profile_env):
+    def test_default_returns_lliam_home(self, profile_env):
         tmp_path = profile_env
         result = get_profile_dir("default")
         assert result == tmp_path / ".hermes"
@@ -661,7 +661,7 @@ class TestActiveProfile:
 class TestGetActiveProfileName:
     """Tests for get_active_profile_name()."""
 
-    def test_default_hermes_home_returns_default(self, profile_env):
+    def test_default_lliam_home_returns_default(self, profile_env):
         # HERMES_HOME points to tmp_path/.hermes which is the default
         assert get_active_profile_name() == "default"
 
@@ -1328,9 +1328,9 @@ class TestInternalHelpers:
         root = _get_profiles_root()
         assert root == tmp_path / ".hermes" / "profiles"
 
-    def test_default_hermes_home(self, profile_env):
+    def test_default_lliam_home(self, profile_env):
         tmp_path = profile_env
-        home = _get_default_hermes_home()
+        home = _get_default_lliam_home()
         assert home == tmp_path / ".hermes"
 
     def test_profiles_root_docker_deployment(self, tmp_path, monkeypatch):
@@ -1342,13 +1342,13 @@ class TestInternalHelpers:
         root = _get_profiles_root()
         assert root == docker_home / "profiles"
 
-    def test_default_hermes_home_docker(self, tmp_path, monkeypatch):
+    def test_default_lliam_home_docker(self, tmp_path, monkeypatch):
         """In Docker, _get_default_hermes_home() returns HERMES_HOME itself."""
         docker_home = tmp_path / "opt" / "data"
         docker_home.mkdir(parents=True)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setenv("HERMES_HOME", str(docker_home))
-        home = _get_default_hermes_home()
+        home = _get_default_lliam_home()
         assert home == docker_home
 
     def test_profiles_root_profile_mode(self, tmp_path, monkeypatch):
@@ -1641,7 +1641,7 @@ class TestProfilesToServe:
         assert len(serve) == 1
         name, home = serve[0]
         assert name == "default"
-        assert home == _get_default_hermes_home()
+        assert home == _get_default_lliam_home()
 
     def test_off_returns_only_active_named(self, profile_env, monkeypatch):
         # A named profile's gateway runs with HERMES_HOME pointing at the
@@ -1658,7 +1658,7 @@ class TestProfilesToServe:
         create_profile("writer", no_alias=True)
         serve = dict(profiles_to_serve(multiplex=True))
         assert set(serve) == {"default", "coder", "writer"}
-        assert serve["default"] == _get_default_hermes_home()
+        assert serve["default"] == _get_default_lliam_home()
         assert serve["coder"] == get_profile_dir("coder")
 
     def test_on_default_always_first(self, profile_env):

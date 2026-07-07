@@ -1958,8 +1958,8 @@ class OpenVikingMemoryProvider(MemoryProvider):
         from lliam_cli.config import save_config
         from lliam_cli.memory_setup import _CANCELLED, _curses_select, _print_cancelled_setup, _prompt
 
-        hermes_home_path = Path(lliam_home)
-        env_path = hermes_home_path / ".env"
+        lliam_home_path = Path(lliam_home)
+        env_path = lliam_home_path / ".env"
         if not isinstance(config.get("memory"), dict):
             config["memory"] = {}
         provider_config = config["memory"].get("openviking", {})

@@ -25,13 +25,13 @@ def _isolate_kanban_board_env():
     # rename R.8a: the producer now writes LLIAM_KANBAN_BOARD; snapshot/clear
     # both names so neither leaks into other tests.
     prev_lliam = os.environ.get("LLIAM_KANBAN_BOARD")
-    prev_hermes = os.environ.get("HERMES_KANBAN_BOARD")
+    prev_lliam = os.environ.get("HERMES_KANBAN_BOARD")
     os.environ.pop("LLIAM_KANBAN_BOARD", None)
     os.environ.pop("HERMES_KANBAN_BOARD", None)
     try:
         yield
     finally:
-        for name, prev in (("LLIAM_KANBAN_BOARD", prev_lliam), ("HERMES_KANBAN_BOARD", prev_hermes)):
+        for name, prev in (("LLIAM_KANBAN_BOARD", prev_lliam), ("HERMES_KANBAN_BOARD", prev_lliam)):
             if prev is None:
                 os.environ.pop(name, None)
             else:

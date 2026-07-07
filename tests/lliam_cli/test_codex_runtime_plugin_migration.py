@@ -485,7 +485,7 @@ class TestMigrate:
         assert "github@openai-curated" not in second
         assert "canva@openai-curated" in second
 
-    def test_expose_hermes_tools_writes_callback_mcp_entry(self, tmp_path):
+    def test_expose_lliam_tools_writes_callback_mcp_entry(self, tmp_path):
         """When expose_hermes_tools=True (production default), an
         [mcp_servers.hermes-tools] entry is written so codex calls back
         into Hermes for browser/web/delegate_task/vision/memory tools.
@@ -505,7 +505,7 @@ class TestMigrate:
         # And the entry is reported
         assert "lliam-tools" in report.migrated
 
-    def test_expose_hermes_tools_disabled_skips_entry(self, tmp_path):
+    def test_expose_lliam_tools_disabled_skips_entry(self, tmp_path):
         """expose_hermes_tools=False suppresses the callback registration."""
         migrate({}, codex_home=tmp_path,
                 discover_plugins=False,
@@ -523,7 +523,7 @@ class TestMigrate:
         assert "x" in report.migrated
 
     def test_full_migration_round_trip(self, tmp_path):
-        hermes_cfg = {
+        lliam_cfg = {
             "mcp_servers": {
                 "filesystem": {
                     "command": "npx",
@@ -535,7 +535,7 @@ class TestMigrate:
                 },
             }
         }
-        report = migrate(hermes_cfg, codex_home=tmp_path, expose_lliam_tools=False)
+        report = migrate(lliam_cfg, codex_home=tmp_path, expose_lliam_tools=False)
         assert report.written
         text = (tmp_path / "config.toml").read_text()
         assert "[mcp_servers.filesystem]" in text
@@ -795,7 +795,7 @@ class TestStripUnmanagedPluginTables:
 # ---- Bug C: HERMES_HOME tempdir leak into ~/.codex/config.toml ----
 
 
-class TestHermesHomeLeakGuard:
+class TestLliamHomeLeakGuard:
     """Regression tests for issue #26250 Bug C.
 
     Previously ``_build_hermes_tools_mcp_entry()`` read ``HERMES_HOME``
@@ -815,7 +815,7 @@ class TestHermesHomeLeakGuard:
             "/private/var/folders/zz/T/pytest-of-bob/pytest-1"
         )
 
-    def test_tempdir_detector_accepts_real_hermes_home(self):
+    def test_tempdir_detector_accepts_real_lliam_home(self):
         assert not _looks_like_test_tempdir("/Users/alice/.hermes")
         assert not _looks_like_test_tempdir("/home/bob/.hermes")
         assert not _looks_like_test_tempdir("/opt/hermes")
@@ -835,7 +835,7 @@ class TestHermesHomeLeakGuard:
             f"{env.get('HERMES_HOME')!r}"
         )
 
-    def test_real_hermes_home_propagates(self, monkeypatch, tmp_path):
+    def test_real_lliam_home_propagates(self, monkeypatch, tmp_path):
         """A legitimate HERMES_HOME (not a tempdir path) DOES propagate so the
         MCP subprocess sees the same config as the parent CLI."""
         # Use a path that looks real — under /Users or /home, not /var/folders.
@@ -848,7 +848,7 @@ class TestHermesHomeLeakGuard:
         env = entry.get("env", {})
         assert env.get("HERMES_HOME") == real_path
 
-    def test_unset_hermes_home_omits_env_key(self, monkeypatch):
+    def test_unset_lliam_home_omits_env_key(self, monkeypatch):
         """When HERMES_HOME is unset in the environment, the MCP entry MUST
         NOT bake in a resolved-default path. The codex subprocess should
         inherit whatever HERMES_HOME its launcher (systemd, gateway, shell)

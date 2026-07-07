@@ -48,7 +48,7 @@ def test_root_start_works(
     assert "OK" in r.stdout
 
 
-def test_user_pinned_to_hermes_uid_works(
+def test_user_pinned_to_lliam_uid_works(
     built_image: str,
 ) -> None:
     """docker run --user 10000:10000 (the hermes UID) must be allowed.

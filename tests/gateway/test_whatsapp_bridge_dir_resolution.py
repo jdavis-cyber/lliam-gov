@@ -44,7 +44,7 @@ def test_writable_install_returns_install_dir(tmp_path, monkeypatch):
     assert not (lliam_home / "scripts" / "whatsapp-bridge").exists()
 
 
-def test_readonly_install_mirrors_to_hermes_home(tmp_path, monkeypatch):
+def test_readonly_install_mirrors_to_lliam_home(tmp_path, monkeypatch):
     """A read-only install tree is mirrored into a writable HERMES_HOME."""
     install_root = tmp_path / "install"
     install_bridge = install_root / "scripts" / "whatsapp-bridge"

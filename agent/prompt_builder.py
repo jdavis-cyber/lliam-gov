@@ -1801,8 +1801,8 @@ def load_soul_md(context_length: Optional[int] = None) -> Optional[str]:
     ``skip_soul=True`` so SOUL.md isn't injected twice.
     """
     try:
-        from lliam_cli.config import ensure_hermes_home
-        ensure_hermes_home()
+        from lliam_cli.config import ensure_lliam_home
+        ensure_lliam_home()
     except Exception as e:
         logger.debug("Could not ensure HERMES_HOME before loading SOUL.md: %s", e)
 

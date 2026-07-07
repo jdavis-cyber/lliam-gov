@@ -596,7 +596,7 @@ def test_save_platform_tools_does_not_preserve_platform_default_toolsets():
     assert "moa" not in saved
 
 
-def test_save_platform_tools_does_not_preserve_hermes_telegram():
+def test_save_platform_tools_does_not_preserve_lliam_telegram():
     """Same bug for Telegram — hermes-telegram must not be preserved."""
     config = {
         "platform_toolsets": {

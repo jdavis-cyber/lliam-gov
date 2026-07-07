@@ -235,7 +235,7 @@ def _clear_install_failed():
         pass
 
 
-def _hermes_bin_dir() -> str:
+def _lliam_bin_dir() -> str:
     """Return $HERMES_HOME/bin, creating it if needed."""
     d = os.path.join(_get_lliam_home(), "bin")
     os.makedirs(d, exist_ok=True)
@@ -458,7 +458,7 @@ def _install_tirith(*, log_failures: bool = True) -> tuple[str | None, str]:
             if src is None:
                 return None, reason
 
-        dest = os.path.join(_hermes_bin_dir(), "tirith")
+        dest = os.path.join(_lliam_bin_dir(), "tirith")
         try:
             shutil.move(src, dest)
         except OSError:
@@ -548,7 +548,7 @@ def _resolve_tirith_path(configured_path: str) -> str:
         _clear_install_failed()
         return found
 
-    lliam_bin = os.path.join(_hermes_bin_dir(), "tirith")
+    lliam_bin = os.path.join(_lliam_bin_dir(), "tirith")
     if os.path.isfile(lliam_bin) and os.access(lliam_bin, os.X_OK):
         _resolved_path = lliam_bin
         _install_failure_reason = ""
@@ -612,7 +612,7 @@ def _background_install(*, log_failures: bool = True):
             _install_failure_reason = ""
             return
 
-        lliam_bin = os.path.join(_hermes_bin_dir(), "tirith")
+        lliam_bin = os.path.join(_lliam_bin_dir(), "tirith")
         if os.path.isfile(lliam_bin) and os.access(lliam_bin, os.X_OK):
             _resolved_path = lliam_bin
             _install_failure_reason = ""
@@ -682,7 +682,7 @@ def ensure_installed(*, log_failures: bool = True):
         _clear_install_failed()
         return found
 
-    lliam_bin = os.path.join(_hermes_bin_dir(), "tirith")
+    lliam_bin = os.path.join(_lliam_bin_dir(), "tirith")
     if os.path.isfile(lliam_bin) and os.access(lliam_bin, os.X_OK):
         _resolved_path = lliam_bin
         _install_failure_reason = ""

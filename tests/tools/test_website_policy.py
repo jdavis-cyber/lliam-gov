@@ -241,7 +241,7 @@ def test_load_website_blocklist_wraps_shared_file_read_errors(tmp_path, monkeypa
     assert result["rules"] == []  # shared file rules skipped
 
 
-def test_check_website_access_uses_dynamic_hermes_home(monkeypatch, tmp_path):
+def test_check_website_access_uses_dynamic_lliam_home(monkeypatch, tmp_path):
     lliam_home = tmp_path / "hermes-home"
     lliam_home.mkdir()
     (lliam_home / "config.yaml").write_text(

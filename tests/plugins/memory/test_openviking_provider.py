@@ -395,7 +395,7 @@ def test_post_setup_create_remote_user_profile_can_mirror_to_openviking_store(tm
         assert "OPENVIKING_" not in env_path.read_text(encoding="utf-8")
 
 
-def test_post_setup_create_remote_user_can_keep_hermes_only(tmp_path, monkeypatch):
+def test_post_setup_create_remote_user_can_keep_lliam_only(tmp_path, monkeypatch):
     _clear_openviking_env(monkeypatch)
     lliam_home = tmp_path / "hermes"
     lliam_home.mkdir()
@@ -490,11 +490,11 @@ def test_post_setup_remote_blank_api_key_cancels_without_saving(tmp_path, monkey
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
     monkeypatch.setattr(openviking_module, "_validate_openviking_reachability", lambda endpoint: (True, ""))
 
-    from lliam_cli import config as hermes_config
+    from lliam_cli import config as lliam_config
     from lliam_cli import memory_setup
 
     save_config = MagicMock()
-    monkeypatch.setattr(hermes_config, "save_config", save_config)
+    monkeypatch.setattr(lliam_config, "save_config", save_config)
     choices = iter([1, 0, 1])
     monkeypatch.setattr(memory_setup, "_curses_select", lambda *args, **kwargs: next(choices))
     monkeypatch.setattr(

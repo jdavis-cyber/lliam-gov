@@ -26,10 +26,10 @@ from lliam_constants import (
 )
 
 
-class TestGetDefaultHermesRoot:
+class TestGetDefaultLliamRoot:
     """Tests for get_default_lliam_root() — Docker/custom deployment awareness."""
 
-    def test_no_hermes_home_returns_native(self, tmp_path, monkeypatch):
+    def test_no_lliam_home_returns_native(self, tmp_path, monkeypatch):
         """When neither home var is set, returns the new default ~/.lliam."""
         monkeypatch.delenv("HERMES_HOME", raising=False)
         monkeypatch.delenv("LLIAM_HOME", raising=False)
@@ -37,7 +37,7 @@ class TestGetDefaultHermesRoot:
 
         assert get_default_lliam_root() == tmp_path / ".lliam"
 
-    def test_hermes_home_is_native(self, tmp_path, monkeypatch):
+    def test_lliam_home_is_native(self, tmp_path, monkeypatch):
         """When HERMES_HOME = ~/.hermes, returns ~/.hermes."""
         native = tmp_path / ".hermes"
         native.mkdir()
@@ -45,7 +45,7 @@ class TestGetDefaultHermesRoot:
         monkeypatch.setenv("HERMES_HOME", str(native))
         assert get_default_lliam_root() == native
 
-    def test_hermes_home_is_profile(self, tmp_path, monkeypatch):
+    def test_lliam_home_is_profile(self, tmp_path, monkeypatch):
         """When HERMES_HOME is a profile under ~/.hermes, returns ~/.hermes."""
         native = tmp_path / ".hermes"
         profile = native / "profiles" / "coder"
@@ -54,7 +54,7 @@ class TestGetDefaultHermesRoot:
         monkeypatch.setenv("HERMES_HOME", str(profile))
         assert get_default_lliam_root() == native
 
-    def test_hermes_home_is_docker(self, tmp_path, monkeypatch):
+    def test_lliam_home_is_docker(self, tmp_path, monkeypatch):
         """When HERMES_HOME points outside ~/.hermes (Docker), returns HERMES_HOME."""
         docker_home = tmp_path / "opt" / "data"
         docker_home.mkdir(parents=True)
@@ -62,7 +62,7 @@ class TestGetDefaultHermesRoot:
         monkeypatch.setenv("HERMES_HOME", str(docker_home))
         assert get_default_lliam_root() == docker_home
 
-    def test_hermes_home_is_custom_path(self, tmp_path, monkeypatch):
+    def test_lliam_home_is_custom_path(self, tmp_path, monkeypatch):
         """Any HERMES_HOME outside ~/.hermes is treated as the root."""
         custom = tmp_path / "my-hermes-data"
         custom.mkdir()
@@ -80,7 +80,7 @@ class TestGetDefaultHermesRoot:
         monkeypatch.setenv("HERMES_HOME", str(profile))
         assert get_default_lliam_root() == docker_root
 
-    def test_no_hermes_home_returns_localappdata_root_on_windows(self, tmp_path, monkeypatch):
+    def test_no_lliam_home_returns_localappdata_root_on_windows(self, tmp_path, monkeypatch):
         """Native Windows falls back to %LOCALAPPDATA%\\lliam, not ~/.lliam."""
         local_appdata = tmp_path / "LocalAppData"
         monkeypatch.delenv("HERMES_HOME", raising=False)
@@ -91,7 +91,7 @@ class TestGetDefaultHermesRoot:
 
         assert get_default_lliam_root() == local_appdata / "lliam"
 
-    def test_no_hermes_home_uses_windows_path_when_localappdata_missing(self, tmp_path, monkeypatch):
+    def test_no_lliam_home_uses_windows_path_when_localappdata_missing(self, tmp_path, monkeypatch):
         """Windows fallback still uses AppData/Local/lliam without LOCALAPPDATA."""
         home = tmp_path / "Home"
         monkeypatch.delenv("HERMES_HOME", raising=False)
@@ -103,7 +103,7 @@ class TestGetDefaultHermesRoot:
         assert get_default_lliam_root() == home / "AppData" / "Local" / "lliam"
 
 
-class TestGetHermesHome:
+class TestGetLliamHome:
     """Tests for get_lliam_home() platform-aware fallback."""
 
     def test_windows_fallback_uses_localappdata(self, tmp_path, monkeypatch):
@@ -119,7 +119,7 @@ class TestGetHermesHome:
         assert get_lliam_home() == local_appdata / "lliam"
 
 
-class TestHermesManagedNode:
+class TestLliamManagedNode:
     def test_windows_node_dir_prefers_portable_root(self, tmp_path, monkeypatch):
         home = tmp_path / "hermes"
         node_dir = home / "node"
@@ -196,7 +196,7 @@ class TestHermesManagedNode:
         assert find_node_executable("npm") is None
         assert find_node_executable("npm") != str(path_npm)
 
-    def test_with_hermes_node_path_prepends_existing_managed_dirs(self, tmp_path, monkeypatch):
+    def test_with_lliam_node_path_prepends_existing_managed_dirs(self, tmp_path, monkeypatch):
         home = tmp_path / "hermes"
         node_dir = home / "node"
         bin_dir = node_dir / "bin"
@@ -616,7 +616,7 @@ class TestAgentBrowserRunnable:
         assert agent_browser_runnable("/usr/local/bin/npx agent-browser") is True
 
 
-class TestGetHermesDir:
+class TestGetLliamDir:
     """Tests for ``get_lliam_dir(new_subpath, old_name)``.
 
     Contract: prefer the legacy ``<old_name>/`` location, but only when

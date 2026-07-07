@@ -20,7 +20,7 @@ def all_assignees_spawnable(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _suppress_concurrent_hermes_gate(request, monkeypatch):
+def _suppress_concurrent_lliam_gate(request, monkeypatch):
     """Default ``_detect_concurrent_hermes_instances`` to ``[]`` for every test.
 
     The Windows update path now refuses to proceed when another

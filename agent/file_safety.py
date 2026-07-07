@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 
-def _hermes_home_path() -> Path:
+def _lliam_home_path() -> Path:
     """Resolve the active HERMES_HOME (profile-aware) without circular imports."""
     try:
         from lliam_constants import get_lliam_home  # local import to avoid cycles
@@ -17,7 +17,7 @@ def _hermes_home_path() -> Path:
         return Path(os.path.expanduser("~/.hermes"))
 
 
-def _hermes_root_path() -> Path:
+def _lliam_root_path() -> Path:
     """Resolve the Hermes root dir (always the parent of any profile, never per-profile)."""
     try:
         from lliam_constants import get_default_lliam_root  # local import to avoid cycles
@@ -28,8 +28,8 @@ def _hermes_root_path() -> Path:
 
 def build_write_denied_paths(home: str) -> set[str]:
     """Return exact sensitive paths that must never be written."""
-    lliam_home = _hermes_home_path()
-    lliam_root = _hermes_root_path()
+    lliam_home = _lliam_home_path()
+    lliam_root = _lliam_root_path()
     return {
         os.path.realpath(p)
         for p in [
@@ -110,7 +110,7 @@ def is_write_denied(path: str) -> bool:
     mcp_tokens_dir_name = "mcp-tokens"
 
     lliam_dirs = []
-    for base in (_hermes_home_path(), _hermes_root_path()):
+    for base in (_lliam_home_path(), _lliam_root_path()):
         try:
             real = os.path.realpath(base)
             if real not in lliam_dirs:
@@ -212,7 +212,7 @@ def get_read_block_error(path: str) -> Optional[str]:
     # <root>/profiles/<name> in profile mode). Same shape as the write
     # deny widening (#15981, #14157).
     lliam_dirs: list[Path] = []
-    for base in (_hermes_home_path(), _hermes_root_path()):
+    for base in (_lliam_home_path(), _lliam_root_path()):
         try:
             real = base.resolve()
             if real not in lliam_dirs:
@@ -343,8 +343,8 @@ def _resolve_active_profile_name() -> str:
     never raises into the tool path.
     """
     try:
-        home_real = _hermes_home_path().resolve()
-        root_real = _hermes_root_path().resolve()
+        home_real = _lliam_home_path().resolve()
+        root_real = _lliam_root_path().resolve()
     except (OSError, RuntimeError):
         return "default"
     profiles_dir = root_real / "profiles"
@@ -377,7 +377,7 @@ def classify_cross_profile_target(path: str) -> Optional[dict]:
     """
     try:
         target = Path(os.path.expanduser(str(path))).resolve()
-        root_real = _hermes_root_path().resolve()
+        root_real = _lliam_root_path().resolve()
     except (OSError, RuntimeError):
         return None
 

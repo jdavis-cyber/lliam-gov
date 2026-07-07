@@ -106,7 +106,7 @@ class TestHandleUpdateCommand:
         assert "Not a git repository" in result
 
     @pytest.mark.asyncio
-    async def test_no_hermes_binary(self, tmp_path):
+    async def test_no_lliam_binary(self, tmp_path):
         """Returns error when hermes is not on PATH and lliam_cli is not importable."""
         runner = _make_runner()
         event = _make_event()
@@ -160,36 +160,36 @@ class TestHandleUpdateCommand:
         assert "lliam_cli.main" in joined or "bash" in call_args[0]
 
     @pytest.mark.asyncio
-    async def test_resolve_hermes_bin_prefers_which(self, tmp_path):
+    async def test_resolve_lliam_bin_prefers_which(self, tmp_path):
         """_resolve_hermes_bin returns argv parts from shutil.which when available."""
-        from gateway.run import _resolve_hermes_bin
+        from gateway.run import _resolve_lliam_bin
 
         with patch("shutil.which", return_value="/custom/path/hermes"):
-            result = _resolve_hermes_bin()
+            result = _resolve_lliam_bin()
 
         assert result == ["/custom/path/hermes"]
 
     @pytest.mark.asyncio
-    async def test_resolve_hermes_bin_fallback(self):
+    async def test_resolve_lliam_bin_fallback(self):
         """_resolve_hermes_bin falls back to sys.executable argv when which fails."""
         import sys
-        from gateway.run import _resolve_hermes_bin
+        from gateway.run import _resolve_lliam_bin
 
         fake_spec = MagicMock()
         with patch("shutil.which", return_value=None), \
              patch("importlib.util.find_spec", return_value=fake_spec):
-            result = _resolve_hermes_bin()
+            result = _resolve_lliam_bin()
 
         assert result == [sys.executable, "-m", "lliam_cli.main"]
 
     @pytest.mark.asyncio
-    async def test_resolve_hermes_bin_returns_none_when_both_fail(self):
+    async def test_resolve_lliam_bin_returns_none_when_both_fail(self):
         """_resolve_hermes_bin returns None when both strategies fail."""
-        from gateway.run import _resolve_hermes_bin
+        from gateway.run import _resolve_lliam_bin
 
         with patch("shutil.which", return_value=None), \
              patch("importlib.util.find_spec", return_value=None):
-            result = _resolve_hermes_bin()
+            result = _resolve_lliam_bin()
 
         assert result is None
 

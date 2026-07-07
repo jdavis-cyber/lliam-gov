@@ -66,7 +66,7 @@ class TestEnvFileReadBlocking:
             error = get_read_block_error(path)
             assert error is None, f"{path} should be allowed"
 
-    def test_allowed_hermes_env(self):
+    def test_allowed_lliam_env(self):
         """Hermes' own .env inside HERMES_HOME is NOT blocked by this rule
         (it's handled by other mechanisms). Only project-local .env is blocked."""
         # Note: hermes internal .env is in ~/.hermes/.env which is NOT a project-local
@@ -96,7 +96,7 @@ class TestCacheFileReadBlocking:
         cache.parent.mkdir(parents=True)
         cache.write_text("{}")
 
-        with patch("agent.file_safety._hermes_home_path", return_value=lliam_home):
+        with patch("agent.file_safety._lliam_home_path", return_value=lliam_home):
             error = get_read_block_error(str(cache))
             assert error is not None
             assert "internal Hermes cache" in error
@@ -108,7 +108,7 @@ class TestCacheFileReadBlocking:
         hub.parent.mkdir(parents=True)
         hub.write_text("{}")
 
-        with patch("agent.file_safety._hermes_home_path", return_value=lliam_home):
+        with patch("agent.file_safety._lliam_home_path", return_value=lliam_home):
             error = get_read_block_error(str(hub))
             assert error is not None
 
@@ -121,12 +121,12 @@ class TestCacheFileReadBlocking:
 class TestCombinedGuards:
     """Both guards should work independently without interference."""
 
-    def test_env_guard_works_regardless_of_hermes_home(self, tmp_path):
+    def test_env_guard_works_regardless_of_lliam_home(self, tmp_path):
         """The env basename guard does not depend on HERMES_HOME resolution."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
 
-        with patch("agent.file_safety._hermes_home_path", return_value=lliam_home):
+        with patch("agent.file_safety._lliam_home_path", return_value=lliam_home):
             # Regular project .env should still be blocked
             error = get_read_block_error("/workspace/.env")
             assert error is not None
@@ -142,7 +142,7 @@ class TestCombinedGuards:
         cache.parent.mkdir(parents=True)
         cache.write_text("")
 
-        with patch("agent.file_safety._hermes_home_path", return_value=lliam_home):
+        with patch("agent.file_safety._lliam_home_path", return_value=lliam_home):
             error = get_read_block_error(str(cache))
             assert error is not None
             assert "internal Hermes cache" in error

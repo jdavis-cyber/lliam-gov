@@ -85,7 +85,7 @@ class TestIsWriteDenied:
         "path",
         ["auth.json", "config.yaml", "webhook_subscriptions.json"],
     )
-    def test_hermes_control_files_requested_writable(self, path):
+    def test_lliam_control_files_requested_writable(self, path):
         from lliam_constants import get_lliam_home
 
         assert _is_write_denied(str(get_lliam_home() / path)) is False

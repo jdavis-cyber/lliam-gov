@@ -103,7 +103,7 @@ def sleep_container(built_image: str, container_name: str) -> Iterator[str]:
         )
 
 
-def test_shim_drops_root_to_hermes_uid(sleep_container: str) -> None:
+def test_shim_drops_root_to_lliam_uid(sleep_container: str) -> None:
     """docker exec defaults to root; the shim should drop to uid 10000.
 
     We invoke `hermes` with a Python-style `-c` shim equivalent — there's no

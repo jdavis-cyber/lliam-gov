@@ -19,7 +19,7 @@ def stage2_text() -> str:
     return STAGE2_HOOK.read_text()
 
 
-def _chown_hermes_tree_function(text: str) -> str:
+def _chown_lliam_tree_function(text: str) -> str:
     start = text.index("path_has_symlink_component() {")
     end = text.index("\n\nneeds_chown=false", start)
     return text[start:end]
@@ -39,7 +39,7 @@ def _run_helper(
     script = (
         "set -eu\n"
         f'HERMES_HOME="{lliam_home}"\n'
-        f"{_chown_hermes_tree_function(text)}\n"
+        f"{_chown_lliam_tree_function(text)}\n"
         f'chown() {{ printf "%s\\n" "$*" >> "{log_path}"; }}\n'
         f'chown_hermes_tree "{target}"\n'
     )
@@ -130,7 +130,7 @@ def test_chown_helper_refuses_target_with_symlinked_ancestor(
     assert "refusing recursive chown through symlinked path" in proc.stdout
 
 
-def test_stage2_uses_symlink_safe_helper_for_hermes_home_trees(stage2_text: str) -> None:
+def test_stage2_uses_symlink_safe_helper_for_lliam_home_trees(stage2_text: str) -> None:
     assert 'chown_hermes_tree "$HERMES_HOME/$sub"' in stage2_text
     assert 'chown_hermes_tree "$HERMES_HOME/profiles"' in stage2_text
     assert 'chown_hermes_tree "$HERMES_HOME/cron"' in stage2_text
@@ -139,7 +139,7 @@ def test_stage2_uses_symlink_safe_helper_for_hermes_home_trees(stage2_text: str)
     assert 'chown -R hermes:hermes "$HERMES_HOME/cron"' not in stage2_text
 
 
-def test_stage2_skips_top_level_chown_for_symlinked_hermes_home(
+def test_stage2_skips_top_level_chown_for_symlinked_lliam_home(
     stage2_text: str,
 ) -> None:
     assert 'refuse_symlinked_path "chown" "$HERMES_HOME"' in stage2_text
