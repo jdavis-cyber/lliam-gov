@@ -3,7 +3,7 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
-  title: 'Hermes Agent',
+  title: 'Lliam-GOV',
   tagline: 'The self-improving AI agent',
   favicon: 'img/favicon.ico',
 
@@ -11,7 +11,7 @@ const config: Config = {
   baseUrl: '/docs/',
 
   organizationName: 'NousResearch',
-  projectName: 'hermes-agent',
+  projectName: 'lliam-gov-agent',
 
   onBrokenLinks: 'warn',
 
@@ -101,7 +101,7 @@ const config: Config = {
   ],
 
   themeConfig: {
-    image: 'img/hermes-agent-banner.png',
+    image: 'img/lliam-gov-agent-banner.png',
     colorMode: {
       defaultMode: 'dark',
       respectPrefersColorScheme: true,
@@ -113,9 +113,9 @@ const config: Config = {
       },
     },
     navbar: {
-      title: 'Hermes Agent',
+      title: 'Lliam-GOV',
       logo: {
-        alt: 'Hermes Agent',
+        alt: 'Lliam-GOV',
         src: 'img/logo.png',
       },
       items: [

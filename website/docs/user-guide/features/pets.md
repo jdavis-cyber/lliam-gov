@@ -6,7 +6,7 @@ description: "Adopt an animated mascot that reacts to agent activity across the 
 
 # Pets
 
-Hermes can show an animated **pet** — a small mascot sprite that reacts to what
+Lliam-GOV can show an animated **pet** — a small mascot sprite that reacts to what
 the agent is doing (idle, running a tool, thinking, finishing, failing) across
 the **CLI**, **TUI**, and **desktop app**. Pets come from the public
 [petdex](https://github.com/crafter-station/petdex) gallery.
@@ -39,7 +39,7 @@ the agent's behavior** — the sprite is a display concern only. The feature is
 
 ## Rendering
 
-In the terminal (CLI/TUI), Hermes renders the sprite at full fidelity when your
+In the terminal (CLI/TUI), Lliam-GOV renders the sprite at full fidelity when your
 terminal supports a graphics protocol (**kitty**, **Ghostty**, **WezTerm**,
 **iTerm2**, or **sixel**). Otherwise it falls back automatically to a truecolor
 Unicode **half-block** rendering. Inside a pipe or redirect (no TTY), terminal
@@ -52,34 +52,34 @@ from **Settings → Appearance**.
 
 ```bash
 # Browse the gallery (filter by substring)
-hermes pets list
-hermes pets list cat
+lliam-gov pets list
+lliam-gov pets list cat
 
 # Install a pet and make it active in one step
-hermes pets install boba --select
+lliam-gov pets install boba --select
 
 # Preview / animate it in your terminal (Ctrl+C to stop)
-hermes pets show
+lliam-gov pets show
 
 # Check your setup
-hermes pets doctor
+lliam-gov pets doctor
 ```
 
-## `hermes pets` commands
+## `lliam-gov pets` commands
 
 | Goal | Command |
 | --- | --- |
-| Browse the gallery | `hermes pets list [query] [--limit N]` |
-| List installed pets | `hermes pets list --installed` |
-| Install a pet | `hermes pets install <slug> [--select] [--force]` |
-| Set the active pet | `hermes pets select [slug]` (omit slug for a picker) |
-| Resize the pet everywhere | `hermes pets scale <factor>` (e.g. `0.5`, clamped 0.1–3.0) |
-| Preview/animate | `hermes pets show [slug] [--state <s>] [--cycle] [--once] [--mode <m>] [--scale <f>]` |
-| Disable the pet | `hermes pets off` |
-| Remove an installed pet | `hermes pets remove <slug>` |
-| Diagnose setup | `hermes pets doctor` |
+| Browse the gallery | `lliam-gov pets list [query] [--limit N]` |
+| List installed pets | `lliam-gov pets list --installed` |
+| Install a pet | `lliam-gov pets install <slug> [--select] [--force]` |
+| Set the active pet | `lliam-gov pets select [slug]` (omit slug for a picker) |
+| Resize the pet everywhere | `lliam-gov pets scale <factor>` (e.g. `0.5`, clamped 0.1–3.0) |
+| Preview/animate | `lliam-gov pets show [slug] [--state <s>] [--cycle] [--once] [--mode <m>] [--scale <f>]` |
+| Disable the pet | `lliam-gov pets off` |
+| Remove an installed pet | `lliam-gov pets remove <slug>` |
+| Diagnose setup | `lliam-gov pets doctor` |
 
-`hermes pets show` flags:
+`lliam-gov pets show` flags:
 
 - `--state` — play a single state (`idle`, `wave`, `run`, `failed`, `review`,
   `jump`).
@@ -118,7 +118,7 @@ instantly; adopting a new pet lights it up within a moment.
 ### Pop-out overlay
 
 **Shift-click** the floating pet to pop it out into its own transparent,
-always-on-top desktop window. Out there it stays visible while Hermes is
+always-on-top desktop window. Out there it stays visible while Lliam-GOV is
 minimized (Codex-style), so a glance tells you what the agent is doing.
 
 Gestures once it's popped out:
@@ -166,7 +166,7 @@ display:
 
 ## Troubleshooting
 
-Run `hermes pets doctor` — it reports:
+Run `lliam-gov pets doctor` — it reports:
 
 - the pets directory and which pets are installed,
 - `display.pet.enabled`, `display.pet.slug`, and the resolved active pet,
@@ -181,8 +181,8 @@ Common gotchas:
 
 - A pet only shows once one is **installed AND selected** (`enabled: true`).
 - Inside a pipe/redirect (no TTY), terminal rendering is disabled by design.
-- The petdex npm CLI installs to `~/.codex/pets`; Hermes uses its own
-  profile-scoped `<HERMES_HOME>/pets/` instead — install through `hermes pets`.
+- The petdex npm CLI installs to `~/.codex/pets`; Lliam-GOV uses its own
+  profile-scoped `<HERMES_HOME>/pets/` instead — install through `lliam-gov pets`.
 
 ## See also
 

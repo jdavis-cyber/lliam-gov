@@ -6,7 +6,7 @@ description: "何时以及如何使用子代理委托——并行研究、代码
 
 # 委托与并行工作
 
-Hermes 可以生成隔离的子代理来并行处理任务。每个子代理拥有独立的对话、终端会话和工具集。只有最终摘要会返回——中间工具调用不会进入你的上下文窗口。
+Lliam-GOV 可以生成隔离的子代理来并行处理任务。每个子代理拥有独立的对话、终端会话和工具集。只有最终摘要会返回——中间工具调用不会进入你的上下文窗口。
 
 完整功能参考，请参阅[子代理委托](/user-guide/features/delegation)。
 
@@ -42,7 +42,7 @@ Hermes 可以生成隔离的子代理来并行处理任务。每个子代理拥�
 重点关注近期进展和关键参与者。
 ```
 
-在后台，Hermes 使用：
+在后台，Lliam-GOV 使用：
 
 ```python
 delegate_task(tasks=[
@@ -165,7 +165,7 @@ delegate_task(tasks=[
 ```python
 # 第一步：机械性收集（此处 execute_code 更合适——无需推理）
 execute_code("""
-from hermes_tools import web_search, web_extract
+from lliam_tools import web_search, web_extract
 
 results = []
 for query in ["AI funding Q1 2026", "AI startup acquisitions 2026", "AI IPOs 2026"]:
