@@ -223,7 +223,7 @@ class TestVerifyCoreDependencies:
              patch("lliam_cli.main._is_windows", return_value=True), \
              patch("lliam_cli.main._venv_scripts_dir", return_value=fake_scripts), \
              patch("lliam_cli.main._run_install_with_heartbeat"), \
-             patch("lliam_cli.main._quarantine_running_hermes_exe", return_value=[]) as mock_quar:
+             patch("lliam_cli.main._quarantine_running_lliam_exe", return_value=[]) as mock_quar:
 
             from lliam_cli.main import _verify_core_dependencies_installed
             _verify_core_dependencies_installed(["uv", "pip"], env=env)

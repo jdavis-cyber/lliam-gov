@@ -61,7 +61,7 @@ agent:
 
     from lliam_cli import kanban_db as kb
 
-    monkeypatch.setattr(kb, "_resolve_hermes_argv", lambda: ["hermes"])
+    monkeypatch.setattr(kb, "_resolve_lliam_argv", lambda: ["hermes"])
 
     captured = {}
 

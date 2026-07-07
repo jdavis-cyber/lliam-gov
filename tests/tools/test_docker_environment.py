@@ -282,7 +282,7 @@ def test_init_env_args_uses_hermes_dotenv_for_allowlisted_env(monkeypatch):
     env = _make_execute_only_env(["DATABASE_URL"])
 
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.setattr(docker_env, "_load_hermes_env_vars", lambda: {"DATABASE_URL": "value_from_dotenv"})
+    monkeypatch.setattr(docker_env, "_load_lliam_env_vars", lambda: {"DATABASE_URL": "value_from_dotenv"})
 
     args = env._build_init_env_args()
     args_str = " ".join(args)
@@ -295,7 +295,7 @@ def test_init_env_args_prefers_shell_env_over_hermes_dotenv(monkeypatch):
     env = _make_execute_only_env(["DATABASE_URL"])
 
     monkeypatch.setenv("DATABASE_URL", "value_from_shell")
-    monkeypatch.setattr(docker_env, "_load_hermes_env_vars", lambda: {"DATABASE_URL": "value_from_dotenv"})
+    monkeypatch.setattr(docker_env, "_load_lliam_env_vars", lambda: {"DATABASE_URL": "value_from_dotenv"})
 
     args = env._build_init_env_args()
     args_str = " ".join(args)
@@ -314,7 +314,7 @@ def test_init_env_args_uses_hermes_dotenv_for_empty_shell_env(monkeypatch):
     env = _make_execute_only_env(["MY_SECRET"])
 
     monkeypatch.setenv("MY_SECRET", "")
-    monkeypatch.setattr(docker_env, "_load_hermes_env_vars", lambda: {"MY_SECRET": "value_from_dotenv"})
+    monkeypatch.setattr(docker_env, "_load_lliam_env_vars", lambda: {"MY_SECRET": "value_from_dotenv"})
 
     args = env._build_init_env_args()
 
@@ -329,7 +329,7 @@ def test_init_env_args_never_forwards_blank_secret(monkeypatch):
     env = _make_execute_only_env(["MY_SECRET"])
 
     monkeypatch.setenv("MY_SECRET", "")
-    monkeypatch.setattr(docker_env, "_load_hermes_env_vars", lambda: {})
+    monkeypatch.setattr(docker_env, "_load_lliam_env_vars", lambda: {})
 
     args = env._build_init_env_args()
 
@@ -373,7 +373,7 @@ def test_forward_env_overrides_docker_env_in_init_args(monkeypatch):
     env._env = {"MY_KEY": "static_value"}
 
     monkeypatch.setenv("MY_KEY", "dynamic_value")
-    monkeypatch.setattr(docker_env, "_load_hermes_env_vars", lambda: {})
+    monkeypatch.setattr(docker_env, "_load_lliam_env_vars", lambda: {})
 
     args = env._build_init_env_args()
     args_str = " ".join(args)
@@ -388,7 +388,7 @@ def test_docker_env_and_forward_env_merge_in_init_args(monkeypatch):
     env._env = {"SSH_AUTH_SOCK": "/run/user/1000/agent.sock"}
 
     monkeypatch.setenv("TOKEN", "secret123")
-    monkeypatch.setattr(docker_env, "_load_hermes_env_vars", lambda: {})
+    monkeypatch.setattr(docker_env, "_load_lliam_env_vars", lambda: {})
 
     args = env._build_init_env_args()
     args_str = " ".join(args)

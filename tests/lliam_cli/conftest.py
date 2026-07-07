@@ -50,7 +50,7 @@ def _suppress_concurrent_hermes_gate(request, monkeypatch):
     # transiently absent is the correct, race-free default.
     monkeypatch.setattr(
         _cli_main,
-        "_detect_concurrent_hermes_instances",
+        "_detect_concurrent_lliam_instances",
         lambda *_a, **_k: [],
         raising=False,
     )

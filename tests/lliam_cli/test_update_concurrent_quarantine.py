@@ -378,7 +378,7 @@ def test_quarantine_retries_then_succeeds(_winp, tmp_path, monkeypatch):
         return original_rename(self, target)
 
     # Speed up the test: avoid actual sleeps in the backoff schedule.
-    monkeypatch.setattr(cli_main, "_hermes_exe_shims", lambda d: [shim])
+    monkeypatch.setattr(cli_main, "_lliam_exe_shims", lambda d: [shim])
     with patch.object(Path, "rename", flaky_rename), patch(
         "time.sleep", lambda *_a, **_k: None
     ):
@@ -404,7 +404,7 @@ def test_quarantine_falls_back_to_reboot_schedule(_winp, tmp_path, capsys, monke
         scheduled_calls.append((s, q))
         return True
 
-    monkeypatch.setattr(cli_main, "_hermes_exe_shims", lambda d: [shim])
+    monkeypatch.setattr(cli_main, "_lliam_exe_shims", lambda d: [shim])
     with patch.object(Path, "rename", always_fails), patch.object(
         cli_main, "_schedule_replace_on_reboot", fake_schedule
     ), patch("time.sleep", lambda *_a, **_k: None):
@@ -433,7 +433,7 @@ def test_quarantine_actionable_warning_when_everything_fails(
     def always_fails(self, target):
         raise OSError(32, "share violation")
 
-    monkeypatch.setattr(cli_main, "_hermes_exe_shims", lambda d: [shim])
+    monkeypatch.setattr(cli_main, "_lliam_exe_shims", lambda d: [shim])
     with patch.object(Path, "rename", always_fails), patch.object(
         cli_main, "_schedule_replace_on_reboot", lambda *_a, **_k: False
     ), patch("time.sleep", lambda *_a, **_k: None):
@@ -736,7 +736,7 @@ def test_cmd_update_aborts_on_concurrent_instance(_winp, tmp_path, capsys):
         cli_main, "_venv_scripts_dir", return_value=scripts_dir
     ), patch.object(
         cli_main,
-        "_detect_concurrent_hermes_instances",
+        "_detect_concurrent_lliam_instances",
         return_value=[(4242, "hermes.exe")],
     ), patch.object(
         cli_main, "_run_pre_update_backup"
@@ -782,7 +782,7 @@ def test_cmd_update_force_bypasses_concurrent_check(_winp, tmp_path):
     with patch.object(
         cli_main, "_venv_scripts_dir", return_value=scripts_dir
     ), patch.object(
-        cli_main, "_detect_concurrent_hermes_instances", detect
+        cli_main, "_detect_concurrent_lliam_instances", detect
     ), patch.object(
         cli_main, "_run_pre_update_backup", side_effect=sentinel
     ), patch.object(
