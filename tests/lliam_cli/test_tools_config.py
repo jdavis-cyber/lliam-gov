@@ -1602,7 +1602,7 @@ def test_vision_picker_writes_provider_and_model(tmp_path, monkeypatch):
     """Picking a provider+model persists auxiliary.vision.{provider,model}.
 
     Vision must not force OpenRouter — it offers the same any-provider surface
-    as ``hermes model`` and writes the selection to the auxiliary config keys
+    as ``lliam-gov model`` and writes the selection to the auxiliary config keys
     the resolver reads.
     """
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))

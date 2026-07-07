@@ -158,7 +158,7 @@ def test_board_query_param_default_overrides_current_board_pointer(client):
     pointer targets a non-default board.
 
     Regression: selecting the Default board in the dashboard must not fall
-    through to whichever board ``hermes kanban boards switch`` last pinned.
+    through to whichever board ``lliam-gov kanban boards switch`` last pinned.
     """
     default_task = client.post(
         "/api/plugins/kanban/tasks",

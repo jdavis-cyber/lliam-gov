@@ -56,9 +56,9 @@ class TestGatewayLifecyclePattern:
 
     @pytest.mark.parametrize("text", [
         "restart the server application",
-        "hermes cron list",
+        "lliam-gov cron list",
         "lliam-gov update",
-        "hermes config set model claude",
+        "lliam-gov config set model claude",
         "echo 'just a normal cron job'",
         "run the backup script",
         "gateway is running fine",

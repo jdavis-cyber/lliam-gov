@@ -959,7 +959,7 @@ def test_unusable_access_token_refresh_uses_latest_rotated_refresh_token(tmp_pat
 
 
 class TestLoginNousSkipKeepsCurrent:
-    """When a user runs `hermes model` → Nous Portal → Skip (keep current) after
+    """When a user runs `lliam-gov model` → Nous Portal → Skip (keep current) after
     a successful OAuth login, the prior provider and model MUST be preserved.
 
     Regression: previously, _update_config_for_provider was called
@@ -1150,7 +1150,7 @@ def _full_state_fixture() -> dict:
 def test_persist_nous_credentials_writes_both_pool_and_providers(tmp_path, monkeypatch):
     """Helper must populate BOTH credential_pool.nous AND providers.nous.
 
-    Regression guard: before this helper existed, `hermes auth add nous`
+    Regression guard: before this helper existed, `lliam-gov auth add nous`
     wrote only the pool. After the Nous agent_key's 24h TTL expired, the
     401-recovery path in run_agent.py called resolve_nous_runtime_credentials
     which reads providers.nous, found it empty, raised AuthError, and the
@@ -1193,7 +1193,7 @@ def test_persist_nous_credentials_writes_both_pool_and_providers(tmp_path, monke
 
 def test_persist_nous_credentials_allows_recovery_from_401(tmp_path, monkeypatch):
     """End-to-end: after persisting via the helper, resolve_nous_runtime_credentials
-    must succeed (not raise "Hermes is not logged into Nous Portal").
+    must succeed (not raise "Lliam-GOV is not logged into Nous Portal").
 
     This is the exact path that run_agent.py's `_try_refresh_nous_client_credentials`
     calls after a Nous 401 — before the fix it would raise AuthError because
@@ -1216,7 +1216,7 @@ def test_persist_nous_credentials_allows_recovery_from_401(tmp_path, monkeypatch
 
     # Stub the network-touching steps so we don't actually contact the
     # portal — the point of this test is that state lookup succeeds and
-    # doesn't raise "Hermes is not logged into Nous Portal".
+    # doesn't raise "Lliam-GOV is not logged into Nous Portal".
     def _fake_refresh_access_token(*, client, portal_base_url, client_id, refresh_token):
         return {
             "access_token": new_jwt,
@@ -1307,7 +1307,7 @@ def test_persist_nous_credentials_reloads_pool_after_singleton_write(tmp_path, m
 def test_persist_nous_credentials_embeds_custom_label(tmp_path, monkeypatch):
     """User-supplied ``--label`` round-trips through providers.nous and the pool.
 
-    Previously `hermes auth add nous --type oauth --label <name>` silently
+    Previously `lliam-gov auth add nous --type oauth --label <name>` silently
     dropped the label because persist_nous_credentials() ignored it and
     _seed_from_singletons always auto-derived via label_from_token().  The
     fix stashes the label inside providers.nous so seeding prefers it.
@@ -1652,7 +1652,7 @@ def test_persist_nous_credentials_mirrors_to_shared_store(
     tmp_path, monkeypatch, shared_store_env,
 ):
     """persist_nous_credentials must populate BOTH per-profile auth.json
-    AND the shared store, so a future profile's `hermes auth add nous
+    AND the shared store, so a future profile's `lliam-gov auth add nous
     --type oauth` can one-tap import instead of redoing device-code.
     """
     from lliam_cli.auth import (

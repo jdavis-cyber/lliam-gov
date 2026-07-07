@@ -174,7 +174,7 @@ class TestApplyProfileOverrideLliamHomeGuard:
         """Command argv flags named --profile must stay with that command.
 
         Docker Desktop's MCP Toolkit uses `docker mcp gateway run --profile ...`.
-        When that argv is passed through `hermes mcp add --args`, the early
+        When that argv is passed through `lliam-gov mcp add --args`, the early
         profile pre-parser must not interpret the Docker profile as a Hermes
         profile.
         """

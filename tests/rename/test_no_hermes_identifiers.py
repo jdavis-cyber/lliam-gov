@@ -71,6 +71,11 @@ WHOLE_TREE_KEEPS = [
     "hermes_cli/env_compat.py",
     "tests/rename",
     "scripts/rename",
+    # Docker integration tests validate the CONTAINER, whose OS user, command,
+    # and install prefix are deliberately `hermes`/`/opt/hermes` (docker/** is a
+    # whole-tree keep). These tests assert that kept identity (id -u hermes,
+    # `docker exec <c> hermes`, `owned by hermes`), so they keep the name too.
+    "tests/docker",
     # Container / OS install identity — whole docker/ tree + the root Dockerfile
     # that builds it. Inside the container the command, OS user, and install
     # prefix are all deliberately `hermes` / `/opt/hermes` (see
@@ -369,6 +374,25 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"hermes-security", "test host-key/profile fixture — opaque data"),
     (r"hermes_test\b|hermes_kanban|hermes_timezone|hermes_stream_retries",
      "opaque test fixture identifiers seeded as data"),
+    # --- Bot-name / mention-pattern / wake-word fixture DATA (test asserts these values) ---
+    (r'"[A-Za-z ]*Hermes[A-Za-z ]*Bot"|"Hermes Bot"|"Env Hermes"|"Hydrated Hermes"|'
+     r'_bot_name.*[Hh]ermes|FEISHU_BOT_NAME.*[Hh]ermes|bot_name.*[Hh]ermes',
+     "bot-name fixture value a test sets and asserts (adapter._bot_name) — opaque data"),
+    (r"hey hermes|ok hermes|HEY HERMES|hermes,|hermes do this|mention_patterns.*hermes|"
+     r"SLACK_MENTION_PATTERNS.*hermes|matches_mention.*hermes|@hermes\b",
+     "wake-word / mention-pattern fixture value a test asserts matching against — opaque data"),
+    # --- Broad opaque test-fixture identifiers (task ids, session ids, hosts, tags a test uses as data) ---
+    (r"hermes-managed|hermes-mytask|hermes-session-s\d|hermes-temp-hello|hermes-ok|hermes-ws-ok|"
+     r"hermes-custom|hermes-local|hermes-at\b|hermes-mcp|hermes-test\b|hermes\.partner|hermes\.env\b|"
+     r"hermes\.ssi_health|hermes\.cmd|hermes/python|from-hermes-home|hermes-readable|hermes-_test_platform|"
+     r"hermes\.system|hermes/system|fake-hermes|pure-hermes|non-hermes|other-hermes|hermesacpagent|"
+     r"hermes-uid\b|hermes3\b|hermes-token|hermesbot\b",
+     "opaque test-fixture datum — task/session id, host, tag, path, provider-list entry, or fake "
+     "binary name a test uses as input or asserts on; not the product display name"),
+]
+
+# The bulk below is appended so the ordering above (specific contract keeps) wins first.
+KEEP_PATTERNS += [
 ]
 
 KEEP_PATTERNS += [

@@ -162,7 +162,7 @@ class TestTencentTokenhubModelCatalog:
 
 
 # =============================================================================
-# CANONICAL_PROVIDERS (hermes model picker)
+# CANONICAL_PROVIDERS (lliam-gov model picker)
 # =============================================================================
 
 
@@ -418,7 +418,7 @@ class TestTencentTokenhubCLIDispatch:
 
     def test_in_api_key_provider_tuple(self):
         """tencent-tokenhub must appear in the elif tuple in _model_flow dispatch
-        so ``hermes model`` routes it through the generic api_key_provider flow.
+        so ``lliam-gov model`` routes it through the generic api_key_provider flow.
         """
         import inspect
         from lliam_cli import main as main_mod

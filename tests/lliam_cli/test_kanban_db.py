@@ -3104,7 +3104,7 @@ def test_unlink_tasks_triggers_recompute_ready(kanban_home):
     complete_task and unblock_task.
 
     Before the fix, child stayed 'todo' indefinitely after unlink; only the
-    next dispatcher tick or a manual 'hermes kanban recompute' would promote it.
+    next dispatcher tick or a manual 'lliam-gov kanban recompute' would promote it.
     """
     with kb.connect() as conn:
         # A is done.

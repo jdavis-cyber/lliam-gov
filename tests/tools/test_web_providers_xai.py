@@ -727,7 +727,7 @@ class TestXAIBackendWiring:
 
 class TestXAIProviderOAuthPath:
     """Verifies the provider works when credentials come from the OAuth
-    runtime resolver (``hermes auth`` sign-in) rather than an env-var key.
+    runtime resolver (``lliam-gov auth`` sign-in) rather than an env-var key.
     Patches at the ``lliam_cli.runtime_provider.resolve_runtime_provider``
     boundary so the full ``tools.xai_http.resolve_xai_http_credentials``
     chain is exercised end-to-end.

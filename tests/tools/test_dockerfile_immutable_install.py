@@ -100,7 +100,7 @@ def test_dockerfile_redirects_lazy_installs_to_durable_target() -> None:
     assert "ENV HERMES_DISABLE_LAZY_INSTALLS=1" in text
 
     # stage2-hook must seed + chown the target dir so first-use installs
-    # succeed as the unprivileged hermes runtime user.
+    # succeed as the unprivileged lliam-gov runtime user.
     stage2 = (REPO_ROOT / "docker" / "stage2-hook.sh").read_text()
     assert '"$HERMES_HOME/lazy-packages"' in stage2, (
         "stage2-hook.sh must create the lazy-packages dir on the data volume"

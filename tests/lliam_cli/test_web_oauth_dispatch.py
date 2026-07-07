@@ -149,7 +149,7 @@ def test_oauth_provider_status_uses_profile_query(tmp_path, monkeypatch):
         "id": "fake-oauth",
         "name": "Fake OAuth",
         "flow": "pkce",
-        "cli_command": "hermes auth add fake-oauth",
+        "cli_command": "lliam-gov auth add fake-oauth",
         "docs_url": "https://example.com",
         "status_fn": fake_status,
     },)
@@ -472,7 +472,7 @@ def test_xai_oauth_listed_as_loopback_flow():
 
 def test_accounts_offers_every_oauth_provider_from_catalog():
     """PARITY CONTRACT: every accounts-tab provider in the unified catalog (the
-    `hermes model` universe) must be offered by /api/providers/oauth. This keeps
+    `lliam-gov model` universe) must be offered by /api/providers/oauth. This keeps
     the desktop Accounts tab in lockstep with the CLI picker — no provider the
     CLI can sign into may be missing from the GUI.
     """
@@ -484,7 +484,7 @@ def test_accounts_offers_every_oauth_provider_from_catalog():
     for d in provider_catalog():
         if d.tab == "accounts":
             assert d.slug in offered, (
-                f"{d.slug} is an accounts-tab provider in `hermes model` but is "
+                f"{d.slug} is an accounts-tab provider in `lliam-gov model` but is "
                 f"missing from the desktop Accounts tab (/api/providers/oauth)"
             )
 
@@ -818,7 +818,7 @@ def test_unknown_pkce_provider_rejected_cleanly():
         "id": "hypothetical-pkce-provider",
         "name": "Hypothetical PKCE Provider",
         "flow": "pkce",
-        "cli_command": "hermes auth add hypothetical-pkce-provider",
+        "cli_command": "lliam-gov auth add hypothetical-pkce-provider",
         "docs_url": "https://example.com",
         "status_fn": None,
     }

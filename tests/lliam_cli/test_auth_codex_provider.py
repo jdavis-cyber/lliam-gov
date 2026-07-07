@@ -306,7 +306,7 @@ def test_save_codex_tokens_syncs_manual_device_code_entries(tmp_path, monkeypatc
     aliases of the singleton, while leaving INDEPENDENT entries alone.
 
     Original regression for #33538: a user who hit #33000 before the #33164
-    fix landed would have run ``hermes auth add openai-codex`` as a
+    fix landed would have run ``lliam-gov auth add openai-codex`` as a
     workaround, leaving a pool entry with ``source="manual:device_code"``.
     On every subsequent re-auth via setup/model picker, the singleton-seeded
     ``device_code`` entry got refreshed but the ``manual:device_code`` entry
@@ -315,7 +315,7 @@ def test_save_codex_tokens_syncs_manual_device_code_entries(tmp_path, monkeypatc
 
     Narrowed for #39236: the original fix treated every ``manual:device_code``
     entry as a singleton-alias and refreshed them all, which silently
-    clobbered independent accounts added via ``hermes auth add openai-codex``.
+    clobbered independent accounts added via ``lliam-gov auth add openai-codex``.
     The current behavior refreshes only entries whose access_token matches
     the *previous* singleton access_token (true legacy aliases), and leaves
     distinct-token entries alone (independent accounts).
@@ -353,7 +353,7 @@ def test_save_codex_tokens_syncs_manual_device_code_entries(tmp_path, monkeypatc
                     "last_error_code": 401,
                     "last_error_reason": "token_invalidated",
                 },
-                # Independent account from `hermes auth add openai-codex` —
+                # Independent account from `lliam-gov auth add openai-codex` —
                 # its tokens are distinct from the singleton.  Must NOT be
                 # overwritten by a re-auth that targeted a different account
                 # (#39236).
@@ -410,7 +410,7 @@ def test_save_codex_tokens_does_not_overwrite_independent_manual_entries(tmp_pat
     """Re-auth must NOT overwrite ``manual:device_code`` entries that hold
     independent token material (different OpenAI/ChatGPT accounts).
 
-    Regression for #39236: ``hermes auth add openai-codex`` for accounts B and C
+    Regression for #39236: ``lliam-gov auth add openai-codex`` for accounts B and C
     routes through ``_save_codex_tokens`` because the singleton path is the
     only Codex OAuth save flow.  The #33538 fix refreshed every
     ``manual:device_code`` entry on every re-auth, which works fine for the
@@ -449,7 +449,7 @@ def test_save_codex_tokens_does_not_overwrite_independent_manual_entries(tmp_pat
                     "refresh_token": "acctA-rt",
                 },
                 # Two INDEPENDENT manual entries added later via
-                # ``hermes auth add openai-codex`` (account B and account C).
+                # ``lliam-gov auth add openai-codex`` (account B and account C).
                 # Each has its OWN distinct token material, unrelated to the
                 # singleton.
                 {
@@ -509,7 +509,7 @@ def test_save_codex_tokens_still_refreshes_legacy_manual_alias(tmp_path, monkeyp
     """The #33538 legacy use case must keep working.
 
     A user who hit #33000 before the #33164 fix landed might have run
-    ``hermes auth add openai-codex`` as a workaround when there was no
+    ``lliam-gov auth add openai-codex`` as a workaround when there was no
     singleton entry — that created a ``manual:device_code`` pool entry that
     holds the SAME token material as the (later) singleton.  This entry is a
     true alias of the singleton and SHOULD still be refreshed on subsequent
@@ -910,7 +910,7 @@ def test_refresh_429_classified_as_quota_not_auth_failure(monkeypatch):
 
     Regression test for #32790: must NOT force relogin and must carry the
     dedicated rate-limit code so callers surface a "retry later" notice rather
-    than a misleading "run hermes auth".
+    than a misleading "run lliam-gov auth".
     """
     from lliam_cli.auth import (
         CODEX_RATE_LIMITED_CODE,
@@ -936,7 +936,7 @@ def test_refresh_429_classified_as_quota_not_auth_failure(monkeypatch):
     # User-facing copy must not tell the operator to re-authenticate.
     rendered = format_auth_error(err)
     assert "re-authenticate" not in rendered
-    assert "hermes auth" not in rendered
+    assert "lliam-gov auth" not in rendered
 
 
 def test_refresh_429_without_retry_after_header(monkeypatch):

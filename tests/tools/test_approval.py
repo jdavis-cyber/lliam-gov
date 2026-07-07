@@ -425,7 +425,7 @@ class TestLliamConfigWriteProtection:
         # bypassing the redirection/tee patterns.
         dangerous, key, desc = detect_dangerous_command("sed -i 's/manual/off/' ~/.hermes/config.yaml")
         assert dangerous is True
-        assert "hermes config" in desc.lower() or "in-place" in desc.lower()
+        assert "lliam-gov config" in desc.lower() or "in-place" in desc.lower()
 
     def test_sed_in_place_long_flag(self):
         dangerous, key, desc = detect_dangerous_command("sed --in-place 's/manual/off/' ~/.hermes/config.yaml")
@@ -437,7 +437,7 @@ class TestLliamConfigWriteProtection:
             f"sed -i 's/manual/off/' {config_path}"
         )
         assert dangerous is True
-        assert "hermes config" in desc.lower() or "in-place" in desc.lower()
+        assert "lliam-gov config" in desc.lower() or "in-place" in desc.lower()
 
     def test_sed_in_place_absolute_lliam_home_env(self):
         env_path = get_lliam_home() / ".env"
@@ -445,7 +445,7 @@ class TestLliamConfigWriteProtection:
             f"sed -i 's/API_KEY=.*/API_KEY=x/' {env_path}"
         )
         assert dangerous is True
-        assert "hermes config" in desc.lower() or "in-place" in desc.lower()
+        assert "lliam-gov config" in desc.lower() or "in-place" in desc.lower()
 
     def test_custom_lliam_home(self):
         dangerous, key, desc = detect_dangerous_command("echo x | tee $HERMES_HOME/config.yaml")

@@ -3,8 +3,7 @@ silently fell back to the old primary provider on the next turn because the
 fallback chain — seeded from config at agent __init__ — kept entries for the
 provider the user just moved away from.
 
-Reported: "switched from openrouter provider to anthropic api key via hermes
-model and the tui keeps trying openrouter".
+Reported: "switched from openrouter provider to anthropic api key via lliam-gov model and the tui keeps trying openrouter".
 """
 
 from unittest.mock import MagicMock, patch
