@@ -19,7 +19,7 @@
 # WHAT THIS FILE IS
 # -----------------------------------------------------------------------------
 # The single, version-controlled, fail-closed configuration OVERLAY that moves
-# Lliam-GOV (a fork of Hermes Agent, Nous Research, MIT) from its shipped
+# Lliam-GOV (a fork of Lliam-GOV, Nous Research, MIT) from its shipped
 # permissive defaults to the CUI posture floor: NIST SP 800-171 r3 / CMMC L2.
 # It is the documented secure baseline for control LG-CH-01.
 #
@@ -148,7 +148,7 @@ security:
 #    Control: LG-CH-07 (flip permissive defaults to strict for CUI)
 #    Cross-refs: LG-DP-04 (PII), LG-HO-04 (staged write-approval), LG-SC-02/06
 # -----------------------------------------------------------------------------
-# These keys ALL already exist in Hermes DEFAULT_CONFIG and are consumed by
+# These keys ALL already exist in Lliam-GOV DEFAULT_CONFIG and are consumed by
 # SHIPPED code today — flipping them is capability-preserving:
 #   * write_approval only DELAYS/STAGES memory & skill writes (to <HERMES_HOME>/
 #     pending/{memory,skills}) for review; it never drops them. Ordinary file

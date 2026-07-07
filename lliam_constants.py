@@ -1,4 +1,4 @@
-"""Shared constants for Hermes Agent.
+"""Shared constants for Lliam-GOV.
 
 Import-safe module with no dependencies — can be imported from anywhere
 without risk of circular imports.
@@ -22,7 +22,7 @@ _LLIAM_HOME_OVERRIDE: ContextVar[str | object] = ContextVar(
 
 
 def set_lliam_home_override(path: str | Path | None) -> Token:
-    """Set a context-local Hermes home override and return its reset token.
+    """Set a context-local Lliam-GOV home override and return its reset token.
 
     This is for in-process, per-task scoping.  It deliberately does not mutate
     ``os.environ`` because that is shared by every thread in the process.
@@ -32,12 +32,12 @@ def set_lliam_home_override(path: str | Path | None) -> Token:
 
 
 def reset_lliam_home_override(token: Token) -> None:
-    """Restore the previous context-local Hermes home override."""
+    """Restore the previous context-local Lliam-GOV home override."""
     _LLIAM_HOME_OVERRIDE.reset(token)
 
 
 def get_lliam_home_override() -> str | None:
-    """Return the active context-local Hermes home override, if any."""
+    """Return the active context-local Lliam-GOV home override, if any."""
     override = _LLIAM_HOME_OVERRIDE.get()
     if override is _UNSET or not override:
         return None
@@ -80,7 +80,7 @@ def get_default_home_leaf() -> str:
 
 
 def get_lliam_home() -> Path:
-    """Return the Hermes home directory (default: platform-native path).
+    """Return the Lliam-GOV home directory (default: platform-native path).
 
     Reads HERMES_HOME env var, falls back to the platform-native default.
     This is the single source of truth — all other copies should import this.
@@ -184,9 +184,9 @@ def run_startup_migration() -> None:
 
 
 def get_default_lliam_root() -> Path:
-    """Return the root Hermes directory for profile-level operations.
+    """Return the root Lliam-GOV directory for profile-level operations.
 
-    In standard deployments this is the platform-native Hermes home
+    In standard deployments this is the platform-native Lliam-GOV home
     (``~/.hermes`` on POSIX, ``%LOCALAPPDATA%\\hermes`` on native Windows).
 
     In Docker or custom deployments where ``HERMES_HOME`` points outside
@@ -230,7 +230,7 @@ def get_default_lliam_root() -> Path:
 def _get_packaged_data_dir(name: str) -> Path | None:
     """Return an installed data-files directory if one exists.
 
-    Used to discover bundled skills/optional-skills when Hermes is installed
+    Used to discover bundled skills/optional-skills when Lliam-GOV is installed
     from a wheel that emitted them via setuptools data_files.
     """
     candidates = []
@@ -301,7 +301,7 @@ def get_bundled_skills_dir(default: Path | None = None) -> Path:
 
 
 def get_lliam_dir(new_subpath: str, old_name: str) -> Path:
-    """Resolve a Hermes subdirectory with backward compatibility.
+    """Resolve a Lliam-GOV subdirectory with backward compatibility.
 
     New installs get the consolidated layout (e.g. ``cache/images``).
     Existing installs that already have the old path (e.g. ``image_cache``)
@@ -331,7 +331,7 @@ def get_lliam_dir(new_subpath: str, old_name: str) -> Path:
 
 
 def iter_lliam_node_dirs(home: Path | None = None) -> list[Path]:
-    """Return Hermes-managed Node.js directories in preferred lookup order.
+    """Return Lliam-managed Node.js directories in preferred lookup order.
 
     Windows installs from ``scripts/install.ps1`` unpack portable Node directly
     into ``%LOCALAPPDATA%\\hermes\\node``. POSIX installs use
@@ -372,11 +372,11 @@ _NODE_BOOTSTRAP_SCRIPT = Path(__file__).resolve().parent / "scripts" / "lib" / "
 def node_tool_runnable(path: str | None) -> bool:
     """Return True only when *path* is a Node/npm/npx binary that actually runs.
 
-    Hermes-managed Node trees live under ``$HERMES_HOME/node`` (or a profile's
+    Lliam-managed Node trees live under ``$HERMES_HOME/node`` (or a profile's
     ``HERMES_HOME``). A partial upgrade or interrupted install can leave
     ``bin/npm`` behind while ``lib/cli.js`` is missing — the wrapper exists but
     immediately throws ``MODULE_NOT_FOUND``. ``find_lliam_node_executable``
-    used to trust file presence alone, so ``hermes update`` would pick that
+    used to trust file presence alone, so ``lliam-gov update`` would pick that
     broken npm and fail the Node refresh / web UI build.
 
     Probe with ``--version`` (same pattern as :func:`agent_browser_runnable`) so
@@ -406,7 +406,7 @@ def node_tool_runnable(path: str | None) -> bool:
 
 
 def lliam_managed_node_tree_present(home: Path | None = None) -> bool:
-    """Return True when any Hermes-managed node/npm/npx shim exists on disk."""
+    """Return True when any Lliam-managed node/npm/npx shim exists on disk."""
     names = set()
     for command in ("node", "npm", "npx"):
         names.update(_candidate_node_command_names(command))
@@ -483,7 +483,7 @@ def _heal_managed_node_windows() -> bool:
 
 
 def heal_lliam_managed_node() -> bool:
-    """Redownload Hermes-managed Node when the tree exists but is broken.
+    """Redownload Lliam-managed Node when the tree exists but is broken.
 
     Runs at most once per process. POSIX installs shell out to
     ``heal_managed_node`` in ``scripts/lib/node-bootstrap.sh``; Windows
@@ -522,7 +522,7 @@ def heal_lliam_managed_node() -> bool:
 
 
 def find_lliam_node_executable(command: str) -> str | None:
-    """Return a Hermes-managed Node/npm executable path, healing broken trees."""
+    """Return a Lliam-managed Node/npm executable path, healing broken trees."""
     names = _candidate_node_command_names(command)
     broken_present = False
     for directory in iter_lliam_node_dirs():
@@ -553,7 +553,7 @@ def find_node_executable_on_path(command: str) -> str | None:
 
     ``shutil.which("npm")`` can resolve an extensionless npm shim before the
     ``.cmd`` shim on Windows. Python's CreateProcess cannot execute that shim
-    directly, so prefer the launchable variants explicitly for Hermes-owned
+    directly, so prefer the launchable variants explicitly for Lliam-GOV-owned
     subprocesses.
     """
     if sys.platform != "win32":
@@ -577,9 +577,9 @@ def find_node_executable_on_path(command: str) -> str | None:
 
 
 def find_node_executable(command: str) -> str | None:
-    """Resolve a Node.js command, preferring healthy Hermes-managed installs.
+    """Resolve a Node.js command, preferring healthy Lliam-managed installs.
 
-    This is for Hermes-owned subprocesses that should not be broken by a bad,
+    This is for Lliam-GOV-owned subprocesses that should not be broken by a bad,
     missing, or elevation-triggering system Node/npm on PATH. When a managed
     tree exists but cannot be healed, returns ``None`` instead of falling back
     to system npm on PATH.
@@ -593,7 +593,7 @@ def find_node_executable(command: str) -> str | None:
 
 
 def with_lliam_node_path(env: dict[str, str] | None = None) -> dict[str, str]:
-    """Return *env* with Hermes-managed Node directories prepended to PATH."""
+    """Return *env* with Lliam-managed Node directories prepended to PATH."""
     merged = dict(os.environ if env is None else env)
     existing = merged.get("PATH", "")
     parts = [p for p in existing.split(os.pathsep) if p]
@@ -612,7 +612,7 @@ def agent_browser_runnable(path: str | None) -> bool:
     agent-browser's npm ``postinstall`` re-points a *global* install symlink
     (e.g. ``/opt/homebrew/bin/agent-browser``) at our local
     ``node_modules/agent-browser/bin/...`` binary, which then disappears on the
-    next ``hermes update`` — leaving a **dangling symlink** that ``which`` still
+    next ``lliam-gov update`` — leaving a **dangling symlink** that ``which`` still
     reports but exec fails on with exit 127 (issue #48521). Callers that trust
     such a path silently break every browser tool.
 
@@ -803,9 +803,9 @@ def _iter_real_home_candidates(env: dict[str, str] | None = None) -> list[str]:
 
 
 def get_real_home(env: dict[str, str] | None = None) -> str:
-    """Return the OS user's real home directory, avoiding Hermes profile HOME.
+    """Return the OS user's real home directory, avoiding Lliam-GOV profile HOME.
 
-    ``HERMES_HOME`` scopes Hermes state. ``HOME`` is reserved for the OS/user
+    ``HERMES_HOME`` scopes Lliam-GOV state. ``HOME`` is reserved for the OS/user
     account and the many external CLIs that store credentials under ``~``.
     If a parent process is already running with ``HOME={HERMES_HOME}/home``,
     this helper repairs back to the account home when possible.
@@ -859,7 +859,7 @@ def get_subprocess_home(env: dict[str, str] | None = None) -> str | None:
 
 
 def apply_subprocess_home_env(env: dict[str, str]) -> None:
-    """Apply Hermes' subprocess HOME contract to *env* in-place."""
+    """Apply Lliam-GOV' subprocess HOME contract to *env* in-place."""
     real_home = get_real_home(env)
     if real_home:
         env["LLIAM_REAL_HOME"] = real_home

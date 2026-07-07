@@ -1,4 +1,4 @@
-"""Centralized logging setup for Hermes Agent.
+"""Centralized logging setup for Lliam-GOV.
 
 Provides a single ``setup_logging()`` entry point that both the CLI and
 gateway call early in their startup path.  All log files live under
@@ -38,7 +38,7 @@ from typing import Optional, Sequence
 # On Windows, stdlib ``RotatingFileHandler`` calls ``os.rename()`` in
 # ``doRollover()`` and fails with ``PermissionError [WinError 32]`` whenever
 # another process holds an append-mode handle on ``agent.log`` — which is
-# essentially always in Hermes (TUI, gateway, ``hy_memory`` server, MCP
+# essentially always in Lliam-GOV (TUI, gateway, ``hy_memory`` server, MCP
 # servers, and on-demand CLI commands all log from separate processes),
 # pinning ``agent.log`` at the 5 MiB threshold and spamming stderr with
 # a traceback on every emit. ``concurrent-log-handler`` wraps the rename in a
@@ -208,12 +208,12 @@ class _ComponentFilter(logging.Filter):
 
 
 # Logger name prefixes that belong to each component.
-# Used by _ComponentFilter and exposed for ``hermes logs --component``.
+# Used by _ComponentFilter and exposed for ``lliam-gov logs --component``.
 COMPONENT_PREFIXES = {
     # ``plugins.platforms`` covers messaging-platform adapters that migrated
     # out of ``gateway/platforms/`` into bundled plugins (#41112) — they are
     # still gateway components and their logs belong in gateway.log / match
-    # ``hermes logs --component gateway``.
+    # ``lliam-gov logs --component gateway``.
     "gateway": ("gateway", "hermes_plugins", "plugins.platforms"),
     "agent": ("agent", "run_agent", "model_tools", "batch_runner"),
     "tools": ("tools",),
@@ -241,7 +241,7 @@ def setup_logging(
     mode: Optional[str] = None,
     force: bool = False,
 ) -> Path:
-    """Configure the Hermes logging subsystem.
+    """Configure the Lliam-GOV logging subsystem.
 
     Safe to call multiple times — the second call is a no-op unless
     *force* is ``True``.
@@ -249,7 +249,7 @@ def setup_logging(
     Parameters
     ----------
     hermes_home
-        Override for the Hermes home directory.  Falls back to
+        Override for the Lliam-GOV home directory.  Falls back to
         ``get_lliam_home()`` (profile-aware).
     log_level
         Minimum level for the ``agent.log`` file handler.  Accepts any

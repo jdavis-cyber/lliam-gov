@@ -32,7 +32,7 @@
           ]
           ++ self'.packages.default.passthru.devDeps;
         shellHook = ''
-          echo "Hermes Agent dev shell"
+          echo "Lliam-GOV dev shell"
           ${combinedNonNpm}
           ${hermesNpmLib.mkNpmDevShellHook npmPackageJsonPaths}
           echo "Ready. Run 'hermes' to start."

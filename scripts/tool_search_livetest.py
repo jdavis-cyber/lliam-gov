@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live test harness for Hermes Agent's Tool Search feature.
+"""Live test harness for Lliam-GOV's Tool Search feature.
 
 Spins up a real AIAgent against a real model, registers ~20 fake "MCP" tools
 with realistic shapes (github-like, slack-like, calendar-like, search-like),
@@ -32,7 +32,7 @@ import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-# Force-isolate the test environment BEFORE any hermes imports.
+# Force-isolate the test environment BEFORE any lliam-gov imports.
 ORIGINAL_HOME = os.environ.get("HERMES_HOME")
 ORIGINAL_AUTH = Path.home() / ".hermes" / "auth.json"
 

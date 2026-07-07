@@ -1,6 +1,6 @@
 """Resolve HERMES_HOME for standalone skill scripts.
 
-Skill scripts may run outside the Hermes process (e.g. system Python,
+Skill scripts may run outside the Lliam-GOV process (e.g. system Python,
 nix env, CI) where ``lliam_constants`` is not importable.  This module
 provides the same ``get_lliam_home()`` and ``display_lliam_home()``
 contracts as ``lliam_constants`` without requiring it on ``sys.path``.
@@ -25,7 +25,7 @@ try:
 except (ModuleNotFoundError, ImportError):
 
     def get_lliam_home() -> Path:
-        """Return the Hermes home directory (default: ~/.hermes).
+        """Return the Lliam-GOV home directory (default: ~/.hermes).
 
         Mirrors ``lliam_constants.get_lliam_home()``."""
         val = os.environ.get("HERMES_HOME", "").strip()

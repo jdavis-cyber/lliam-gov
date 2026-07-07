@@ -47,8 +47,8 @@ frozen_paths:
 # they ship today (the gates and runtime call them verbatim). Documented for
 # reviewers; the diff-based guard above enforces the file-path half.
 frozen_cli_identifiers:
-  - "hermes security audit"
-  - "hermes skills audit"
-  - "hermes mcp add"
-  - "hermes doctor"
-  - "hermes status"
+  - "lliam-gov security audit"
+  - "lliam-gov skills audit"
+  - "lliam-gov mcp add"
+  - "lliam-gov doctor"
+  - "lliam-gov status"

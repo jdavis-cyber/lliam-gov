@@ -1,4 +1,4 @@
-# nix/web.nix — Hermes Web Dashboard (Vite/React) frontend build
+# nix/web.nix — Lliam-GOV Web Dashboard (Vite/React) frontend build
 { pkgs, hermesNpmLib, ... }:
 let
   npm = hermesNpmLib.mkNpmPassthru { folder = "web"; attr = "web"; pname = "hermes-web"; };

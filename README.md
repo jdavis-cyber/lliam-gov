@@ -5,7 +5,7 @@
 <h1 align="center">LLIAM-GOV</h1>
 
 <p align="center">
-  A fork of <a href="https://github.com/NousResearch/hermes-agent">Hermes Agent</a> by Nous Research —
+  A fork of <a href="https://github.com/NousResearch/hermes-agent">Lliam-GOV</a> by Nous Research —
   rebranded and being hardened for governance and security in federal and defense environments.
   <br><b>Work in progress.</b>
 </p>
