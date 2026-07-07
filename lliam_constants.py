@@ -752,10 +752,10 @@ def _norm_home_path(path: str | None) -> str:
 
 def _profile_home_path(env: dict[str, str] | None = None) -> str | None:
     """Return ``{HERMES_HOME}/home`` when the profile-home directory exists."""
-    hermes_home = get_lliam_home_override() or (env or {}).get("HERMES_HOME") or os.getenv("HERMES_HOME")
-    if not hermes_home:
+    lliam_home = get_lliam_home_override() or (env or {}).get("HERMES_HOME") or os.getenv("HERMES_HOME")
+    if not lliam_home:
         return None
-    profile_home = os.path.join(hermes_home, "home")
+    profile_home = os.path.join(lliam_home, "home")
     if os.path.isdir(profile_home):
         return profile_home
     return None

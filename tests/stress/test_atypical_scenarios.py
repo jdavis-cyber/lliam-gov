@@ -685,11 +685,11 @@ def _(home, kb):
 # CONCURRENCY CORNERS
 # =============================================================================
 
-def _idempotency_race_worker(hermes_home: str, key: str, result_file: str,
+def _idempotency_race_worker(lliam_home: str, key: str, result_file: str,
                              barrier_path: str) -> None:
     """Subprocess body for the idempotency race test."""
-    os.environ["HERMES_HOME"] = hermes_home
-    os.environ["HOME"] = hermes_home
+    os.environ["HERMES_HOME"] = lliam_home
+    os.environ["HOME"] = lliam_home
     sys.path.insert(0, str(WT))
     from lliam_cli import kanban_db as kb
 

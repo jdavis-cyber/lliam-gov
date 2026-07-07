@@ -21,7 +21,7 @@ def _write_skill(skills_dir, name, description="test skill"):
 
 
 @pytest.fixture
-def isolated_profiles(tmp_path, monkeypatch, _isolate_hermes_home):
+def isolated_profiles(tmp_path, monkeypatch, _isolate_lliam_home):
     """Isolated default home + one named profile, each with its own skills."""
     from lliam_constants import get_lliam_home
     from lliam_cli import profiles

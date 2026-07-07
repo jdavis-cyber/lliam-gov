@@ -342,12 +342,12 @@ class TestResolveSessionName:
 
 class TestResolveConfigPath:
     def test_prefers_hermes_home_when_exists(self, tmp_path):
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
-        local_cfg = hermes_home / "honcho.json"
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir()
+        local_cfg = lliam_home / "honcho.json"
         local_cfg.write_text('{"apiKey": "local"}')
 
-        with patch.dict(os.environ, {"HERMES_HOME": str(hermes_home)}):
+        with patch.dict(os.environ, {"HERMES_HOME": str(lliam_home)}):
             result = resolve_config_path()
         assert result == local_cfg
 
@@ -384,10 +384,10 @@ class TestResolveConfigPath:
     def test_global_fallback_uses_home_at_call_time(self, tmp_path):
         fake_home = tmp_path / "fakehome"
         fake_home.mkdir()
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir()
 
-        with patch.dict(os.environ, {"HERMES_HOME": str(hermes_home)}), \
+        with patch.dict(os.environ, {"HERMES_HOME": str(lliam_home)}), \
              patch.object(Path, "home", return_value=fake_home):
             assert resolve_global_config_path() == fake_home / ".honcho" / "config.json"
             assert resolve_config_path() == fake_home / ".honcho" / "config.json"
@@ -415,15 +415,15 @@ class TestResolveConfigPath:
         assert config.workspace_id == "default-ws"
 
     def test_from_global_config_uses_local_path(self, tmp_path):
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
-        local_cfg = hermes_home / "honcho.json"
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir()
+        local_cfg = lliam_home / "honcho.json"
         local_cfg.write_text(json.dumps({
             "apiKey": "***",
             "workspace": "local-ws",
         }))
 
-        with patch.dict(os.environ, {"HERMES_HOME": str(hermes_home)}), \
+        with patch.dict(os.environ, {"HERMES_HOME": str(lliam_home)}), \
              patch.object(Path, "home", return_value=tmp_path):
             config = HonchoClientConfig.from_global_config()
         assert config.api_key == "***"

@@ -926,7 +926,7 @@ def test_launch_tui_exports_model_provider_and_toolsets(monkeypatch, main_mod):
 
 
 def test_launch_tui_applies_terminal_backend_config(
-    monkeypatch, main_mod, _isolate_hermes_home
+    monkeypatch, main_mod, _isolate_lliam_home
 ):
     captured = {}
     config_path = Path(os.environ["HERMES_HOME"]) / "config.yaml"

@@ -573,7 +573,7 @@ def init_agent(
     # both live under ~/.hermes/logs/.  Idempotent, so gateway mode
     # (which creates a new AIAgent per message) won't duplicate handlers.
     from lliam_logging import setup_logging, setup_verbose_logging
-    setup_logging(hermes_home=_ra()._hermes_home)
+    setup_logging(lliam_home=_ra()._lliam_home)
 
     if agent.verbose_logging:
         setup_verbose_logging()
@@ -1115,8 +1115,8 @@ def init_agent(
         os.environ["LLIAM_SESSION_ID"] = agent.session_id
 
     # Session logs go into ~/.hermes/sessions/ alongside gateway sessions
-    hermes_home = get_lliam_home()
-    agent.logs_dir = hermes_home / "sessions"
+    lliam_home = get_lliam_home()
+    agent.logs_dir = lliam_home / "sessions"
     agent.logs_dir.mkdir(parents=True, exist_ok=True)
     # Per-session JSON snapshot writer (~/.hermes/sessions/session_{sid}.json)
     # is opt-in via sessions.write_json_snapshots (default False).  state.db
@@ -1738,7 +1738,7 @@ def init_agent(
         try:
             agent.context_compressor.on_session_start(
                 agent.session_id,
-                hermes_home=str(get_lliam_home()),
+                lliam_home=str(get_lliam_home()),
                 platform=agent.platform or "cli",
                 model=agent.model,
                 context_length=getattr(agent.context_compressor, "context_length", 0),

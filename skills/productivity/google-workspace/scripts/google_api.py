@@ -32,12 +32,12 @@ from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from pathlib import Path
 
-# Ensure sibling modules (_hermes_home) are importable when run standalone.
+# Ensure sibling modules (_lliam_home) are importable when run standalone.
 _SCRIPTS_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
-from _hermes_home import get_lliam_home
+from _lliam_home import get_lliam_home
 
 HERMES_HOME = get_lliam_home()
 TOKEN_PATH = HERMES_HOME / "google_token.json"

@@ -36,7 +36,7 @@ _EXAMPLE_PLUGIN_FIXTURE = (
 
 
 @pytest.fixture
-def _install_example_plugin(_isolate_hermes_home):
+def _install_example_plugin(_isolate_lliam_home):
     """Drop the example-dashboard fixture into the per-test HERMES_HOME
     user-plugins directory and force the web_server's dashboard plugin
     cache + API mount to rediscover it.
@@ -224,7 +224,7 @@ class TestWebServerEndpoints:
     """Test the FastAPI REST endpoints using Starlette TestClient."""
 
     @pytest.fixture(autouse=True)
-    def _setup_test_client(self, monkeypatch, _isolate_hermes_home):
+    def _setup_test_client(self, monkeypatch, _isolate_lliam_home):
         """Create a TestClient and isolate the state DB under the test HERMES_HOME."""
         try:
             from starlette.testclient import TestClient
@@ -3026,7 +3026,7 @@ class TestNewEndpoints:
     """Tests for session detail, logs, cron, skills, tools, raw config, analytics."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, monkeypatch, _isolate_hermes_home):
+    def _setup(self, monkeypatch, _isolate_lliam_home):
         try:
             from starlette.testclient import TestClient
         except ImportError:
@@ -3113,13 +3113,13 @@ class TestNewEndpoints:
         from lliam_constants import get_lliam_home
         import lliam_cli.profiles as profiles_mod
 
-        hermes_home = get_lliam_home()
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "config.yaml").write_text(
+        lliam_home = get_lliam_home()
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "config.yaml").write_text(
             "model:\n  provider: openrouter\n  name: anthropic/claude-sonnet-4.6\n",
             encoding="utf-8",
         )
-        named = hermes_home / "profiles" / "multi-agent"
+        named = lliam_home / "profiles" / "multi-agent"
         named.mkdir(parents=True)
         (named / ".env").write_text("EXAMPLE=1\n", encoding="utf-8")
         (named / "skills" / "demo").mkdir(parents=True)
@@ -5028,7 +5028,7 @@ class TestDeleteSessionEndpoint:
     """
 
     @pytest.fixture(autouse=True)
-    def _setup_test_client(self, monkeypatch, _isolate_hermes_home):
+    def _setup_test_client(self, monkeypatch, _isolate_lliam_home):
         try:
             from starlette.testclient import TestClient
         except ImportError:
@@ -5105,7 +5105,7 @@ class TestBulkDeleteSessionsEndpoint:
     """
 
     @pytest.fixture(autouse=True)
-    def _setup_test_client(self, monkeypatch, _isolate_hermes_home):
+    def _setup_test_client(self, monkeypatch, _isolate_lliam_home):
         try:
             from starlette.testclient import TestClient
         except ImportError:
@@ -5229,7 +5229,7 @@ class TestDeleteEmptySessionsEndpoint:
     """
 
     @pytest.fixture(autouse=True)
-    def _setup_test_client(self, monkeypatch, _isolate_hermes_home):
+    def _setup_test_client(self, monkeypatch, _isolate_lliam_home):
         try:
             from starlette.testclient import TestClient
         except ImportError:
@@ -5358,7 +5358,7 @@ class TestPluginAPIAuth:
     """Tests that plugin API routes require the session token (issue #19533)."""
 
     @pytest.fixture(autouse=True)
-    def _setup_test_client(self, monkeypatch, _isolate_hermes_home, _install_example_plugin):
+    def _setup_test_client(self, monkeypatch, _isolate_lliam_home, _install_example_plugin):
         """Create a TestClient without the session token header.
 
         Pulls in ``_install_example_plugin`` so ``test_plugin_route_allows_auth``
@@ -5606,7 +5606,7 @@ skip_on_windows = pytest.mark.skipif(
 @skip_on_windows
 class TestPtyWebSocket:
     @pytest.fixture(autouse=True)
-    def _setup(self, monkeypatch, _isolate_hermes_home):
+    def _setup(self, monkeypatch, _isolate_lliam_home):
         from starlette.testclient import TestClient
 
         import lliam_cli.web_server as ws
@@ -5645,7 +5645,7 @@ class TestPtyWebSocket:
         assert env["LLIAM_TUI_DISABLE_MOUSE"] == "1"
 
     def test_resolve_chat_argv_applies_terminal_backend_config(
-        self, monkeypatch, _isolate_hermes_home
+        self, monkeypatch, _isolate_lliam_home
     ):
         import lliam_cli.main as main_mod
 
@@ -6081,7 +6081,7 @@ class TestDashboardPluginStaticAssetAllowlist:
     """
 
     @pytest.fixture(autouse=True)
-    def _setup_test_client(self, monkeypatch, _isolate_hermes_home, _install_example_plugin):
+    def _setup_test_client(self, monkeypatch, _isolate_lliam_home, _install_example_plugin):
         """Create a TestClient and install the example-dashboard fixture.
 
         The static-asset allowlist tests need a plugin to point at —
@@ -6184,7 +6184,7 @@ class TestValidateProviderCredential:
     """Live-probe credential validation (/api/providers/validate)."""
 
     @pytest.fixture(autouse=True)
-    def _setup_test_client(self, monkeypatch, _isolate_hermes_home):
+    def _setup_test_client(self, monkeypatch, _isolate_lliam_home):
         try:
             from starlette.testclient import TestClient
         except ImportError:
@@ -6317,7 +6317,7 @@ class TestDesktopCronTicker:
 
         return TestClient(app)
 
-    def test_ticker_runs_when_desktop(self, monkeypatch, _isolate_hermes_home):
+    def test_ticker_runs_when_desktop(self, monkeypatch, _isolate_lliam_home):
         import threading
         import cron.scheduler as sched
 
@@ -6328,7 +6328,7 @@ class TestDesktopCronTicker:
         with self._client():
             assert called.wait(3.0), "expected cron tick under LLIAM_DESKTOP=1"
 
-    def test_ticker_skipped_without_desktop(self, monkeypatch, _isolate_hermes_home):
+    def test_ticker_skipped_without_desktop(self, monkeypatch, _isolate_lliam_home):
         import threading
         import cron.scheduler as sched
 

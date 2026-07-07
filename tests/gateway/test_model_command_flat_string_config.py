@@ -58,23 +58,23 @@ def _setup_isolated_home(tmp_path, monkeypatch, model_yaml_value):
     """Write a config.yaml with the given ``model:`` value and stub the heavy bits."""
     import gateway.run as gateway_run
 
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    cfg_path = hermes_home / "config.yaml"
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
+    cfg_path = lliam_home / "config.yaml"
     cfg_path.write_text(
         yaml.safe_dump({"model": model_yaml_value, "providers": {}}),
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(gateway_run, "_hermes_home", hermes_home)
+    monkeypatch.setattr(gateway_run, "_lliam_home", lliam_home)
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr(
         "lliam_cli.model_switch.switch_model",
         lambda **kw: _fake_switch_result(),
     )
     # save_config writes to ``get_lliam_home() / config.yaml`` — point it here.
-    monkeypatch.setattr("lliam_constants.get_lliam_home", lambda: hermes_home)
-    monkeypatch.setattr("lliam_cli.config.get_lliam_home", lambda: hermes_home)
+    monkeypatch.setattr("lliam_constants.get_lliam_home", lambda: lliam_home)
+    monkeypatch.setattr("lliam_cli.config.get_lliam_home", lambda: lliam_home)
     return cfg_path
 
 
@@ -112,19 +112,19 @@ async def test_model_global_persists_when_config_has_missing_model(tmp_path, mon
     """
     import gateway.run as gateway_run
 
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    cfg_path = hermes_home / "config.yaml"
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
+    cfg_path = lliam_home / "config.yaml"
     cfg_path.write_text(yaml.safe_dump({"providers": {}}), encoding="utf-8")
 
-    monkeypatch.setattr(gateway_run, "_hermes_home", hermes_home)
+    monkeypatch.setattr(gateway_run, "_lliam_home", lliam_home)
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr(
         "lliam_cli.model_switch.switch_model",
         lambda **kw: _fake_switch_result(),
     )
-    monkeypatch.setattr("lliam_constants.get_lliam_home", lambda: hermes_home)
-    monkeypatch.setattr("lliam_cli.config.get_lliam_home", lambda: hermes_home)
+    monkeypatch.setattr("lliam_constants.get_lliam_home", lambda: lliam_home)
+    monkeypatch.setattr("lliam_cli.config.get_lliam_home", lambda: lliam_home)
 
     result = await _make_runner()._handle_model_command(
         _make_event("/model gpt-5.5 --global")

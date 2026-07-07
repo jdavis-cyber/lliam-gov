@@ -24,7 +24,7 @@ from lliam_state import SessionDB
 
 
 @pytest.fixture()
-def hermes_home(tmp_path, monkeypatch):
+def lliam_home(tmp_path, monkeypatch):
     home = tmp_path / ".hermes"
     home.mkdir()
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -33,7 +33,7 @@ def hermes_home(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def server(hermes_home):
+def server(lliam_home):
     with patch.dict(
         "sys.modules",
         {
@@ -51,8 +51,8 @@ def server(hermes_home):
 
 
 @pytest.fixture()
-def db(hermes_home):
-    return SessionDB(db_path=hermes_home / "state.db")
+def db(lliam_home):
+    return SessionDB(db_path=lliam_home / "state.db")
 
 
 @pytest.fixture()

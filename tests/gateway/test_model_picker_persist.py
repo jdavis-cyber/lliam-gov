@@ -84,15 +84,15 @@ def _setup_isolated_home(tmp_path, monkeypatch, model_yaml_value):
     """Write a config.yaml with the given ``model:`` value and stub heavy bits."""
     import gateway.run as gateway_run
 
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    cfg_path = hermes_home / "config.yaml"
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
+    cfg_path = lliam_home / "config.yaml"
     cfg_path.write_text(
         yaml.safe_dump({"model": model_yaml_value, "providers": {}}),
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(gateway_run, "_hermes_home", hermes_home)
+    monkeypatch.setattr(gateway_run, "_lliam_home", lliam_home)
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     # The picker-setup path calls list_picker_providers, which otherwise hits
     # the network (OpenRouter model catalog). Stub it to a minimal list — these
@@ -119,8 +119,8 @@ def _setup_isolated_home(tmp_path, monkeypatch, model_yaml_value):
         lambda *a, **k: 272000,
     )
     # save_config writes to ``get_lliam_home() / config.yaml`` — point it here.
-    monkeypatch.setattr("lliam_constants.get_lliam_home", lambda: hermes_home)
-    monkeypatch.setattr("lliam_cli.config.get_lliam_home", lambda: hermes_home)
+    monkeypatch.setattr("lliam_constants.get_lliam_home", lambda: lliam_home)
+    monkeypatch.setattr("lliam_cli.config.get_lliam_home", lambda: lliam_home)
     return cfg_path
 
 

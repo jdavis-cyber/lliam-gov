@@ -29,7 +29,7 @@ def _client():
 
 class TestMcpEndpoints:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, self.header = _client()
 
     def test_list_add_remove_roundtrip(self):
@@ -128,7 +128,7 @@ class TestMcpEndpoints:
 
 class TestCredentialPoolEndpoints:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
 
     def test_add_list_remove_and_cli_parity(self):
@@ -164,7 +164,7 @@ class TestCredentialPoolEndpoints:
 
 class TestMemoryEndpoints:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
         from lliam_constants import get_lliam_home
 
@@ -200,7 +200,7 @@ class TestMemoryEndpoints:
 
 class TestPairingEndpoints:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
 
     def test_list_and_bad_approve(self):
@@ -214,7 +214,7 @@ class TestPairingEndpoints:
 
 class TestWebhookEndpoints:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
 
     def test_list_disabled_and_create_blocked(self):
@@ -311,7 +311,7 @@ class TestWebhookEndpoints:
 
 class TestOpsEndpoints:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
 
     def test_hooks_list_reads_config(self):
@@ -372,7 +372,7 @@ class TestOpsEndpoints:
 
 class TestSystemStatsEndpoint:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
 
     def test_stats_shape(self):
@@ -388,7 +388,7 @@ class TestSystemStatsEndpoint:
 
 class TestCuratorEndpoints:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
 
     def test_status_and_pause_toggle(self):
@@ -406,7 +406,7 @@ class TestCuratorEndpoints:
 
 class TestPortalEndpoint:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
 
     def test_status_shape(self):
@@ -419,7 +419,7 @@ class TestPortalEndpoint:
 
 class TestSessionManagementEndpoints:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
         from lliam_state import SessionDB
 
@@ -455,7 +455,7 @@ class TestSessionManagementEndpoints:
 
 class TestSkillsHubSearchEndpoint:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
 
     def test_empty_query_returns_empty(self):
@@ -505,7 +505,7 @@ class _FakeBundle:
 
 class TestSkillsHubSourcesEndpoint:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
 
     def test_sources_lists_configured_hubs(self, monkeypatch):
@@ -550,7 +550,7 @@ class TestSkillsHubSourcesEndpoint:
 
 class TestSkillsHubPreviewEndpoint:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
 
     def test_preview_requires_identifier(self):
@@ -592,7 +592,7 @@ class TestSkillsHubPreviewEndpoint:
 
 class TestSkillsHubScanEndpoint:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
 
     def test_scan_requires_identifier(self):
@@ -671,7 +671,7 @@ class TestSkillsHubScanEndpoint:
 
 class TestWebhookToggleEndpoint:
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
         # Enable the webhook platform so a subscription can be created.
         from lliam_cli.config import load_config, save_config
@@ -702,7 +702,7 @@ class TestAdminEndpointsAuthGate:
     """Every admin endpoint must sit behind the dashboard session-token gate."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         from starlette.testclient import TestClient
         from lliam_cli.web_server import app
 
@@ -743,7 +743,7 @@ class TestUpdateCheckEndpoint:
     """
 
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, _ = _client()
 
     def test_git_install_reports_behind_count(self, monkeypatch):
@@ -868,7 +868,7 @@ class TestDebugShareEndpoint:
     dashboard can render them as copyable links (not a backgrounded log tail)."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, self.header = _client()
         from lliam_constants import get_lliam_home
 
@@ -961,7 +961,7 @@ class TestToolsConfigEndpoints:
     the dashboard surface that replicates the `hermes tools` configurator."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_hermes_home):
+    def _setup(self, _isolate_lliam_home):
         self.client, self.header = _client()
 
     def test_list_toolsets_shape(self):

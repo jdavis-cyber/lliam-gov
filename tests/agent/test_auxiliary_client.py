@@ -218,9 +218,9 @@ class TestNormalizeAuxProvider:
 
 class TestReadCodexAccessToken:
     def test_valid_auth_store(self, tmp_path, monkeypatch):
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -228,14 +228,14 @@ class TestReadCodexAccessToken:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         result = _read_codex_access_token()
         assert result == "tok-123"
 
     def test_pool_without_selected_entry_falls_back_to_auth_store(self, tmp_path, monkeypatch):
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
         valid_jwt = "eyJhbGciOiJSUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTl9.sig"
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(True, None)), \
@@ -247,18 +247,18 @@ class TestReadCodexAccessToken:
         assert result == valid_jwt
 
     def test_missing_returns_none(self, tmp_path, monkeypatch):
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({"version": 1, "providers": {}}))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({"version": 1, "providers": {}}))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)):
             result = _read_codex_access_token()
         assert result is None
 
     def test_empty_token_returns_none(self, tmp_path, monkeypatch):
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -266,7 +266,7 @@ class TestReadCodexAccessToken:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         result = _read_codex_access_token()
         assert result is None
 
@@ -298,9 +298,9 @@ class TestReadCodexAccessToken:
         payload = base64.urlsafe_b64encode(payload_data).rstrip(b"=").decode()
         expired_jwt = f"{header}.{payload}.fakesig"
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -308,7 +308,7 @@ class TestReadCodexAccessToken:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)):
             result = _read_codex_access_token()
         assert result is None, "Expired JWT should return None"
@@ -323,9 +323,9 @@ class TestReadCodexAccessToken:
         payload = base64.urlsafe_b64encode(payload_data).rstrip(b"=").decode()
         valid_jwt = f"{header}.{payload}.fakesig"
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -333,15 +333,15 @@ class TestReadCodexAccessToken:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         result = _read_codex_access_token()
         assert result == valid_jwt
 
     def test_non_jwt_token_passes_through(self, tmp_path, monkeypatch):
         """Non-JWT tokens (no dots) should be returned as-is."""
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -349,7 +349,7 @@ class TestReadCodexAccessToken:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         result = _read_codex_access_token()
         assert result == "plain-token-no-jwt"
 
@@ -365,13 +365,13 @@ class TestResolveXaiOAuthForAux:
         from agent.credential_pool import AUTH_TYPE_OAUTH, PooledCredential, load_pool
         from lliam_cli.auth import DEFAULT_XAI_OAUTH_BASE_URL
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {},
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         monkeypatch.delenv("HERMES_XAI_BASE_URL", raising=False)
         monkeypatch.delenv("XAI_BASE_URL", raising=False)
 
@@ -397,13 +397,13 @@ class TestResolveXaiOAuthForAux:
         from agent.credential_pool import AUTH_TYPE_OAUTH, PooledCredential, load_pool
         from lliam_cli.auth import DEFAULT_XAI_OAUTH_BASE_URL
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {},
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         monkeypatch.setenv("HERMES_XAI_BASE_URL", "https://example.x.ai/v1/")
 
         pool = load_pool("xai-oauth")
@@ -715,9 +715,9 @@ class TestExpiredCodexFallback:
         payload = base64.urlsafe_b64encode(payload_data).rstrip(b"=").decode()
         expired_jwt = f"{header}.{payload}.fakesig"
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -725,7 +725,7 @@ class TestExpiredCodexFallback:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
         # Set up Anthropic as fallback
         monkeypatch.setenv("ANTHROPIC_TOKEN", "sk-ant-oat01-test-fallback")
@@ -758,9 +758,9 @@ class TestExpiredCodexFallback:
         payload = base64.urlsafe_b64encode(payload_data).rstrip(b"=").decode()
         expired_jwt = f"{header}.{payload}.fakesig"
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -768,7 +768,7 @@ class TestExpiredCodexFallback:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-test-key")
 
         with patch("agent.auxiliary_client.OpenAI") as mock_openai:
@@ -789,9 +789,9 @@ class TestExpiredCodexFallback:
         payload = base64.urlsafe_b64encode(payload_data).rstrip(b"=").decode()
         expired_jwt = f"{header}.{payload}.fakesig"
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -799,7 +799,7 @@ class TestExpiredCodexFallback:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
         # Simulate Ollama or custom endpoint
         with patch("agent.auxiliary_client._resolve_custom_runtime",
@@ -832,9 +832,9 @@ class TestExpiredCodexFallback:
         payload = base64.urlsafe_b64encode(payload_data).rstrip(b"=").decode()
         no_exp_jwt = f"{header}.{payload}.fakesig"
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -842,7 +842,7 @@ class TestExpiredCodexFallback:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         result = _read_codex_access_token()
         assert result == no_exp_jwt, "JWT without exp should pass through"
 
@@ -853,9 +853,9 @@ class TestExpiredCodexFallback:
         payload = base64.urlsafe_b64encode(b"not-json-content").rstrip(b"=").decode()
         bad_jwt = f"{header}.{payload}.fakesig"
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        lliam_home = tmp_path / "hermes"
+        lliam_home.mkdir(parents=True, exist_ok=True)
+        (lliam_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -863,7 +863,7 @@ class TestExpiredCodexFallback:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         result = _read_codex_access_token()
         assert result == bad_jwt, "JWT with invalid JSON payload should pass through"
 

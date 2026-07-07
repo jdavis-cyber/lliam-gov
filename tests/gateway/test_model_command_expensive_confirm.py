@@ -69,22 +69,22 @@ def _fake_warning():
 def _setup_isolated_home(tmp_path, monkeypatch, *, warn):
     import gateway.run as gateway_run
 
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    cfg_path = hermes_home / "config.yaml"
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
+    cfg_path = lliam_home / "config.yaml"
     cfg_path.write_text(
         yaml.safe_dump({"model": {"default": "old-model", "provider": "openrouter"}, "providers": {}}),
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(gateway_run, "_hermes_home", hermes_home)
+    monkeypatch.setattr(gateway_run, "_lliam_home", lliam_home)
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr(
         "lliam_cli.model_switch.switch_model",
         lambda **kw: _fake_switch_result(),
     )
-    monkeypatch.setattr("lliam_constants.get_lliam_home", lambda: hermes_home)
-    monkeypatch.setattr("lliam_cli.config.get_lliam_home", lambda: hermes_home)
+    monkeypatch.setattr("lliam_constants.get_lliam_home", lambda: lliam_home)
+    monkeypatch.setattr("lliam_cli.config.get_lliam_home", lambda: lliam_home)
     monkeypatch.setattr(
         "lliam_cli.model_cost_guard.expensive_model_warning",
         (lambda *a, **kw: _fake_warning()) if warn else (lambda *a, **kw: None),

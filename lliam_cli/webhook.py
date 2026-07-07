@@ -28,13 +28,13 @@ _SUBSCRIPTIONS_FILENAME = "webhook_subscriptions.json"
 _SUBSCRIPTIONS_FILE_MODE = 0o600
 
 
-def _hermes_home() -> Path:
+def _lliam_home() -> Path:
     from lliam_constants import get_lliam_home
     return get_lliam_home()
 
 
 def _subscriptions_path() -> Path:
-    return _hermes_home() / _SUBSCRIPTIONS_FILENAME
+    return _lliam_home() / _SUBSCRIPTIONS_FILENAME
 
 
 def _load_subscriptions() -> Dict[str, dict]:

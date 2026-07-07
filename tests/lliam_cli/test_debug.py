@@ -11,7 +11,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def hermes_home(tmp_path, monkeypatch):
+def lliam_home(tmp_path, monkeypatch):
     """Set up an isolated HERMES_HOME with minimal logs."""
     home = tmp_path / ".hermes"
     home.mkdir()
@@ -144,7 +144,7 @@ class TestUploadToPastebin:
 class TestCaptureLogSnapshot:
     """Test _capture_log_snapshot for log reading and truncation."""
 
-    def test_reads_small_file(self, hermes_home):
+    def test_reads_small_file(self, lliam_home):
         from lliam_cli.debug import _capture_log_snapshot
 
         snap = _capture_log_snapshot("agent", tail_lines=10)
@@ -162,18 +162,18 @@ class TestCaptureLogSnapshot:
         assert snap.full_text is None
         assert snap.tail_text == "(file not found)"
 
-    def test_empty_primary_reports_file_empty(self, hermes_home):
+    def test_empty_primary_reports_file_empty(self, lliam_home):
         """Empty primary (no .1 fallback) surfaces as '(file empty)', not missing."""
-        (hermes_home / "logs" / "agent.log").write_text("")
+        (lliam_home / "logs" / "agent.log").write_text("")
 
         from lliam_cli.debug import _capture_log_snapshot
         snap = _capture_log_snapshot("agent", tail_lines=10)
         assert snap.full_text is None
         assert snap.tail_text == "(file empty)"
 
-    def test_race_truncate_after_resolve_reports_empty(self, hermes_home, monkeypatch):
+    def test_race_truncate_after_resolve_reports_empty(self, lliam_home, monkeypatch):
         """If the log is truncated between resolve and stat, say 'empty', not 'missing'."""
-        log_path = hermes_home / "logs" / "agent.log"
+        log_path = lliam_home / "logs" / "agent.log"
         from lliam_cli import debug
 
         monkeypatch.setattr(debug, "_resolve_log_path", lambda _name: log_path)
@@ -184,19 +184,19 @@ class TestCaptureLogSnapshot:
         assert snap.full_text is None
         assert snap.tail_text == "(file empty)"
 
-    def test_truncates_large_file(self, hermes_home):
+    def test_truncates_large_file(self, lliam_home):
         """Files larger than max_bytes get tail-truncated."""
         from lliam_cli.debug import _capture_log_snapshot
 
         # Write a file larger than 1KB
         big_content = "x" * 100 + "\n"
-        (hermes_home / "logs" / "agent.log").write_text(big_content * 200)
+        (lliam_home / "logs" / "agent.log").write_text(big_content * 200)
 
         snap = _capture_log_snapshot("agent", tail_lines=10, max_bytes=1024)
         assert snap.full_text is not None
         assert "truncated" in snap.full_text
 
-    def test_keeps_first_line_when_truncation_on_boundary(self, hermes_home):
+    def test_keeps_first_line_when_truncation_on_boundary(self, lliam_home):
         """When truncation lands on a line boundary, keep the first full line."""
         from lliam_cli.debug import _capture_log_snapshot
 
@@ -204,7 +204,7 @@ class TestCaptureLogSnapshot:
         # backward-reading loop so the truncation path actually fires.
         line = "A" * 99 + "\n"  # 100 bytes per line
         num_lines = 200  # 20000 bytes
-        (hermes_home / "logs" / "agent.log").write_text(line * num_lines)
+        (lliam_home / "logs" / "agent.log").write_text(line * num_lines)
 
         # max_bytes = 1000 = 100 * 10 → cut at byte 20000 - 1000 = 19000,
         # and byte 19000 - 1 is '\n'.  Boundary hit → keep all 10 lines.
@@ -215,13 +215,13 @@ class TestCaptureLogSnapshot:
         kept = [l for l in raw.strip().splitlines() if l.startswith("A")]
         assert len(kept) == 10
 
-    def test_drops_partial_when_truncation_mid_line(self, hermes_home):
+    def test_drops_partial_when_truncation_mid_line(self, lliam_home):
         """When truncation lands mid-line, drop the partial fragment."""
         from lliam_cli.debug import _capture_log_snapshot
 
         line = "A" * 99 + "\n"  # 100 bytes per line
         num_lines = 200  # 20000 bytes
-        (hermes_home / "logs" / "agent.log").write_text(line * num_lines)
+        (lliam_home / "logs" / "agent.log").write_text(line * num_lines)
 
         # max_bytes = 950 doesn't divide evenly into 100 → mid-line cut.
         snap = _capture_log_snapshot("agent", tail_lines=5, max_bytes=950)
@@ -232,16 +232,16 @@ class TestCaptureLogSnapshot:
         # 950 / 100 = 9.5 → 9 complete lines after dropping partial
         assert len(kept) == 9
 
-    def test_unknown_log_returns_none(self, hermes_home):
+    def test_unknown_log_returns_none(self, lliam_home):
         from lliam_cli.debug import _capture_log_snapshot
         snap = _capture_log_snapshot("nonexistent", tail_lines=10)
         assert snap.full_text is None
 
-    def test_falls_back_to_rotated_file(self, hermes_home):
+    def test_falls_back_to_rotated_file(self, lliam_home):
         """When gateway.log doesn't exist, falls back to gateway.log.1."""
         from lliam_cli.debug import _capture_log_snapshot
 
-        logs_dir = hermes_home / "logs"
+        logs_dir = lliam_home / "logs"
         # Remove the primary (if any) and create a .1 rotation
         (logs_dir / "gateway.log").unlink(missing_ok=True)
         (logs_dir / "gateway.log.1").write_text(
@@ -252,11 +252,11 @@ class TestCaptureLogSnapshot:
         assert snap.full_text is not None
         assert "rotated content" in snap.full_text
 
-    def test_prefers_primary_over_rotated(self, hermes_home):
+    def test_prefers_primary_over_rotated(self, lliam_home):
         """Primary log is used when it exists, even if .1 also exists."""
         from lliam_cli.debug import _capture_log_snapshot
 
-        logs_dir = hermes_home / "logs"
+        logs_dir = lliam_home / "logs"
         (logs_dir / "gateway.log").write_text("primary content\n")
         (logs_dir / "gateway.log.1").write_text("rotated content\n")
 
@@ -264,11 +264,11 @@ class TestCaptureLogSnapshot:
         assert "primary content" in snap.full_text
         assert "rotated" not in snap.full_text
 
-    def test_falls_back_when_primary_empty(self, hermes_home):
+    def test_falls_back_when_primary_empty(self, lliam_home):
         """Empty primary log falls back to .1 rotation."""
         from lliam_cli.debug import _capture_log_snapshot
 
-        logs_dir = hermes_home / "logs"
+        logs_dir = lliam_home / "logs"
         (logs_dir / "agent.log").write_text("")
         (logs_dir / "agent.log.1").write_text("rotated agent data\n")
 
@@ -290,7 +290,7 @@ class TestCaptureLogSnapshotRedaction:
     """Pin upload-time redaction at the _capture_log_snapshot boundary."""
 
     @pytest.fixture
-    def hermes_home_with_secret(self, tmp_path, monkeypatch):
+    def lliam_home_with_secret(self, tmp_path, monkeypatch):
         """Isolated HERMES_HOME whose agent.log contains a vendor-prefixed token."""
         home = tmp_path / ".hermes"
         home.mkdir()
@@ -311,7 +311,7 @@ class TestCaptureLogSnapshotRedaction:
         (logs_dir / "gateway.log").write_text("")
         return home
 
-    def test_default_redacts_tail_and_full_text(self, hermes_home_with_secret):
+    def test_default_redacts_tail_and_full_text(self, lliam_home_with_secret):
         from lliam_cli.debug import _capture_log_snapshot
 
         snap = _capture_log_snapshot("agent", tail_lines=10)
@@ -321,7 +321,7 @@ class TestCaptureLogSnapshotRedaction:
         assert snap.full_text is not None
         assert _REDACT_FIXTURE_TOKEN not in snap.full_text
 
-    def test_redact_false_passes_through(self, hermes_home_with_secret):
+    def test_redact_false_passes_through(self, lliam_home_with_secret):
         from lliam_cli.debug import _capture_log_snapshot
 
         snap = _capture_log_snapshot("agent", tail_lines=10, redact=False)
@@ -331,7 +331,7 @@ class TestCaptureLogSnapshotRedaction:
         assert _REDACT_FIXTURE_TOKEN in (snap.full_text or "")
 
     def test_force_true_works_when_redaction_disabled(
-        self, hermes_home_with_secret, monkeypatch
+        self, lliam_home_with_secret, monkeypatch
     ):
         """Regression test: redact_sensitive_text short-circuits without force=True.
 
@@ -357,11 +357,11 @@ class TestCaptureLogSnapshotRedaction:
         assert _REDACT_FIXTURE_TOKEN not in snap.full_text
 
     def test_default_redacts_email_addresses_for_public_share(
-        self, hermes_home_with_secret
+        self, lliam_home_with_secret
     ):
         from lliam_cli.debug import _capture_log_snapshot
 
-        log_path = hermes_home_with_secret / "logs" / "agent.log"
+        log_path = lliam_home_with_secret / "logs" / "agent.log"
         log_path.write_text(
             "2026-04-12 17:00:00 INFO gateway.run: "
             "inbound message: platform=bluebubbles "
@@ -375,10 +375,10 @@ class TestCaptureLogSnapshotRedaction:
         assert snap.full_text is not None
         assert "person@example.com" not in snap.full_text
 
-    def test_no_redact_preserves_email_addresses(self, hermes_home_with_secret):
+    def test_no_redact_preserves_email_addresses(self, lliam_home_with_secret):
         from lliam_cli.debug import _capture_log_snapshot
 
-        log_path = hermes_home_with_secret / "logs" / "agent.log"
+        log_path = lliam_home_with_secret / "logs" / "agent.log"
         log_path.write_text(
             "2026-04-12 17:00:00 INFO gateway.run: "
             "inbound message: platform=bluebubbles "
@@ -391,7 +391,7 @@ class TestCaptureLogSnapshotRedaction:
         assert "person@example.com" in (snap.full_text or "")
 
     def test_capture_default_log_snapshots_threads_redact(
-        self, hermes_home_with_secret
+        self, lliam_home_with_secret
     ):
         from lliam_cli.debug import _capture_default_log_snapshots
 
@@ -402,7 +402,7 @@ class TestCaptureLogSnapshotRedaction:
         assert _REDACT_FIXTURE_TOKEN not in (snaps["agent"].full_text or "")
 
     def test_capture_default_log_snapshots_no_redact_passes_through(
-        self, hermes_home_with_secret
+        self, lliam_home_with_secret
     ):
         from lliam_cli.debug import _capture_default_log_snapshots
 
@@ -419,7 +419,7 @@ class TestCaptureLogSnapshotRedaction:
 class TestCollectDebugReport:
     """Test the debug report builder."""
 
-    def test_report_includes_dump_output(self, hermes_home):
+    def test_report_includes_dump_output(self, lliam_home):
         from lliam_cli.debug import collect_debug_report
 
         with patch("lliam_cli.dump.run_dump") as mock_dump:
@@ -431,7 +431,7 @@ class TestCollectDebugReport:
         assert "--- hermes dump ---" in report
         assert "version: 0.8.0" in report
 
-    def test_report_includes_agent_log(self, hermes_home):
+    def test_report_includes_agent_log(self, lliam_home):
         from lliam_cli.debug import collect_debug_report
 
         with patch("lliam_cli.dump.run_dump"):
@@ -440,7 +440,7 @@ class TestCollectDebugReport:
         assert "--- agent.log" in report
         assert "session started" in report
 
-    def test_report_includes_errors_log(self, hermes_home):
+    def test_report_includes_errors_log(self, lliam_home):
         from lliam_cli.debug import collect_debug_report
 
         with patch("lliam_cli.dump.run_dump"):
@@ -449,7 +449,7 @@ class TestCollectDebugReport:
         assert "--- errors.log" in report
         assert "connection lost" in report
 
-    def test_report_includes_gateway_log(self, hermes_home):
+    def test_report_includes_gateway_log(self, lliam_home):
         from lliam_cli.debug import collect_debug_report
 
         with patch("lliam_cli.dump.run_dump"):
@@ -457,7 +457,7 @@ class TestCollectDebugReport:
 
         assert "--- gateway.log" in report
 
-    def test_report_includes_gui_log(self, hermes_home):
+    def test_report_includes_gui_log(self, lliam_home):
         from lliam_cli.debug import collect_debug_report
 
         with patch("lliam_cli.dump.run_dump"):
@@ -466,7 +466,7 @@ class TestCollectDebugReport:
         assert "--- gui.log" in report
         assert "dashboard request" in report
 
-    def test_report_includes_desktop_log(self, hermes_home):
+    def test_report_includes_desktop_log(self, lliam_home):
         from lliam_cli.debug import collect_debug_report
 
         with patch("lliam_cli.dump.run_dump"):
@@ -495,7 +495,7 @@ class TestCollectDebugReport:
 class TestRunDebugShare:
     """Test the run_debug_share CLI handler."""
 
-    def test_share_sweeps_expired_pastes(self, hermes_home, capsys):
+    def test_share_sweeps_expired_pastes(self, lliam_home, capsys):
         """Slash-command path should sweep old pending deletes before uploading."""
         from lliam_cli.debug import run_debug_share
 
@@ -513,7 +513,7 @@ class TestRunDebugShare:
         mock_sweep.assert_called_once()
         assert "Debug report uploaded" in capsys.readouterr().out
 
-    def test_share_survives_sweep_failure(self, hermes_home, capsys):
+    def test_share_survives_sweep_failure(self, lliam_home, capsys):
         """Expired-paste cleanup is best-effort and must not block sharing."""
         from lliam_cli.debug import run_debug_share
 
@@ -533,7 +533,7 @@ class TestRunDebugShare:
 
         assert "https://paste.rs/test" in capsys.readouterr().out
 
-    def test_local_flag_prints_full_logs(self, hermes_home, capsys):
+    def test_local_flag_prints_full_logs(self, lliam_home, capsys):
         """--local prints the report plus full log contents."""
         from lliam_cli.debug import run_debug_share
 
@@ -550,7 +550,7 @@ class TestRunDebugShare:
         assert "FULL agent.log" in out
         assert "FULL gateway.log" in out
 
-    def test_share_uploads_five_pastes(self, hermes_home, capsys):
+    def test_share_uploads_five_pastes(self, lliam_home, capsys):
         """Successful share uploads report + agent.log + gateway.log + gui.log + desktop.log."""
         from lliam_cli.debug import run_debug_share
 
@@ -600,11 +600,11 @@ class TestRunDebugShare:
         assert "--- hermes dump ---" in desktop_paste
         assert "--- full desktop.log ---" in desktop_paste
 
-    def test_share_keeps_report_and_full_log_on_same_snapshot(self, hermes_home, capsys):
+    def test_share_keeps_report_and_full_log_on_same_snapshot(self, lliam_home, capsys):
         """A mid-run rotation must not make full agent.log older than the report."""
         from lliam_cli.debug import run_debug_share, collect_debug_report as real_collect_debug_report
 
-        logs_dir = hermes_home / "logs"
+        logs_dir = lliam_home / "logs"
         (logs_dir / "agent.log").write_text(
             "2026-04-22 12:00:00 INFO agent: newest line\n"
         )
@@ -677,7 +677,7 @@ class TestRunDebugShare:
         assert call_count[0] == 1
         assert "Report" in out
 
-    def test_share_continues_on_log_upload_failure(self, hermes_home, capsys):
+    def test_share_continues_on_log_upload_failure(self, lliam_home, capsys):
         """Log upload failure doesn't stop the report from being shared."""
         from lliam_cli.debug import run_debug_share
 
@@ -703,7 +703,7 @@ class TestRunDebugShare:
         assert "paste.rs/report" in out
         assert "failed to upload" in out
 
-    def test_share_exits_on_report_upload_failure(self, hermes_home, capsys):
+    def test_share_exits_on_report_upload_failure(self, lliam_home, capsys):
         """If the main report fails to upload, exit with code 1."""
         from lliam_cli.debug import run_debug_share
 
@@ -731,7 +731,7 @@ class TestRunDebugShareRedaction:
     """End-to-end: --no-redact flag, banner injection, default behavior."""
 
     @pytest.fixture
-    def hermes_home_with_secret(self, tmp_path, monkeypatch):
+    def lliam_home_with_secret(self, tmp_path, monkeypatch):
         """Isolated HERMES_HOME whose agent.log contains a vendor-prefixed token."""
         home = tmp_path / ".hermes"
         home.mkdir()
@@ -750,7 +750,7 @@ class TestRunDebugShareRedaction:
         return home
 
     def test_default_share_redacts_uploaded_content(
-        self, hermes_home_with_secret, capsys
+        self, lliam_home_with_secret, capsys
     ):
         """The uploaded report and full-log pastes do not contain the raw token."""
         from lliam_cli.debug import run_debug_share
@@ -780,7 +780,7 @@ class TestRunDebugShareRedaction:
             )
 
     def test_default_share_includes_redaction_banner(
-        self, hermes_home_with_secret, capsys
+        self, lliam_home_with_secret, capsys
     ):
         """Each upload-bound paste carries the visible redaction banner."""
         from lliam_cli.debug import run_debug_share
@@ -808,7 +808,7 @@ class TestRunDebugShareRedaction:
             )
 
     def test_no_redact_flag_disables_redaction_and_banner(
-        self, hermes_home_with_secret, capsys
+        self, lliam_home_with_secret, capsys
     ):
         """--no-redact preserves original log content and omits the banner."""
         from lliam_cli.debug import run_debug_share
@@ -859,7 +859,7 @@ class TestRunDebug:
         assert "share" in out
         assert "delete" in out
 
-    def test_share_subcommand_routes(self, hermes_home):
+    def test_share_subcommand_routes(self, lliam_home):
         from lliam_cli.debug import run_debug
 
         args = MagicMock()
@@ -939,7 +939,7 @@ class TestScheduleAutoDelete:
     invocation.
     """
 
-    def test_does_not_spawn_subprocess(self, hermes_home):
+    def test_does_not_spawn_subprocess(self, lliam_home):
         """Regression guard: _schedule_auto_delete must NEVER spawn subprocesses.
 
         We assert this structurally rather than by mocking Popen: the new
@@ -1001,7 +1001,7 @@ class TestScheduleAutoDelete:
                 except OSError:
                     pass  # process exited already
 
-    def test_records_pending_to_json(self, hermes_home):
+    def test_records_pending_to_json(self, lliam_home):
         """Scheduled URLs are persisted to pending.json with expiration."""
         from lliam_cli.debug import _schedule_auto_delete, _pending_file
         import json
@@ -1025,7 +1025,7 @@ class TestScheduleAutoDelete:
             assert e["expire_at"] > time.time()
             assert e["expire_at"] <= time.time() + 15
 
-    def test_skips_non_paste_rs_urls(self, hermes_home):
+    def test_skips_non_paste_rs_urls(self, lliam_home):
         """dpaste.com URLs auto-expire — don't track them."""
         from lliam_cli.debug import _schedule_auto_delete, _pending_file
 
@@ -1034,7 +1034,7 @@ class TestScheduleAutoDelete:
         # pending.json should not be created for non-paste.rs URLs
         assert not _pending_file().exists()
 
-    def test_merges_with_existing_pending(self, hermes_home):
+    def test_merges_with_existing_pending(self, lliam_home):
         """Subsequent calls merge into existing pending.json."""
         from lliam_cli.debug import _schedule_auto_delete, _load_pending
 
@@ -1045,7 +1045,7 @@ class TestScheduleAutoDelete:
         urls = {e["url"] for e in entries}
         assert urls == {"https://paste.rs/first", "https://paste.rs/second"}
 
-    def test_dedupes_same_url(self, hermes_home):
+    def test_dedupes_same_url(self, lliam_home):
         """Same URL recorded twice → one entry with the later expire_at."""
         from lliam_cli.debug import _schedule_auto_delete, _load_pending
 
@@ -1060,14 +1060,14 @@ class TestScheduleAutoDelete:
 class TestSweepExpiredPastes:
     """Test the opportunistic sweep that replaces the sleeping subprocess."""
 
-    def test_sweep_empty_is_noop(self, hermes_home):
+    def test_sweep_empty_is_noop(self, lliam_home):
         from lliam_cli.debug import _sweep_expired_pastes
 
         deleted, remaining = _sweep_expired_pastes()
         assert deleted == 0
         assert remaining == 0
 
-    def test_sweep_deletes_expired_entries(self, hermes_home):
+    def test_sweep_deletes_expired_entries(self, lliam_home):
         from lliam_cli.debug import (
             _sweep_expired_pastes,
             _save_pending,
@@ -1098,7 +1098,7 @@ class TestSweepExpiredPastes:
         urls = {e["url"] for e in entries}
         assert urls == {"https://paste.rs/future"}
 
-    def test_sweep_leaves_future_entries_alone(self, hermes_home):
+    def test_sweep_leaves_future_entries_alone(self, lliam_home):
         from lliam_cli.debug import _sweep_expired_pastes, _save_pending
         import time
 
@@ -1114,7 +1114,7 @@ class TestSweepExpiredPastes:
         assert deleted == 0
         assert remaining == 2
 
-    def test_sweep_survives_network_failure(self, hermes_home):
+    def test_sweep_survives_network_failure(self, lliam_home):
         """Failed DELETEs stay in pending.json until the 24h grace window."""
         from lliam_cli.debug import (
             _sweep_expired_pastes,
@@ -1138,7 +1138,7 @@ class TestSweepExpiredPastes:
         assert remaining == 1
         assert len(_load_pending()) == 1
 
-    def test_sweep_drops_entries_past_grace_window(self, hermes_home):
+    def test_sweep_drops_entries_past_grace_window(self, lliam_home):
         """After 24h past expiration, give up even on network failures."""
         from lliam_cli.debug import (
             _sweep_expired_pastes,
@@ -1167,7 +1167,7 @@ class TestSweepExpiredPastes:
 class TestRunDebugSweepsOnInvocation:
     """``run_debug`` must sweep expired pastes on every invocation."""
 
-    def test_run_debug_calls_sweep(self, hermes_home):
+    def test_run_debug_calls_sweep(self, lliam_home):
         from lliam_cli.debug import run_debug
 
         args = MagicMock()
@@ -1178,7 +1178,7 @@ class TestRunDebugSweepsOnInvocation:
 
         mock_sweep.assert_called_once()
 
-    def test_run_debug_survives_sweep_failure(self, hermes_home, capsys):
+    def test_run_debug_survives_sweep_failure(self, lliam_home, capsys):
         """If the sweep throws, the subcommand still runs."""
         from lliam_cli.debug import run_debug
 
@@ -1238,7 +1238,7 @@ class TestRunDebugDelete:
 class TestShareIncludesAutoDelete:
     """Verify that run_debug_share schedules auto-deletion and prints TTL."""
 
-    def test_share_schedules_auto_delete(self, hermes_home, capsys):
+    def test_share_schedules_auto_delete(self, lliam_home, capsys):
         from lliam_cli.debug import run_debug_share
 
         args = MagicMock()
@@ -1260,7 +1260,7 @@ class TestShareIncludesAutoDelete:
         out = capsys.readouterr().out
         assert "auto-delete" in out
 
-    def test_share_shows_privacy_notice(self, hermes_home, capsys):
+    def test_share_shows_privacy_notice(self, lliam_home, capsys):
         from lliam_cli.debug import run_debug_share
 
         args = MagicMock()
@@ -1277,7 +1277,7 @@ class TestShareIncludesAutoDelete:
         out = capsys.readouterr().out
         assert "public paste service" in out
 
-    def test_local_no_privacy_notice(self, hermes_home, capsys):
+    def test_local_no_privacy_notice(self, lliam_home, capsys):
         from lliam_cli.debug import run_debug_share
 
         args = MagicMock()
@@ -1305,7 +1305,7 @@ class TestBuildDebugShare:
     contract here is the return value, not stdout.
     """
 
-    def test_returns_structured_urls(self, hermes_home):
+    def test_returns_structured_urls(self, lliam_home):
         from lliam_cli.debug import build_debug_share, DebugShareResult
 
         count = [0]
@@ -1329,11 +1329,11 @@ class TestBuildDebugShare:
         assert result.redacted is True
         assert result.auto_delete_seconds == 21600
 
-    def test_skips_missing_logs_without_failure(self, hermes_home):
+    def test_skips_missing_logs_without_failure(self, lliam_home):
         from lliam_cli.debug import build_debug_share
 
         # Remove desktop.log so it should be neither uploaded nor reported failed.
-        (hermes_home / "logs" / "desktop.log").unlink()
+        (lliam_home / "logs" / "desktop.log").unlink()
 
         with patch("lliam_cli.dump.run_dump"), patch(
             "lliam_cli.debug.upload_to_pastebin",
@@ -1344,11 +1344,11 @@ class TestBuildDebugShare:
         assert "desktop.log" not in result.urls
         assert result.failures == []
 
-    def test_redaction_keeps_secrets_out_of_payload(self, hermes_home):
+    def test_redaction_keeps_secrets_out_of_payload(self, lliam_home):
         from lliam_cli.debug import build_debug_share
 
         secret = "sk-proj-SUPERSECRETtoken1234567890"
-        (hermes_home / "logs" / "agent.log").write_text(
+        (lliam_home / "logs" / "agent.log").write_text(
             f"line one\nauthorization token={secret}\nline three\n"
         )
 
@@ -1367,7 +1367,7 @@ class TestBuildDebugShare:
         joined = "\n".join(uploaded)
         assert secret not in joined, "secret leaked into upload payload"
 
-    def test_optional_log_failure_is_collected_not_raised(self, hermes_home):
+    def test_optional_log_failure_is_collected_not_raised(self, lliam_home):
         from lliam_cli.debug import build_debug_share
 
         count = [0]
@@ -1388,7 +1388,7 @@ class TestBuildDebugShare:
         assert len(result.failures) == 1
         assert "paste service hiccup" in result.failures[0]
 
-    def test_required_report_failure_raises(self, hermes_home):
+    def test_required_report_failure_raises(self, lliam_home):
         from lliam_cli.debug import build_debug_share
 
         with patch("lliam_cli.dump.run_dump"), patch(

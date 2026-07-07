@@ -131,7 +131,7 @@ def _node_symlink_candidate_dirs() -> "list[Path]":
     return dirs
 
 
-def remove_node_symlinks(hermes_home: Path) -> list:
+def remove_node_symlinks(lliam_home: Path) -> list:
     """Remove the node/npm/npx symlinks the installer placed on PATH.
 
     The POSIX installer (``scripts/install.sh`` / ``scripts/lib/node-bootstrap.sh``)
@@ -148,7 +148,7 @@ def remove_node_symlinks(hermes_home: Path) -> list:
     directory are removed — links the user has repointed elsewhere (nvm, fnm,
     etc.) are left untouched.
     """
-    node_dir = (hermes_home / "node").resolve()
+    node_dir = (lliam_home / "node").resolve()
     removed = []
 
     for name in ("node", "npm", "npx"):
@@ -319,9 +319,9 @@ def uninstall_gateway_service():
 # or open a new terminal anyway).
 
 
-def _hermes_path_markers(hermes_home: Path) -> list[str]:
+def _hermes_path_markers(lliam_home: Path) -> list[str]:
     """Path-entry substrings that identify Hermes-owned User-PATH entries."""
-    root = str(hermes_home).rstrip("\\/")
+    root = str(lliam_home).rstrip("\\/")
     # Match on prefix so sub-entries (git\cmd, git\bin, git\usr\bin, node, etc.)
     # all get swept.  Also match the bare hermes-agent install dir.
     markers = [root + "\\hermes-agent", root + "\\git", root + "\\node", root + "\\venv"]
@@ -332,7 +332,7 @@ def _hermes_path_markers(hermes_home: Path) -> list[str]:
     return markers
 
 
-def remove_path_from_windows_registry(hermes_home: Path) -> list[str]:
+def remove_path_from_windows_registry(lliam_home: Path) -> list[str]:
     """Strip Hermes-owned entries from User-scope PATH in the registry.
 
     Returns the list of removed path entries.  Operates on HKCU\\Environment,
@@ -354,7 +354,7 @@ def remove_path_from_windows_registry(hermes_home: Path) -> list[str]:
                 return []
             # Preserve REG_EXPAND_SZ vs REG_SZ so unexpanded %VARS% survive.
             entries = [e for e in path_value.split(";") if e]
-            markers = _hermes_path_markers(hermes_home)
+            markers = _hermes_path_markers(lliam_home)
             kept: list[str] = []
             for entry in entries:
                 entry_norm = entry.rstrip("\\/")
@@ -397,13 +397,13 @@ def remove_hermes_env_vars_windows() -> list[str]:
     return removed
 
 
-def remove_portable_tooling_windows(hermes_home: Path) -> list[Path]:
+def remove_portable_tooling_windows(lliam_home: Path) -> list[Path]:
     """Delete PortableGit and Node installs the Windows installer created under
     ``%LOCALAPPDATA%\\hermes\\``.  Only called on full uninstall; they're
     isolated from any system Git / Node so they cannot break other tools."""
     removed: list[Path] = []
     for sub in ("git", "node", "gateway-service"):
-        target = hermes_home / sub
+        target = lliam_home / sub
         if target.exists():
             try:
                 shutil.rmtree(target, ignore_errors=False)
@@ -418,11 +418,11 @@ def _is_windows() -> bool:
     return sys.platform == "win32"
 
 
-def _is_default_hermes_home(hermes_home: Path) -> bool:
+def _is_default_hermes_home(lliam_home: Path) -> bool:
     """Return True when ``hermes_home`` points at the default (non-profile) root."""
     try:
         from lliam_constants import get_default_lliam_root
-        return hermes_home.resolve() == get_default_lliam_root().resolve()
+        return lliam_home.resolve() == get_default_lliam_root().resolve()
     except Exception:
         return False
 
@@ -506,8 +506,8 @@ def run_gui_uninstall(args):
         uninstall_gui,
     )
 
-    hermes_home = get_lliam_home()
-    summary = gui_install_summary(hermes_home)
+    lliam_home = get_lliam_home()
+    summary = gui_install_summary(lliam_home)
     skip_confirm = bool(getattr(args, "yes", False))
 
     print()
@@ -518,7 +518,7 @@ def run_gui_uninstall(args):
 
     if not summary["gui_installed"]:
         print("No Hermes Chat GUI installation was found.")
-        print(f"  Checked: {hermes_home}, and the standard app locations for this OS.")
+        print(f"  Checked: {lliam_home}, and the standard app locations for this OS.")
         return
 
     print(color("This removes the Chat GUI only. The Hermes agent stays installed.", Colors.CYAN))
@@ -531,10 +531,10 @@ def run_gui_uninstall(args):
     if summary["userdata_exists"]:
         print(f"  • {summary['userdata_dir']}  (desktop app data)")
     print()
-    if agent_is_installed(hermes_home):
+    if agent_is_installed(lliam_home):
         print(color("Kept intact:", Colors.GREEN, Colors.BOLD))
-        print(f"  • The Hermes agent at {hermes_home / 'hermes-agent'}")
-        print(f"  • Your config, sessions, and secrets under {hermes_home}")
+        print(f"  • The Hermes agent at {lliam_home / 'hermes-agent'}")
+        print(f"  • Your config, sessions, and secrets under {lliam_home}")
         print()
 
     if not skip_confirm:
@@ -552,7 +552,7 @@ def run_gui_uninstall(args):
     print()
     print(color("Uninstalling Chat GUI...", Colors.CYAN, Colors.BOLD))
     print()
-    uninstall_gui(hermes_home)
+    uninstall_gui(lliam_home)
 
     print()
     print(color("┌─────────────────────────────────────────────────────────┐", Colors.GREEN, Colors.BOLD))
@@ -573,12 +573,12 @@ def run_uninstall(args):
     - Keep data: removes code but keeps ~/.hermes/ for future reinstall
     """
     project_root = get_project_root()
-    hermes_home = get_lliam_home()
+    lliam_home = get_lliam_home()
 
     # Detect named profiles when uninstalling from the default root —
     # offer to clean them up too instead of leaving zombie HERMES_HOMEs
     # and systemd units behind.
-    is_default_profile = _is_default_hermes_home(hermes_home)
+    is_default_profile = _is_default_hermes_home(lliam_home)
     named_profiles = _discover_named_profiles() if is_default_profile else []
 
     # Non-interactive fast path (``--yes``): no prompts. ``--full`` selects a
@@ -592,7 +592,7 @@ def run_uninstall(args):
         full_uninstall = bool(getattr(args, "full", False))
         _perform_uninstall(
             project_root=project_root,
-            hermes_home=hermes_home,
+            lliam_home=lliam_home,
             full_uninstall=full_uninstall,
             remove_profiles=False,
             named_profiles=named_profiles,
@@ -608,9 +608,9 @@ def run_uninstall(args):
     # Show what will be affected
     print(color("Current Installation:", Colors.CYAN, Colors.BOLD))
     print(f"  Code:    {project_root}")
-    print(f"  Config:  {hermes_home / 'config.yaml'}")
-    print(f"  Secrets: {hermes_home / '.env'}")
-    print(f"  Data:    {hermes_home / 'cron/'}, {hermes_home / 'sessions/'}, {hermes_home / 'logs/'}")
+    print(f"  Config:  {lliam_home / 'config.yaml'}")
+    print(f"  Secrets: {lliam_home / '.env'}")
+    print(f"  Data:    {lliam_home / 'cron/'}, {lliam_home / 'sessions/'}, {lliam_home / 'logs/'}")
     print()
 
     if named_profiles:
@@ -697,7 +697,7 @@ def run_uninstall(args):
 
     _perform_uninstall(
         project_root=project_root,
-        hermes_home=hermes_home,
+        lliam_home=lliam_home,
         full_uninstall=full_uninstall,
         remove_profiles=remove_profiles,
         named_profiles=named_profiles,
@@ -707,7 +707,7 @@ def run_uninstall(args):
 def _perform_uninstall(
     *,
     project_root: Path,
-    hermes_home: Path,
+    lliam_home: Path,
     full_uninstall: bool,
     remove_profiles: bool,
     named_profiles: list,
@@ -745,7 +745,7 @@ def _perform_uninstall(
         # Expand %LOCALAPPDATA% etc. in hermes_home so the marker matching is
         # against fully resolved paths — installer writes literal strings
         # like C:\Users\<u>\AppData\Local\hermes\git\cmd, not %LOCALAPPDATA%.
-        removed_path_entries = remove_path_from_windows_registry(Path(os.path.expandvars(str(hermes_home))))
+        removed_path_entries = remove_path_from_windows_registry(Path(os.path.expandvars(str(lliam_home))))
         if removed_path_entries:
             for entry in removed_path_entries:
                 log_success(f"Removed from User PATH: {entry}")
@@ -773,7 +773,7 @@ def _perform_uninstall(
     #     (only when they still point into this Hermes home's node dir, so we
     #     never clobber an existing nvm / user-managed Node).
     log_info("Removing Hermes-managed node/npm/npx symlinks...")
-    removed_node_links = remove_node_symlinks(hermes_home)
+    removed_node_links = remove_node_symlinks(lliam_home)
     if removed_node_links:
         for link in removed_node_links:
             log_success(f"Removed {link}")
@@ -792,7 +792,7 @@ def _perform_uninstall(
     log_info("Removing desktop Chat GUI artifacts...")
     try:
         from lliam_cli.gui_uninstall import uninstall_gui
-        gui_removed = uninstall_gui(hermes_home)
+        gui_removed = uninstall_gui(lliam_home)
         if not gui_removed:
             log_info("No desktop GUI artifacts found")
     except Exception as e:
@@ -806,7 +806,7 @@ def _perform_uninstall(
     try:
         if project_root.exists():
             # If the install is inside ~/.hermes/, just remove the hermes-agent subdir
-            if hermes_home in project_root.parents or project_root.parent == hermes_home:
+            if lliam_home in project_root.parents or project_root.parent == lliam_home:
                 shutil.rmtree(project_root)
                 log_success(f"Removed {project_root}")
             else:
@@ -825,7 +825,7 @@ def _perform_uninstall(
     #     this helper there is a no-op since they'll already be gone.
     if _is_windows():
         log_info("Removing Windows installer artifacts (PortableGit, Node, gateway-service)...")
-        removed_artifacts = remove_portable_tooling_windows(hermes_home)
+        removed_artifacts = remove_portable_tooling_windows(lliam_home)
         if removed_artifacts:
             for path in removed_artifacts:
                 log_success(f"Removed {path}")
@@ -845,14 +845,14 @@ def _perform_uninstall(
 
         log_info("Removing configuration and data...")
         try:
-            if hermes_home.exists():
-                shutil.rmtree(hermes_home)
-                log_success(f"Removed {hermes_home}")
+            if lliam_home.exists():
+                shutil.rmtree(lliam_home)
+                log_success(f"Removed {lliam_home}")
         except Exception as e:
-            log_warn(f"Could not fully remove {hermes_home}: {e}")
+            log_warn(f"Could not fully remove {lliam_home}: {e}")
             log_info("You may need to manually remove it")
     else:
-        log_info(f"Keeping configuration and data in {hermes_home}")
+        log_info(f"Keeping configuration and data in {lliam_home}")
     
     # Done
     print()
@@ -863,7 +863,7 @@ def _perform_uninstall(
     
     if not full_uninstall:
         print(color("Your configuration and data have been preserved:", Colors.CYAN))
-        print(f"  {hermes_home}/")
+        print(f"  {lliam_home}/")
         print()
         print("To reinstall later with your existing settings:")
         if _is_windows():

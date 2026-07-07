@@ -306,8 +306,8 @@ def check_for_updates() -> Optional[int]:
     if behind but the count is unknown, ``0`` if up-to-date, or ``None`` if
     the check failed or doesn't apply. Cached for 6 hours.
     """
-    hermes_home = get_lliam_home()
-    cache_file = hermes_home / ".update_check"
+    lliam_home = get_lliam_home()
+    cache_file = lliam_home / ".update_check"
     embedded_rev = getenv_compat("REVISION") or None
 
     # Docker images have no working tree to count commits against — the
@@ -355,7 +355,7 @@ def check_for_updates() -> Optional[int]:
         # Path(__file__) always resolves to the actual installed checkout.
         repo_dir = Path(__file__).parent.parent.resolve()
         if not (repo_dir / ".git").exists():
-            repo_dir = hermes_home / "hermes-agent"
+            repo_dir = lliam_home / "hermes-agent"
         if not (repo_dir / ".git").exists():
             behind = check_via_pypi()
         else:
@@ -380,8 +380,8 @@ def _resolve_repo_dir() -> Optional[Path]:
     """
     repo_dir = Path(__file__).parent.parent.resolve()
     if not (repo_dir / ".git").exists():
-        hermes_home = get_lliam_home()
-        repo_dir = hermes_home / "hermes-agent"
+        lliam_home = get_lliam_home()
+        repo_dir = lliam_home / "hermes-agent"
     return repo_dir if (repo_dir / ".git").exists() else None
 
 

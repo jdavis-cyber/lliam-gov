@@ -1142,11 +1142,11 @@ def _media_delivery_denied_paths() -> List[Path]:
     _ROOT_CREDENTIAL_DIRS = (
         "pairing",
     )
-    for hermes_root in (_HERMES_HOME, _HERMES_ROOT):
+    for lliam_root in (_HERMES_HOME, _HERMES_ROOT):
         for rel in _ROOT_CREDENTIAL_FILES:
-            denied.append(hermes_root / rel)
+            denied.append(lliam_root / rel)
         for rel in _ROOT_CREDENTIAL_DIRS:
-            denied.append(hermes_root / rel)
+            denied.append(lliam_root / rel)
     return denied
 
 

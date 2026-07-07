@@ -5956,7 +5956,7 @@ def cfg_get(cfg: Optional[Dict[str, Any]], *keys: str, default: Any = None) -> A
       3. ``cfg is None`` (callers sometimes pass ``load_config() or None``).
 
     Named ``cfg_get`` rather than ``cfg_path`` to avoid shadowing the
-    ubiquitous ``cfg_path = _hermes_home / "config.yaml"`` local variable
+    ubiquitous ``cfg_path = _lliam_home / "config.yaml"`` local variable
     that appears in gateway/run.py, cron/scheduler.py, main.py, etc.
 
     Explicit ``None`` values are returned as-is (matches ``dict.get(key,

@@ -475,7 +475,7 @@ def get_external_skills_dirs() -> List[Path]:
 
     from lliam_constants import get_lliam_home
 
-    hermes_home = get_lliam_home()
+    lliam_home = get_lliam_home()
     local_skills = get_skills_dir().resolve()
     seen: Set[Path] = set()
     result = []
@@ -489,7 +489,7 @@ def get_external_skills_dirs() -> List[Path]:
         p = Path(expanded)
         # Resolve relative paths against HERMES_HOME, not cwd
         if not p.is_absolute():
-            p = (hermes_home / p).resolve()
+            p = (lliam_home / p).resolve()
         else:
             p = p.resolve()
         if p == local_skills:

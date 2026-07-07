@@ -1691,7 +1691,7 @@ def _profile_suffix() -> str:
     return hashlib.sha256(str(home).encode()).hexdigest()[:8]
 
 
-def _profile_arg(hermes_home: str | None = None, default_root: str | Path | None = None) -> str:
+def _profile_arg(lliam_home: str | None = None, default_root: str | Path | None = None) -> str:
     """Return ``--profile <name>`` only when HERMES_HOME is a named profile.
 
     For ``~/.hermes/profiles/<name>``, returns ``"--profile <name>"``.
@@ -1709,7 +1709,7 @@ def _profile_arg(hermes_home: str | None = None, default_root: str | Path | None
     import re
     from lliam_constants import get_default_lliam_root
 
-    home = Path(hermes_home or str(get_lliam_home())).resolve()
+    home = Path(lliam_home or str(get_lliam_home())).resolve()
     default = Path(default_root).resolve() if default_root else get_default_lliam_root().resolve()
     if home == default:
         return ""
@@ -1724,17 +1724,17 @@ def _profile_arg(hermes_home: str | None = None, default_root: str | Path | None
     return ""
 
 
-def _profile_arg_for_target_user(hermes_home: str, target_home_dir: str) -> str:
+def _profile_arg_for_target_user(lliam_home: str, target_home_dir: str) -> str:
     """Return the profile arg for a system service running as another user."""
     from lliam_constants import get_default_home_leaf
 
     # Post-rename default leaf is ``.lliam``; derive it instead of hardcoding.
     target_root = Path(target_home_dir) / get_default_home_leaf()
     try:
-        Path(hermes_home).resolve().relative_to(target_root.resolve())
-        return _profile_arg(hermes_home, default_root=target_root)
+        Path(lliam_home).resolve().relative_to(target_root.resolve())
+        return _profile_arg(lliam_home, default_root=target_root)
     except ValueError:
-        return _profile_arg(hermes_home)
+        return _profile_arg(lliam_home)
 
 
 def get_service_name() -> str:
@@ -2623,11 +2623,11 @@ def _build_service_path_dirs(project_root: Path | None = None) -> list[str]:
     if _is_dir(node_bin):
         candidates.append(str(node_bin))
 
-    hermes_home = get_lliam_home()
-    hermes_node = hermes_home / "node" / "bin"
+    lliam_home = get_lliam_home()
+    hermes_node = lliam_home / "node" / "bin"
     if _is_dir(hermes_node):
         candidates.append(str(hermes_node))
-    hermes_nm = hermes_home / "node_modules" / ".bin"
+    hermes_nm = lliam_home / "node_modules" / ".bin"
     if _is_dir(hermes_nm):
         candidates.append(str(hermes_nm))
 
@@ -2694,8 +2694,8 @@ def generate_systemd_unit(system: bool = False, run_as_user: str | None = None) 
 
     if system:
         username, group_name, home_dir = _system_service_identity(run_as_user)
-        hermes_home = _hermes_home_for_target_user(home_dir)
-        profile_arg = _profile_arg_for_target_user(hermes_home, home_dir)
+        lliam_home = _hermes_home_for_target_user(home_dir)
+        profile_arg = _profile_arg_for_target_user(lliam_home, home_dir)
         # Remap all paths that may resolve under the calling user's home
         # (e.g. /root/) to the target user's home so the service can
         # actually access them.
@@ -2703,7 +2703,7 @@ def generate_systemd_unit(system: bool = False, run_as_user: str | None = None) 
         # Anchor cwd to the target user's HERMES_HOME (stable, always exists)
         # rather than a remapped source-checkout path that can rot. See
         # _stable_service_working_dir() for the full rationale.
-        working_dir = str(hermes_home) if hermes_home else _remap_path_for_user(working_dir, home_dir)
+        working_dir = str(lliam_home) if lliam_home else _remap_path_for_user(working_dir, home_dir)
         venv_dir = _remap_path_for_user(venv_dir, home_dir)
         path_entries = [_remap_path_for_user(p, home_dir) for p in path_entries]
         path_entries.extend(_build_user_local_paths(Path(home_dir), path_entries))
@@ -2727,7 +2727,7 @@ Environment="USER={username}"
 Environment="LOGNAME={username}"
 Environment="PATH={sane_path}"
 Environment="VIRTUAL_ENV={venv_dir}"
-Environment="HERMES_HOME={hermes_home}"
+Environment="HERMES_HOME={lliam_home}"
 Restart=always
 RestartSec=5
 RestartForceExitStatus={GATEWAY_SERVICE_RESTART_EXIT_CODE}
@@ -2743,8 +2743,8 @@ StandardError=journal
 WantedBy=multi-user.target
 """
 
-    hermes_home = str(get_lliam_home().resolve())
-    profile_arg = _profile_arg(hermes_home)
+    lliam_home = str(get_lliam_home().resolve())
+    profile_arg = _profile_arg(lliam_home)
     path_entries.extend(_build_user_local_paths(Path.home(), path_entries))
     path_entries.extend(_build_wsl_interop_paths(path_entries))
     path_entries.extend(common_bin_paths)
@@ -2761,7 +2761,7 @@ ExecStart={python_path} -m lliam_cli.main{f" {profile_arg}" if profile_arg else 
 WorkingDirectory={working_dir}
 Environment="PATH={sane_path}"
 Environment="VIRTUAL_ENV={venv_dir}"
-Environment="HERMES_HOME={hermes_home}"
+Environment="HERMES_HOME={lliam_home}"
 Restart=always
 RestartSec=5
 RestartForceExitStatus={GATEWAY_SERVICE_RESTART_EXIT_CODE}
@@ -3816,11 +3816,11 @@ def generate_launchd_plist() -> str:
     # _stable_service_working_dir() for the rationale (same rot risk applies
     # to launchd's WorkingDirectory as to systemd's).
     working_dir = _stable_service_working_dir()
-    hermes_home = str(get_lliam_home().resolve())
+    lliam_home = str(get_lliam_home().resolve())
     log_dir = get_lliam_home() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     label = get_launchd_label()
-    profile_arg = _profile_arg(hermes_home)
+    profile_arg = _profile_arg(lliam_home)
     # Build a sane PATH for the launchd plist.  launchd provides only a
     # minimal default (/usr/bin:/bin:/usr/sbin:/sbin) which misses Homebrew,
     # nvm, cargo, etc.  We prepend venv/bin and node_modules/.bin (matching
@@ -3882,7 +3882,7 @@ def generate_launchd_plist() -> str:
         <key>VIRTUAL_ENV</key>
         <string>{venv_dir}</string>
         <key>HERMES_HOME</key>
-        <string>{hermes_home}</string>
+        <string>{lliam_home}</string>
     </dict>
 
     <key>LimitLoadToSessionType</key>

@@ -352,10 +352,10 @@ atexit.register(_shutdown_parallel_pool)
 
 
 # Backward-compatible module override used by tests and emergency monkeypatches.
-_hermes_home: Path | None = None
+_lliam_home: Path | None = None
 
 
-def _get_hermes_home() -> Path:
+def _get_lliam_home() -> Path:
     """Resolve Hermes home dynamically while preserving test monkeypatch hooks.
 
     Cron is per-profile by design (#4707): the in-process ticker runs inside a
@@ -364,13 +364,13 @@ def _get_hermes_home() -> Path:
     (its .env, config.yaml, scripts, skills). Do not freeze this at import or
     anchor it at the shared default root — either re-breaks profile isolation.
     """
-    return _hermes_home or get_lliam_home()
+    return _lliam_home or get_lliam_home()
 
 
 def _get_lock_paths() -> tuple[Path, Path]:
     """Resolve cron lock paths at call time so profile/env changes are honored."""
-    hermes_home = _get_hermes_home()
-    lock_dir = hermes_home / "cron"
+    lliam_home = _get_lliam_home()
+    lock_dir = lliam_home / "cron"
     return lock_dir, lock_dir / ".tick.lock"
 
 
@@ -1577,7 +1577,7 @@ def _run_job_script(script_path: str) -> tuple[bool, str]:
         (success, output) — on failure *output* contains the error message so the
         LLM can report the problem to the user.
     """
-    scripts_dir = _get_hermes_home() / "scripts"
+    scripts_dir = _get_lliam_home() / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     scripts_dir_resolved = scripts_dir.resolve()
 
@@ -2227,9 +2227,9 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
         # changes take effect without a gateway restart.
         from dotenv import load_dotenv
         try:
-            load_dotenv(str(_get_hermes_home() / ".env"), override=True, encoding="utf-8")
+            load_dotenv(str(_get_lliam_home() / ".env"), override=True, encoding="utf-8")
         except UnicodeDecodeError:
-            load_dotenv(str(_get_hermes_home() / ".env"), override=True, encoding="latin-1")
+            load_dotenv(str(_get_lliam_home() / ".env"), override=True, encoding="latin-1")
 
         delivery_target = _resolve_delivery_target(job)
         if delivery_target:
@@ -2252,7 +2252,7 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
         _cfg = {}
         try:
             import yaml
-            _cfg_path = str(_get_hermes_home() / "config.yaml")
+            _cfg_path = str(_get_lliam_home() / "config.yaml")
             if os.path.exists(_cfg_path):
                 with open(_cfg_path, encoding="utf-8") as _f:
                     _cfg = yaml.safe_load(_f) or {}
@@ -2321,7 +2321,7 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
         if prefill_file:
             pfpath = Path(prefill_file).expanduser()
             if not pfpath.is_absolute():
-                pfpath = _get_hermes_home() / pfpath
+                pfpath = _get_lliam_home() / pfpath
             if pfpath.exists():
                 try:
                     with open(pfpath, "r", encoding="utf-8") as _pf:

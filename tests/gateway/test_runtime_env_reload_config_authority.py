@@ -16,18 +16,18 @@ from gateway import run as gateway_run
 
 
 def test_reload_runtime_env_preserves_config_max_turns(tmp_path: Path, monkeypatch) -> None:
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    (hermes_home / "config.yaml").write_text(
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
+    (lliam_home / "config.yaml").write_text(
         yaml.safe_dump({"agent": {"max_turns": 9000}}),
         encoding="utf-8",
     )
-    (hermes_home / ".env").write_text(
+    (lliam_home / ".env").write_text(
         "HERMES_MAX_ITERATIONS=90\nOPENROUTER_API_KEY=fresh-key\n",
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(gateway_run, "_hermes_home", hermes_home)
+    monkeypatch.setattr(gateway_run, "_lliam_home", lliam_home)
     # rename R.8a: config authority is bridged into the new LLIAM_ name; a
     # stale legacy HERMES_ value in .env must not shadow it (consumers read
     # LLIAM_ first via getenv_compat).
@@ -43,12 +43,12 @@ def test_reload_runtime_env_preserves_config_max_turns(tmp_path: Path, monkeypat
 def test_reload_runtime_env_keeps_env_max_iterations_when_config_omits_key(
     tmp_path: Path, monkeypatch
 ) -> None:
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    (hermes_home / "config.yaml").write_text(yaml.safe_dump({"agent": {}}), encoding="utf-8")
-    (hermes_home / ".env").write_text("HERMES_MAX_ITERATIONS=123\n", encoding="utf-8")
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
+    (lliam_home / "config.yaml").write_text(yaml.safe_dump({"agent": {}}), encoding="utf-8")
+    (lliam_home / ".env").write_text("HERMES_MAX_ITERATIONS=123\n", encoding="utf-8")
 
-    monkeypatch.setattr(gateway_run, "_hermes_home", hermes_home)
+    monkeypatch.setattr(gateway_run, "_lliam_home", lliam_home)
     # rename R.8a: clear both names so the .env legacy value is the only source.
     monkeypatch.delenv("LLIAM_MAX_ITERATIONS", raising=False)
     monkeypatch.delenv("HERMES_MAX_ITERATIONS", raising=False)

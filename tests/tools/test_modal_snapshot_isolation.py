@@ -62,10 +62,10 @@ def _install_modal_test_modules(
     lliam_cli = types.ModuleType("lliam_cli")
     lliam_cli.__path__ = []  # type: ignore[attr-defined]
     sys.modules["lliam_cli"] = lliam_cli
-    hermes_home = tmp_path / "hermes-home"
-    os.environ["HERMES_HOME"] = str(hermes_home)
+    lliam_home = tmp_path / "hermes-home"
+    os.environ["HERMES_HOME"] = str(lliam_home)
     sys.modules["lliam_cli.config"] = types.SimpleNamespace(
-        get_lliam_home=lambda: hermes_home,
+        get_lliam_home=lambda: lliam_home,
     )
 
     tools_package = types.ModuleType("tools")
@@ -190,7 +190,7 @@ def _install_modal_test_modules(
     )
 
     return {
-        "snapshot_store": hermes_home / "modal_snapshots.json",
+        "snapshot_store": lliam_home / "modal_snapshots.json",
         "create_calls": create_calls,
         "from_id_calls": from_id_calls,
         "registry_calls": registry_calls,

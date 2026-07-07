@@ -219,11 +219,11 @@ class Mem0MemoryProvider(MemoryProvider):
             return bool(cfg.get("oss", {}).get("vector_store"))
         return bool(cfg.get("api_key"))
 
-    def save_config(self, values, hermes_home):
+    def save_config(self, values, lliam_home):
         """Write config to $HERMES_HOME/mem0.json."""
         import json
         from pathlib import Path
-        config_path = Path(hermes_home) / "mem0.json"
+        config_path = Path(lliam_home) / "mem0.json"
         existing = {}
         if config_path.exists():
             try:
@@ -245,9 +245,9 @@ class Mem0MemoryProvider(MemoryProvider):
             {"key": "rerank", "description": "Enable reranking for recall", "default": "true", "choices": ["true", "false"]},
         ]
 
-    def post_setup(self, hermes_home: str, config: dict) -> None:
+    def post_setup(self, lliam_home: str, config: dict) -> None:
         from ._setup import post_setup
-        post_setup(hermes_home, config)
+        post_setup(lliam_home, config)
 
     def _create_backend(self):
         try:

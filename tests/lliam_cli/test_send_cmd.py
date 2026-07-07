@@ -344,14 +344,14 @@ def test_load_hermes_env_bridges_config_yaml_scalars(tmp_path, monkeypatch):
     """
     import os
 
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    (hermes_home / ".env").write_text("SOME_TOKEN=abc123\n")
-    (hermes_home / "config.yaml").write_text(
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
+    (lliam_home / ".env").write_text("SOME_TOKEN=abc123\n")
+    (lliam_home / "config.yaml").write_text(
         "TELEGRAM_HOME_CHANNEL: '5550001111'\nnested:\n  ignored: true\n"
     )
 
-    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+    monkeypatch.setenv("HERMES_HOME", str(lliam_home))
     monkeypatch.delenv("TELEGRAM_HOME_CHANNEL", raising=False)
     monkeypatch.delenv("SOME_TOKEN", raising=False)
 
@@ -371,11 +371,11 @@ def test_load_hermes_env_does_not_override_existing(tmp_path, monkeypatch):
     """Existing env vars must not be clobbered by config.yaml values."""
     import os
 
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    (hermes_home / "config.yaml").write_text("TELEGRAM_HOME_CHANNEL: yaml_value\n")
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
+    (lliam_home / "config.yaml").write_text("TELEGRAM_HOME_CHANNEL: yaml_value\n")
 
-    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+    monkeypatch.setenv("HERMES_HOME", str(lliam_home))
     monkeypatch.setenv("TELEGRAM_HOME_CHANNEL", "env_value")
 
     from importlib import reload
@@ -389,9 +389,9 @@ def test_load_hermes_env_does_not_override_existing(tmp_path, monkeypatch):
 
 def test_load_hermes_env_handles_missing_files(tmp_path, monkeypatch):
     """No .env or config.yaml should be a silent no-op, not an exception."""
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     from importlib import reload
     import lliam_cli.config as _hc_config

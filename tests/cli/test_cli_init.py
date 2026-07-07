@@ -561,11 +561,11 @@ class TestRootLevelProviderOverride:
         """model.provider takes priority — root-level provider is only a fallback."""
         import yaml
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
-        config_path = hermes_home / "config.yaml"
+        config_path = lliam_home / "config.yaml"
         config_path.write_text(yaml.safe_dump({
             "provider": "opencode-go",  # stale root-level key
             "model": {
@@ -575,7 +575,7 @@ class TestRootLevelProviderOverride:
         }))
 
         import cli
-        monkeypatch.setattr(cli, "_hermes_home", hermes_home)
+        monkeypatch.setattr(cli, "_lliam_home", lliam_home)
         cfg = cli.load_cli_config()
 
         assert cfg["model"]["provider"] == "openrouter"
@@ -584,11 +584,11 @@ class TestRootLevelProviderOverride:
         """Legacy root-level provider still populates model.provider in the CLI loader."""
         import yaml
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
-        config_path = hermes_home / "config.yaml"
+        config_path = lliam_home / "config.yaml"
         config_path.write_text(yaml.safe_dump({
             "provider": "opencode-go",  # stale root key
             "model": {
@@ -598,7 +598,7 @@ class TestRootLevelProviderOverride:
         }))
 
         import cli
-        monkeypatch.setattr(cli, "_hermes_home", hermes_home)
+        monkeypatch.setattr(cli, "_lliam_home", lliam_home)
         cfg = cli.load_cli_config()
 
         assert cfg["model"]["provider"] == "opencode-go"
@@ -607,11 +607,11 @@ class TestRootLevelProviderOverride:
         """Legacy root-level base_url still populates model.base_url in the CLI loader."""
         import yaml
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
-        config_path = hermes_home / "config.yaml"
+        config_path = lliam_home / "config.yaml"
         config_path.write_text(yaml.safe_dump({
             "base_url": "https://example.com/v1",
             "model": {
@@ -620,7 +620,7 @@ class TestRootLevelProviderOverride:
         }))
 
         import cli
-        monkeypatch.setattr(cli, "_hermes_home", hermes_home)
+        monkeypatch.setattr(cli, "_lliam_home", lliam_home)
         cfg = cli.load_cli_config()
 
         assert cfg["model"]["base_url"] == "https://example.com/v1"

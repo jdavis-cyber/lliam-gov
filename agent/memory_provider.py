@@ -260,7 +260,7 @@ class MemoryProvider(ABC):
         """
         return []
 
-    def save_config(self, values: Dict[str, Any], hermes_home: str) -> None:
+    def save_config(self, values: Dict[str, Any], lliam_home: str) -> None:
         """Write non-secret config to the provider's native location.
 
         Called by 'hermes memory setup' after collecting user inputs.

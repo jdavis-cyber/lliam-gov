@@ -97,9 +97,9 @@ def test_cron_execution_home_follows_active_profile(tmp_path, monkeypatch):
     import cron.scheduler as scheduler
 
     # The module-level test override must be clear so the dynamic path runs.
-    monkeypatch.setattr(scheduler, "_hermes_home", None, raising=False)
-    assert scheduler._get_hermes_home().resolve() == profile_home.resolve()
-    assert scheduler._get_hermes_home().resolve() != root.resolve()
+    monkeypatch.setattr(scheduler, "_lliam_home", None, raising=False)
+    assert scheduler._get_lliam_home().resolve() == profile_home.resolve()
+    assert scheduler._get_lliam_home().resolve() != root.resolve()
 
 
 def test_cron_storage_unaffected_when_no_profile(tmp_path, monkeypatch):

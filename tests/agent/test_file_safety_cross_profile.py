@@ -72,10 +72,10 @@ def fake_hermes(tmp_path, monkeypatch):
     }
 
 
-def _set_active_home(monkeypatch, hermes_home: Path):
+def _set_active_home(monkeypatch, lliam_home: Path):
     """Point file_safety._hermes_home_path at a specific profile dir."""
     import agent.file_safety as fs
-    monkeypatch.setattr(fs, "_hermes_home_path", lambda: hermes_home)
+    monkeypatch.setattr(fs, "_hermes_home_path", lambda: lliam_home)
 
 
 # ---------------------------------------------------------------------------

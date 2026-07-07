@@ -952,8 +952,8 @@ class TestMediaDeliveryDefaultMode:
         fake_home = tmp_path / "home"
         profile_home = fake_home / ".hermes" / "profiles" / "work"
         profile_home.mkdir(parents=True)
-        hermes_root = fake_home / ".hermes"
-        config_file = hermes_root / "config.yaml"
+        lliam_root = fake_home / ".hermes"
+        config_file = lliam_root / "config.yaml"
         config_file.write_text("profiles:\n  active: work\n")
         monkeypatch.setenv("HOME", str(fake_home))
         monkeypatch.setattr(
@@ -962,7 +962,7 @@ class TestMediaDeliveryDefaultMode:
         )
         monkeypatch.setattr(
             "gateway.platforms.base._HERMES_ROOT",
-            hermes_root,
+            lliam_root,
         )
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(config_file)) is None
@@ -1187,8 +1187,8 @@ class TestMediaDeliveryDefaultMode:
 
         # Stand-in for the literal /root deny prefix in the deployment.
         denied_root = tmp_path / "root"
-        hermes_root = denied_root / ".hermes"
-        prof_cache = hermes_root / "profiles" / "myprof" / "cache" / "images"
+        lliam_root = denied_root / ".hermes"
+        prof_cache = lliam_root / "profiles" / "myprof" / "cache" / "images"
         prof_cache.mkdir(parents=True)
         image = prof_cache / "gen.png"
         image.write_bytes(b"\x89PNG\r\n\x1a\n")
@@ -1202,7 +1202,7 @@ class TestMediaDeliveryDefaultMode:
             (str(denied_root),),
         )
         monkeypatch.setattr(
-            "gateway.platforms.base._HERMES_ROOT", hermes_root
+            "gateway.platforms.base._HERMES_ROOT", lliam_root
         )
 
         assert (
@@ -1218,8 +1218,8 @@ class TestMediaDeliveryDefaultMode:
         self._patch_roots(monkeypatch)
 
         denied_root = tmp_path / "root"
-        hermes_root = denied_root / ".hermes"
-        prof_dir = hermes_root / "profiles" / "myprof"
+        lliam_root = denied_root / ".hermes"
+        prof_dir = lliam_root / "profiles" / "myprof"
         prof_dir.mkdir(parents=True)
         cred = prof_dir / "auth.json"
         cred.write_text("{}")
@@ -1232,7 +1232,7 @@ class TestMediaDeliveryDefaultMode:
             (str(denied_root),),
         )
         monkeypatch.setattr(
-            "gateway.platforms.base._HERMES_ROOT", hermes_root
+            "gateway.platforms.base._HERMES_ROOT", lliam_root
         )
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(cred)) is None

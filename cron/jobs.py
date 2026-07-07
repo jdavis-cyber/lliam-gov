@@ -61,7 +61,7 @@ except ImportError:
 # ticker process happens to have — leaking config/credentials/skills across
 # profiles (the security boundary #4707 was filed for). Do NOT change this to
 # the default root: that re-breaks per-profile isolation. See also the dynamic
-# `_get_hermes_home()` / `_get_lock_paths()` resolution in cron/scheduler.py.
+# `_get_lliam_home()` / `_get_lock_paths()` resolution in cron/scheduler.py.
 HERMES_DIR = get_lliam_home().resolve()
 CRON_DIR = HERMES_DIR / "cron"
 JOBS_FILE = CRON_DIR / "jobs.json"

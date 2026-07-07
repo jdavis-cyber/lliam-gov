@@ -77,8 +77,8 @@ class TestIsWriteDenied:
     def test_oauth_mcp_tokens_and_pairing_denied(self, path):
         """PKCE creds, mcp-tokens, and pairing entries must be write-denied."""
         from lliam_constants import get_lliam_home
-        hermes_home = get_lliam_home()
-        full_path = str(hermes_home / path)
+        lliam_home = get_lliam_home()
+        full_path = str(lliam_home / path)
         assert _is_write_denied(full_path) is True
 
     @pytest.mark.parametrize(
@@ -99,8 +99,8 @@ class TestIsWriteDenied:
     def test_oauth_traversal_denied(self, path):
         """Path traversal attempts to protected OAuth files must be blocked."""
         from lliam_constants import get_lliam_home
-        hermes_home = get_lliam_home()
-        full_path = str(hermes_home / path)
+        lliam_home = get_lliam_home()
+        full_path = str(lliam_home / path)
         assert _is_write_denied(full_path) is True
 
     @pytest.mark.parametrize(

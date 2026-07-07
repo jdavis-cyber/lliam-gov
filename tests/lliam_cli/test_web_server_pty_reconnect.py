@@ -39,7 +39,7 @@ class _OneFrameBridge:
 
 
 @pytest.fixture
-def pty_client(monkeypatch, _isolate_hermes_home):
+def pty_client(monkeypatch, _isolate_lliam_home):
     from starlette.testclient import TestClient
 
     import lliam_cli.web_server as ws

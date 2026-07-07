@@ -964,7 +964,7 @@ class TestRunJobSessionPersistence:
         }
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1010,7 +1010,7 @@ class TestRunJobSessionPersistence:
         job = {"id": "test-job", "name": "test", "prompt": "hello"}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1053,7 +1053,7 @@ class TestRunJobSessionPersistence:
         job = {"id": "test-job", "name": "test", "prompt": "hello"}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1093,7 +1093,7 @@ class TestRunJobSessionPersistence:
         }
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1130,7 +1130,7 @@ class TestRunJobSessionPersistence:
         }
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1167,7 +1167,7 @@ class TestRunJobSessionPersistence:
         }
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1195,7 +1195,7 @@ class TestRunJobSessionPersistence:
         """Common patches for run_job tests."""
         fake_db = MagicMock()
         return fake_db, [
-            patch("cron.scheduler._hermes_home", tmp_path),
+            patch("cron.scheduler._lliam_home", tmp_path),
             patch("cron.scheduler._resolve_origin", return_value=None),
             patch("dotenv.load_dotenv"),
             patch("lliam_state.SessionDB", return_value=fake_db),
@@ -1334,7 +1334,7 @@ class TestRunJobSessionPersistence:
         }
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1410,7 +1410,7 @@ class TestRunJobSessionPersistence:
         }
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1449,7 +1449,7 @@ class TestRunJobSessionPersistence:
         }
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1491,7 +1491,7 @@ class TestRunJobSessionPersistence:
         }
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1542,7 +1542,7 @@ class TestRunJobSessionPersistence:
 
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler.get_due_jobs", return_value=[job]), \
              patch("cron.scheduler.advance_next_run"), \
              patch("cron.scheduler.mark_job_run") as mock_mark, \
@@ -1585,7 +1585,7 @@ class TestRunJobSessionPersistence:
                 seen["thread_id"] = get_session_env("HERMES_CRON_AUTO_DELIVER_THREAD_ID") or None
                 return {"final_response": "ok"}
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
              patch(
                  "lliam_cli.runtime_provider.resolve_runtime_provider",
@@ -1651,7 +1651,7 @@ class TestRunJobSessionPersistence:
                 )
                 return {"final_response": "ok"}
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
              patch(
                  "lliam_cli.runtime_provider.resolve_runtime_provider",
@@ -1707,7 +1707,7 @@ class TestRunJobConfigLogging:
         # resolution and MCP discovery, both of which can spawn subprocesses
         # / hit the network and have caused this test to time out on CI
         # (>30s wall clock) under load. See PR #33661 follow-up.
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_cli.runtime_provider.resolve_runtime_provider",
@@ -1741,7 +1741,7 @@ class TestRunJobConfigLogging:
             "prompt": "hello",
         }
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_cli.runtime_provider.resolve_runtime_provider",
@@ -1779,7 +1779,7 @@ class TestRunJobConfigEnvVarExpansion:
         job = {"id": "env-job", "name": "env test", "prompt": "hi"}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1812,7 +1812,7 @@ class TestRunJobConfigEnvVarExpansion:
         job = {"id": "prefill-job", "name": "prefill test", "prompt": "hi"}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1842,7 +1842,7 @@ class TestRunJobConfigEnvVarExpansion:
         job = {"id": "fb-job", "name": "fallback test", "prompt": "hi"}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1871,7 +1871,7 @@ class TestRunJobConfigEnvVarExpansion:
         job = {"id": "unset-job", "name": "unset var test", "prompt": "hi"}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1915,7 +1915,7 @@ class TestRunJobModelResolution:
         job = {"id": "null-model-job", "name": "null model", "prompt": "hi", "model": None}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1939,7 +1939,7 @@ class TestRunJobModelResolution:
         job = {"id": "cfg-default-job", "name": "cfg default", "prompt": "hi", "model": None}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1971,7 +1971,7 @@ class TestRunJobModelResolution:
         job = {"id": "null-default-job", "name": "null default", "prompt": "hi", "model": None}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -1994,7 +1994,7 @@ class TestRunJobModelResolution:
         job = {"id": "no-model-job", "name": "no model anywhere", "prompt": "hi", "model": None}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -2023,7 +2023,7 @@ class TestRunJobModelResolution:
         job = {"id": "updated-model-job", "name": "updated", "prompt": "hi", "model": "first-model"}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -2049,7 +2049,7 @@ class TestRunJobModelResolution:
         job = {"id": "string-cfg-job", "name": "string cfg", "prompt": "hi", "model": None}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -2079,7 +2079,7 @@ class TestRunJobModelResolution:
         job = {"id": "alias-job", "name": "alias", "prompt": "hi", "model": None}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -2103,7 +2103,7 @@ class TestRunJobModelResolution:
         job = {"id": "corrupt-job", "name": "corrupt", "prompt": "hi", "model": "explicit-model"}
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -2145,7 +2145,7 @@ class TestRunJobSkillBacked:
             assert "NOTION_API_KEY" in get_all_passthrough()
             return {"final_response": "ok"}
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -2204,7 +2204,7 @@ class TestRunJobSkillBacked:
             assert any("google_token.json" in v for v in registered.values())
             return {"final_response": "ok"}
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("tools.credential_files._resolve_hermes_home", return_value=tmp_path), \
              patch("dotenv.load_dotenv"), \
@@ -2243,7 +2243,7 @@ class TestRunJobSkillBacked:
 
         fake_db = MagicMock()
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \
@@ -2289,7 +2289,7 @@ class TestRunJobSkillBacked:
         def _skill_view(name):
             return json.dumps({"success": True, "content": f"# {name}\nInstructions for {name}."})
 
-        with patch("cron.scheduler._hermes_home", tmp_path), \
+        with patch("cron.scheduler._lliam_home", tmp_path), \
              patch("cron.scheduler._resolve_origin", return_value=None), \
              patch("dotenv.load_dotenv"), \
              patch("lliam_state.SessionDB", return_value=fake_db), \

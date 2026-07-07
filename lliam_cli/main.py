@@ -484,10 +484,10 @@ def _apply_profile_override() -> None:
         try:
             from lliam_cli.profiles import resolve_profile_env
 
-            hermes_home = resolve_profile_env(profile_name)
+            lliam_home = resolve_profile_env(profile_name)
         except FileNotFoundError as exc:
-            hermes_home = _resolve_sudo_user_profile_env(profile_name)
-            if not hermes_home:
+            lliam_home = _resolve_sudo_user_profile_env(profile_name)
+            if not lliam_home:
                 print(f"Error: {exc}", file=sys.stderr)
                 sys.exit(1)
         except ValueError as exc:
@@ -500,7 +500,7 @@ def _apply_profile_override() -> None:
                 file=sys.stderr,
             )
             return
-        os.environ["HERMES_HOME"] = hermes_home
+        os.environ["HERMES_HOME"] = lliam_home
         # Strip the flag from argv so argparse doesn't choke
         if consume > 0 and profile_index is not None:
             start = profile_index + 1  # +1 because argv is sys.argv[1:]
@@ -1609,7 +1609,7 @@ def _ensure_tui_node() -> None:
     if not helper.is_file():
         return
 
-    hermes_home = os.environ.get("HERMES_HOME") or str(Path.home() / ".hermes")
+    lliam_home = os.environ.get("HERMES_HOME") or str(Path.home() / ".hermes")
     try:
         # Helper writes logs to stderr; we ask bash to print `command -v node`
         # on stdout once ensure_node succeeds. Subshell PATH edits don't leak
@@ -1620,7 +1620,7 @@ def _ensure_tui_node() -> None:
                 "-c",
                 f'source "{helper}" >&2 && ensure_node >&2 && command -v node',
             ],
-            env={**os.environ, "HERMES_HOME": hermes_home},
+            env={**os.environ, "HERMES_HOME": lliam_home},
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -1637,7 +1637,7 @@ def _ensure_tui_node() -> None:
     if resolved:
         extras.append(Path(resolved).resolve().parent)
 
-    extras.extend([Path(hermes_home) / "node" / "bin", Path.home() / ".local" / "bin"])
+    extras.extend([Path(lliam_home) / "node" / "bin", Path.home() / ".local" / "bin"])
 
     for extra in extras:
         s = str(extra)
@@ -8156,9 +8156,9 @@ def _install_hangup_protection(gateway_mode: bool = False):
     try:
         # Late-bound import so tests can monkeypatch
         # lliam_cli.config.get_lliam_home to simulate setup failure.
-        from lliam_cli.config import get_lliam_home as _get_hermes_home
+        from lliam_cli.config import get_lliam_home as _get_lliam_home
 
-        logs_dir = _get_hermes_home() / "logs"
+        logs_dir = _get_lliam_home() / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
         log_path = logs_dir / "update.log"
         log_file = open(log_path, "a", buffering=1, encoding="utf-8")

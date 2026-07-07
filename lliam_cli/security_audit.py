@@ -164,14 +164,14 @@ def _parse_pyproject_pins(text: str) -> list[tuple[str, str]]:
     return pins
 
 
-def _discover_plugins(hermes_home: Path) -> list[Component]:
+def _discover_plugins(lliam_home: Path) -> list[Component]:
     """Python deps declared by plugins under ``~/.hermes/plugins``.
 
     Plugins typically don't install into the venv (they're directory-based
     with relative imports), so their stated requirements are useful audit
     surface even when the venv scan misses them.
     """
-    plugins_dir = hermes_home / "plugins"
+    plugins_dir = lliam_home / "plugins"
     if not plugins_dir.is_dir():
         return []
 
@@ -416,10 +416,10 @@ def run_audit(
     skip_venv: bool = False,
     skip_plugins: bool = False,
     skip_mcp: bool = False,
-    hermes_home: Optional[Path] = None,
+    lliam_home: Optional[Path] = None,
 ) -> list[Finding]:
     """Discover components, query OSV, return findings sorted by severity desc."""
-    home = hermes_home or Path(get_lliam_home())
+    home = lliam_home or Path(get_lliam_home())
     components: list[Component] = []
     if not skip_venv:
         components.extend(_discover_venv())
@@ -510,13 +510,13 @@ def _render_json(findings: list[Finding], total_components: int) -> str:
 
 
 def _count_components(
-    *, skip_venv: bool, skip_plugins: bool, skip_mcp: bool, hermes_home: Path
+    *, skip_venv: bool, skip_plugins: bool, skip_mcp: bool, lliam_home: Path
 ) -> int:
     total = 0
     if not skip_venv:
         total += len(_discover_venv())
     if not skip_plugins:
-        total += len(_discover_plugins(hermes_home))
+        total += len(_discover_plugins(lliam_home))
     if not skip_mcp:
         total += len(_discover_mcp())
     return total
@@ -542,7 +542,7 @@ def cmd_security_audit(args: argparse.Namespace) -> int:
         return 2
 
     total = _count_components(
-        skip_venv=skip_venv, skip_plugins=skip_plugins, skip_mcp=skip_mcp, hermes_home=home
+        skip_venv=skip_venv, skip_plugins=skip_plugins, skip_mcp=skip_mcp, lliam_home=home
     )
     if total == 0:
         msg = "No components discovered (everything skipped, or empty environment)."
@@ -557,7 +557,7 @@ def cmd_security_audit(args: argparse.Namespace) -> int:
             skip_venv=skip_venv,
             skip_plugins=skip_plugins,
             skip_mcp=skip_mcp,
-            hermes_home=home,
+            lliam_home=home,
         )
     except RuntimeError as exc:
         print(f"audit failed: {exc}", file=sys.stderr)

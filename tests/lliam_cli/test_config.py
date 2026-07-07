@@ -1151,7 +1151,7 @@ class TestEnvWriteDenylist:
     """
 
     @pytest.fixture(autouse=True)
-    def _hermes_home(self, tmp_path, monkeypatch):
+    def _lliam_home(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
         ensure_hermes_home()
 

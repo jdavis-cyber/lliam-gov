@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 
 def _run_apply_profile_override(
-    tmp_path, monkeypatch, *, hermes_home: str | None, active_profile: str | None,
+    tmp_path, monkeypatch, *, lliam_home: str | None, active_profile: str | None,
     argv: list[str] | None = None,
 ):
     """Run _apply_profile_override in isolation.
@@ -32,18 +32,18 @@ def _run_apply_profile_override(
     # lliam_constants.get_default_lliam_root); when HERMES_HOME is provided it
     # IS the store root. Create active_profile/profiles where the production
     # code will actually read them.
-    hermes_root = Path(hermes_home) if hermes_home is not None else tmp_path / ".lliam"
-    hermes_root.mkdir(parents=True, exist_ok=True)
+    lliam_root = Path(lliam_home) if lliam_home is not None else tmp_path / ".lliam"
+    lliam_root.mkdir(parents=True, exist_ok=True)
 
     if active_profile is not None:
-        (hermes_root / "active_profile").write_text(active_profile)
+        (lliam_root / "active_profile").write_text(active_profile)
 
     if active_profile and active_profile != "default":
-        (hermes_root / "profiles" / active_profile).mkdir(parents=True, exist_ok=True)
+        (lliam_root / "profiles" / active_profile).mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    if hermes_home is not None:
-        monkeypatch.setenv("HERMES_HOME", hermes_home)
+    if lliam_home is not None:
+        monkeypatch.setenv("HERMES_HOME", lliam_home)
     else:
         monkeypatch.delenv("HERMES_HOME", raising=False)
     monkeypatch.delenv("LLIAM_HOME", raising=False)
@@ -74,13 +74,13 @@ class TestApplyProfileOverrideHermesHomeGuard:
         and the user switches to a profile via `hermes profile use`.
         Before the fix, the guard returned early and active_profile was ignored.
         """
-        hermes_root = tmp_path / ".hermes"
-        hermes_root.mkdir(parents=True, exist_ok=True)
+        lliam_root = tmp_path / ".hermes"
+        lliam_root.mkdir(parents=True, exist_ok=True)
 
         result = _run_apply_profile_override(
             tmp_path,
             monkeypatch,
-            hermes_home=str(hermes_root),
+            lliam_home=str(lliam_root),
             active_profile="coder",
         )
 
@@ -100,11 +100,11 @@ class TestApplyProfileOverrideHermesHomeGuard:
         with HERMES_HOME already set to a specific profile must stay in that
         profile.
         """
-        hermes_root = tmp_path / ".hermes"
-        profile_dir = hermes_root / "profiles" / "coder"
+        lliam_root = tmp_path / ".hermes"
+        profile_dir = lliam_root / "profiles" / "coder"
         profile_dir.mkdir(parents=True, exist_ok=True)
 
-        (hermes_root / "active_profile").write_text("other")
+        (lliam_root / "active_profile").write_text("other")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setenv("HERMES_HOME", str(profile_dir))
@@ -124,7 +124,7 @@ class TestApplyProfileOverrideHermesHomeGuard:
         result = _run_apply_profile_override(
             tmp_path,
             monkeypatch,
-            hermes_home=None,
+            lliam_home=None,
             active_profile="coder",
         )
 
@@ -157,13 +157,13 @@ class TestApplyProfileOverrideHermesHomeGuard:
 
     def test_hermes_home_unset_default_profile_no_redirect(self, tmp_path, monkeypatch):
         """active_profile=default must not redirect HERMES_HOME."""
-        hermes_root = tmp_path / ".hermes"
-        hermes_root.mkdir(parents=True, exist_ok=True)
+        lliam_root = tmp_path / ".hermes"
+        lliam_root.mkdir(parents=True, exist_ok=True)
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.delenv("HERMES_HOME", raising=False)
         monkeypatch.setattr(sys, "argv", ["hermes", "gateway", "start"])
-        (hermes_root / "active_profile").write_text("default")
+        (lliam_root / "active_profile").write_text("default")
 
         from lliam_cli.main import _apply_profile_override
         _apply_profile_override()
@@ -178,8 +178,8 @@ class TestApplyProfileOverrideHermesHomeGuard:
         profile pre-parser must not interpret the Docker profile as a Hermes
         profile.
         """
-        hermes_root = tmp_path / ".hermes"
-        hermes_root.mkdir(parents=True, exist_ok=True)
+        lliam_root = tmp_path / ".hermes"
+        lliam_root.mkdir(parents=True, exist_ok=True)
         argv = [
             "hermes",
             "mcp",
@@ -210,7 +210,7 @@ class TestApplyProfileOverrideHermesHomeGuard:
         result = _run_apply_profile_override(
             tmp_path,
             monkeypatch,
-            hermes_home=None,
+            lliam_home=None,
             active_profile="coder",
             argv=["hermes", "chat", "-p", "coder", "-q", "hello"],
         )
@@ -224,7 +224,7 @@ class TestApplyProfileOverrideHermesHomeGuard:
         result = _run_apply_profile_override(
             tmp_path,
             monkeypatch,
-            hermes_home=None,
+            lliam_home=None,
             active_profile="coder",
             argv=["hermes", "-m", "gpt-5", "--profile", "coder", "chat"],
         )
@@ -238,7 +238,7 @@ class TestApplyProfileOverrideHermesHomeGuard:
         result = _run_apply_profile_override(
             tmp_path,
             monkeypatch,
-            hermes_home=None,
+            lliam_home=None,
             active_profile="coder",
             argv=["hermes", "--continue", "--profile", "coder"],
         )
@@ -271,22 +271,22 @@ class TestSupervisedChildIgnoresStickyProfile:
         ``profiles``), and a sticky ``active_profile`` of another profile.
         The reserved default slot must stay on the root profile.
         """
-        hermes_root = tmp_path / ".hermes"
-        hermes_root.mkdir(parents=True, exist_ok=True)
-        (hermes_root / "active_profile").write_text("briefer")
-        (hermes_root / "profiles" / "briefer").mkdir(parents=True, exist_ok=True)
+        lliam_root = tmp_path / ".hermes"
+        lliam_root.mkdir(parents=True, exist_ok=True)
+        (lliam_root / "active_profile").write_text("briefer")
+        (lliam_root / "profiles" / "briefer").mkdir(parents=True, exist_ok=True)
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         # Container root HERMES_HOME: parent dir is NOT "profiles", so the
         # #22502 guard does not short-circuit — step 2 (active_profile) runs.
-        monkeypatch.setenv("HERMES_HOME", str(hermes_root))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_root))
         monkeypatch.setenv("HERMES_S6_SUPERVISED_CHILD", "1")
         monkeypatch.setattr(sys, "argv", ["hermes", "gateway", "run"])
 
         from lliam_cli.main import _apply_profile_override
         _apply_profile_override()
 
-        assert os.environ.get("HERMES_HOME") == str(hermes_root), (
+        assert os.environ.get("HERMES_HOME") == str(lliam_root), (
             "Supervised default gateway must stay on the root profile, not be "
             f"hijacked by active_profile; got {os.environ.get('HERMES_HOME')!r}"
         )
@@ -299,7 +299,7 @@ class TestSupervisedChildIgnoresStickyProfile:
         result = _run_apply_profile_override(
             tmp_path,
             monkeypatch,
-            hermes_home=None,
+            lliam_home=None,
             active_profile="briefer",
             argv=["hermes", "gateway", "run"],
         )
@@ -313,11 +313,11 @@ class TestSupervisedChildIgnoresStickyProfile:
         active_profile fallback, never an explicit flag)."""
         # HERMES_HOME unset -> profile store lives under the platform default
         # home, which post-rename is ~/.lliam.
-        hermes_root = tmp_path / ".lliam"
-        hermes_root.mkdir(parents=True, exist_ok=True)
-        (hermes_root / "active_profile").write_text("briefer")
-        (hermes_root / "profiles" / "briefer").mkdir(parents=True, exist_ok=True)
-        (hermes_root / "profiles" / "coder").mkdir(parents=True, exist_ok=True)
+        lliam_root = tmp_path / ".lliam"
+        lliam_root.mkdir(parents=True, exist_ok=True)
+        (lliam_root / "active_profile").write_text("briefer")
+        (lliam_root / "profiles" / "briefer").mkdir(parents=True, exist_ok=True)
+        (lliam_root / "profiles" / "coder").mkdir(parents=True, exist_ok=True)
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.delenv("HERMES_HOME", raising=False)

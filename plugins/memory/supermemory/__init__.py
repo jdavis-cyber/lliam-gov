@@ -96,9 +96,9 @@ def _as_bool(value: Any, default: bool) -> bool:
     return default
 
 
-def _load_supermemory_config(hermes_home: str) -> dict:
+def _load_supermemory_config(lliam_home: str) -> dict:
     config = _default_config()
-    config_path = Path(hermes_home) / "supermemory.json"
+    config_path = Path(lliam_home) / "supermemory.json"
     if config_path.exists():
         try:
             raw = json.loads(config_path.read_text(encoding="utf-8"))
@@ -142,8 +142,8 @@ def _load_supermemory_config(hermes_home: str) -> dict:
     return config
 
 
-def _save_supermemory_config(values: dict, hermes_home: str) -> None:
-    config_path = Path(hermes_home) / "supermemory.json"
+def _save_supermemory_config(values: dict, lliam_home: str) -> None:
+    config_path = Path(lliam_home) / "supermemory.json"
     existing = {}
     if config_path.exists():
         try:
@@ -388,19 +388,19 @@ class _SupermemoryClient:
             return
 
 
-def _resolve_container_tag_for_setup(hermes_home: str, *, identity: str = "default") -> str:
-    config = _load_supermemory_config(hermes_home)
+def _resolve_container_tag_for_setup(lliam_home: str, *, identity: str = "default") -> str:
+    config = _load_supermemory_config(lliam_home)
     env_tag = os.environ.get("SUPERMEMORY_CONTAINER_TAG", "").strip()
     raw_tag = env_tag or config["container_tag"]
     return _sanitize_tag(raw_tag.replace("{identity}", identity))
 
 
-def _probe_supermemory_connection(api_key: str, hermes_home: str, *, identity: str = "default") -> dict:
-    config = _load_supermemory_config(hermes_home)
+def _probe_supermemory_connection(api_key: str, lliam_home: str, *, identity: str = "default") -> dict:
+    config = _load_supermemory_config(lliam_home)
     status = {
         "ok": False,
         "error": "",
-        "container_tag": _resolve_container_tag_for_setup(hermes_home, identity=identity),
+        "container_tag": _resolve_container_tag_for_setup(lliam_home, identity=identity),
         "profile_facts": 0,
         "auto_recall": bool(config["auto_recall"]),
         "auto_capture": bool(config["auto_capture"]),
@@ -518,7 +518,7 @@ class SupermemoryMemoryProvider(MemoryProvider):
         self._search_mode = _DEFAULT_SEARCH_MODE
         self._entity_context = _DEFAULT_ENTITY_CONTEXT
         self._api_timeout = _DEFAULT_API_TIMEOUT
-        self._hermes_home = ""
+        self._lliam_home = ""
         self._write_enabled = True
         self._active = False
         # Multi-container support
@@ -550,24 +550,24 @@ class SupermemoryMemoryProvider(MemoryProvider):
             {"key": "api_key", "description": "Supermemory API key", "secret": True, "required": True, "env_var": "SUPERMEMORY_API_KEY", "url": _API_KEY_URL},
         ]
 
-    def save_config(self, values, hermes_home):
+    def save_config(self, values, lliam_home):
         sanitized = dict(values or {})
         if "container_tag" in sanitized:
             sanitized["container_tag"] = _sanitize_tag(str(sanitized["container_tag"]))
         if "entity_context" in sanitized:
             sanitized["entity_context"] = _clamp_entity_context(str(sanitized["entity_context"]))
-        _save_supermemory_config(sanitized, hermes_home)
+        _save_supermemory_config(sanitized, lliam_home)
 
     def get_status_config(self, provider_config: dict) -> dict:
         from lliam_constants import get_lliam_home
 
         del provider_config
-        hermes_home = str(get_lliam_home())
+        lliam_home = str(get_lliam_home())
         api_key = os.environ.get("SUPERMEMORY_API_KEY", "")
-        status = _probe_supermemory_connection(api_key, hermes_home)
+        status = _probe_supermemory_connection(api_key, lliam_home)
         return {"summary": _format_connection_summary(status)}
 
-    def post_setup(self, hermes_home: str, config: dict) -> None:
+    def post_setup(self, lliam_home: str, config: dict) -> None:
         from pathlib import Path
 
         from lliam_cli.config import save_config
@@ -592,7 +592,7 @@ class SupermemoryMemoryProvider(MemoryProvider):
         save_config(config)
 
         if env_writes:
-            _write_env_vars(Path(hermes_home) / ".env", env_writes)
+            _write_env_vars(Path(lliam_home) / ".env", env_writes)
 
         api_key = env_writes.get("SUPERMEMORY_API_KEY") or existing
         # Make the freshly-entered key visible to the connection probe below.
@@ -601,7 +601,7 @@ class SupermemoryMemoryProvider(MemoryProvider):
         if api_key and os.environ.get("SUPERMEMORY_API_KEY") != api_key:
             os.environ["SUPERMEMORY_API_KEY"] = api_key
 
-        status = _probe_supermemory_connection(api_key, hermes_home)
+        status = _probe_supermemory_connection(api_key, lliam_home)
         print(f"\n  {_format_connection_summary(status)}")
         print("\n  Memory provider: supermemory")
         print("  Activation saved to config.yaml")
@@ -611,10 +611,10 @@ class SupermemoryMemoryProvider(MemoryProvider):
 
     def initialize(self, session_id: str, **kwargs) -> None:
         from lliam_constants import get_lliam_home
-        self._hermes_home = kwargs.get("hermes_home") or str(get_lliam_home())
+        self._lliam_home = kwargs.get("hermes_home") or str(get_lliam_home())
         self._session_id = session_id
         self._turn_count = 0
-        self._config = _load_supermemory_config(self._hermes_home)
+        self._config = _load_supermemory_config(self._lliam_home)
         self._api_key = os.environ.get("SUPERMEMORY_API_KEY", "")
 
         # Resolve container tag: env var > config > default.

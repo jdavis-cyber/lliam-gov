@@ -2689,9 +2689,9 @@ class TestSharedBoardPaths:
     """`kanban_home`/`kanban_db_path`/`workspaces_root`/`worker_log_path`
     must anchor at the **shared root**, not the active profile's HERMES_HOME."""
 
-    def _set_home(self, monkeypatch, tmp_path, hermes_home):
+    def _set_home(self, monkeypatch, tmp_path, lliam_home):
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         monkeypatch.delenv("LLIAM_KANBAN_HOME", raising=False)
 
     def test_default_install_anchors_at_home_dot_hermes(

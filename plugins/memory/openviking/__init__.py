@@ -1953,12 +1953,12 @@ class OpenVikingMemoryProvider(MemoryProvider):
                 display[key] = "(set)"
         return display
 
-    def post_setup(self, hermes_home: str, config: dict) -> None:
+    def post_setup(self, lliam_home: str, config: dict) -> None:
         """Custom setup that can reuse OpenViking's shared CLI config."""
         from lliam_cli.config import save_config
         from lliam_cli.memory_setup import _CANCELLED, _curses_select, _print_cancelled_setup, _prompt
 
-        hermes_home_path = Path(hermes_home)
+        hermes_home_path = Path(lliam_home)
         env_path = hermes_home_path / ".env"
         if not isinstance(config.get("memory"), dict):
             config["memory"] = {}

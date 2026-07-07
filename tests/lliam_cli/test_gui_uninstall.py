@@ -14,51 +14,51 @@ import pytest
 import lliam_cli.gui_uninstall as gu
 
 
-def _make_agent(hermes_home: Path) -> Path:
+def _make_agent(lliam_home: Path) -> Path:
     """Create a fake agent install: source package + venv."""
-    agent_root = hermes_home / "hermes-agent"
+    agent_root = lliam_home / "hermes-agent"
     (agent_root / "lliam_cli").mkdir(parents=True)
     (agent_root / "lliam_cli" / "__init__.py").write_text("")
     (agent_root / "venv" / "bin").mkdir(parents=True)
     return agent_root
 
 
-def _make_gui_build(hermes_home: Path) -> None:
+def _make_gui_build(lliam_home: Path) -> None:
     """Create the source-built GUI artifacts a `hermes desktop` run produces."""
-    desktop = hermes_home / "hermes-agent" / "apps" / "desktop"
+    desktop = lliam_home / "hermes-agent" / "apps" / "desktop"
     (desktop / "dist").mkdir(parents=True)
     (desktop / "dist" / "index.html").write_text("<html>")
     (desktop / "release" / "linux-unpacked").mkdir(parents=True)
     (desktop / "node_modules").mkdir(parents=True)
-    (hermes_home / "hermes-agent" / "node_modules").mkdir(parents=True)
-    (hermes_home / "desktop-build-stamp.json").write_text("{}")
+    (lliam_home / "hermes-agent" / "node_modules").mkdir(parents=True)
+    (lliam_home / "desktop-build-stamp.json").write_text("{}")
 
 
-def _make_user_data(hermes_home: Path) -> None:
-    (hermes_home / "config.yaml").write_text("x: 1\n")
-    (hermes_home / ".env").write_text("KEY=secret\n")
-    (hermes_home / "sessions").mkdir()
+def _make_user_data(lliam_home: Path) -> None:
+    (lliam_home / "config.yaml").write_text("x: 1\n")
+    (lliam_home / ".env").write_text("KEY=secret\n")
+    (lliam_home / "sessions").mkdir()
 
 
 def test_agent_is_installed_detects_source_and_venv(tmp_path):
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    assert gu.agent_is_installed(hermes_home) is False
-    _make_agent(hermes_home)
-    assert gu.agent_is_installed(hermes_home) is True
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
+    assert gu.agent_is_installed(lliam_home) is False
+    _make_agent(lliam_home)
+    assert gu.agent_is_installed(lliam_home) is True
 
 
 def test_agent_is_installed_venv_only(tmp_path):
     """A checkout with only a venv (no package dir yet) still counts."""
-    hermes_home = tmp_path / ".hermes"
-    (hermes_home / "hermes-agent" / "venv").mkdir(parents=True)
-    assert gu.agent_is_installed(hermes_home) is True
+    lliam_home = tmp_path / ".hermes"
+    (lliam_home / "hermes-agent" / "venv").mkdir(parents=True)
+    assert gu.agent_is_installed(lliam_home) is True
 
 
 def test_source_built_artifacts_lists_known_paths(tmp_path):
-    hermes_home = tmp_path / ".hermes"
-    _make_gui_build(hermes_home)
-    artifacts = gu.source_built_gui_artifacts(hermes_home)
+    lliam_home = tmp_path / ".hermes"
+    _make_gui_build(lliam_home)
+    artifacts = gu.source_built_gui_artifacts(lliam_home)
     names = {p.name for p in artifacts}
     assert "dist" in names
     assert "release" in names
@@ -67,35 +67,35 @@ def test_source_built_artifacts_lists_known_paths(tmp_path):
 
 
 def test_gui_is_installed_true_when_built(tmp_path, monkeypatch):
-    hermes_home = tmp_path / ".hermes"
-    _make_gui_build(hermes_home)
+    lliam_home = tmp_path / ".hermes"
+    _make_gui_build(lliam_home)
     # Make sure packaged-app + userdata probes don't false-positive on the box
     # running the test.
     monkeypatch.setattr(gu, "packaged_gui_app_paths", lambda: [])
     monkeypatch.setattr(gu, "desktop_userdata_dir", lambda: tmp_path / "nope")
-    assert gu.gui_is_installed(hermes_home) is True
+    assert gu.gui_is_installed(lliam_home) is True
 
 
 def test_gui_is_installed_false_when_nothing(tmp_path, monkeypatch):
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
     monkeypatch.setattr(gu, "packaged_gui_app_paths", lambda: [])
     monkeypatch.setattr(gu, "desktop_userdata_dir", lambda: tmp_path / "nope")
-    assert gu.gui_is_installed(hermes_home) is False
+    assert gu.gui_is_installed(lliam_home) is False
 
 
 def test_uninstall_gui_removes_only_gui_artifacts(tmp_path, monkeypatch):
     """The core invariant: GUI gone, agent + user data untouched."""
-    hermes_home = tmp_path / ".hermes"
-    agent_root = _make_agent(hermes_home)
-    _make_gui_build(hermes_home)
-    _make_user_data(hermes_home)
+    lliam_home = tmp_path / ".hermes"
+    agent_root = _make_agent(lliam_home)
+    _make_gui_build(lliam_home)
+    _make_user_data(lliam_home)
 
     # Isolate the packaged-app + userdata probes from the test machine.
     monkeypatch.setattr(gu, "packaged_gui_app_paths", lambda: [])
     monkeypatch.setattr(gu, "desktop_userdata_dir", lambda: tmp_path / "userdata-none")
 
-    removed = gu.uninstall_gui(hermes_home)
+    removed = gu.uninstall_gui(lliam_home)
     removed_names = {p.name for p in removed}
 
     # GUI artifacts removed.
@@ -104,22 +104,22 @@ def test_uninstall_gui_removes_only_gui_artifacts(tmp_path, monkeypatch):
     assert not (desktop / "release").exists()
     assert not (desktop / "node_modules").exists()
     assert not (agent_root / "node_modules").exists()
-    assert not (hermes_home / "desktop-build-stamp.json").exists()
+    assert not (lliam_home / "desktop-build-stamp.json").exists()
     assert "dist" in removed_names
 
     # Agent + user data preserved.
     assert (agent_root / "lliam_cli" / "__init__.py").exists()
     assert (agent_root / "venv").exists()
-    assert (hermes_home / "config.yaml").exists()
-    assert (hermes_home / ".env").exists()
-    assert (hermes_home / "sessions").exists()
+    assert (lliam_home / "config.yaml").exists()
+    assert (lliam_home / ".env").exists()
+    assert (lliam_home / "sessions").exists()
     # The desktop source dir itself survives (only its build output is gone).
     assert desktop.exists()
 
 
 def test_uninstall_gui_removes_userdata(tmp_path, monkeypatch):
-    hermes_home = tmp_path / ".hermes"
-    _make_agent(hermes_home)
+    lliam_home = tmp_path / ".hermes"
+    _make_agent(lliam_home)
     userdata = tmp_path / "Hermes-userdata"
     userdata.mkdir()
     (userdata / "connection.json").write_text("{}")
@@ -127,51 +127,51 @@ def test_uninstall_gui_removes_userdata(tmp_path, monkeypatch):
     monkeypatch.setattr(gu, "packaged_gui_app_paths", lambda: [])
     monkeypatch.setattr(gu, "desktop_userdata_dir", lambda: userdata)
 
-    gu.uninstall_gui(hermes_home)
+    gu.uninstall_gui(lliam_home)
     assert not userdata.exists()
 
 
 def test_uninstall_gui_keeps_userdata_when_requested(tmp_path, monkeypatch):
-    hermes_home = tmp_path / ".hermes"
-    _make_agent(hermes_home)
+    lliam_home = tmp_path / ".hermes"
+    _make_agent(lliam_home)
     userdata = tmp_path / "Hermes-userdata"
     userdata.mkdir()
 
     monkeypatch.setattr(gu, "packaged_gui_app_paths", lambda: [])
     monkeypatch.setattr(gu, "desktop_userdata_dir", lambda: userdata)
 
-    gu.uninstall_gui(hermes_home, remove_userdata=False)
+    gu.uninstall_gui(lliam_home, remove_userdata=False)
     assert userdata.exists()
 
 
 def test_uninstall_gui_removes_packaged_bundle(tmp_path, monkeypatch):
-    hermes_home = tmp_path / ".hermes"
-    _make_agent(hermes_home)
+    lliam_home = tmp_path / ".hermes"
+    _make_agent(lliam_home)
     bundle = tmp_path / "Hermes.app"
     (bundle / "Contents").mkdir(parents=True)
 
     monkeypatch.setattr(gu, "packaged_gui_app_paths", lambda: [bundle])
     monkeypatch.setattr(gu, "desktop_userdata_dir", lambda: tmp_path / "none")
 
-    removed = gu.uninstall_gui(hermes_home)
+    removed = gu.uninstall_gui(lliam_home)
     assert not bundle.exists()
     assert bundle in removed
 
 
 def test_gui_install_summary_shape(tmp_path, monkeypatch):
-    hermes_home = tmp_path / ".hermes"
-    _make_agent(hermes_home)
-    _make_gui_build(hermes_home)
+    lliam_home = tmp_path / ".hermes"
+    _make_agent(lliam_home)
+    _make_gui_build(lliam_home)
     monkeypatch.setattr(gu, "packaged_gui_app_paths", lambda: [])
     monkeypatch.setattr(gu, "desktop_userdata_dir", lambda: tmp_path / "none")
 
-    summary = gu.gui_install_summary(hermes_home)
+    summary = gu.gui_install_summary(lliam_home)
     # JSON-serializable primitives the desktop UI gates on.
     assert summary["agent_installed"] is True
     assert summary["gui_installed"] is True
     assert isinstance(summary["source_built_artifacts"], list)
     assert all(isinstance(p, str) for p in summary["source_built_artifacts"])
-    assert summary["hermes_home"] == str(hermes_home)
+    assert summary["hermes_home"] == str(lliam_home)
     assert summary["platform"] == sys.platform
 
 
@@ -227,19 +227,19 @@ def test_run_uninstall_yes_keep_data_is_non_interactive(tmp_path, monkeypatch):
     """
     import lliam_cli.uninstall as uninstall
 
-    hermes_home = tmp_path / ".hermes"
-    agent_root = hermes_home / "hermes-agent"
+    lliam_home = tmp_path / ".hermes"
+    agent_root = lliam_home / "hermes-agent"
     (agent_root / "lliam_cli").mkdir(parents=True)
-    (hermes_home / "config.yaml").write_text("x: 1\n")
+    (lliam_home / "config.yaml").write_text("x: 1\n")
     desktop = agent_root / "apps" / "desktop"
     (desktop / "release").mkdir(parents=True)
-    (hermes_home / "desktop-build-stamp.json").write_text("{}")
+    (lliam_home / "desktop-build-stamp.json").write_text("{}")
     fake_code = tmp_path / "checkout"
     fake_code.mkdir()
 
     # Stub every destructive external so the test only exercises the control
     # flow + the real GUI sweep (which is safe inside tmp_path).
-    monkeypatch.setattr(uninstall, "get_lliam_home", lambda: hermes_home)
+    monkeypatch.setattr(uninstall, "get_lliam_home", lambda: lliam_home)
     monkeypatch.setattr(uninstall, "get_project_root", lambda: fake_code)
     monkeypatch.setattr(uninstall, "uninstall_gateway_service", lambda: False)
     monkeypatch.setattr(uninstall, "remove_path_from_shell_configs", lambda: [])
@@ -257,23 +257,23 @@ def test_run_uninstall_yes_keep_data_is_non_interactive(tmp_path, monkeypatch):
 
     # Code checkout removed, GUI artifacts swept, but user data preserved.
     assert not fake_code.exists()
-    assert not (hermes_home / "desktop-build-stamp.json").exists()
+    assert not (lliam_home / "desktop-build-stamp.json").exists()
     assert not (desktop / "release").exists()
-    assert (hermes_home / "config.yaml").exists()
-    assert hermes_home.exists()
+    assert (lliam_home / "config.yaml").exists()
+    assert lliam_home.exists()
 
 
 def test_run_uninstall_yes_full_wipes_home(tmp_path, monkeypatch):
     """``--yes --full`` removes the whole HERMES_HOME non-interactively."""
     import lliam_cli.uninstall as uninstall
 
-    hermes_home = tmp_path / ".hermes"
-    (hermes_home / "hermes-agent" / "lliam_cli").mkdir(parents=True)
-    (hermes_home / "config.yaml").write_text("x: 1\n")
+    lliam_home = tmp_path / ".hermes"
+    (lliam_home / "hermes-agent" / "lliam_cli").mkdir(parents=True)
+    (lliam_home / "config.yaml").write_text("x: 1\n")
     fake_code = tmp_path / "checkout"
     fake_code.mkdir()
 
-    monkeypatch.setattr(uninstall, "get_lliam_home", lambda: hermes_home)
+    monkeypatch.setattr(uninstall, "get_lliam_home", lambda: lliam_home)
     monkeypatch.setattr(uninstall, "get_project_root", lambda: fake_code)
     monkeypatch.setattr(uninstall, "uninstall_gateway_service", lambda: False)
     monkeypatch.setattr(uninstall, "remove_path_from_shell_configs", lambda: [])
@@ -288,7 +288,7 @@ def test_run_uninstall_yes_full_wipes_home(tmp_path, monkeypatch):
 
     uninstall.run_uninstall(_Args(yes=True, full=True))
 
-    assert not hermes_home.exists()
+    assert not lliam_home.exists()
 
 
 def test_uninstall_module_main_gui_mode(tmp_path, monkeypatch):
@@ -300,28 +300,28 @@ def test_uninstall_module_main_gui_mode(tmp_path, monkeypatch):
     """
     import lliam_cli.uninstall as uninstall
 
-    hermes_home = tmp_path / ".hermes"
-    agent_root = hermes_home / "hermes-agent"
+    lliam_home = tmp_path / ".hermes"
+    agent_root = lliam_home / "hermes-agent"
     (agent_root / "lliam_cli").mkdir(parents=True)
     desktop = agent_root / "apps" / "desktop"
     (desktop / "release").mkdir(parents=True)
-    (hermes_home / "desktop-build-stamp.json").write_text("{}")
-    (hermes_home / "config.yaml").write_text("x: 1\n")
+    (lliam_home / "desktop-build-stamp.json").write_text("{}")
+    (lliam_home / "config.yaml").write_text("x: 1\n")
 
-    monkeypatch.setattr(uninstall, "get_lliam_home", lambda: hermes_home)
+    monkeypatch.setattr(uninstall, "get_lliam_home", lambda: lliam_home)
     from lliam_cli import gui_uninstall as gu_mod
     monkeypatch.setattr(gu_mod, "packaged_gui_app_paths", lambda: [])
     monkeypatch.setattr(gu_mod, "desktop_userdata_dir", lambda: tmp_path / "none")
-    monkeypatch.setattr(gu_mod, "get_lliam_home", lambda: hermes_home)
+    monkeypatch.setattr(gu_mod, "get_lliam_home", lambda: lliam_home)
     monkeypatch.setattr("builtins.input", lambda *a, **k: pytest.fail("prompted in module main"))
 
     rc = uninstall.main(["--mode", "gui"])
     assert rc == 0
     # GUI swept, agent + config kept (gui-only contract).
     assert not (desktop / "release").exists()
-    assert not (hermes_home / "desktop-build-stamp.json").exists()
+    assert not (lliam_home / "desktop-build-stamp.json").exists()
     assert (agent_root / "lliam_cli").exists()
-    assert (hermes_home / "config.yaml").exists()
+    assert (lliam_home / "config.yaml").exists()
 
 
 def test_uninstall_module_main_rejects_bad_mode():

@@ -1511,8 +1511,8 @@ def get_active_profile_name() -> str:
     Returns ``"custom"`` if HERMES_HOME is set to an unrecognized path.
     """
     from lliam_constants import get_lliam_home
-    hermes_home = get_lliam_home()
-    resolved = hermes_home.resolve()
+    lliam_home = get_lliam_home()
+    resolved = lliam_home.resolve()
 
     default_resolved = _get_default_hermes_home().resolve()
     if resolved == default_resolved:

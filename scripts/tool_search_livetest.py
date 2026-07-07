@@ -255,17 +255,17 @@ def setup_isolated_home(enabled: bool) -> Path:
     the agent can authenticate against OpenRouter inside the isolated home.
     """
     home_dir = Path(tempfile.mkdtemp(prefix="hermes_ts_live_"))
-    hermes_home = home_dir / ".hermes"
-    hermes_home.mkdir(parents=True)
+    lliam_home = home_dir / ".hermes"
+    lliam_home.mkdir(parents=True)
 
     if ORIGINAL_AUTH.exists():
-        shutil.copy(ORIGINAL_AUTH, hermes_home / "auth.json")
+        shutil.copy(ORIGINAL_AUTH, lliam_home / "auth.json")
 
     # Copy .env so OPENROUTER_API_KEY (or others) are visible to the agent
     # running inside the isolated home.
     real_env_file = Path.home() / ".hermes" / ".env"
     if real_env_file.exists():
-        shutil.copy(real_env_file, hermes_home / ".env")
+        shutil.copy(real_env_file, lliam_home / ".env")
         # Also load the real user env into this process so the provider
         # resolver can authenticate. We go through the canonical loader
         # (python-dotenv under the hood) rather than parsing the file by
@@ -273,7 +273,7 @@ def setup_isolated_home(enabled: bool) -> Path:
         # this module, which both avoids a hand-rolled parser bug and keeps
         # static analysis from tainting the transcript records with the key.
         from lliam_cli.env_loader import load_hermes_dotenv
-        load_hermes_dotenv(hermes_home=str(Path.home() / ".hermes"))
+        load_hermes_dotenv(lliam_home=str(Path.home() / ".hermes"))
 
     cfg = {
         "model": {
@@ -290,8 +290,8 @@ def setup_isolated_home(enabled: bool) -> Path:
         },
         "logging": {"level": "WARNING"},
     }
-    (hermes_home / "config.yaml").write_text(_yaml_dump(cfg), encoding="utf-8")
-    return hermes_home
+    (lliam_home / "config.yaml").write_text(_yaml_dump(cfg), encoding="utf-8")
+    return lliam_home
 
 
 def _yaml_dump(obj: Any) -> str:

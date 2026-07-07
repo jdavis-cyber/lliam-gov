@@ -694,30 +694,30 @@ class TestHasAnyProviderConfigured:
     def test_glm_key_counts(self, monkeypatch, tmp_path):
         from lliam_cli import config as config_module
         monkeypatch.setenv("GLM_API_KEY", "test-key")
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        monkeypatch.setattr(config_module, "get_env_path", lambda: hermes_home / ".env")
-        monkeypatch.setattr(config_module, "get_lliam_home", lambda: hermes_home)
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
+        monkeypatch.setattr(config_module, "get_env_path", lambda: lliam_home / ".env")
+        monkeypatch.setattr(config_module, "get_lliam_home", lambda: lliam_home)
         from lliam_cli.main import _has_any_provider_configured
         assert _has_any_provider_configured() is True
 
     def test_minimax_key_counts(self, monkeypatch, tmp_path):
         from lliam_cli import config as config_module
         monkeypatch.setenv("MINIMAX_API_KEY", "test-key")
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        monkeypatch.setattr(config_module, "get_env_path", lambda: hermes_home / ".env")
-        monkeypatch.setattr(config_module, "get_lliam_home", lambda: hermes_home)
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
+        monkeypatch.setattr(config_module, "get_env_path", lambda: lliam_home / ".env")
+        monkeypatch.setattr(config_module, "get_lliam_home", lambda: lliam_home)
         from lliam_cli.main import _has_any_provider_configured
         assert _has_any_provider_configured() is True
 
     def test_gh_cli_token_counts(self, monkeypatch, tmp_path):
         from lliam_cli import config as config_module
         monkeypatch.setattr("lliam_cli.copilot_auth._try_gh_cli_token", lambda: "gho_cli_secret")
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        monkeypatch.setattr(config_module, "get_env_path", lambda: hermes_home / ".env")
-        monkeypatch.setattr(config_module, "get_lliam_home", lambda: hermes_home)
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
+        monkeypatch.setattr(config_module, "get_env_path", lambda: lliam_home / ".env")
+        monkeypatch.setattr(config_module, "get_lliam_home", lambda: lliam_home)
         from lliam_cli.main import _has_any_provider_configured
         assert _has_any_provider_configured() is True
 
@@ -725,10 +725,10 @@ class TestHasAnyProviderConfigured:
         """Claude Code credentials should NOT skip the wizard when Hermes is unconfigured."""
         from lliam_cli import config as config_module
         from lliam_cli.auth import PROVIDER_REGISTRY
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        monkeypatch.setattr(config_module, "get_env_path", lambda: hermes_home / ".env")
-        monkeypatch.setattr(config_module, "get_lliam_home", lambda: hermes_home)
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
+        monkeypatch.setattr(config_module, "get_env_path", lambda: lliam_home / ".env")
+        monkeypatch.setattr(config_module, "get_lliam_home", lambda: lliam_home)
         monkeypatch.setattr("lliam_cli.copilot_auth.resolve_copilot_token", lambda: ("", ""))
         # Clear all provider env vars so earlier checks don't short-circuit
         _all_vars = {"OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
@@ -756,15 +756,15 @@ class TestHasAnyProviderConfigured:
         """config.yaml with model.provider set should count as configured."""
         import yaml
         from lliam_cli import config as config_module
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        config_file = hermes_home / "config.yaml"
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
+        config_file = lliam_home / "config.yaml"
         config_file.write_text(yaml.dump({
             "model": {"default": "anthropic/claude-opus-4.6", "provider": "openrouter"},
         }))
-        monkeypatch.setattr(config_module, "get_env_path", lambda: hermes_home / ".env")
-        monkeypatch.setattr(config_module, "get_lliam_home", lambda: hermes_home)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setattr(config_module, "get_env_path", lambda: lliam_home / ".env")
+        monkeypatch.setattr(config_module, "get_lliam_home", lambda: lliam_home)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         # Clear all provider env vars
         for var in ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
                      "ANTHROPIC_TOKEN", "OPENAI_BASE_URL"):
@@ -776,15 +776,15 @@ class TestHasAnyProviderConfigured:
         """config.yaml with model.base_url set (custom endpoint) should count."""
         import yaml
         from lliam_cli import config as config_module
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        config_file = hermes_home / "config.yaml"
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
+        config_file = lliam_home / "config.yaml"
         config_file.write_text(yaml.dump({
             "model": {"default": "my-model", "base_url": "http://localhost:11434/v1"},
         }))
-        monkeypatch.setattr(config_module, "get_env_path", lambda: hermes_home / ".env")
-        monkeypatch.setattr(config_module, "get_lliam_home", lambda: hermes_home)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setattr(config_module, "get_env_path", lambda: lliam_home / ".env")
+        monkeypatch.setattr(config_module, "get_lliam_home", lambda: lliam_home)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         for var in ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
                      "ANTHROPIC_TOKEN", "OPENAI_BASE_URL"):
             monkeypatch.delenv(var, raising=False)
@@ -795,15 +795,15 @@ class TestHasAnyProviderConfigured:
         """config.yaml with model.api_key set should count."""
         import yaml
         from lliam_cli import config as config_module
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        config_file = hermes_home / "config.yaml"
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
+        config_file = lliam_home / "config.yaml"
         config_file.write_text(yaml.dump({
             "model": {"default": "my-model", "api_key": "sk-test-key"},
         }))
-        monkeypatch.setattr(config_module, "get_env_path", lambda: hermes_home / ".env")
-        monkeypatch.setattr(config_module, "get_lliam_home", lambda: hermes_home)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setattr(config_module, "get_env_path", lambda: lliam_home / ".env")
+        monkeypatch.setattr(config_module, "get_lliam_home", lambda: lliam_home)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         for var in ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
                      "ANTHROPIC_TOKEN", "OPENAI_BASE_URL"):
             monkeypatch.delenv(var, raising=False)
@@ -815,15 +815,15 @@ class TestHasAnyProviderConfigured:
         import yaml
         from lliam_cli import config as config_module
         from lliam_cli.auth import PROVIDER_REGISTRY
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        config_file = hermes_home / "config.yaml"
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
+        config_file = lliam_home / "config.yaml"
         config_file.write_text(yaml.dump({
             "model": {"default": ""},
         }))
-        monkeypatch.setattr(config_module, "get_env_path", lambda: hermes_home / ".env")
-        monkeypatch.setattr(config_module, "get_lliam_home", lambda: hermes_home)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setattr(config_module, "get_env_path", lambda: lliam_home / ".env")
+        monkeypatch.setattr(config_module, "get_lliam_home", lambda: lliam_home)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         monkeypatch.setattr("lliam_cli.copilot_auth.resolve_copilot_token", lambda: ("", ""))
         _all_vars = {"OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
                       "ANTHROPIC_TOKEN", "OPENAI_BASE_URL"}
@@ -841,14 +841,14 @@ class TestHasAnyProviderConfigured:
         """Claude Code credentials should count when Hermes has been explicitly configured."""
         import yaml
         from lliam_cli import config as config_module
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
         # Write a config with a non-default model to simulate explicit configuration
-        config_file = hermes_home / "config.yaml"
+        config_file = lliam_home / "config.yaml"
         config_file.write_text(yaml.dump({"model": {"default": "my-local-model"}}))
-        monkeypatch.setattr(config_module, "get_env_path", lambda: hermes_home / ".env")
-        monkeypatch.setattr(config_module, "get_lliam_home", lambda: hermes_home)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setattr(config_module, "get_env_path", lambda: lliam_home / ".env")
+        monkeypatch.setattr(config_module, "get_lliam_home", lambda: lliam_home)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         # Clear all provider env vars
         for var in ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
                      "ANTHROPIC_TOKEN", "OPENAI_BASE_URL"):

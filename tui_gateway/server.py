@@ -39,9 +39,9 @@ from tui_gateway.transport import (
 
 logger = logging.getLogger(__name__)
 
-_hermes_home = get_lliam_home()
+_lliam_home = get_lliam_home()
 load_hermes_dotenv(
-    hermes_home=_hermes_home, project_env=Path(__file__).parent.parent / ".env"
+    lliam_home=_lliam_home, project_env=Path(__file__).parent.parent / ".env"
 )
 
 
@@ -54,7 +54,7 @@ load_hermes_dotenv(
 # AND re-emits a one-line summary to stderr so the TUI can surface it in
 # Activity — exactly what was missing when the voice-mode turns started
 # exiting the gateway mid-TTS.
-_CRASH_LOG = os.path.join(_hermes_home, "logs", "tui_gateway_crash.log")
+_CRASH_LOG = os.path.join(_lliam_home, "logs", "tui_gateway_crash.log")
 
 
 def _panic_hook(exc_type, exc_value, exc_tb):
@@ -896,7 +896,7 @@ def _profile_home(profile: str | None) -> Path | None:
     except Exception:
         return None
     # Already the launch profile? No override needed.
-    if home.resolve() == Path(_hermes_home).resolve():
+    if home.resolve() == Path(_lliam_home).resolve():
         return None
     return home if (home / "state.db").exists() or home.exists() else None
 
@@ -1733,10 +1733,10 @@ def _load_cfg() -> dict:
 
         # Honor a per-session profile override (see session.resume) so a resumed
         # remote profile loads ITS config (model, skills, prompt); otherwise the
-        # launch profile's _hermes_home. Cache is keyed on the resolved path, so
+        # launch profile's _lliam_home. Cache is keyed on the resolved path, so
         # profiles don't clobber each other.
         override = get_lliam_home_override()
-        home = override if isinstance(override, str) and override else _hermes_home
+        home = override if isinstance(override, str) and override else _lliam_home
         p = Path(home) / "config.yaml"
         mtime = p.stat().st_mtime if p.exists() else None
         with _cfg_lock:
@@ -1782,7 +1782,7 @@ def _save_cfg(cfg: dict):
 
     from utils import atomic_yaml_write
 
-    path = _hermes_home / "config.yaml"
+    path = _lliam_home / "config.yaml"
     atomic_yaml_write(path, cfg)
     with _cfg_lock:
         _cfg_cache = copy.deepcopy(cfg)
@@ -8819,7 +8819,7 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 5027, f"clipboard unavailable: {e}")
 
     session["image_counter"] = session.get("image_counter", 0) + 1
-    img_dir = _hermes_home / "images"
+    img_dir = _lliam_home / "images"
     img_dir.mkdir(parents=True, exist_ok=True)
     img_path = (
         img_dir
@@ -8967,7 +8967,7 @@ def _queue_attached_image(session: dict, img_bytes: bytes, ext: str, *, prefix: 
     the existing native-image-attach pipeline. Returns the written path.
     """
     session["image_counter"] = session.get("image_counter", 0) + 1
-    img_dir = _hermes_home / "images"
+    img_dir = _lliam_home / "images"
     img_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     img_path = img_dir / f"{prefix}_{ts}_{session['image_counter']}{ext}"
@@ -10326,9 +10326,9 @@ def _is_repo_junk(root: str) -> bool:
 
     real = os.path.realpath(root)
     home = os.path.realpath(os.path.expanduser("~"))
-    hermes_home = os.path.realpath(str(get_lliam_home()))
+    lliam_home = os.path.realpath(str(get_lliam_home()))
 
-    return real == home or real == hermes_home or real.startswith(hermes_home + os.sep)
+    return real == home or real == lliam_home or real.startswith(lliam_home + os.sep)
 
 
 def _discover_repos_payload(db, *, conn=None, backfill: bool = True) -> list[dict]:
@@ -10613,7 +10613,7 @@ def _(rid, params: dict) -> dict:
     if key == "profile":
         from lliam_constants import display_lliam_home
 
-        return _ok(rid, {"home": str(_hermes_home), "display": display_lliam_home()})
+        return _ok(rid, {"home": str(_lliam_home), "display": display_lliam_home()})
     if key == "project":
         cfg_terminal = _load_cfg().get("terminal") or {}
         raw = str(params.get("cwd", "") or cfg_terminal.get("cwd", "") or "").strip()
@@ -10716,7 +10716,7 @@ def _(rid, params: dict) -> dict:
         display = _load_cfg().get("display")
         return _ok(rid, {"value": _display_mouse_tracking(display)})
     if key == "mtime":
-        cfg_path = _hermes_home / "config.yaml"
+        cfg_path = _lliam_home / "config.yaml"
         try:
             return _ok(
                 rid, {"mtime": cfg_path.stat().st_mtime if cfg_path.exists() else 0}
@@ -11608,7 +11608,7 @@ def _(rid, params: dict) -> dict:
 
     _paste_counter += 1
     line_count = text.count("\n") + 1
-    paste_dir = _hermes_home / "pastes"
+    paste_dir = _lliam_home / "pastes"
     paste_dir.mkdir(parents=True, exist_ok=True)
 
     from datetime import datetime
@@ -13144,7 +13144,7 @@ def _(rid, params: dict) -> dict:
                 "title": "Environment",
                 "rows": [
                     ["Working Dir", os.getcwd()],
-                    ["Config File", str(_hermes_home / "config.yaml")],
+                    ["Config File", str(_lliam_home / "config.yaml")],
                 ],
             },
         ]

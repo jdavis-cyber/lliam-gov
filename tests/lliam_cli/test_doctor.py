@@ -61,19 +61,19 @@ class TestDoctorEnvFileEncoding:
     ):
         import pathlib
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
         # Write a UTF-8 .env containing an em dash (U+2014 = e2 80 94). The
         # 0x94 byte is exactly the one the issue reporter hit: it's invalid
         # as a GBK trailing byte in this position, so locale-default reads
         # raise UnicodeDecodeError on Chinese Windows.
-        env_path = hermes_home / ".env"
+        env_path = lliam_home / ".env"
         env_path.write_text(
             "OPENAI_API_KEY=sk-test  # em-dash here — should not crash\n",
             encoding="utf-8",
         )
 
-        monkeypatch.setattr(doctor_mod, "HERMES_HOME", hermes_home)
+        monkeypatch.setattr(doctor_mod, "HERMES_HOME", lliam_home)
 
         orig_read_text = pathlib.Path.read_text
 
@@ -193,12 +193,12 @@ class TestHonchoDoctorConfigDetection:
 def test_run_doctor_sets_interactive_env_for_tool_checks(monkeypatch, tmp_path):
     """Doctor should present CLI-gated tools as available in CLI context."""
     project_root = tmp_path / "project"
-    hermes_home = tmp_path / ".hermes"
+    lliam_home = tmp_path / ".hermes"
     project_root.mkdir()
-    hermes_home.mkdir()
+    lliam_home.mkdir()
 
     monkeypatch.setattr(doctor_mod, "PROJECT_ROOT", project_root)
-    monkeypatch.setattr(doctor_mod, "HERMES_HOME", hermes_home)
+    monkeypatch.setattr(doctor_mod, "HERMES_HOME", lliam_home)
     # rename R.8a: doctor now sets LLIAM_INTERACTIVE; clear both first.
     monkeypatch.delenv("LLIAM_INTERACTIVE", raising=False)
     monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
@@ -1319,20 +1319,20 @@ class TestDoctorStaleMaxIterationsDrift:
         import io
         from argparse import Namespace
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir(parents=True)
-        (hermes_home / "config.yaml").write_text(
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir(parents=True)
+        (lliam_home / "config.yaml").write_text(
             f"agent:\n  max_turns: {cfg_turns}\n", encoding="utf-8"
         )
         env_lines = ["OPENAI_API_KEY=sk-test\n"]
         if ghost is not None:
             env_lines.append(f"HERMES_MAX_ITERATIONS={ghost}\n")
-        (hermes_home / ".env").write_text("".join(env_lines), encoding="utf-8")
+        (lliam_home / ".env").write_text("".join(env_lines), encoding="utf-8")
 
-        monkeypatch.setattr(doctor_mod, "HERMES_HOME", hermes_home)
-        monkeypatch.setattr(doctor_mod, "get_lliam_home", lambda: hermes_home)
+        monkeypatch.setattr(doctor_mod, "HERMES_HOME", lliam_home)
+        monkeypatch.setattr(doctor_mod, "get_lliam_home", lambda: lliam_home)
         # Point the config helpers at the temp home.
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         if os_environ_value is not None:
             # Simulate the gateway bridge having already overridden os.environ.
             monkeypatch.setenv("HERMES_MAX_ITERATIONS", str(os_environ_value))
@@ -1350,25 +1350,25 @@ class TestDoctorStaleMaxIterationsDrift:
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf), pytest.raises(SystemExit):
             doctor_mod.run_doctor(Namespace(fix=fix))
-        return buf.getvalue(), hermes_home
+        return buf.getvalue(), lliam_home
 
     def test_detects_drift_warn_only(self, monkeypatch, tmp_path):
-        out, hermes_home = self._run_config_section(
+        out, lliam_home = self._run_config_section(
             monkeypatch, tmp_path, fix=False, ghost=90, cfg_turns=400,
             os_environ_value=400,  # bridge contaminated os.environ
         )
         assert "HERMES_MAX_ITERATIONS=90" in out
         assert "shadows" in out
         # Warn-only must NOT mutate .env.
-        assert "HERMES_MAX_ITERATIONS=90" in (hermes_home / ".env").read_text(encoding="utf-8")
+        assert "HERMES_MAX_ITERATIONS=90" in (lliam_home / ".env").read_text(encoding="utf-8")
 
     def test_fix_removes_ghost(self, monkeypatch, tmp_path):
-        out, hermes_home = self._run_config_section(
+        out, lliam_home = self._run_config_section(
             monkeypatch, tmp_path, fix=True, ghost=90, cfg_turns=400,
             os_environ_value=400,
         )
         assert "Removed stale HERMES_MAX_ITERATIONS" in out
-        env_after = (hermes_home / ".env").read_text(encoding="utf-8")
+        env_after = (lliam_home / ".env").read_text(encoding="utf-8")
         assert "HERMES_MAX_ITERATIONS" not in env_after
         assert "OPENAI_API_KEY=sk-test" in env_after  # other keys preserved
 

@@ -1297,14 +1297,14 @@ class LineAdapter(BasePlatformAdapter):
 
         try:
             from lliam_constants import get_lliam_home
-            hermes_home = Path(get_lliam_home()).resolve()
+            lliam_home = Path(get_lliam_home()).resolve()
         except Exception:
-            hermes_home = Path.home().joinpath(".hermes").resolve()
+            lliam_home = Path.home().joinpath(".hermes").resolve()
 
         allowed_roots = {
             Path(tempfile.gettempdir()).resolve(),
             Path("/tmp").resolve(),  # → /private/tmp on macOS
-            hermes_home,
+            lliam_home,
         }
         resolved = path.resolve()
         if not any(_is_relative_to(resolved, r) for r in allowed_roots):

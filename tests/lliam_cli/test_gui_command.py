@@ -21,7 +21,7 @@ def _ns(**kw):
         source=False,
         fake_boot=False,
         ignore_existing=False,
-        hermes_root=None,
+        lliam_root=None,
         cwd=None,
     )
     defaults.update(kw)
@@ -79,9 +79,9 @@ def test_gui_installs_packages_and_launches_desktop_app(tmp_path, monkeypatch):
 
 def test_gui_forwards_desktop_environment_overrides(tmp_path, monkeypatch):
     root = _make_desktop_tree(tmp_path)
-    hermes_root = tmp_path / "custom-hermes"
+    lliam_root = tmp_path / "custom-hermes"
     cwd = tmp_path / "project"
-    hermes_root.mkdir()
+    lliam_root.mkdir()
     cwd.mkdir()
     monkeypatch.setattr(cli_main, "PROJECT_ROOT", root)
     _make_packaged_executable(root, monkeypatch)
@@ -98,14 +98,14 @@ def test_gui_forwards_desktop_environment_overrides(tmp_path, monkeypatch):
         cli_main.cmd_gui(_ns(
             fake_boot=True,
             ignore_existing=True,
-            hermes_root=str(hermes_root),
+            lliam_root=str(lliam_root),
             cwd=str(cwd),
         ))
 
     launch_env = mock_run.call_args_list[1].kwargs["env"]
     assert launch_env["LLIAM_DESKTOP_BOOT_FAKE"] == "1"
     assert launch_env["LLIAM_DESKTOP_IGNORE_EXISTING"] == "1"
-    assert launch_env["LLIAM_DESKTOP_HERMES_ROOT"] == str(hermes_root)
+    assert launch_env["LLIAM_DESKTOP_HERMES_ROOT"] == str(lliam_root)
     assert launch_env["LLIAM_DESKTOP_CWD"] == str(cwd)
 
 

@@ -43,7 +43,7 @@ def test_gateway_run_loader_honors_managed(homes, monkeypatch):
     _seed(home, managed, user="model:\n  default: user/m\n", mgd="model:\n  default: org/m\n")
     import gateway.run as gr
 
-    monkeypatch.setattr(gr, "_hermes_home", home, raising=False)
+    monkeypatch.setattr(gr, "_lliam_home", home, raising=False)
     cfg = gr._load_gateway_config()
     assert (cfg.get("model") or {}).get("default") == "org/m"
 
@@ -69,7 +69,7 @@ def test_tui_loader_honors_managed(homes, monkeypatch):
     _seed(home, managed, user="display:\n  skin: user\n", mgd="display:\n  skin: charizard\n")
     import tui_gateway.server as ts
 
-    monkeypatch.setattr(ts, "_hermes_home", home, raising=False)
+    monkeypatch.setattr(ts, "_lliam_home", home, raising=False)
     monkeypatch.setattr(ts, "_cfg_cache", None, raising=False)
     monkeypatch.setattr(ts, "_cfg_mtime", None, raising=False)
     monkeypatch.setattr(ts, "get_lliam_home_override", lambda: None, raising=False)
@@ -83,7 +83,7 @@ def test_tui_loader_does_not_persist_managed_back(homes, monkeypatch):
     _seed(home, managed, user="display:\n  skin: user\n", mgd="display:\n  skin: charizard\n")
     import tui_gateway.server as ts
 
-    monkeypatch.setattr(ts, "_hermes_home", home, raising=False)
+    monkeypatch.setattr(ts, "_lliam_home", home, raising=False)
     monkeypatch.setattr(ts, "_cfg_cache", None, raising=False)
     monkeypatch.setattr(ts, "_cfg_mtime", None, raising=False)
     monkeypatch.setattr(ts, "get_lliam_home_override", lambda: None, raising=False)

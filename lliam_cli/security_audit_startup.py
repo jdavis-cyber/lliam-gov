@@ -167,10 +167,10 @@ def _path_is_mounted(path: Path) -> bool:
     return best_fstype not in ("overlay", "tmpfs", "aufs")
 
 
-def _container_no_volume_mount(hermes_home: Optional[Path]) -> Optional[str]:
+def _container_no_volume_mount(lliam_home: Optional[Path]) -> Optional[str]:
     if not _in_container():
         return None
-    home = hermes_home or Path(
+    home = lliam_home or Path(
         os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))
     )
     try:
@@ -223,7 +223,7 @@ def _network_listener_without_auth(config: Optional[dict]) -> list[str]:
 
 
 def run_security_audit(
-    *, hermes_home: Optional[Path] = None, config: Optional[dict] = None
+    *, lliam_home: Optional[Path] = None, config: Optional[dict] = None
 ) -> list[str]:
     """Run all checks and return a list of human-readable warning strings.
 
@@ -243,7 +243,7 @@ def run_security_audit(
         except Exception:
             continue
     try:
-        r = _container_no_volume_mount(hermes_home)
+        r = _container_no_volume_mount(lliam_home)
         if r:
             findings.append(r)
     except Exception:
@@ -257,7 +257,7 @@ def run_security_audit(
 
 def log_startup_security_warnings(
     *,
-    hermes_home: Optional[Path] = None,
+    lliam_home: Optional[Path] = None,
     config: Optional[dict] = None,
     force: bool = False,
 ) -> list[str]:
@@ -271,7 +271,7 @@ def log_startup_security_warnings(
         return []
     _AUDIT_RAN = True
     try:
-        findings = run_security_audit(hermes_home=hermes_home, config=config)
+        findings = run_security_audit(lliam_home=lliam_home, config=config)
     except Exception:
         return []
     if findings:

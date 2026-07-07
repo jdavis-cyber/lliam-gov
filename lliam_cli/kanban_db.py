@@ -7624,7 +7624,7 @@ def _worker_terminal_timeout_env(
     return str(desired)
 
 
-def _resolve_worker_cli_toolsets(hermes_home: Optional[str]) -> Optional[list[str]]:
+def _resolve_worker_cli_toolsets(lliam_home: Optional[str]) -> Optional[list[str]]:
     """Return the assigned profile's effective CLI toolsets for a worker.
 
     Dispatcher-spawned workers are launched from a long-lived gateway process,
@@ -7635,14 +7635,14 @@ def _resolve_worker_cli_toolsets(hermes_home: Optional[str]) -> Optional[list[st
     is only the kanban orchestrator surface. ``model_tools`` still appends the
     task-scoped kanban lifecycle tools when ``HERMES_KANBAN_TASK`` is set.
     """
-    if not hermes_home:
+    if not lliam_home:
         return None
     try:
         from lliam_constants import reset_lliam_home_override, set_lliam_home_override
         from lliam_cli.config import load_config
         from lliam_cli.tools_config import _get_platform_tools
 
-        token = set_lliam_home_override(hermes_home)
+        token = set_lliam_home_override(lliam_home)
         try:
             cfg = load_config()
             toolsets = sorted(_get_platform_tools(cfg, "cli"))
@@ -7652,7 +7652,7 @@ def _resolve_worker_cli_toolsets(hermes_home: Optional[str]) -> Optional[list[st
     except Exception as exc:
         _log.debug(
             "kanban worker: could not resolve CLI toolsets for HERMES_HOME=%r (%s)",
-            hermes_home,
+            lliam_home,
             exc,
         )
         return None

@@ -579,11 +579,11 @@ def _build_hermes_tools_mcp_entry() -> dict:
     # a sibling test's monkeypatch.setenv("HERMES_HOME", tmp_path) would
     # otherwise leak a transient pytest tempdir into the user's real
     # ~/.codex/config.toml and silently brick codex once the tempdir is GC'd.
-    hermes_home = os.environ.get("HERMES_HOME") or ""
-    if hermes_home and _looks_like_test_tempdir(hermes_home):
-        hermes_home = ""
-    if hermes_home:
-        env["HERMES_HOME"] = hermes_home
+    lliam_home = os.environ.get("HERMES_HOME") or ""
+    if lliam_home and _looks_like_test_tempdir(lliam_home):
+        lliam_home = ""
+    if lliam_home:
+        env["HERMES_HOME"] = lliam_home
     # PYTHONPATH passes through so a worktree-launched hermes finds the
     # branch's modules instead of the installed package.
     pythonpath = os.environ.get("PYTHONPATH")

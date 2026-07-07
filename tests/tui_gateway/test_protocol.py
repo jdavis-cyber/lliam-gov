@@ -1209,12 +1209,12 @@ def test_make_agent_accepts_list_system_prompt(server, monkeypatch):
 
 
 def test_config_load_missing(server, tmp_path):
-    server._hermes_home = tmp_path
+    server._lliam_home = tmp_path
     assert server._load_cfg() == {}
 
 
 def test_config_roundtrip(server, tmp_path):
-    server._hermes_home = tmp_path
+    server._lliam_home = tmp_path
     server._save_cfg({"model": "test/model"})
     assert server._load_cfg()["model"] == "test/model"
 

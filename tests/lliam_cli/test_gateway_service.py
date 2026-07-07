@@ -1986,8 +1986,8 @@ class TestSystemUnitHermesHome:
         # User-scope units should still use the calling user's HERMES_HOME
         unit = gateway_cli.generate_systemd_unit(system=False)
 
-        hermes_home = str(gateway_cli.get_lliam_home().resolve())
-        assert f'HERMES_HOME={hermes_home}' in unit
+        lliam_home = str(gateway_cli.get_lliam_home().resolve())
+        assert f'HERMES_HOME={lliam_home}' in unit
 
 
 class TestHermesHomeForTargetUser:
@@ -2312,11 +2312,11 @@ class TestProfileArg:
 
     def test_default_hermes_home_returns_empty(self, tmp_path, monkeypatch):
         """Default ~/.hermes should not produce a --profile flag."""
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir()
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
-        result = gateway_cli._profile_arg(str(hermes_home))
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
+        result = gateway_cli._profile_arg(str(lliam_home))
         assert result == ""
 
     def test_named_profile_returns_flag(self, tmp_path, monkeypatch):

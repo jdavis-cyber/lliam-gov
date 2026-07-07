@@ -234,7 +234,7 @@ COMPONENT_PREFIXES = {
 
 def setup_logging(
     *,
-    hermes_home: Optional[Path] = None,
+    lliam_home: Optional[Path] = None,
     log_level: Optional[str] = None,
     max_size_mb: Optional[int] = None,
     backup_count: Optional[int] = None,
@@ -276,7 +276,7 @@ def setup_logging(
         The ``logs/`` directory where files are written.
     """
     global _logging_initialized
-    home = hermes_home or get_lliam_home()
+    home = lliam_home or get_lliam_home()
     log_dir = home / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
