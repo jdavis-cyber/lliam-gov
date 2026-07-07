@@ -78,6 +78,17 @@ WHOLE_TREE_KEEPS = [
     "website/i18n/zh-Hans/docusaurus-plugin-content-docs/current/user-guide/skills/optional/devops/devops-hermes-s6-container-supervision.md",
     # Upstream marketing post authored in Lliam-GOV's own voice (D4).
     "hermes-already-has-routines.md",
+    # OpenClaw->Hermes migration tool + its test. The rebrand-identity map
+    # (OpenClaw/ClawdBot/MoltBot -> "Hermes") and its lowercase branch are
+    # functionally coupled to the KEPT `.hermes` home: lowercase matches must
+    # rewrite `~/.openclaw` -> `~/.hermes` (the real home), not a non-existent
+    # `~/.lliam-gov`. 50+ rebrand outputs are asserted by string-equality in the
+    # test. Renaming the replacement value would inject a migration bug and break
+    # the external-contract test. Filename openclaw_to_hermes.py is itself a
+    # documented keep. Kept whole; a separate D-level decision, not a mechanical
+    # rename, governs whether the migration target identity ever changes.
+    "optional-skills/migration/openclaw-migration/scripts/openclaw_to_hermes.py",
+    "tests/skills/test_openclaw_migration.py",
 ]
 
 
@@ -158,6 +169,12 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"hermesbot-cron", "IRC handle — external"),
     (r"hermes-telegram|hermes-acp|hermes-achievements|hermes-update",
      "registered plugin/integration ids — external/contract"),
+    (r'"hermes-[a-z][a-z-]*"',
+     "toolset/platform-preset config key (cli-config.yaml.example platform_toolsets namespace) — "
+     "user-facing config contract; renaming breaks existing configs + string-equality tests"),
+    (r'hermes-\*|hermes-<|startswith\("hermes-"\)|"hermes-"|\[len\("hermes-"\)',
+     "toolset-key NAMESPACE prefix literal — the `hermes-<platform>` preset contract; "
+     "the startswith/prefix logic must match the kept toolset keys"),
 
     # --- Wire attribution to 3rd-party APIs (X-Title / User-Agent / registry name) ---
     (r'X-Title.*Hermes Agent|"Hermes Agent"', "OpenRouter X-Title / ACP registry name — wire attribution"),

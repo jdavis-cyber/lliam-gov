@@ -110,7 +110,7 @@ TOOLSETS = {
             "Search X (Twitter) posts and threads via xAI's built-in "
             "x_search Responses tool. Available when xAI credentials are "
             "configured (SuperGrok OAuth or XAI_API_KEY). Off by default; "
-            "enable in `hermes tools` → X (Twitter) Search."
+            "enable in `lliam-gov tools` → X (Twitter) Search."
         ),
         "tools": ["x_search"],
         "includes": []
@@ -139,7 +139,7 @@ TOOLSETS = {
             "Video generation tools. Single ``video_generate`` tool covers "
             "text-to-video (prompt only) and image-to-video (prompt + "
             "image_url) — the active backend auto-routes. Configure via "
-            "``hermes tools`` → Video Generation."
+            "``lliam-gov tools`` → Video Generation."
         ),
         "tools": ["video_generate"],
         "includes": []
@@ -337,7 +337,7 @@ TOOLSETS = {
         "includes": ["web", "vision", "image_gen"]
     },
 
-    # Coding posture (base Hermes — CLI/TUI/desktop/ACP). Auto-selected in a
+    # Coding posture (base Lliam-GOV — CLI/TUI/desktop/ACP). Auto-selected in a
     # code workspace; see agent/coding_context.py. Keeps everything you reach
     # for while pairing on code and drops the rest (messaging, tts, image_gen,
     # spotify, home-assistant, cron, computer-use).
@@ -365,12 +365,12 @@ TOOLSETS = {
     },
     
     # ==========================================================================
-    # Full Hermes toolsets (CLI + messaging platforms)
+    # Full Lliam-GOV toolsets (CLI + messaging platforms)
     #
     # All platforms share the same core tools. Note: agents do NOT get an
     # agent-callable send_message tool — outbound platform messaging is handled
     # outside the agent loop (cron delivery, the gateway kanban notifier, and
-    # the `hermes send` CLI), not by the model deciding to send on its own.
+    # the `lliam-gov send` CLI), not by the model deciding to send on its own.
     # ==========================================================================
 
     "hermes-acp": {
@@ -433,11 +433,11 @@ TOOLSETS = {
 
     "hermes-cron": {
         # Mirrors hermes-cli so cron's "default" toolset is the same set of
-        # core tools users see interactively — then `hermes tools` filters
+        # core tools users see interactively — then `lliam-gov tools` filters
         # them down per the platform config. _DEFAULT_OFF_TOOLSETS (moa,
         # homeassistant) are excluded by _get_platform_tools() unless
         # the user explicitly enables them.
-        "description": "Default cron toolset - same core tools as hermes-cli; gated by `hermes tools`",
+        "description": "Default cron toolset - same core tools as hermes-cli; gated by `lliam-gov tools`",
         "tools": _LLIAM_CORE_TOOLS,
         "includes": []
     },
@@ -488,7 +488,7 @@ TOOLSETS = {
     },
 
     "hermes-email": {
-        "description": "Email bot toolset - interact with Hermes via email (IMAP/SMTP)",
+        "description": "Email bot toolset - interact with Lliam-GOV via email (IMAP/SMTP)",
         "tools": _LLIAM_CORE_TOOLS,
         "includes": []
     },
@@ -561,7 +561,7 @@ TOOLSETS = {
     },
 
     "hermes-sms": {
-        "description": "SMS bot toolset - interact with Hermes via SMS (Twilio)",
+        "description": "SMS bot toolset - interact with Lliam-GOV via SMS (Twilio)",
         "tools": _LLIAM_CORE_TOOLS,
         "includes": []
     },
