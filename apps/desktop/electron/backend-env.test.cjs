@@ -13,7 +13,7 @@ const {
 
 test('desktop backend PATH adds Lliam-managed bins and missing POSIX sane entries', () => {
   const result = buildDesktopBackendPath({
-    hermesHome: '/Users/test/.hermes',
+    lliamHome: '/Users/test/.hermes',
     venvRoot: '/Users/test/.hermes/hermes-agent/venv',
     currentPath: '/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin',
     platform: 'darwin',
@@ -34,7 +34,7 @@ test('desktop backend PATH adds Lliam-managed bins and missing POSIX sane entrie
 
 test('desktop backend PATH preserves first occurrence and avoids duplicates', () => {
   const result = buildDesktopBackendPath({
-    hermesHome: '/Users/test/.hermes',
+    lliamHome: '/Users/test/.hermes',
     venvRoot: '/Users/test/.hermes/hermes-agent/venv',
     currentPath: '/opt/homebrew/bin:/usr/bin:/opt/homebrew/bin:/bin',
     platform: 'darwin',
@@ -51,7 +51,7 @@ test('desktop backend PATH preserves first occurrence and avoids duplicates', ()
 
 test('buildDesktopBackendEnv extends PYTHONPATH and backend PATH together', () => {
   const env = buildDesktopBackendEnv({
-    hermesHome: '/Users/test/.hermes',
+    lliamHome: '/Users/test/.hermes',
     pythonPathEntries: ['/repo/hermes-agent'],
     venvRoot: '/Users/test/.hermes/hermes-agent/venv',
     currentEnv: {
@@ -81,7 +81,7 @@ test('normalizeLliamHomeRoot maps profile homes back to the global Lliam-GOV roo
 
 test('Windows PATH casing and delimiter are preserved without POSIX sane entries', () => {
   const env = buildDesktopBackendEnv({
-    hermesHome: 'C:\\Users\\test\\AppData\\Local\\hermes',
+    lliamHome: 'C:\\Users\\test\\AppData\\Local\\hermes',
     pythonPathEntries: ['C:\\repo\\hermes-agent'],
     venvRoot: 'C:\\Users\\test\\AppData\\Local\\hermes\\hermes-agent\\venv',
     currentEnv: {

@@ -236,11 +236,11 @@ function launchFresh() {
 
   const sandbox = fs.mkdtempSync(`${FRESH_SANDBOX_ROOT}-`)
   const userDataDir = path.join(sandbox, 'electron-user-data')
-  const hermesHome = path.join(sandbox, 'hermes-home')
+  const lliamHome = path.join(sandbox, 'hermes-home')
   const cwd = path.join(sandbox, 'workspace')
 
   fs.mkdirSync(userDataDir, { recursive: true })
-  fs.mkdirSync(hermesHome, { recursive: true })
+  fs.mkdirSync(lliamHome, { recursive: true })
   fs.mkdirSync(cwd, { recursive: true })
 
   // Strip every credential-shaped env var so the sandbox is actually fresh.
@@ -254,7 +254,7 @@ function launchFresh() {
   env.LLIAM_DESKTOP_IGNORE_EXISTING = '1'
   env.LLIAM_DESKTOP_TEST_MODE = 'fresh-install'
   env.LLIAM_DESKTOP_USER_DATA_DIR = userDataDir
-  env.HERMES_HOME = hermesHome
+  env.HERMES_HOME = lliamHome
   delete env.LLIAM_DESKTOP_HERMES
   delete env.LLIAM_DESKTOP_HERMES_ROOT
 
@@ -269,10 +269,10 @@ function launchFresh() {
   console.log('\nFresh install sandbox:')
   console.log(`  root: ${sandbox}`)
   console.log(`  electron userData: ${userDataDir}`)
-  console.log(`  HERMES_HOME: ${hermesHome}`)
+  console.log(`  HERMES_HOME: ${lliamHome}`)
   console.log(`  cwd: ${cwd}`)
 
-  return { runtimeRoot: path.join(hermesHome, 'hermes-agent', 'venv') }
+  return { runtimeRoot: path.join(lliamHome, 'hermes-agent', 'venv') }
 }
 
 // Validate the packaged bundle matches the thin-installer architecture:

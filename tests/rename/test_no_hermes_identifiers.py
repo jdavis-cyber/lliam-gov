@@ -260,6 +260,8 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     # --- Wire attribution to 3rd-party APIs (X-Title / User-Agent / registry name) ---
     (r'X-Title.*Hermes Agent|"Hermes Agent"', "OpenRouter X-Title / ACP registry name — wire attribution"),
     (r"Hermes-Watcher|Hermes[- ]Agent[/ ]", "User-Agent value sent to 3rd-party API"),
+    (r'"User-Agent":\s*"Hermes"|User-Agent.*"Hermes"',
+     "bare 'Hermes' User-Agent value sent to a 3rd-party API — wire attribution"),
     (r"HermesDashboard/|hermes-dashboard/1\.0",
      "User-Agent value the dashboard sends to 3rd-party APIs — wire attribution"),
     (r"codex_cli_rs|graph-client|x-exa", "3rd-party User-Agent/integration value on a hermes line"),
@@ -461,6 +463,18 @@ KEEP_PATTERNS += [
     # --- kanban/godmode opaque account/model data ---
     (r'kc_account="\$\{2:-hermes\}|check_key.*hermes|return "hermes"|installed hermes CLI',
      "kanban service-account default / godmode model-name data / skill diagnostic — opaque data"),
+    (r'restart\\s\+.*hermes|restart\s+hermes|Fallback:.*"hermes"|seen\.add\("hermes"\)|'
+     r'Portal NAS #293 / hermes|3\. Fallback',
+     "restart-command DETECTION regex / honcho profile fallback default / seeded provider-list "
+     "datum / wrapped upstream issue ref — detection or opaque data"),
+    (r"hermes-already-has-routines",
+     "reference to the kept upstream marketing post filename (in a governance keep-register)"),
+    # --- Test-fixture data under apps/**/*.test.* (opaque values a test asserts/uses) ---
+    (r"pattern=hermes|'hermes-x'|'hermes-y'|\"hermes-x\"|\"hermes-y\"|hermes-probes-ghost-|"
+     r"hermes-probes-o|\.mount_Hermes|hermes-execf|Hermes here\.|hermes/test-gui-stuff|"
+     r"C:\\\\hermes|/home/x/\.hermes|hermesHome: home",
+     "apps/**/*.test.* fixture data — opaque model ids / tmp prefixes / branch names / ANSI "
+     "sample text a test asserts or uses as input, not the product display name"),
 ]
 
 _COMPILED = [(re.compile(rx, re.IGNORECASE), why) for rx, why in KEEP_PATTERNS]
