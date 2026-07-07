@@ -154,8 +154,8 @@ def _core_tool_names() -> frozenset[str]:
     and we don't want a hard cycle.
     """
     try:
-        from toolsets import _HERMES_CORE_TOOLS
-        return frozenset(_HERMES_CORE_TOOLS)
+        from toolsets import _LLIAM_CORE_TOOLS
+        return frozenset(_LLIAM_CORE_TOOLS)
     except Exception:
         return frozenset()
 

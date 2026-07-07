@@ -75,7 +75,7 @@ def _resolve_safe_cwd(cwd: str) -> str:
 
 
 # Hermes-internal env vars that should NOT leak into terminal subprocesses.
-_HERMES_PROVIDER_ENV_FORCE_PREFIX = "_HERMES_FORCE_"
+_LLIAM_PROVIDER_ENV_FORCE_PREFIX = "_HERMES_FORCE_"
 
 # Hermes-managed AWS *inference* credentials for ``auth_type="aws_sdk"``
 # providers (Bedrock).  Scoped DELIBERATELY NARROW: this lists only the
@@ -192,7 +192,7 @@ def _build_provider_env_blocklist() -> frozenset:
     return frozenset(blocked)
 
 
-_HERMES_PROVIDER_ENV_BLOCKLIST = _build_provider_env_blocklist()
+_LLIAM_PROVIDER_ENV_BLOCKLIST = _build_provider_env_blocklist()
 
 # Active-virtualenv markers that must NOT leak into terminal subprocesses.
 # The gateway runs inside its own venv, so its process environment carries
@@ -229,16 +229,16 @@ def _sanitize_subprocess_env(base_env: dict | None, extra_env: dict | None = Non
     sanitized: dict[str, str] = {}
 
     for key, value in (base_env or {}).items():
-        if key.startswith(_HERMES_PROVIDER_ENV_FORCE_PREFIX):
+        if key.startswith(_LLIAM_PROVIDER_ENV_FORCE_PREFIX):
             continue
-        if key not in _HERMES_PROVIDER_ENV_BLOCKLIST or _is_passthrough(key):
+        if key not in _LLIAM_PROVIDER_ENV_BLOCKLIST or _is_passthrough(key):
             sanitized[key] = value
 
     for key, value in (extra_env or {}).items():
-        if key.startswith(_HERMES_PROVIDER_ENV_FORCE_PREFIX):
-            real_key = key[len(_HERMES_PROVIDER_ENV_FORCE_PREFIX):]
+        if key.startswith(_LLIAM_PROVIDER_ENV_FORCE_PREFIX):
+            real_key = key[len(_LLIAM_PROVIDER_ENV_FORCE_PREFIX):]
             sanitized[real_key] = value
-        elif key not in _HERMES_PROVIDER_ENV_BLOCKLIST or _is_passthrough(key):
+        elif key not in _LLIAM_PROVIDER_ENV_BLOCKLIST or _is_passthrough(key):
             sanitized[key] = value
 
     _inject_context_hermes_home(sanitized)
@@ -325,12 +325,12 @@ def hermes_subprocess_env(*, inherit_credentials: bool = False) -> dict[str, str
         env.pop(key, None)
     # Internal routing hints must never reach a child.
     for key in list(env):
-        if key.startswith(_HERMES_PROVIDER_ENV_FORCE_PREFIX):
+        if key.startswith(_LLIAM_PROVIDER_ENV_FORCE_PREFIX):
             env.pop(key, None)
 
     if not inherit_credentials:
         # Tier 2 — strip provider/tool credentials unless explicitly inherited.
-        for key in _HERMES_PROVIDER_ENV_BLOCKLIST:
+        for key in _LLIAM_PROVIDER_ENV_BLOCKLIST:
             env.pop(key, None)
 
     # Windows UTF-8 safety for spawned processes (#31420).
@@ -611,10 +611,10 @@ def _make_run_env(env: dict) -> dict:
     merged = dict(os.environ | env)
     run_env = {}
     for k, v in merged.items():
-        if k.startswith(_HERMES_PROVIDER_ENV_FORCE_PREFIX):
-            real_key = k[len(_HERMES_PROVIDER_ENV_FORCE_PREFIX):]
+        if k.startswith(_LLIAM_PROVIDER_ENV_FORCE_PREFIX):
+            real_key = k[len(_LLIAM_PROVIDER_ENV_FORCE_PREFIX):]
             run_env[real_key] = v
-        elif k not in _HERMES_PROVIDER_ENV_BLOCKLIST or _is_passthrough(k):
+        elif k not in _LLIAM_PROVIDER_ENV_BLOCKLIST or _is_passthrough(k):
             run_env[k] = v
     path_key = _path_env_key(run_env)
     if path_key is not None:

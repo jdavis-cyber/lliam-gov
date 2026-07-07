@@ -95,7 +95,7 @@ _SECRET_SUBSTRINGS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL",
 # are non-secret runtime-location flags (the same set lliam_cli treats as the
 # runtime location) that repo-root modules a sandbox script imports may read at
 # import time.  None match _SECRET_SUBSTRINGS.
-_HERMES_CHILD_ALLOWED = frozenset({
+_LLIAM_CHILD_ALLOWED = frozenset({
     # New LLIAM_ names (rename R.8a) and legacy HERMES_ names both pass —
     # producers now set the LLIAM_ names; the HERMES_ names stay allowlisted
     # for the transition window so an externally-exported legacy var still
@@ -184,7 +184,7 @@ def _scrub_child_env(source_env, is_passthrough=None, is_windows=None):
         if any(k.startswith(p) for p in _SAFE_ENV_PREFIXES):
             scrubbed[k] = v
             continue
-        if k in _HERMES_CHILD_ALLOWED:
+        if k in _LLIAM_CHILD_ALLOWED:
             scrubbed[k] = v
             continue
         if is_windows and k.upper() in _WINDOWS_ESSENTIAL_ENV_VARS:

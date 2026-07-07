@@ -36,7 +36,7 @@ from acp.schema import (
     UserMessageChunk,
 )
 from acp_adapter.auth import TERMINAL_SETUP_AUTH_METHOD_ID
-from acp_adapter.server import LliamACPAgent, HERMES_VERSION
+from acp_adapter.server import LliamACPAgent, LLIAM_VERSION
 from acp_adapter.session import SessionManager
 from lliam_state import SessionDB
 
@@ -100,7 +100,7 @@ class TestInitialize:
         assert resp.agent_info is not None
         assert isinstance(resp.agent_info, Implementation)
         assert resp.agent_info.name == "hermes-agent"
-        assert resp.agent_info.version == HERMES_VERSION
+        assert resp.agent_info.version == LLIAM_VERSION
 
     @pytest.mark.asyncio
     async def test_initialize_returns_capabilities(self, agent):
@@ -1545,7 +1545,7 @@ class TestSlashCommands:
     def test_version(self, agent, mock_manager):
         state = self._make_state(mock_manager)
         result = agent._handle_slash_command("/version", state)
-        assert HERMES_VERSION in result
+        assert LLIAM_VERSION in result
 
     def test_compact_compresses_context(self, agent, mock_manager):
         state = self._make_state(mock_manager)

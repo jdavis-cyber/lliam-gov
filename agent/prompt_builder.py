@@ -76,7 +76,7 @@ def _find_git_root(start: Path) -> Optional[Path]:
     return None
 
 
-_HERMES_MD_NAMES = (".hermes.md", "HERMES.md")
+_LLIAM_MD_NAMES = (".hermes.md", "HERMES.md")
 
 
 def _find_hermes_md(cwd: Path) -> Optional[Path]:
@@ -90,7 +90,7 @@ def _find_hermes_md(cwd: Path) -> Optional[Path]:
     current = cwd.resolve()
 
     for directory in [current, *current.parents]:
-        for name in _HERMES_MD_NAMES:
+        for name in _LLIAM_MD_NAMES:
             candidate = directory / name
             if candidate.is_file():
                 return candidate
@@ -131,7 +131,7 @@ DEFAULT_AGENT_IDENTITY = (
     "Be targeted and efficient in your exploration and investigations."
 )
 
-HERMES_AGENT_HELP_GUIDANCE = (
+LLIAM_AGENT_HELP_GUIDANCE = (
     "You run on Hermes Agent (by Nous Research). When the user needs help with "
     "Hermes itself — configuring, setting up, using, extending, or troubleshooting "
     "it — or when you need to understand your own features, tools, or capabilities, "

@@ -103,12 +103,12 @@ logger = logging.getLogger(__name__)
 # Version / platform constants (used in AUTH_BIND and sign-token headers)
 # ---------------------------------------------------------------------------
 try:
-    from lliam_cli import __version__ as _HERMES_VERSION
+    from lliam_cli import __version__ as _LLIAM_VERSION
 except ImportError:
-    _HERMES_VERSION = "0.0.0"
+    _LLIAM_VERSION = "0.0.0"
 
-_APP_VERSION = _HERMES_VERSION
-_BOT_VERSION = _HERMES_VERSION
+_APP_VERSION = _LLIAM_VERSION
+_BOT_VERSION = _LLIAM_VERSION
 _YUANBAO_INSTANCE_ID = str(HERMES_INSTANCE_ID)  # single source: yuanbao_proto.HERMES_INSTANCE_ID
 _OPERATION_SYSTEM = sys.platform
 

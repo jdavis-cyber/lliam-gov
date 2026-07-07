@@ -17,7 +17,7 @@ from unittest.mock import patch
 from tools.environments.local import (
     hermes_subprocess_env,
     _ALWAYS_STRIP_KEYS,
-    _HERMES_PROVIDER_ENV_FORCE_PREFIX,
+    _LLIAM_PROVIDER_ENV_FORCE_PREFIX,
 )
 
 
@@ -70,8 +70,8 @@ class TestStripByDefault:
         assert result["MY_APP_VAR"] == "keep-me"
 
     def test_force_prefix_hints_stripped(self):
-        result = _build({f"{_HERMES_PROVIDER_ENV_FORCE_PREFIX}OPENAI_API_KEY": "sk-x"})
-        assert f"{_HERMES_PROVIDER_ENV_FORCE_PREFIX}OPENAI_API_KEY" not in result
+        result = _build({f"{_LLIAM_PROVIDER_ENV_FORCE_PREFIX}OPENAI_API_KEY": "sk-x"})
+        assert f"{_LLIAM_PROVIDER_ENV_FORCE_PREFIX}OPENAI_API_KEY" not in result
         assert "OPENAI_API_KEY" not in result
 
     def test_pythonutf8_set(self):

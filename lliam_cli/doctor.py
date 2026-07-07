@@ -25,7 +25,7 @@ _env_path = get_env_path()
 load_hermes_dotenv(lliam_home=_env_path.parent, project_env=PROJECT_ROOT / ".env")
 
 from lliam_cli.colors import Colors, color
-from lliam_cli.models import _HERMES_USER_AGENT
+from lliam_cli.models import _LLIAM_USER_AGENT
 from lliam_constants import OPENROUTER_MODELS_URL
 from utils import base_url_host_matches
 
@@ -1899,7 +1899,7 @@ def run_doctor(args):
             url = (base.rstrip("/") + "/models") if base else default_url
             headers = {
                 "Authorization": f"Bearer {key}",
-                "User-Agent": _HERMES_USER_AGENT,
+                "User-Agent": _LLIAM_USER_AGENT,
             }
             if base_url_host_matches(base, "api.kimi.com"):
                 headers["User-Agent"] = "claude-code/0.1.0"

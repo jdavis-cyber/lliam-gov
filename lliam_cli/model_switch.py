@@ -73,7 +73,7 @@ def _bare_custom_provider_def(current_base_url: str) -> Optional[ProviderDef]:
 # Non-agentic model warning
 # ---------------------------------------------------------------------------
 
-_HERMES_MODEL_WARNING = (
+_LLIAM_MODEL_WARNING = (
     "Nous Research Hermes 3 & 4 models are NOT agentic and are not designed "
     "for use with Lliam-GOV. They lack the tool-calling capabilities "
     "required for agent workflows. Consider using an agentic model instead "
@@ -110,7 +110,7 @@ def is_nous_hermes_non_agentic(model_name: str) -> bool:
 def _check_hermes_model_warning(model_name: str) -> str:
     """Return a warning string if *model_name* is a Nous Hermes 3/4 chat model."""
     if is_nous_hermes_non_agentic(model_name):
-        return _HERMES_MODEL_WARNING
+        return _LLIAM_MODEL_WARNING
     return ""
 
 

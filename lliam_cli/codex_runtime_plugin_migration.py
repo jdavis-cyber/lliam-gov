@@ -106,7 +106,7 @@ class MigrationReport:
 # Hermes keys that codex's MCP schema doesn't support — dropped during
 # migration with a warning. Anything not on the keep list AND not the
 # transport keys is added to skipped.
-_KNOWN_HERMES_KEYS = {
+_KNOWN_LLIAM_KEYS = {
     # transport — stdio
     "command", "args", "env", "cwd",
     # transport — http
@@ -190,7 +190,7 @@ def _translate_one_server(
     for key in hermes_cfg:
         if key in _KEYS_DROPPED_WITH_WARNING:
             skipped.append(f"{key} (no codex equivalent)")
-        elif key not in _KNOWN_HERMES_KEYS:
+        elif key not in _KNOWN_LLIAM_KEYS:
             skipped.append(f"{key} (unknown Hermes key)")
 
     return out, skipped

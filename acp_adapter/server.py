@@ -79,9 +79,9 @@ from acp_adapter.tools import build_tool_complete, build_tool_start
 logger = logging.getLogger(__name__)
 
 try:
-    from lliam_cli import __version__ as HERMES_VERSION
+    from lliam_cli import __version__ as LLIAM_VERSION
 except Exception:
-    HERMES_VERSION = "0.0.0"
+    LLIAM_VERSION = "0.0.0"
 
 # Thread pool for running AIAgent (synchronous) in parallel.
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="acp-agent")
@@ -880,7 +880,7 @@ class LliamACPAgent(acp.Agent):
 
         return InitializeResponse(
             protocol_version=acp.PROTOCOL_VERSION,
-            agent_info=Implementation(name="hermes-agent", version=HERMES_VERSION),
+            agent_info=Implementation(name="hermes-agent", version=LLIAM_VERSION),
             agent_capabilities=AgentCapabilities(
                 load_session=True,
                 prompt_capabilities=PromptCapabilities(image=True),
@@ -1984,7 +1984,7 @@ class LliamACPAgent(acp.Agent):
         return f"Queued for the next turn. ({depth} queued)"
 
     def _cmd_version(self, args: str, state: SessionState) -> str:
-        return f"Hermes Agent v{HERMES_VERSION}"
+        return f"Hermes Agent v{LLIAM_VERSION}"
 
     # ---- Model switching (ACP protocol method) -------------------------------
 

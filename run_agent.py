@@ -238,10 +238,10 @@ _QWEN_CODE_VERSION = "0.14.1"
 
 def _routermint_headers() -> dict:
     """Return the User-Agent RouterMint needs to avoid Cloudflare 1010 blocks."""
-    from lliam_cli import __version__ as _HERMES_VERSION
+    from lliam_cli import __version__ as _LLIAM_VERSION
 
     return {
-        "User-Agent": f"HermesAgent/{_HERMES_VERSION}",
+        "User-Agent": f"HermesAgent/{_LLIAM_VERSION}",
     }
 
 

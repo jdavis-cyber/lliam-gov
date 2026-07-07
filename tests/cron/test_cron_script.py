@@ -134,12 +134,12 @@ class TestRunJobScript:
 
     def test_script_subprocess_env_sanitized(self, cron_env, monkeypatch):
         """Cron scripts must not inherit Hermes provider env (SECURITY.md §2.3)."""
-        from tools.environments.local import _HERMES_PROVIDER_ENV_BLOCKLIST
+        from tools.environments.local import _LLIAM_PROVIDER_ENV_BLOCKLIST
         from cron.scheduler import _run_job_script
 
         # sorted() so the probed var is deterministic across runs
         # (frozenset iteration order varies with PYTHONHASHSEED).
-        blocked_var = sorted(_HERMES_PROVIDER_ENV_BLOCKLIST)[0]
+        blocked_var = sorted(_LLIAM_PROVIDER_ENV_BLOCKLIST)[0]
         monkeypatch.setenv(blocked_var, "must_not_leak")
 
         script = cron_env / "scripts" / "env_probe.py"

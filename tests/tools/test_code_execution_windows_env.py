@@ -268,7 +268,7 @@ def _legacy_posix_scrubber(source_env, is_passthrough):
                           "XDG_", "PYTHONPATH", "VIRTUAL_ENV", "CONDA")
     _SECRET_SUBSTRINGS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL",
                           "PASSWD", "AUTH", "DSN", "WEBHOOK")
-    _HERMES_CHILD_ALLOWED = frozenset({
+    _LLIAM_CHILD_ALLOWED = frozenset({
         "HERMES_HOME", "HERMES_PROFILE", "HERMES_CONFIG", "HERMES_ENV",
     })
     out = {}
@@ -281,7 +281,7 @@ def _legacy_posix_scrubber(source_env, is_passthrough):
         if any(k.startswith(p) for p in _SAFE_ENV_PREFIXES):
             out[k] = v
             continue
-        if k in _HERMES_CHILD_ALLOWED:
+        if k in _LLIAM_CHILD_ALLOWED:
             out[k] = v
     return out
 

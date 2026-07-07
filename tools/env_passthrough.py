@@ -66,7 +66,7 @@ def _is_hermes_provider_credential(name: str) -> bool:
     let a skill tunnel a Hermes credential into the execute_code child.
     """
     try:
-        from tools.environments.local import _HERMES_PROVIDER_ENV_BLOCKLIST
+        from tools.environments.local import _LLIAM_PROVIDER_ENV_BLOCKLIST
     except Exception as e:
         logger.warning(
             "env passthrough: provider credential blocklist import failed; "
@@ -75,7 +75,7 @@ def _is_hermes_provider_credential(name: str) -> bool:
             e,
         )
         return True
-    return name in _HERMES_PROVIDER_ENV_BLOCKLIST
+    return name in _LLIAM_PROVIDER_ENV_BLOCKLIST
 
 
 def register_env_passthrough(var_names: Iterable[str]) -> None:
