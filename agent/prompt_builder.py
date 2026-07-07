@@ -79,7 +79,7 @@ def _find_git_root(start: Path) -> Optional[Path]:
 _LLIAM_MD_NAMES = (".hermes.md", "HERMES.md")
 
 
-def _find_hermes_md(cwd: Path) -> Optional[Path]:
+def _find_lliam_md(cwd: Path) -> Optional[Path]:
     """Discover the nearest ``.hermes.md`` or ``HERMES.md``.
 
     Search order: *cwd* first, then each parent directory up to (and
@@ -1824,29 +1824,29 @@ def load_soul_md(context_length: Optional[int] = None) -> Optional[str]:
         return None
 
 
-def _load_hermes_md(cwd_path: Path, context_length: Optional[int] = None) -> str:
+def _load_lliam_md(cwd_path: Path, context_length: Optional[int] = None) -> str:
     """.hermes.md / HERMES.md — walk to git root."""
-    hermes_md_path = _find_hermes_md(cwd_path)
-    if not hermes_md_path:
+    lliam_md_path = _find_lliam_md(cwd_path)
+    if not lliam_md_path:
         return ""
     try:
-        content = hermes_md_path.read_text(encoding="utf-8").strip()
+        content = lliam_md_path.read_text(encoding="utf-8").strip()
         if not content:
             return ""
         content = _strip_yaml_frontmatter(content)
-        rel = hermes_md_path.name
+        rel = lliam_md_path.name
         try:
-            rel = str(hermes_md_path.relative_to(cwd_path))
+            rel = str(lliam_md_path.relative_to(cwd_path))
         except ValueError:
             pass
         content = _scan_context_content(content, rel)
         result = f"## {rel}\n\n{content}"
         return _truncate_content(
             result, ".hermes.md", context_length=context_length,
-            read_path=str(hermes_md_path),
+            read_path=str(lliam_md_path),
         )
     except Exception as e:
-        logger.debug("Could not read %s: %s", hermes_md_path, e)
+        logger.debug("Could not read %s: %s", lliam_md_path, e)
         return ""
 
 
@@ -1952,7 +1952,7 @@ def build_context_files_prompt(
 
     # Priority-based project context: first match wins
     project_context = (
-        _load_hermes_md(cwd_path, context_length)
+        _load_lliam_md(cwd_path, context_length)
         or _load_agents_md(cwd_path, context_length)
         or _load_claude_md(cwd_path, context_length)
         or _load_cursorrules(cwd_path, context_length)

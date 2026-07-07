@@ -53,9 +53,9 @@ def get_env_value(name: str, default=None):
     xAI credential resolver.
     """
     try:
-        from lliam_cli.config import get_env_value as _hermes_get_env_value
+        from lliam_cli.config import get_env_value as _lliam_get_env_value
 
-        value = _hermes_get_env_value(name)
+        value = _lliam_get_env_value(name)
         if value is not None:
             return value
     except Exception:

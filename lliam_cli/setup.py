@@ -2047,7 +2047,7 @@ def setup_gateway(config: dict):
             _is_service_running,
             supports_systemd_services,
             has_conflicting_systemd_units,
-            has_legacy_hermes_units,
+            has_legacy_lliam_units,
             install_linux_gateway_from_setup,
             print_systemd_scope_conflict_warning,
             print_legacy_unit_warning,
@@ -2072,7 +2072,7 @@ def setup_gateway(config: dict):
             print_systemd_scope_conflict_warning()
             print()
 
-        if supports_systemd and has_legacy_hermes_units():
+        if supports_systemd and has_legacy_lliam_units():
             print_legacy_unit_warning()
             print()
 

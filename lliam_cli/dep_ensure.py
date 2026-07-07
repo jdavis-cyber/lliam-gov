@@ -32,7 +32,7 @@ _DEP_CHECKS = {
     "browser": lambda: (
         agent_browser_runnable(shutil.which("agent-browser"))
         or _has_system_browser()
-        or _has_hermes_agent_browser()
+        or _has_lliam_agent_browser()
     ),
     "ripgrep": lambda: shutil.which("rg") is not None,
     "ffmpeg": lambda: shutil.which("ffmpeg") is not None,
@@ -57,7 +57,7 @@ def _has_system_browser() -> bool:
     return False
 
 
-def _has_hermes_agent_browser() -> bool:
+def _has_lliam_agent_browser() -> bool:
     from lliam_constants import get_lliam_home
     home = get_lliam_home()
     if _IS_WINDOWS:

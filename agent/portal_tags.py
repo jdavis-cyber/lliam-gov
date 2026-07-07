@@ -34,7 +34,7 @@ from __future__ import annotations
 from typing import List
 
 
-def _hermes_version() -> str:
+def _lliam_version() -> str:
     """Return the current Hermes release version, e.g. ``"0.13.0"``.
 
     Falls back to ``"unknown"`` if ``lliam_cli`` cannot be imported (should
@@ -52,7 +52,7 @@ def lliam_client_tag() -> str:
 
     Format: ``client=hermes-client-v<MAJOR>.<MINOR>.<PATCH>``.
     """
-    return f"client=hermes-client-v{_hermes_version()}"
+    return f"client=hermes-client-v{_lliam_version()}"
 
 
 def nous_portal_tags() -> List[str]:

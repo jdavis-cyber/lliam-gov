@@ -12,7 +12,7 @@ from agent.prompt_builder import (
     _truncate_content,
     _parse_skill_file,
     _skill_should_show,
-    _find_hermes_md,
+    _find_lliam_md,
     _find_git_root,
     _strip_yaml_frontmatter,
     build_skills_system_prompt,
@@ -899,26 +899,26 @@ class TestBuildContextFilesPrompt:
 class TestFindHermesMd:
     def test_finds_in_cwd(self, tmp_path):
         (tmp_path / ".hermes.md").write_text("rules")
-        assert _find_hermes_md(tmp_path) == tmp_path / ".hermes.md"
+        assert _find_lliam_md(tmp_path) == tmp_path / ".hermes.md"
 
     def test_finds_uppercase(self, tmp_path):
         (tmp_path / "HERMES.md").write_text("rules")
-        assert _find_hermes_md(tmp_path) == tmp_path / "HERMES.md"
+        assert _find_lliam_md(tmp_path) == tmp_path / "HERMES.md"
 
     def test_prefers_lowercase(self, tmp_path):
         (tmp_path / ".hermes.md").write_text("lower")
         (tmp_path / "HERMES.md").write_text("upper")
-        assert _find_hermes_md(tmp_path) == tmp_path / ".hermes.md"
+        assert _find_lliam_md(tmp_path) == tmp_path / ".hermes.md"
 
     def test_walks_to_git_root(self, tmp_path):
         (tmp_path / ".git").mkdir()
         (tmp_path / ".hermes.md").write_text("root rules")
         sub = tmp_path / "a" / "b"
         sub.mkdir(parents=True)
-        assert _find_hermes_md(sub) == tmp_path / ".hermes.md"
+        assert _find_lliam_md(sub) == tmp_path / ".hermes.md"
 
     def test_returns_none_when_absent(self, tmp_path):
-        assert _find_hermes_md(tmp_path) is None
+        assert _find_lliam_md(tmp_path) is None
 
     def test_stops_at_git_root(self, tmp_path):
         """Does not walk past the git root."""
@@ -926,7 +926,7 @@ class TestFindHermesMd:
         repo = tmp_path / "repo"
         repo.mkdir()
         (repo / ".git").mkdir()
-        assert _find_hermes_md(repo) is None
+        assert _find_lliam_md(repo) is None
 
 
 class TestFindGitRoot:

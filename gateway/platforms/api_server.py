@@ -63,7 +63,7 @@ from agent.redact import redact_sensitive_text
 logger = logging.getLogger(__name__)
 
 
-def _hermes_version() -> str:
+def _lliam_version() -> str:
     """Return the hermes-agent version string, or "dev" if it can't be resolved.
 
     Tries the installed package metadata first (authoritative for a pip/uv
@@ -1145,7 +1145,7 @@ class APIServerAdapter(BasePlatformAdapter):
     async def _handle_health(self, request: "web.Request") -> "web.Response":
         """GET /health — simple health check."""
         return web.json_response(
-            {"status": "ok", "platform": "hermes-agent", "version": _hermes_version()}
+            {"status": "ok", "platform": "hermes-agent", "version": _lliam_version()}
         )
 
     async def _handle_health_detailed(self, request: "web.Request") -> "web.Response":
@@ -1171,7 +1171,7 @@ class APIServerAdapter(BasePlatformAdapter):
         return web.json_response({
             "status": "ok",
             "platform": "hermes-agent",
-            "version": _hermes_version(),
+            "version": _lliam_version(),
             "gateway_state": gw_state,
             "platforms": runtime.get("platforms", {}),
             "active_agents": gw_active,

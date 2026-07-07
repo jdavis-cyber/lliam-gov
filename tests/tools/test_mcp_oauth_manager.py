@@ -148,7 +148,7 @@ def test_manager_builds_hermes_provider_subclass(tmp_path, monkeypatch):
 
     assert _LLIAM_PROVIDER_CLS is not None
     assert isinstance(provider, _LLIAM_PROVIDER_CLS)
-    assert provider._hermes_server_name == "srv"
+    assert provider._lliam_server_name == "srv"
 
 
 def test_manager_fails_fast_noninteractive_without_cached_tokens(tmp_path, monkeypatch):

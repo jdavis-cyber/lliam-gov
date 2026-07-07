@@ -15,7 +15,7 @@ import pytest
 
 from lliam_cli.model_switch import (
     _LLIAM_MODEL_WARNING,
-    _check_hermes_model_warning,
+    _check_lliam_model_warning,
     is_nous_hermes_non_agentic,
 )
 
@@ -40,7 +40,7 @@ def test_matches_real_nous_hermes_chat_models(model_name: str) -> None:
     assert is_nous_hermes_non_agentic(model_name), (
         f"expected {model_name!r} to be flagged as Nous Hermes 3/4"
     )
-    assert _check_hermes_model_warning(model_name) == _LLIAM_MODEL_WARNING
+    assert _check_lliam_model_warning(model_name) == _LLIAM_MODEL_WARNING
 
 
 @pytest.mark.parametrize(
@@ -75,10 +75,10 @@ def test_does_not_match_unrelated_models(model_name: str) -> None:
     assert not is_nous_hermes_non_agentic(model_name), (
         f"expected {model_name!r} NOT to be flagged as Nous Hermes 3/4"
     )
-    assert _check_hermes_model_warning(model_name) == ""
+    assert _check_lliam_model_warning(model_name) == ""
 
 
 def test_none_like_inputs_are_safe() -> None:
     assert is_nous_hermes_non_agentic("") is False
     # Defensive: the helper shouldn't crash on None-ish falsy input either.
-    assert _check_hermes_model_warning("") == ""
+    assert _check_lliam_model_warning("") == ""

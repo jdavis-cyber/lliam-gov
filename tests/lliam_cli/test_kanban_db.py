@@ -3257,7 +3257,7 @@ def test_resolve_hermes_argv_prefers_path_shim(monkeypatch):
 
     monkeypatch.delenv("HERMES_BIN", raising=False)
     monkeypatch.setattr(shutil, "which", lambda name: "/usr/local/bin/hermes")
-    argv = kb._resolve_hermes_argv()
+    argv = kb._resolve_lliam_argv()
     assert argv == ["/usr/local/bin/hermes"]
 
 
@@ -3269,7 +3269,7 @@ def test_resolve_hermes_argv_absolutizes_relative_exe_shim(monkeypatch, tmp_path
     monkeypatch.setenv("HERMES_BIN", ".\\hermes.exe")
     monkeypatch.setattr(kb, "_IS_WINDOWS", True)
 
-    assert kb._resolve_hermes_argv() == [os.path.abspath(".\\hermes.exe")]
+    assert kb._resolve_lliam_argv() == [os.path.abspath(".\\hermes.exe")]
 
 
 def test_resolve_hermes_argv_avoids_implicit_windows_batch_shim(monkeypatch, tmp_path):
@@ -3285,7 +3285,7 @@ def test_resolve_hermes_argv_avoids_implicit_windows_batch_shim(monkeypatch, tmp
     monkeypatch.setenv("PATHEXT", ".CMD")
     monkeypatch.setattr(kb, "_IS_WINDOWS", True)
 
-    assert kb._resolve_hermes_argv() == [sys.executable, "-m", "lliam_cli.main"]
+    assert kb._resolve_lliam_argv() == [sys.executable, "-m", "lliam_cli.main"]
 
 
 def test_resolve_hermes_argv_honors_hermes_bin_path_override(monkeypatch, tmp_path):
@@ -3299,7 +3299,7 @@ def test_resolve_hermes_argv_honors_hermes_bin_path_override(monkeypatch, tmp_pa
     monkeypatch.setenv("HERMES_BIN", str(shim))
     monkeypatch.setattr(shutil, "which", lambda name: None)
 
-    assert kb._resolve_hermes_argv() == [str(shim)]
+    assert kb._resolve_lliam_argv() == [str(shim)]
 
 
 def test_resolve_hermes_argv_hermes_bin_bare_name_uses_path(monkeypatch, tmp_path):
@@ -3307,18 +3307,18 @@ def test_resolve_hermes_argv_hermes_bin_bare_name_uses_path(monkeypatch, tmp_pat
     import stat
     import lliam_cli.kanban_db as kb
 
-    cwd_hermes = tmp_path / "hermes"
-    cwd_hermes.write_text("wrong\n", encoding="utf-8")
-    cwd_hermes.chmod(cwd_hermes.stat().st_mode | stat.S_IXUSR)
-    path_hermes = tmp_path / "bin" / "hermes"
-    path_hermes.parent.mkdir()
-    path_hermes.write_text("right\n", encoding="utf-8")
-    path_hermes.chmod(path_hermes.stat().st_mode | stat.S_IXUSR)
+    cwd_lliam = tmp_path / "hermes"
+    cwd_lliam.write_text("wrong\n", encoding="utf-8")
+    cwd_lliam.chmod(cwd_lliam.stat().st_mode | stat.S_IXUSR)
+    path_lliam = tmp_path / "bin" / "hermes"
+    path_lliam.parent.mkdir()
+    path_lliam.write_text("right\n", encoding="utf-8")
+    path_lliam.chmod(path_lliam.stat().st_mode | stat.S_IXUSR)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("PATH", str(path_hermes.parent))
+    monkeypatch.setenv("PATH", str(path_lliam.parent))
     monkeypatch.setenv("HERMES_BIN", "hermes")
 
-    assert kb._resolve_hermes_argv() == [str(path_hermes)]
+    assert kb._resolve_lliam_argv() == [str(path_lliam)]
 
 
 def test_resolve_hermes_argv_hermes_bin_bare_name_ignores_cwd(monkeypatch, tmp_path):
@@ -3332,7 +3332,7 @@ def test_resolve_hermes_argv_hermes_bin_bare_name_ignores_cwd(monkeypatch, tmp_p
     monkeypatch.setenv("HERMES_BIN", "hermes")
     monkeypatch.setattr(kb, "_IS_WINDOWS", True)
 
-    assert kb._resolve_hermes_argv() == [sys.executable, "-m", "lliam_cli.main"]
+    assert kb._resolve_lliam_argv() == [sys.executable, "-m", "lliam_cli.main"]
 
 
 def test_resolve_hermes_argv_hermes_bin_bare_cmd_uses_module_fallback(monkeypatch, tmp_path):
@@ -3348,7 +3348,7 @@ def test_resolve_hermes_argv_hermes_bin_bare_cmd_uses_module_fallback(monkeypatc
     monkeypatch.setenv("HERMES_BIN", "hermes")
     monkeypatch.setattr(kb, "_IS_WINDOWS", True)
 
-    assert kb._resolve_hermes_argv() == [sys.executable, "-m", "lliam_cli.main"]
+    assert kb._resolve_lliam_argv() == [sys.executable, "-m", "lliam_cli.main"]
 
 
 def test_resolve_hermes_argv_hermes_bin_unresolved_bare_name_falls_back(monkeypatch):
@@ -3359,7 +3359,7 @@ def test_resolve_hermes_argv_hermes_bin_unresolved_bare_name_falls_back(monkeypa
     monkeypatch.setenv("PATH", "")
     monkeypatch.setenv("HERMES_BIN", "hermes")
 
-    assert kb._resolve_hermes_argv() == [sys.executable, "-m", "lliam_cli.main"]
+    assert kb._resolve_lliam_argv() == [sys.executable, "-m", "lliam_cli.main"]
 
 
 def test_resolve_hermes_argv_falls_back_to_module_form_when_no_path_shim(monkeypatch):
@@ -3376,7 +3376,7 @@ def test_resolve_hermes_argv_falls_back_to_module_form_when_no_path_shim(monkeyp
 
     monkeypatch.delenv("HERMES_BIN", raising=False)
     monkeypatch.setattr(shutil, "which", lambda name: None)
-    argv = kb._resolve_hermes_argv()
+    argv = kb._resolve_lliam_argv()
     assert argv == [sys.executable, "-m", "lliam_cli.main"]
 
 
@@ -3397,7 +3397,7 @@ def test_resolve_hermes_argv_module_actually_runs():
     with mock.patch.dict(os.environ, {}, clear=False):
         os.environ.pop("HERMES_BIN", None)
         with mock.patch.object(shutil, "which", return_value=None):
-            argv = kb._resolve_hermes_argv()
+            argv = kb._resolve_lliam_argv()
     r = subprocess.run(argv + ["--version"], capture_output=True, text=True, timeout=30)
     assert r.returncode == 0, (
         f"`{' '.join(argv)} --version` failed (rc={r.returncode}); "

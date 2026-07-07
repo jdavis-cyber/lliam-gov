@@ -15,7 +15,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_hermes_tree(root: Path) -> None:
+def _make_lliam_tree(root: Path) -> None:
     """Create a realistic ~/.hermes directory structure for testing."""
     (root / "config.yaml").write_text("model:\n  provider: openrouter\n")
     (root / ".env").write_text("OPENROUTER_API_KEY=sk-test-123\n")
@@ -195,7 +195,7 @@ class TestBackup:
         """Backup creates a valid zip containing expected files."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
-        _make_hermes_tree(lliam_home)
+        _make_lliam_tree(lliam_home)
 
         monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         # get_default_lliam_root needs this
@@ -231,7 +231,7 @@ class TestBackup:
         small tmpfs there silently drops large DBs from the backup (#35376)."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
-        _make_hermes_tree(lliam_home)
+        _make_lliam_tree(lliam_home)
 
         monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -262,7 +262,7 @@ class TestBackup:
         also stage SQLite snapshots beside its output zip, not in /tmp."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
-        _make_hermes_tree(lliam_home)
+        _make_lliam_tree(lliam_home)
 
         monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -289,7 +289,7 @@ class TestBackup:
         """Backup does NOT include hermes-agent/ directory."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
-        _make_hermes_tree(lliam_home)
+        _make_lliam_tree(lliam_home)
 
         monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -311,7 +311,7 @@ class TestBackup:
         This is the regression guard for the ballooning-backup bug."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
-        _make_hermes_tree(lliam_home)
+        _make_lliam_tree(lliam_home)
 
         # Simulate the heavy regeneratable trees that ballooned the backup.
         venv_pkg = lliam_home / "plugins" / "heavy" / ".venv" / "lib" / "site-packages" / "dep"
@@ -340,7 +340,7 @@ class TestBackup:
         """Backup includes skills/.../hermes-agent/ but NOT root hermes-agent/."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
-        _make_hermes_tree(lliam_home)
+        _make_lliam_tree(lliam_home)
 
         # Add a nested hermes-agent directory inside skills (like the real layout)
         nested = lliam_home / "skills" / "autonomous-ai-agents" / "hermes-agent"
@@ -371,7 +371,7 @@ class TestBackup:
         """Backup does NOT include __pycache__ dirs."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
-        _make_hermes_tree(lliam_home)
+        _make_lliam_tree(lliam_home)
 
         monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -391,7 +391,7 @@ class TestBackup:
         """Backup does NOT include PID files."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
-        _make_hermes_tree(lliam_home)
+        _make_lliam_tree(lliam_home)
 
         monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -429,7 +429,7 @@ class TestBackup:
         """Backup must not dereference symlinks and leak files outside HERMES_HOME."""
         lliam_home = tmp_path / ".hermes"
         lliam_home.mkdir()
-        _make_hermes_tree(lliam_home)
+        _make_lliam_tree(lliam_home)
         outside = tmp_path / "outside-secret.txt"
         outside.write_text("outside secret\n")
         _symlink_file_or_skip(lliam_home / "skills" / "outside-link.txt", outside)
@@ -819,7 +819,7 @@ class TestRoundTrip:
         # Source
         src_home = tmp_path / "source" / ".hermes"
         src_home.mkdir(parents=True)
-        _make_hermes_tree(src_home)
+        _make_lliam_tree(src_home)
 
         monkeypatch.setenv("HERMES_HOME", str(src_home))
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "source")
@@ -1872,7 +1872,7 @@ class TestPreUpdateBackup:
     def lliam_home(self, tmp_path):
         root = tmp_path / ".hermes"
         root.mkdir()
-        _make_hermes_tree(root)
+        _make_lliam_tree(root)
         return root
 
     def test_creates_backup_under_backups_dir(self, lliam_home):
@@ -2036,7 +2036,7 @@ class TestRunPreUpdateBackup:
     def lliam_home(self, tmp_path, monkeypatch):
         root = tmp_path / ".hermes"
         root.mkdir()
-        _make_hermes_tree(root)
+        _make_lliam_tree(root)
         # Point HERMES_HOME at the temp dir so config + backup paths resolve here
         monkeypatch.setenv("HERMES_HOME", str(root))
         # Make Path.home() point at tmp_path for anything that uses it
@@ -2157,7 +2157,7 @@ class TestPreMigrationBackup:
     def lliam_home(self, tmp_path):
         root = tmp_path / ".hermes"
         root.mkdir()
-        _make_hermes_tree(root)
+        _make_lliam_tree(root)
         return root
 
     def test_creates_backup_under_backups_dir(self, lliam_home):

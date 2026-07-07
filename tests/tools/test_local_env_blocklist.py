@@ -580,7 +580,7 @@ class TestHermesBinDirOnPath:
         from tools.environments import local as local_mod
         self._reset_cache()
         local_mod._HERMES_BIN_DIR = "/opt/hermes/bin"
-        out = local_mod._prepend_hermes_bin_dir("/usr/bin:/bin")
+        out = local_mod._prepend_lliam_bin_dir("/usr/bin:/bin")
         assert out.split(os.pathsep)[0] == "/opt/hermes/bin"
         assert "/usr/bin" in out.split(os.pathsep)
 
@@ -588,8 +588,8 @@ class TestHermesBinDirOnPath:
         from tools.environments import local as local_mod
         self._reset_cache()
         local_mod._HERMES_BIN_DIR = "/opt/hermes/bin"
-        once = local_mod._prepend_hermes_bin_dir("/usr/bin:/bin")
-        twice = local_mod._prepend_hermes_bin_dir(once)
+        once = local_mod._prepend_lliam_bin_dir("/usr/bin:/bin")
+        twice = local_mod._prepend_lliam_bin_dir(once)
         assert twice == once
         assert once.split(os.pathsep).count("/opt/hermes/bin") == 1
 
@@ -597,7 +597,7 @@ class TestHermesBinDirOnPath:
         from tools.environments import local as local_mod
         self._reset_cache()
         local_mod._HERMES_BIN_DIR = None
-        assert local_mod._prepend_hermes_bin_dir("/usr/bin:/bin") == "/usr/bin:/bin"
+        assert local_mod._prepend_lliam_bin_dir("/usr/bin:/bin") == "/usr/bin:/bin"
 
     def test_make_run_env_injects_hermes_bin_dir(self, monkeypatch):
         """A gateway env missing the hermes dir gets it back in the subshell PATH."""

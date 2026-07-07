@@ -554,7 +554,7 @@ def _looks_like_test_tempdir(path: str) -> bool:
     return any(needle in normalized for needle in needles)
 
 
-def _build_hermes_tools_mcp_entry() -> dict:
+def _build_lliam_tools_mcp_entry() -> dict:
     """Build the codex stdio-transport entry that launches Hermes' own
     tool surface as an MCP server. Codex's subprocess will call back into
     this for browser/web/delegate_task/vision/memory/skills tools.
@@ -616,7 +616,7 @@ def migrate(
     dry_run: bool = False,
     discover_plugins: bool = True,
     default_permission_profile: Optional[str] = ":workspace",
-    expose_hermes_tools: bool = True,
+    expose_lliam_tools: bool = True,
 ) -> MigrationReport:
     """Translate Hermes mcp_servers config + Codex curated plugins into
     ~/.codex/config.toml.
@@ -696,8 +696,8 @@ def migrate(
     # memory, skills, session_search, image_generate, text_to_speech.
     # The server itself is agent/transports/lliam_tools_mcp_server.py
     # and is launched on demand by codex (stdio MCP).
-    if expose_hermes_tools:
-        translated["lliam-tools"] = _build_hermes_tools_mcp_entry()
+    if expose_lliam_tools:
+        translated["lliam-tools"] = _build_lliam_tools_mcp_entry()
         if "lliam-tools" not in report.migrated:
             report.migrated.append("lliam-tools")
 

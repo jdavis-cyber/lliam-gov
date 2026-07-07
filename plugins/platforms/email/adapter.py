@@ -134,12 +134,12 @@ def _send_imap_id(imap: "imaplib.IMAP4") -> None:
     """
     try:
         try:
-            from lliam_cli import __version__ as _hermes_version
+            from lliam_cli import __version__ as _lliam_version
         except Exception:  # noqa: BLE001 — keep ID best-effort if import fails
-            _hermes_version = "0"
+            _lliam_version = "0"
         imap.xatom(
             "ID",
-            f'("name" "hermes-agent" "version" "{_hermes_version}" '
+            f'("name" "hermes-agent" "version" "{_lliam_version}" '
             '"vendor" "NousResearch" '
             '"support-email" "noreply@nousresearch.com")',
         )

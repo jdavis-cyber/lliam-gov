@@ -296,7 +296,7 @@ def _parse_semver(v: str) -> Tuple[int, int, int]:
         raise DistributionError(f"Unparseable version: {v!r}") from exc
 
 
-def check_hermes_requires(spec: str, current_version: str) -> None:
+def check_lliam_requires(spec: str, current_version: str) -> None:
     """Raise DistributionError if ``current_version`` does not satisfy ``spec``.
 
     ``spec`` accepts a single comparator (``>=0.12.0``, ``==0.12.0``, etc.).
@@ -495,7 +495,7 @@ def plan_install(
         normalize_profile_name,
         validate_profile_name,
     )
-    from lliam_cli import __version__ as hermes_version
+    from lliam_cli import __version__ as lliam_version
 
     staged, provenance = _stage_source(source, workdir)
     _reject_distribution_symlinks(staged)
@@ -507,7 +507,7 @@ def plan_install(
         )
 
     # Version check up-front so we fail fast
-    check_hermes_requires(manifest.hermes_requires, hermes_version)
+    check_lliam_requires(manifest.hermes_requires, lliam_version)
 
     # Resolve target profile name
     target_name = override_name or manifest.name

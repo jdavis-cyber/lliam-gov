@@ -38,7 +38,7 @@ from lliam_cli.auth import (
 # ---------------------------------------------------------------------------
 
 
-def _setup_hermes_auth(
+def _setup_lliam_auth(
     lliam_home: Path,
     *,
     access_token: str = "access",
@@ -449,7 +449,7 @@ def test_read_xai_oauth_tokens_missing(tmp_path, monkeypatch):
 
 def test_read_xai_oauth_tokens_missing_access_token(tmp_path, monkeypatch):
     lliam_home = tmp_path / "hermes"
-    _setup_hermes_auth(lliam_home, access_token="")
+    _setup_lliam_auth(lliam_home, access_token="")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     with pytest.raises(AuthError) as exc:
@@ -460,7 +460,7 @@ def test_read_xai_oauth_tokens_missing_access_token(tmp_path, monkeypatch):
 
 def test_read_xai_oauth_tokens_missing_refresh_token(tmp_path, monkeypatch):
     lliam_home = tmp_path / "hermes"
-    _setup_hermes_auth(lliam_home, refresh_token="")
+    _setup_lliam_auth(lliam_home, refresh_token="")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     with pytest.raises(AuthError) as exc:
@@ -477,7 +477,7 @@ def test_read_xai_oauth_tokens_missing_refresh_token(tmp_path, monkeypatch):
 def test_resolve_xai_runtime_credentials_returns_singleton_state(tmp_path, monkeypatch):
     lliam_home = tmp_path / "hermes"
     fresh = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=fresh)
+    _setup_lliam_auth(lliam_home, access_token=fresh)
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
     monkeypatch.delenv("HERMES_XAI_BASE_URL", raising=False)
     monkeypatch.delenv("XAI_BASE_URL", raising=False)
@@ -493,7 +493,7 @@ def test_resolve_xai_runtime_credentials_returns_singleton_state(tmp_path, monke
 def test_resolve_xai_runtime_credentials_refreshes_expiring_token(tmp_path, monkeypatch):
     lliam_home = tmp_path / "hermes"
     expiring = _jwt_with_exp(int(time.time()) - 10)
-    _setup_hermes_auth(
+    _setup_lliam_auth(
         lliam_home,
         access_token=expiring,
         refresh_token="rt-old",
@@ -521,7 +521,7 @@ def test_resolve_xai_runtime_credentials_refreshes_expiring_token(tmp_path, monk
 def test_resolve_xai_runtime_credentials_force_refresh(tmp_path, monkeypatch):
     lliam_home = tmp_path / "hermes"
     fresh = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(
+    _setup_lliam_auth(
         lliam_home,
         access_token=fresh,
         discovery={"token_endpoint": "https://auth.x.ai/oauth2/token"},
@@ -547,7 +547,7 @@ def test_resolve_xai_runtime_credentials_force_refresh(tmp_path, monkeypatch):
 def test_resolve_xai_runtime_credentials_honours_env_base_url(tmp_path, monkeypatch):
     lliam_home = tmp_path / "hermes"
     fresh = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=fresh)
+    _setup_lliam_auth(lliam_home, access_token=fresh)
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
     monkeypatch.setenv("HERMES_XAI_BASE_URL", "https://custom.x.ai/v1/")
 
@@ -670,7 +670,7 @@ def test_resolve_xai_runtime_credentials_rejects_off_origin_env_base_url(tmp_pat
     # the OAuth bearer to the attacker.
     lliam_home = tmp_path / "hermes"
     fresh = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=fresh)
+    _setup_lliam_auth(lliam_home, access_token=fresh)
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
     monkeypatch.setenv("XAI_BASE_URL", "https://attacker.example/v1")
     monkeypatch.delenv("HERMES_XAI_BASE_URL", raising=False)
@@ -808,7 +808,7 @@ def test_resolve_credentials_does_not_quarantine_on_transient_refresh_failure(
 def test_get_xai_oauth_auth_status_logged_in_via_singleton(tmp_path, monkeypatch):
     lliam_home = tmp_path / "hermes"
     fresh = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=fresh)
+    _setup_lliam_auth(lliam_home, access_token=fresh)
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     status = get_xai_oauth_auth_status()
@@ -1173,7 +1173,7 @@ def test_credential_pool_seeds_xai_oauth_from_singleton(tmp_path, monkeypatch):
 
     lliam_home = tmp_path / "hermes"
     fresh = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=fresh, refresh_token="rt-1")
+    _setup_lliam_auth(lliam_home, access_token=fresh, refresh_token="rt-1")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     pool = load_pool("xai-oauth")
@@ -1215,7 +1215,7 @@ def test_credential_pool_seed_respects_suppression(tmp_path, monkeypatch):
 
     lliam_home = tmp_path / "hermes"
     fresh = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=fresh)
+    _setup_lliam_auth(lliam_home, access_token=fresh)
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     # Suppress the source — mimic `hermes auth remove`.
@@ -1247,7 +1247,7 @@ def test_auth_remove_xai_oauth_clears_singleton_and_sticks(tmp_path, monkeypatch
 
     lliam_home = tmp_path / "hermes"
     fresh = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=fresh, refresh_token="rt-1")
+    _setup_lliam_auth(lliam_home, access_token=fresh, refresh_token="rt-1")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     # Confirm pre-state: pool sees the seeded entry, auth.json has the singleton.
@@ -1291,7 +1291,7 @@ def test_pool_sync_back_writes_to_singleton(tmp_path, monkeypatch):
 
     lliam_home = tmp_path / "hermes"
     expired = _jwt_with_exp(int(time.time()) - 10)
-    _setup_hermes_auth(lliam_home, access_token=expired, refresh_token="rt-old")
+    _setup_lliam_auth(lliam_home, access_token=expired, refresh_token="rt-old")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     new_access = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
@@ -1335,7 +1335,7 @@ def test_runtime_provider_uses_pool_entry_for_xai_oauth(tmp_path, monkeypatch):
 
     lliam_home = tmp_path / "hermes"
     fresh = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=fresh)
+    _setup_lliam_auth(lliam_home, access_token=fresh)
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
     monkeypatch.delenv("HERMES_XAI_BASE_URL", raising=False)
     monkeypatch.delenv("XAI_BASE_URL", raising=False)
@@ -1606,7 +1606,7 @@ def test_pool_seeded_entry_sync_back_after_refresh(tmp_path, monkeypatch):
 
     lliam_home = tmp_path / "hermes"
     near_expiry = _jwt_with_exp(int(time.time()) + 30)
-    _setup_hermes_auth(lliam_home, access_token=near_expiry, refresh_token="rt-singleton")
+    _setup_lliam_auth(lliam_home, access_token=near_expiry, refresh_token="rt-singleton")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     new_access = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
@@ -1650,7 +1650,7 @@ def test_pool_refresh_adopts_singleton_tokens_when_consumed_elsewhere(tmp_path, 
 
     lliam_home = tmp_path / "hermes"
     in_memory_at = _jwt_with_exp(int(time.time()) + 30)  # near-expiry
-    _setup_hermes_auth(lliam_home, access_token=in_memory_at, refresh_token="rt-stale")
+    _setup_lliam_auth(lliam_home, access_token=in_memory_at, refresh_token="rt-stale")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     # Load the pool once so the in-memory entry is seeded with rt-stale.
@@ -1703,7 +1703,7 @@ def test_pool_refresh_recovers_when_other_process_already_refreshed(tmp_path, mo
 
     lliam_home = tmp_path / "hermes"
     in_memory_at = _jwt_with_exp(int(time.time()) + 30)
-    _setup_hermes_auth(lliam_home, access_token=in_memory_at, refresh_token="rt-shared")
+    _setup_lliam_auth(lliam_home, access_token=in_memory_at, refresh_token="rt-shared")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     pool = load_pool("xai-oauth")
@@ -1751,7 +1751,7 @@ def test_pool_exhausted_xai_entry_recovers_after_singleton_refresh(tmp_path, mon
 
     lliam_home = tmp_path / "hermes"
     stale_at = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=stale_at, refresh_token="rt-stale")
+    _setup_lliam_auth(lliam_home, access_token=stale_at, refresh_token="rt-stale")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     pool = load_pool("xai-oauth")
@@ -1805,7 +1805,7 @@ def test_pool_manual_xai_entry_not_synced_from_singleton(tmp_path, monkeypatch):
 
     lliam_home = tmp_path / "hermes"
     singleton_at = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=singleton_at, refresh_token="rt-singleton")
+    _setup_lliam_auth(lliam_home, access_token=singleton_at, refresh_token="rt-singleton")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     pool = load_pool("xai-oauth")
@@ -1843,7 +1843,7 @@ def test_pool_manual_entry_does_not_sync_back_to_singleton(tmp_path, monkeypatch
     lliam_home = tmp_path / "hermes"
     # Singleton has its own tokens (separate login).
     singleton_at = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=singleton_at, refresh_token="rt-singleton")
+    _setup_lliam_auth(lliam_home, access_token=singleton_at, refresh_token="rt-singleton")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     manual_at_old = _jwt_with_exp(int(time.time()) + 30)
@@ -1912,7 +1912,7 @@ def test_auxiliary_client_routes_xai_oauth_through_responses_api(tmp_path, monke
 
     lliam_home = tmp_path / "hermes"
     fresh = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=fresh)
+    _setup_lliam_auth(lliam_home, access_token=fresh)
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
     monkeypatch.delenv("HERMES_XAI_BASE_URL", raising=False)
     monkeypatch.delenv("XAI_BASE_URL", raising=False)
@@ -1956,7 +1956,7 @@ def test_auxiliary_client_xai_oauth_requires_explicit_model(tmp_path, monkeypatc
 
     lliam_home = tmp_path / "hermes"
     fresh = _jwt_with_exp(int(time.time()) + 2 * 60 * 60)
-    _setup_hermes_auth(lliam_home, access_token=fresh)
+    _setup_lliam_auth(lliam_home, access_token=fresh)
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     client, model = resolve_provider_client("xai-oauth", model=None)
@@ -1981,7 +1981,7 @@ def test_pool_sync_back_preserves_active_provider(tmp_path, monkeypatch):
 
     lliam_home = tmp_path / "hermes"
     near_expiry = _jwt_with_exp(int(time.time()) + 30)
-    _setup_hermes_auth(lliam_home, access_token=near_expiry, refresh_token="rt-xai")
+    _setup_lliam_auth(lliam_home, access_token=near_expiry, refresh_token="rt-xai")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     # Simulate a multi-provider user whose actual chosen provider is

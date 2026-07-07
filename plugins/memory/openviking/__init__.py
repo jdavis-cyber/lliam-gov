@@ -845,7 +845,7 @@ def _is_local_openviking_url(value: str) -> bool:
     return scheme == "http" and (parsed.hostname or "").lower() in _LOCAL_OPENVIKING_HOSTS
 
 
-def _load_hermes_openviking_config() -> dict:
+def _load_lliam_openviking_config() -> dict:
     try:
         from lliam_cli.config import load_config
 
@@ -1569,7 +1569,7 @@ def _link_ovcli_profile(
         os.environ.pop(key, None)
 
 
-def _save_hermes_only_config(
+def _save_lliam_only_config(
     *,
     config: dict,
     provider_config: dict,
@@ -1754,7 +1754,7 @@ def _run_create_profile_setup(
         _print_openviking_ready("Created and linked OpenViking profile.", ovcli_path)
         return True
 
-    _save_hermes_only_config(
+    _save_lliam_only_config(
         config=config,
         provider_config=provider_config,
         env_path=env_path,
@@ -1826,7 +1826,7 @@ class OpenVikingMemoryProvider(MemoryProvider):
         """Check if OpenViking endpoint is configured. No network calls."""
         if os.environ.get("OPENVIKING_ENDPOINT"):
             return True
-        provider_config = _load_hermes_openviking_config()
+        provider_config = _load_lliam_openviking_config()
         if not provider_config.get("use_ovcli_config"):
             return False
         try:
@@ -2124,7 +2124,7 @@ class OpenVikingMemoryProvider(MemoryProvider):
         )
 
     def initialize(self, session_id: str, **kwargs) -> None:
-        settings = _resolve_connection_settings(_load_hermes_openviking_config())
+        settings = _resolve_connection_settings(_load_lliam_openviking_config())
         self._endpoint = settings["endpoint"]
         self._api_key = settings["api_key"]
         self._account = settings["account"]

@@ -7478,7 +7478,7 @@ def _rotate_worker_log(
         pass
 
 
-def _module_hermes_argv() -> list[str]:
+def _module_lliam_argv() -> list[str]:
     """Return the interpreter-bound Hermes CLI invocation."""
     # ``lliam_cli.main`` is the console-script target declared in
     # pyproject.toml, NOT a top-level ``hermes`` package — there is no
@@ -7486,7 +7486,7 @@ def _module_hermes_argv() -> list[str]:
     return [sys.executable, "-m", "lliam_cli.main"]
 
 
-def _absolute_hermes_path(path: str) -> str:
+def _absolute_lliam_path(path: str) -> str:
     """Return an absolute filesystem path for a resolved Hermes shim."""
     expanded = os.path.expanduser(path)
     return expanded if os.path.isabs(expanded) else os.path.abspath(expanded)
@@ -7540,7 +7540,7 @@ def _safe_which_no_cwd(command: str) -> Optional[str]:
     return None
 
 
-def _hermes_path_argv(path: str) -> list[str]:
+def _lliam_path_argv(path: str) -> list[str]:
     """Return argv for a resolved Hermes executable path.
 
     Windows batch shims (`.cmd` / `.bat`) are not safe as argv[0] for
@@ -7549,11 +7549,11 @@ def _hermes_path_argv(path: str) -> list[str]:
     executable is only a shell shim.
     """
     if _IS_WINDOWS and _is_windows_batch_shim(path):
-        return _module_hermes_argv()
-    return [_absolute_hermes_path(path)]
+        return _module_lliam_argv()
+    return [_absolute_lliam_path(path)]
 
 
-def _resolve_hermes_argv() -> list[str]:
+def _resolve_lliam_argv() -> list[str]:
     """Resolve the ``hermes`` invocation as argv parts for ``Popen``.
 
     Tries in order:
@@ -7582,16 +7582,16 @@ def _resolve_hermes_argv() -> list[str]:
     env_bin = getenv_compat("BIN", "").strip()
     if env_bin:
         if _looks_like_path(env_bin):
-            return _hermes_path_argv(env_bin)
+            return _lliam_path_argv(env_bin)
         resolved_env_bin = _safe_which_no_cwd(env_bin)
         if resolved_env_bin:
-            return _hermes_path_argv(resolved_env_bin)
-        return _module_hermes_argv()
+            return _lliam_path_argv(resolved_env_bin)
+        return _module_lliam_argv()
 
     lliam_bin = _safe_which_no_cwd("hermes") if _IS_WINDOWS else shutil.which("hermes")
     if lliam_bin:
-        return _hermes_path_argv(lliam_bin)
-    return _module_hermes_argv()
+        return _lliam_path_argv(lliam_bin)
+    return _module_lliam_argv()
 
 
 def _worker_terminal_timeout_env(
@@ -7768,7 +7768,7 @@ def _default_spawn(
     env["LLIAM_PROFILE"] = profile_arg
 
     cmd = [
-        *_resolve_hermes_argv(),
+        *_resolve_lliam_argv(),
         "-p", profile_arg,
         # Worker subprocesses switch to a profile-scoped HERMES_HOME above,
         # so they see that profile's shell-hook allowlist instead of the

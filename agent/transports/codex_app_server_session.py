@@ -250,7 +250,7 @@ class CodexAppServerSession:
         self._client.initialize(
             client_name="hermes",
             client_title="Hermes Agent",
-            client_version=_get_hermes_version(),
+            client_version=_get_lliam_version(),
         )
         # Permission selection is intentionally NOT sent on thread/start.
         # Two reasons (live-tested against codex 0.130.0):
@@ -867,7 +867,7 @@ def _has_turn_aborted_marker(text: str) -> bool:
     return False
 
 
-def _get_hermes_version() -> str:
+def _get_lliam_version() -> str:
     """Best-effort Hermes version string for codex's userAgent line."""
     try:
         from importlib.metadata import version

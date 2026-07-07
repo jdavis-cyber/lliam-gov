@@ -372,11 +372,11 @@ def _find_bash() -> str:
     #   PortableGit: %LOCALAPPDATA%\hermes\git\bin\bash.exe   (primary)
     #   MinGit:      %LOCALAPPDATA%\hermes\git\usr\bin\bash.exe (legacy/32-bit fallback)
     _local_appdata = os.environ.get("LOCALAPPDATA", "")
-    _hermes_portable_git = os.path.join(_local_appdata, "hermes", "git") if _local_appdata else ""
-    if _hermes_portable_git:
+    _lliam_portable_git = os.path.join(_local_appdata, "hermes", "git") if _local_appdata else ""
+    if _lliam_portable_git:
         for candidate in (
-            os.path.join(_hermes_portable_git, "bin", "bash.exe"),        # PortableGit (primary)
-            os.path.join(_hermes_portable_git, "usr", "bin", "bash.exe"), # MinGit fallback
+            os.path.join(_lliam_portable_git, "bin", "bash.exe"),        # PortableGit (primary)
+            os.path.join(_lliam_portable_git, "usr", "bin", "bash.exe"), # MinGit fallback
         ):
             if os.path.isfile(candidate):
                 return candidate
@@ -518,7 +518,7 @@ def _resolve_hermes_bin_dir() -> str | None:
     return candidate
 
 
-def _prepend_hermes_bin_dir(existing_path: str) -> str:
+def _prepend_lliam_bin_dir(existing_path: str) -> str:
     """Prepend the hermes install dir to ``existing_path`` if it's missing.
 
     Cross-platform (uses ``os.pathsep``). First-occurrence wins, so a PATH
@@ -622,7 +622,7 @@ def _make_run_env(env: dict) -> dict:
         # Ensure the hermes install dir is reachable so plugins can shell out
         # to bare ``hermes`` via the terminal tool even when the gateway was
         # launched without it on PATH (systemd, service managers, cron, etc.).
-        run_env[path_key] = _prepend_hermes_bin_dir(new_path)
+        run_env[path_key] = _prepend_lliam_bin_dir(new_path)
 
     _inject_context_hermes_home(run_env)
 

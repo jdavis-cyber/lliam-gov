@@ -361,7 +361,7 @@ def test_load_hermes_env_bridges_config_yaml_scalars(tmp_path, monkeypatch):
     import lliam_cli.config as _hc_config
     reload(_hc_config)
 
-    send_cmd._load_hermes_env()
+    send_cmd._load_lliam_env()
 
     assert os.environ.get("SOME_TOKEN") == "abc123"
     assert os.environ.get("TELEGRAM_HOME_CHANNEL") == "5550001111"
@@ -382,7 +382,7 @@ def test_load_hermes_env_does_not_override_existing(tmp_path, monkeypatch):
     import lliam_cli.config as _hc_config
     reload(_hc_config)
 
-    send_cmd._load_hermes_env()
+    send_cmd._load_lliam_env()
 
     assert os.environ.get("TELEGRAM_HOME_CHANNEL") == "env_value"
 
@@ -398,4 +398,4 @@ def test_load_hermes_env_handles_missing_files(tmp_path, monkeypatch):
     reload(_hc_config)
 
     # Should not raise.
-    send_cmd._load_hermes_env()
+    send_cmd._load_lliam_env()

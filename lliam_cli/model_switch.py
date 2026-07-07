@@ -107,7 +107,7 @@ def is_nous_hermes_non_agentic(model_name: str) -> bool:
     return bool(_NOUS_HERMES_NON_AGENTIC_RE.search(model_name))
 
 
-def _check_hermes_model_warning(model_name: str) -> str:
+def _check_lliam_model_warning(model_name: str) -> str:
     """Return a warning string if *model_name* is a Nous Hermes 3/4 chat model."""
     if is_nous_hermes_non_agentic(model_name):
         return _LLIAM_MODEL_WARNING
@@ -1328,7 +1328,7 @@ def switch_model(
     warnings: list[str] = []
     if validation.get("message"):
         warnings.append(validation["message"])
-    lliam_warn = _check_hermes_model_warning(new_model)
+    lliam_warn = _check_lliam_model_warning(new_model)
     if lliam_warn:
         warnings.append(lliam_warn)
 
@@ -1684,14 +1684,14 @@ def list_authenticated_providers(
     # Build reverse mapping: models.dev ID → Hermes provider ID.
     # HERMES_OVERLAYS keys may be models.dev IDs (e.g. "github-copilot")
     # while _PROVIDER_MODELS and config.yaml use Hermes IDs ("copilot").
-    _mdev_to_hermes = {v: k for k, v in PROVIDER_TO_MODELS_DEV.items()}
+    _mdev_to_lliam = {v: k for k, v in PROVIDER_TO_MODELS_DEV.items()}
 
     for pid, overlay in HERMES_OVERLAYS.items():
         if pid.lower() in seen_slugs:
             continue
 
         # Resolve Hermes slug — e.g. "github-copilot" → "copilot"
-        lliam_slug = _mdev_to_hermes.get(pid, pid)
+        lliam_slug = _mdev_to_lliam.get(pid, pid)
         if lliam_slug.lower() in seen_slugs:
             continue
 

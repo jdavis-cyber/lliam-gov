@@ -22,7 +22,7 @@ from lliam_cli.auth import (
 )
 
 
-def _setup_hermes_auth(lliam_home: Path, *, access_token: str = "access", refresh_token: str = "refresh"):
+def _setup_lliam_auth(lliam_home: Path, *, access_token: str = "access", refresh_token: str = "refresh"):
     """Write Codex tokens into the Hermes auth store."""
     lliam_home.mkdir(parents=True, exist_ok=True)
     auth_store = {
@@ -52,7 +52,7 @@ def _jwt_with_exp(exp_epoch: int) -> str:
 
 def test_read_codex_tokens_success(tmp_path, monkeypatch):
     lliam_home = tmp_path / "hermes"
-    _setup_hermes_auth(lliam_home)
+    _setup_lliam_auth(lliam_home)
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     data = _read_codex_tokens()
@@ -74,7 +74,7 @@ def test_read_codex_tokens_missing(tmp_path, monkeypatch):
 
 def test_resolve_codex_runtime_credentials_missing_access_token(tmp_path, monkeypatch):
     lliam_home = tmp_path / "hermes"
-    _setup_hermes_auth(lliam_home, access_token="")
+    _setup_lliam_auth(lliam_home, access_token="")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "missing-codex"))
 
@@ -87,7 +87,7 @@ def test_resolve_codex_runtime_credentials_missing_access_token(tmp_path, monkey
 def test_resolve_codex_runtime_credentials_refreshes_expiring_token(tmp_path, monkeypatch):
     lliam_home = tmp_path / "hermes"
     expiring_token = _jwt_with_exp(int(time.time()) - 10)
-    _setup_hermes_auth(lliam_home, access_token=expiring_token, refresh_token="refresh-old")
+    _setup_lliam_auth(lliam_home, access_token=expiring_token, refresh_token="refresh-old")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     called = {"count": 0}
@@ -106,7 +106,7 @@ def test_resolve_codex_runtime_credentials_refreshes_expiring_token(tmp_path, mo
 
 def test_resolve_codex_runtime_credentials_force_refresh(tmp_path, monkeypatch):
     lliam_home = tmp_path / "hermes"
-    _setup_hermes_auth(lliam_home, access_token="access-current", refresh_token="refresh-old")
+    _setup_lliam_auth(lliam_home, access_token="access-current", refresh_token="refresh-old")
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     called = {"count": 0}
@@ -775,7 +775,7 @@ def test_codex_tokens_not_written_to_shared_file(tmp_path, monkeypatch):
 
 def test_resolve_returns_hermes_auth_store_source(tmp_path, monkeypatch):
     lliam_home = tmp_path / "hermes"
-    _setup_hermes_auth(lliam_home)
+    _setup_lliam_auth(lliam_home)
     monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     creds = resolve_codex_runtime_credentials()

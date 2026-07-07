@@ -714,16 +714,16 @@ class LliamACPAgent(acp.Agent):
     def _provenance_meta(
         self,
         acp_session_id: str,
-        current_hermes_session_id: str,
-        previous_hermes_session_id: Optional[str] = None,
+        current_lliam_session_id: str,
+        previous_lliam_session_id: Optional[str] = None,
     ) -> Optional[dict]:
         """Best-effort ``_meta.hermes.sessionProvenance`` for an ACP session."""
         try:
             return session_provenance_meta(
                 self.session_manager._get_db(),
                 acp_session_id,
-                current_hermes_session_id,
-                previous_hermes_session_id=previous_hermes_session_id,
+                current_lliam_session_id,
+                previous_lliam_session_id=previous_lliam_session_id,
             )
         except Exception:
             logger.debug(
@@ -735,8 +735,8 @@ class LliamACPAgent(acp.Agent):
         self,
         session_id: str,
         *,
-        current_hermes_session_id: Optional[str] = None,
-        previous_hermes_session_id: Optional[str] = None,
+        current_lliam_session_id: Optional[str] = None,
+        previous_lliam_session_id: Optional[str] = None,
     ) -> None:
         """Send ACP native session metadata after Hermes changes it.
 
@@ -762,8 +762,8 @@ class LliamACPAgent(acp.Agent):
         updated_at = datetime.now(timezone.utc).isoformat()
         meta = self._provenance_meta(
             session_id,
-            current_hermes_session_id or session_id,
-            previous_hermes_session_id,
+            current_lliam_session_id or session_id,
+            previous_lliam_session_id,
         )
         update = SessionInfoUpdate(
             session_update="session_info_update",
@@ -1549,7 +1549,7 @@ class LliamACPAgent(acp.Agent):
             # can detect a compression-driven session rotation afterwards. The
             # ACP `session_id` stays the stable client handle; agent.session_id
             # is the live internal head that compression may rotate.
-            pre_turn_hermes_id = getattr(state.agent, "session_id", None)
+            pre_turn_lliam_id = getattr(state.agent, "session_id", None)
             # Wrap the executor call in a fresh copy of the current context so
             # concurrent ACP sessions on the shared ThreadPoolExecutor don't
             # stomp on each other's ContextVar writes (HERMES_SESSION_KEY in
@@ -1572,18 +1572,18 @@ class LliamACPAgent(acp.Agent):
         # DB head moved during the turn, emit a session_info_update carrying
         # _meta.hermes.sessionProvenance so ACP clients can render the boundary
         # and keep old/new ids in lineage. The ACP session_id is unchanged.
-        post_turn_hermes_id = getattr(state.agent, "session_id", None)
+        post_turn_lliam_id = getattr(state.agent, "session_id", None)
         if (
             conn
-            and post_turn_hermes_id
-            and pre_turn_hermes_id
-            and post_turn_hermes_id != pre_turn_hermes_id
+            and post_turn_lliam_id
+            and pre_turn_lliam_id
+            and post_turn_lliam_id != pre_turn_lliam_id
         ):
             try:
                 await self._send_session_info_update(
                     session_id,
-                    current_hermes_session_id=post_turn_hermes_id,
-                    previous_hermes_session_id=pre_turn_hermes_id,
+                    current_lliam_session_id=post_turn_lliam_id,
+                    previous_lliam_session_id=pre_turn_lliam_id,
                 )
             except Exception:
                 logger.debug(

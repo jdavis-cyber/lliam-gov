@@ -684,7 +684,7 @@ def _live_system_guard(request, monkeypatch):
                 return ""
         return str(cmd)
 
-    def _matches_hermes_gateway(cmd_str: str) -> bool:
+    def _matches_lliam_gateway(cmd_str: str) -> bool:
         low = cmd_str.lower()
         return any(tok in low for tok in _HERMES_TOKENS)
 
@@ -692,7 +692,7 @@ def _live_system_guard(request, monkeypatch):
         cmd_str = _cmd_to_string(cmd)
         if "systemctl" not in cmd_str:
             return False
-        if not _matches_hermes_gateway(cmd_str):
+        if not _matches_lliam_gateway(cmd_str):
             return False
         try:
             tokens = _shlex.split(cmd_str)

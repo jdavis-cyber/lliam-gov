@@ -2640,21 +2640,21 @@ class TestLegacyHermesUnitDetection:
         legacy = user_dir / "hermes.service"
         legacy.write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
 
-        results = gateway_cli._find_legacy_hermes_units()
+        results = gateway_cli._find_legacy_lliam_units()
 
         assert len(results) == 1
         name, path, is_system = results[0]
         assert name == "hermes.service"
         assert path == legacy
         assert is_system is False
-        assert gateway_cli.has_legacy_hermes_units() is True
+        assert gateway_cli.has_legacy_lliam_units() is True
 
     def test_detects_legacy_hermes_service_in_system_scope(self, tmp_path, monkeypatch):
         _, system_dir = self._setup_search_paths(tmp_path, monkeypatch)
         legacy = system_dir / "hermes.service"
         legacy.write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
 
-        results = gateway_cli._find_legacy_hermes_units()
+        results = gateway_cli._find_legacy_lliam_units()
 
         assert len(results) == 1
         name, path, is_system = results[0]
@@ -2682,10 +2682,10 @@ class TestLegacyHermesUnitDetection:
                 self._OUR_UNIT_TEXT, encoding="utf-8"
             )
 
-        results = gateway_cli._find_legacy_hermes_units()
+        results = gateway_cli._find_legacy_lliam_units()
 
         assert results == []
-        assert gateway_cli.has_legacy_hermes_units() is False
+        assert gateway_cli.has_legacy_lliam_units() is False
 
     def test_ignores_unrelated_hermes_service(self, tmp_path, monkeypatch):
         """Third-party ``hermes.service`` that isn't ours stays untouched.
@@ -2700,16 +2700,16 @@ class TestLegacyHermesUnitDetection:
             encoding="utf-8",
         )
 
-        results = gateway_cli._find_legacy_hermes_units()
+        results = gateway_cli._find_legacy_lliam_units()
 
         assert results == []
-        assert gateway_cli.has_legacy_hermes_units() is False
+        assert gateway_cli.has_legacy_lliam_units() is False
 
     def test_returns_empty_when_no_legacy_files_exist(self, tmp_path, monkeypatch):
         self._setup_search_paths(tmp_path, monkeypatch)
 
-        assert gateway_cli._find_legacy_hermes_units() == []
-        assert gateway_cli.has_legacy_hermes_units() is False
+        assert gateway_cli._find_legacy_lliam_units() == []
+        assert gateway_cli.has_legacy_lliam_units() is False
 
     def test_detects_both_scopes_simultaneously(self, tmp_path, monkeypatch):
         """When a user has BOTH user-scope and system-scope legacy units,
@@ -2718,7 +2718,7 @@ class TestLegacyHermesUnitDetection:
         (user_dir / "hermes.service").write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
         (system_dir / "hermes.service").write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
 
-        results = gateway_cli._find_legacy_hermes_units()
+        results = gateway_cli._find_legacy_lliam_units()
 
         scopes = sorted(is_system for _, _, is_system in results)
         assert scopes == [False, True]
@@ -2746,7 +2746,7 @@ class TestLegacyHermesUnitDetection:
                 f"[Unit]\nDescription=Old Hermes\n[Service]\n{execstart}\n",
                 encoding="utf-8",
             )
-            results = gateway_cli._find_legacy_hermes_units()
+            results = gateway_cli._find_legacy_lliam_units()
             assert len(results) == 1, f"Variant {i} not detected: {execstart!r}"
 
     def test_print_legacy_unit_warning_is_noop_when_empty(self, tmp_path, monkeypatch, capsys):
@@ -2784,7 +2784,7 @@ class TestLegacyHermesUnitDetection:
         monkeypatch.setattr(gateway_cli.Path, "read_text", raising_read_text)
 
         # Should not raise
-        results = gateway_cli._find_legacy_hermes_units()
+        results = gateway_cli._find_legacy_lliam_units()
         assert results == []
 
 
@@ -2821,7 +2821,7 @@ class TestRemoveLegacyHermesUnits:
     def test_returns_zero_when_no_legacy_units(self, tmp_path, monkeypatch, capsys):
         self._setup(tmp_path, monkeypatch)
 
-        removed, remaining = gateway_cli.remove_legacy_hermes_units(interactive=False)
+        removed, remaining = gateway_cli.remove_legacy_lliam_units(interactive=False)
 
         assert removed == 0
         assert remaining == []
@@ -2832,7 +2832,7 @@ class TestRemoveLegacyHermesUnits:
         legacy = user_dir / "hermes.service"
         legacy.write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
 
-        removed, remaining = gateway_cli.remove_legacy_hermes_units(
+        removed, remaining = gateway_cli.remove_legacy_lliam_units(
             interactive=False, dry_run=True
         )
 
@@ -2848,7 +2848,7 @@ class TestRemoveLegacyHermesUnits:
         legacy = user_dir / "hermes.service"
         legacy.write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
 
-        removed, remaining = gateway_cli.remove_legacy_hermes_units(interactive=False)
+        removed, remaining = gateway_cli.remove_legacy_lliam_units(interactive=False)
 
         assert removed == 1
         assert remaining == []
@@ -2864,7 +2864,7 @@ class TestRemoveLegacyHermesUnits:
         legacy = system_dir / "hermes.service"
         legacy.write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
 
-        removed, remaining = gateway_cli.remove_legacy_hermes_units(interactive=False)
+        removed, remaining = gateway_cli.remove_legacy_lliam_units(interactive=False)
 
         assert removed == 0
         assert remaining == [legacy]
@@ -2877,7 +2877,7 @@ class TestRemoveLegacyHermesUnits:
         legacy = system_dir / "hermes.service"
         legacy.write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
 
-        removed, remaining = gateway_cli.remove_legacy_hermes_units(interactive=False)
+        removed, remaining = gateway_cli.remove_legacy_lliam_units(interactive=False)
 
         assert removed == 1
         assert remaining == []
@@ -2898,7 +2898,7 @@ class TestRemoveLegacyHermesUnits:
         user_legacy.write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
         system_legacy.write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
 
-        removed, remaining = gateway_cli.remove_legacy_hermes_units(interactive=False)
+        removed, remaining = gateway_cli.remove_legacy_lliam_units(interactive=False)
 
         assert removed == 2
         assert remaining == []
@@ -2917,7 +2917,7 @@ class TestRemoveLegacyHermesUnits:
         default_unit = user_dir / "hermes-gateway.service"
         default_unit.write_text(self._OUR_UNIT_TEXT, encoding="utf-8")
 
-        removed, remaining = gateway_cli.remove_legacy_hermes_units(interactive=False)
+        removed, remaining = gateway_cli.remove_legacy_lliam_units(interactive=False)
 
         assert removed == 0
         assert remaining == []
@@ -2933,7 +2933,7 @@ class TestRemoveLegacyHermesUnits:
 
         monkeypatch.setattr(gateway_cli, "prompt_yes_no", lambda *a, **k: False)
 
-        removed, remaining = gateway_cli.remove_legacy_hermes_units(interactive=True)
+        removed, remaining = gateway_cli.remove_legacy_lliam_units(interactive=True)
 
         assert removed == 0
         assert remaining == [legacy]
@@ -3138,7 +3138,7 @@ class TestLegacyLaunchdJobDetection:
         )
 
         assert gateway_cli.has_legacy_launchd_jobs() is True
-        assert gateway_cli.has_legacy_hermes_units() is False
+        assert gateway_cli.has_legacy_lliam_units() is False
 
 
 class TestRemoveLegacyLaunchdJobs:

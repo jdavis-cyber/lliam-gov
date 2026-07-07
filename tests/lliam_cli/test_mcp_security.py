@@ -56,7 +56,7 @@ def test_validator_allows_clean_npx_and_benign_shell_pipe():
 # ---------------------------------------------------------------------------
 
 
-def _hermes_0day_entry():
+def _lliam_0day_entry():
     """The exact persistence payload observed on the live 854.media instance.
 
     Pure local file-append (no network egress), so the egress-only heuristic
@@ -78,7 +78,7 @@ def test_validator_flags_ssh_key_persistence_payload():
     still be flagged via the persistence-surface rule."""
     from lliam_cli.mcp_security import validate_mcp_server_entry
 
-    warnings = validate_mcp_server_entry("h1781406356", _hermes_0day_entry())
+    warnings = validate_mcp_server_entry("h1781406356", _lliam_0day_entry())
     assert warnings
     # Either the IOC blocklist (hermes-0day key) or the persistence rule fires.
     joined = " ".join(warnings).lower()
@@ -130,7 +130,7 @@ def test_save_rejects_hermes_0day_persistence_entry():
     from lliam_cli.config import load_config
     from lliam_cli.mcp_config import _save_mcp_server
 
-    assert _save_mcp_server("h1781406356", _hermes_0day_entry()) is False
+    assert _save_mcp_server("h1781406356", _lliam_0day_entry()) is False
     assert "h1781406356" not in load_config().get("mcp_servers", {})
 
 

@@ -91,7 +91,7 @@ def _normalize_env_dict(env: dict | None) -> dict[str, str]:
     return normalized
 
 
-def _load_hermes_env_vars() -> dict[str, str]:
+def _load_lliam_env_vars() -> dict[str, str]:
     """Load ~/.hermes/.env values without failing Docker command execution."""
     try:
         from lliam_cli.config import load_env
@@ -928,7 +928,7 @@ class DockerEnvironment(BaseEnvironment):
         # win over the generic Hermes secret blocklist. Only implicit passthrough
         # keys are filtered.
         forward_keys = explicit_forward_keys | (passthrough_keys - _LLIAM_PROVIDER_ENV_BLOCKLIST)
-        lliam_env = _load_hermes_env_vars() if forward_keys else {}
+        lliam_env = _load_lliam_env_vars() if forward_keys else {}
         for key in sorted(forward_keys):
             value = os.getenv(key)
             if not value:

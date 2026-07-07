@@ -174,7 +174,7 @@ def _scrub_child_env(source_env, is_passthrough=None, is_windows=None):
     # that imports a repo module reading one at import time would otherwise see
     # it silently unset. Surface the drop once so the behavior change is
     # diagnosable and points at the env_passthrough opt-in escape hatch.
-    _dropped_hermes = []
+    _dropped_lliam = []
     for k, v in source_env.items():
         if is_passthrough(k):
             scrubbed[k] = v
@@ -193,15 +193,15 @@ def _scrub_child_env(source_env, is_passthrough=None, is_windows=None):
         if k.startswith(("LLIAM_", "HERMES_")):
             # Non-secret (secrets were already dropped above) and not in any
             # allowlist — a deliberately-dropped LLIAM_*/HERMES_* var.
-            _dropped_hermes.append(k)
-    if _dropped_hermes:
+            _dropped_lliam.append(k)
+    if _dropped_lliam:
         logger.debug(
             "execute_code: dropped %d non-allowlisted HERMES_* var(s) from the "
             "sandbox child env (%s). This is intentional hardening (#27303); if "
             "a sandbox script legitimately needs one, declare it via "
             "env_passthrough in the skill/config so it passes by explicit opt-in.",
-            len(_dropped_hermes),
-            ", ".join(sorted(_dropped_hermes)),
+            len(_dropped_lliam),
+            ", ".join(sorted(_dropped_lliam)),
         )
     return scrubbed
 

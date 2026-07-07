@@ -2033,7 +2033,7 @@ def _legacy_unit_search_paths() -> list[tuple[bool, Path]]:
     ]
 
 
-def _find_legacy_hermes_units() -> list[tuple[str, Path, bool]]:
+def _find_legacy_lliam_units() -> list[tuple[str, Path, bool]]:
     """Return ``[(unit_name, unit_path, is_system)]`` for legacy Hermes gateway units.
 
     Detects unit files installed by older Hermes versions that used a
@@ -2071,14 +2071,14 @@ def _find_legacy_hermes_units() -> list[tuple[str, Path, bool]]:
     return results
 
 
-def has_legacy_hermes_units() -> bool:
+def has_legacy_lliam_units() -> bool:
     """Return True when any legacy Hermes gateway systemd unit files exist.
 
     systemd (Linux) only — every caller is a systemd flow (install/start/
     setup). The macOS launchd counterpart is ``has_legacy_launchd_jobs``,
     surfaced through ``gateway migrate-legacy``.
     """
-    return bool(_find_legacy_hermes_units())
+    return bool(_find_legacy_lliam_units())
 
 
 def print_legacy_unit_warning() -> None:
@@ -2087,7 +2087,7 @@ def print_legacy_unit_warning() -> None:
     Idempotent: prints nothing when no legacy units are detected. Safe to
     call from any status/install/setup path.
     """
-    legacy = _find_legacy_hermes_units()
+    legacy = _find_legacy_lliam_units()
     if not legacy:
         return
     print_warning("Legacy Hermes gateway unit(s) detected from an older install:")
@@ -2100,7 +2100,7 @@ def print_legacy_unit_warning() -> None:
     print_info("    lliam-gov gateway migrate-legacy")
 
 
-def remove_legacy_hermes_units(
+def remove_legacy_lliam_units(
     interactive: bool = True,
     dry_run: bool = False,
 ) -> tuple[int, list[Path]]:
@@ -2120,7 +2120,7 @@ def remove_legacy_hermes_units(
         ``(removed_count, remaining_paths)`` — remaining includes units we
         couldn't remove (typically system-scope when not running as root).
     """
-    legacy = _find_legacy_hermes_units()
+    legacy = _find_legacy_lliam_units()
     if not legacy:
         print("No legacy Hermes gateway units found.")
         return 0, []
@@ -2583,21 +2583,21 @@ def _hermes_home_for_target_user(target_home_dir: str) -> str:
     # Derive the default-home leaf (``.lliam``) from the constants module so this
     # stays correct through the rename instead of hardcoding the old ``.hermes``.
     default_leaf = get_default_home_leaf()
-    current_hermes = get_lliam_home().resolve()
+    current_lliam = get_lliam_home().resolve()
     current_default = (Path.home() / default_leaf).resolve()
     target_default = Path(target_home_dir) / default_leaf
 
     # Default ~/.hermes → remap to target user's default
-    if current_hermes == current_default:
+    if current_lliam == current_default:
         return str(target_default)
 
     # Profile or subdir of ~/.hermes → preserve the relative structure
     try:
-        relative = current_hermes.relative_to(current_default)
+        relative = current_lliam.relative_to(current_default)
         return str(target_default / relative)
     except ValueError:
         # Completely custom path (not under ~/.hermes) — keep as-is
-        return str(current_hermes)
+        return str(current_lliam)
 
 
 def _build_service_path_dirs(project_root: Path | None = None) -> list[str]:
@@ -3082,12 +3082,12 @@ def systemd_install(
     # flap-fight for the Telegram bot token on every gateway startup.
     # Only removes units matching _LEGACY_SERVICE_NAMES + our ExecStart
     # signature — profile units are never touched.
-    if has_legacy_hermes_units():
+    if has_legacy_lliam_units():
         print()
         print_legacy_unit_warning()
         print()
         if non_interactive or prompt_yes_no("Remove the legacy unit(s) before installing?", True):
-            remove_legacy_hermes_units(interactive=False)
+            remove_legacy_lliam_units(interactive=False)
             print()
 
     unit_path = get_systemd_unit_path(system=system)
@@ -3331,7 +3331,7 @@ def systemd_status(deep: bool = False, system: bool = False, full: bool = False)
         print_systemd_scope_conflict_warning()
         print()
 
-    if has_legacy_hermes_units():
+    if has_legacy_lliam_units():
         print_legacy_unit_warning()
         print()
 
@@ -5956,7 +5956,7 @@ def gateway_setup():
         print_systemd_scope_conflict_warning()
         print()
 
-    if supports_systemd_services() and has_legacy_hermes_units():
+    if supports_systemd_services() and has_legacy_lliam_units():
         print_legacy_unit_warning()
         print()
 
@@ -7005,6 +7005,6 @@ def _gateway_command_inner(args):
             print("Legacy unit migration only applies to systemd-based Linux or macOS hosts.")
             return
         if supports_systemd_services():
-            remove_legacy_hermes_units(interactive=not yes, dry_run=dry_run)
+            remove_legacy_lliam_units(interactive=not yes, dry_run=dry_run)
         if is_macos():
             remove_legacy_launchd_jobs(interactive=not yes, dry_run=dry_run)

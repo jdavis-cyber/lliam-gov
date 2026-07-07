@@ -103,7 +103,7 @@ def _manager_provider_with_context(storage: LliamTokenStorage, **context_attrs):
     if _LLIAM_PROVIDER_CLS is None:
         pytest.skip("MCP SDK auth not available")
     provider = _LLIAM_PROVIDER_CLS.__new__(_LLIAM_PROVIDER_CLS)
-    provider._hermes_server_name = context_attrs.get("server_name", "srv")
+    provider._lliam_server_name = context_attrs.get("server_name", "srv")
     context = MagicMock()
     context.storage = storage
     context.oauth_metadata = context_attrs.get("oauth_metadata")

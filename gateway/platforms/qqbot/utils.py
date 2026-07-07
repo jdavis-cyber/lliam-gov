@@ -13,7 +13,7 @@ from .constants import QQBOT_VERSION
 # User-Agent
 # ---------------------------------------------------------------------------
 
-def _get_hermes_version() -> str:
+def _get_lliam_version() -> str:
     """Return the hermes-agent package version, or 'dev' if unavailable."""
     try:
         from importlib.metadata import version
@@ -35,8 +35,8 @@ def build_user_agent() -> str:
     """
     py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     os_name = platform.system().lower()
-    hermes_version = _get_hermes_version()
-    return f"QQBotAdapter/{QQBOT_VERSION} (Python/{py_version}; {os_name}; Hermes/{hermes_version})"
+    lliam_version = _get_lliam_version()
+    return f"QQBotAdapter/{QQBOT_VERSION} (Python/{py_version}; {os_name}; Hermes/{lliam_version})"
 
 
 def get_api_headers() -> Dict[str, str]:
