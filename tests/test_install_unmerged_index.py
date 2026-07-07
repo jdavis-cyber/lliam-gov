@@ -158,15 +158,15 @@ def test_install_ps1_stops_venv_resident_processes_before_removing_venv() -> Non
 
     A gateway autostarted by a scheduled task runs as
     ``venv\\Scripts\\pythonw.exe -m lliam_cli.main gateway run`` — image name
-    ``pythonw``, not ``hermes.exe`` — so the ``taskkill /IM hermes.exe`` guard
+    ``pythonw``, not ``lliam-gov.exe`` — so the ``taskkill /IM lliam-gov.exe`` guard
     misses it, the loaded ``.pyd`` stays locked, and ``Remove-Item venv`` fails
     mid-recursion (issues #47036/#47557/#47910). The recreate branch must also
     sweep by venv path prefix, and that sweep must run before the delete.
     """
     text = INSTALL_PS1.read_text()
 
-    # The hermes.exe tree-kill is preserved (kills spawned child processes too).
-    assert 'taskkill /F /T /IM hermes.exe' in text
+    # The lliam-gov.exe tree-kill is preserved (kills spawned child processes too).
+    assert 'taskkill /F /T /IM lliam-gov.exe' in text
 
     # The venv path-prefix sweep exists. It must match by case-insensitive
     # StartsWith, NOT PowerShell -like: a venv path containing wildcard

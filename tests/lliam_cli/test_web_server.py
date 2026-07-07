@@ -3205,7 +3205,7 @@ class TestNewEndpoints:
         if is_windows:
             assert lines == ["@echo off", "lliam-gov -p writer %*"]
         else:
-            assert lines == ["#!/bin/sh", 'exec /opt/hermes/bin/lliam-gov -p writer "$@"']
+            assert lines == ["#!/bin/sh", 'exec /opt/hermes/bin/hermes -p writer "$@"']
 
     def test_profiles_create_with_clone_from_copies_source_skills(self, monkeypatch):
         from lliam_constants import get_lliam_home

@@ -67,7 +67,7 @@ def test_slug_collision_disambiguates(conn):
     pdb.create_project(conn, name="Lliam-GOV Agent")
     slugs = sorted(p.slug for p in pdb.list_projects(conn))
 
-    assert slugs == ["hermes-agent", "hermes-agent-2"]
+    assert slugs == ["lliam-gov-agent", "lliam-gov-agent-2"]
 
 
 def test_empty_name_rejected(conn):

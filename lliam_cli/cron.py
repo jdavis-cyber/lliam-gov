@@ -23,10 +23,10 @@ from lliam_cli.colors import Colors, color
 # the API gateway logs and report restart events").
 _GATEWAY_LIFECYCLE_PATTERNS = re.compile(
     r"(?i)"
-    r"(hermes\s+gateway\s+(restart|stop|start))"
-    r"|(launchctl\s+(kickstart|unload|load|stop|restart)\s+.*hermes)"
-    r"|(systemctl\s+(-\S+\s+)*(restart|stop|start)\s+.*hermes)"
-    r"|(p?kill\s+.*hermes.*gateway)"
+    r"((lliam-gov|lliam|hermes)\s+gateway\s+(restart|stop|start))"
+    r"|(launchctl\s+(kickstart|unload|load|stop|restart)\s+.*(lliam-gov|lliam|hermes))"
+    r"|(systemctl\s+(-\S+\s+)*(restart|stop|start)\s+.*(lliam-gov|lliam|hermes))"
+    r"|(p?kill\s+.*(lliam-gov|lliam|hermes).*gateway)"
 )
 
 

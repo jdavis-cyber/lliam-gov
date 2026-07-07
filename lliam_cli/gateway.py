@@ -2016,6 +2016,8 @@ _LEGACY_UNIT_EXECSTART_MARKERS: tuple[str, ...] = (
     "lliam_cli.main gateway",
     "lliam_cli/main.py gateway",
     "gateway/run.py",
+    " lliam-gov gateway ",
+    "/lliam-gov gateway ",
     " hermes gateway ",
     "/hermes gateway ",
 )
