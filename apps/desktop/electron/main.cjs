@@ -357,7 +357,7 @@ const DESKTOP_CONNECTION_CONFIG_PATH = path.join(app.getPath('userData'), 'conne
 const DESKTOP_UPDATE_CONFIG_PATH = path.join(app.getPath('userData'), 'updates.json')
 const DESKTOP_WINDOW_STATE_PATH = path.join(app.getPath('userData'), 'window-state.json')
 // active-profile.json records which Lliam-GOV profile the desktop launches its
-// local backend as. When set, startLliam() passes `hermes --profile <name>
+// local backend as. When set, startLliam() passes `lliam-gov --profile <name>
 // dashboard …`, which deterministically pins HERMES_HOME (see
 // _apply_profile_override in hermes_cli/main.py) and bypasses the sticky
 // ~/.hermes/active_profile file. Unset (null) preserves the legacy behavior:
@@ -2023,7 +2023,7 @@ function repairMacUpdaterHelper(updater) {
 function venvLliamShimPath(updateRoot) {
   return IS_WINDOWS
     ? path.join(updateRoot, 'venv', 'Scripts', 'hermes.exe')
-    : path.join(updateRoot, 'venv', 'bin', 'hermes')
+    : path.join(updateRoot, 'venv', 'bin', 'lliam-gov')
 }
 
 // Best-effort lock probe mirroring the Rust updater's is_locked(): a running
@@ -2092,7 +2092,7 @@ async function releaseBackendLockForUpdate(updateRoot) {
 
 // Shared backend teardown + venv-shim unlock wait. Used by BOTH the self-update
 // hand-off and the desktop uninstaller — they have the identical Windows
-// problem: the desktop's backend (and the grandchildren IT spawned — a hermes
+// problem: the desktop's backend (and the grandchildren IT spawned — a lliam-gov
 // REPL, a pty terminal, the gateway) keep `hermes.exe` and other files in the
 // venv mandatory-locked, so any in-place replace/delete of the install tree
 // races a live handle and half-fails (#37532). We tree-kill every backend PID
@@ -2300,12 +2300,12 @@ async function handOffWindowsBootstrapRecovery(reason) {
   return true
 }
 
-// Resolve the hermes CLI to drive an in-app update: prefer the venv shim in
+// Resolve the lliam-gov CLI to drive an in-app update: prefer the venv shim in
 // the install we're updating, fall back to `lliam-gov` on PATH.
 function resolveLliamCliBinary(updateRoot) {
-  const venvLliam = path.join(updateRoot, 'venv', 'bin', 'hermes')
+  const venvLliam = path.join(updateRoot, 'venv', 'bin', 'lliam-gov')
   if (fileExists(venvLliam)) return venvLliam
-  return findOnPath('hermes') || null
+  return findOnPath('lliam-gov') || null
 }
 
 // Spawn a command and stream each output line to the update progress channel.
@@ -2358,8 +2358,8 @@ function shellQuote(value) {
 // restart to load the new GUI" if the swap can't be performed.
 async function applyUpdatesPosixInApp() {
   const updateRoot = resolveUpdateRoot()
-  const hermes = resolveLliamCliBinary(updateRoot)
-  if (!hermes) {
+  const lliamBin = resolveLliamCliBinary(updateRoot)
+  if (!lliamBin) {
     emitUpdateProgress({ stage: 'manual', message: 'lliam-gov update', percent: null })
     return { ok: true, manual: true, command: 'lliam-gov update', hermesRoot: updateRoot }
   }
@@ -2410,7 +2410,7 @@ async function applyUpdatesPosixInApp() {
   }
 
   emitUpdateProgress({ stage: 'update', message: 'Updating Lliam-GOV (git + dependencies)…', percent: 10 })
-  const updated = await runStreamedUpdate(hermes, ['update', '--yes', ...branchArgs], {
+  const updated = await runStreamedUpdate(lliamBin, ['update', '--yes', ...branchArgs], {
     cwd: updateRoot,
     env,
     stage: 'update'
@@ -2428,7 +2428,7 @@ async function applyUpdatesPosixInApp() {
     if (attempt > 0) {
       emitUpdateProgress({ stage: 'rebuild', message: 'Retrying the desktop rebuild…', percent: 60 })
     }
-    return runStreamedUpdate(hermes, ['desktop', '--build-only'], { cwd: updateRoot, env, stage: 'rebuild' })
+    return runStreamedUpdate(lliamBin, ['desktop', '--build-only'], { cwd: updateRoot, env, stage: 'rebuild' })
   })
   if (rebuilt.code !== 0) {
     emitUpdateProgress({
@@ -2661,7 +2661,7 @@ function isBootstrapComplete() {
   if (marker.schemaVersion !== BOOTSTRAP_MARKER_SCHEMA_VERSION) return false
   if (typeof marker.pinnedCommit !== 'string' || marker.pinnedCommit.length < 7) return false
   // We DELIBERATELY do NOT verify that the checkout is currently at the
-  // pinned commit -- users update via the in-app update path or `hermes
+  // pinned commit -- users update via the in-app update path or `lliam-gov
   // update`, which moves HEAD legitimately. The marker just attests "we
   // ran the bootstrap successfully at least once." We DO additionally require
   // a runnable venv: an interrupted or split-home install can leave the marker
@@ -2900,7 +2900,7 @@ function resolveLliamBackend(dashboardArgs) {
   //    %LOCALAPPDATA%\hermes\hermes-agent (Windows) or ~/.hermes/hermes-agent.
   //    The bootstrap marker means install.ps1 stages finished and the user
   //    completed initial configuration; we trust the install and go straight
-  //    to spawning hermes. Updates flow through the in-app update path
+  //    to spawning lliam-gov. Updates flow through the in-app update path
   //    (applyUpdates -> git pull) or `lliam-gov update` from the CLI.
   if (isBootstrapComplete()) {
     return createActiveBackend(dashboardArgs)
@@ -2925,7 +2925,7 @@ function resolveLliamBackend(dashboardArgs) {
         rememberLog(`Ignoring Windows Lliam-GOV override under WSL: ${lliamOverride}`)
       }
     } else {
-      lliamCommand = findOnPath('hermes')
+      lliamCommand = findOnPath('lliam-gov')
     }
 
     if (lliamCommand) {
@@ -6863,7 +6863,7 @@ function terminalShellEnv() {
   env.TERM_PROGRAM = 'Lliam-GOV'
   env.TERM_PROGRAM_VERSION = app.getVersion()
 
-  // Let a hermes/--tui launched in this pane know it's embedded in the desktop
+  // Let a lliam-gov/--tui launched in this pane know it's embedded in the desktop
   // GUI (build_environment_hints surfaces this). Distinct from LLIAM_DESKTOP,
   // which marks the agent *backend* and gates cron/gateway behavior.
   env.LLIAM_DESKTOP_TERMINAL = '1'
@@ -7343,12 +7343,12 @@ async function runDesktopUninstall(mode) {
   let runnerArgs
   try {
     if (IS_WINDOWS) {
-      scriptPath = path.join(app.getPath('temp'), `hermes-uninstall-${Date.now()}.cmd`)
+      scriptPath = path.join(app.getPath('temp'), `lliam-gov-uninstall-${Date.now()}.cmd`)
       fs.writeFileSync(scriptPath, buildWindowsCleanupScript(scriptArgs))
       runner = process.env.ComSpec || 'cmd.exe'
       runnerArgs = ['/c', scriptPath]
     } else {
-      scriptPath = path.join(app.getPath('temp'), `hermes-uninstall-${Date.now()}.sh`)
+      scriptPath = path.join(app.getPath('temp'), `lliam-gov-uninstall-${Date.now()}.sh`)
       fs.writeFileSync(scriptPath, buildPosixCleanupScript(scriptArgs), { mode: 0o755 })
       runner = '/bin/bash'
       runnerArgs = [scriptPath]

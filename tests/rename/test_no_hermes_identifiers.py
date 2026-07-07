@@ -116,12 +116,21 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"~/\.hermes", "legacy home dir literal ~/.hermes — migrate-from path"),
     (r"\.hermes(?![a-z])", "legacy .hermes home/dir/file literal — migrate-from path"),
     (r"%LOCALAPPDATA%\\+hermes", "Windows legacy install path — migrate-from"),
+    (r"LOCALAPPDATA,\s*'hermes'|localappdata.*'hermes'",
+     "JS Windows legacy home path (path.join(LOCALAPPDATA,'hermes')) — migrate-from"),
+    (r"'hermes-home'|\"hermes-home\"",
+     "legacy desktop data-subdir literal 'hermes-home' — inherited path"),
+    (r"99-hermes-wsl-windows-fonts\.conf",
+     "product-written fontconfig filename under the legacy hermes dir — install artifact"),
+    (r"hermes-setup(\.exe)?",
+     "staged Tauri bootstrap-installer binary name detected by the desktop — "
+     "coordinated staging filename; renaming risks breaking staged-installer detection"),
     (r"hermes_history", "legacy history filename — migrate-from artifact"),
     (r"hermes_state\.db", "legacy state DB filename — migrate-from artifact"),
     (r"HERMES\.md", "legacy project-context filename (_LLIAM_MD_NAMES contract)"),
 
     # --- Env vars: whole HERMES_* namespace is a preserved back-compat contract ---
-    (r"HERMES_[A-Z0-9_]+", "HERMES_* env var — preserved backward-compat env API"),
+    (r"HERMES_[A-Z0-9_]*", "HERMES_* env var / namespace prefix — preserved backward-compat env API"),
 
     # --- Contract literals: live keys / kwargs / wire fields ---
     (r"hermes_home", "live kwargs-dispatch key / var / detection substring for HERMES_HOME"),
@@ -141,6 +150,8 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"__hermes_session_token__|window\.__HERMES", "live JS dashboard global"),
     (r"_HERMES_CORE_TOOLS|__HERMES_PLUGIN", "live JS plugin-SDK global"),
     (r"hermes_agent\.plugins", "live pip entry-point group ENTRY_POINTS_GROUP"),
+    (r"persist:hermes-remote-oauth",
+     "electron session-partition storage key — renaming orphans persisted OAuth sessions"),
 
     # --- Legacy service / process detection markers (detecting/cleaning OLD binary) ---
     (r"hermes-gateway", "legacy service/process name — detection marker"),
@@ -217,6 +228,7 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
 
     # --- Incident / proper-noun ---
     (r"hermes-0day", "security incident proper-noun name"),
+    (r"hermes #\d+", "upstream issue-tracker reference (hermes #NNNNN) — attribution/traceability"),
     (r"hermesagent26@users\.noreply\.github\.com", "contributor email — proper noun"),
 
     # --- Upstream file/skill refs ---
