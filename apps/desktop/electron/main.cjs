@@ -2549,8 +2549,8 @@ async function applyUpdatesPosixInApp() {
   }
 
   const rebuiltApp = [
-    path.join(updateRoot, 'apps', 'desktop', 'release', 'mac-arm64', 'Hermes.app'),
-    path.join(updateRoot, 'apps', 'desktop', 'release', 'mac', 'Hermes.app')
+    path.join(updateRoot, 'apps', 'desktop', 'release', 'mac-arm64', 'Lliam-GOV.app'),
+    path.join(updateRoot, 'apps', 'desktop', 'release', 'mac', 'Lliam-GOV.app')
   ].find(directoryExists)
   const targetApp = runningAppBundle()
 
@@ -2739,7 +2739,7 @@ function isPackagedInstallPath(dir) {
 
 function resolveLliamCwd() {
   // In a packaged build, `process.cwd()` resolves to the install root (e.g.
-  // `…/win-unpacked` on Windows or `/Applications/Hermes.app/Contents/...`
+  // `…/win-unpacked` on Windows or `/Applications/Lliam-GOV.app/Contents/...`
   // on macOS). Sessions spawned there leave files inside the app bundle
   // and bewilder users when "where did my files go?" is the install dir.
   // The user-configurable default project directory wins over everything,

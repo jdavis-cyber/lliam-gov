@@ -6,7 +6,7 @@
 //!   Linux:   ~/.hermes  (override via $HERMES_HOME)
 //!
 //! NOTE (macOS): Python's get_hermes_home(), scripts/install.sh, and the
-//! Electron desktop's resolveHermesHome() ALL use ~/.hermes on macOS — there
+//! Electron desktop's resolveLliamHome() ALL use ~/.hermes on macOS — there
 //! is no ~/Library/Application Support branch anywhere else. An earlier
 //! version of this file used Application Support, which drifted from every
 //! other component: the installer wrote the install to one dir and the
@@ -38,7 +38,7 @@ pub fn hermes_home() -> PathBuf {
     }
 
     // macOS + Linux + fallback: ~/.hermes (matches Python get_hermes_home(),
-    // install.sh, and the Electron desktop's resolveHermesHome()).
+    // install.sh, and the Electron desktop's resolveLliamHome()).
     if let Some(home) = dirs::home_dir() {
         return home.join(".hermes");
     }

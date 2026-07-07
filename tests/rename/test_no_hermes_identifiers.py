@@ -62,6 +62,11 @@ EXCLUDES = [
 WHOLE_TREE_KEEPS = [
     "lliam_cli/migrate_home.py",
     "lliam_cli/env_compat.py",
+    # Desktop localStorage-key migration: maps the OLD `hermes*` keys onto the
+    # new `lliam-gov*` keys. Every `hermes*` literal is a migrate-from source
+    # (same role as migrate_home.py) — renaming them breaks the migration.
+    "apps/desktop/src/lib/migrate-storage-keys.ts",
+    "apps/desktop/src/lib/migrate-storage-keys.test.ts",
     "hermes_cli/migrate_home.py",   # pre-R.2 path duality (harmless if absent)
     "hermes_cli/env_compat.py",
     "tests/rename",
@@ -148,6 +153,14 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"X-Hermes-[A-Za-z-]+", "X-Hermes-* HTTP header contract"),
     (r"x-hermes-session-[a-z]+", "x-hermes-session-* HTTP header contract"),
     (r"__hermes_session_token__|window\.__HERMES", "live JS dashboard global"),
+    (r'"?hermes\.(session|run|tool\.progress|subagent\.[a-z]+|api_server[a-z.]*|governance\.posture|lastlocation)"?|'
+     r'hermes\.session\.(chat\.completion|deleted)|"?object"?:\s*"hermes|'
+     r'\[.hermes.\]\s*=|response_data\["hermes"\]|err_body\["error"\]\["hermes"\]|finish_chunk\["hermes"\]|'
+     r'"owned_by":\s*"hermes"|event:\s*hermes\.',
+     "API wire-protocol object type / response-envelope key returned to HTTP clients — "
+     "external contract, test-asserted (tests/gateway/test_session_api.py, test_api_server.py)"),
+    (r"hermes\.tokenReloadAttempted|hermesTokenStorage|hermes\.governance\.posture",
+     "dashboard/portal client-side storage + telemetry keys — persisted-state contract"),
     (r"_HERMES_CORE_TOOLS|__HERMES_PLUGIN", "live JS plugin-SDK global"),
     (r"hermes_agent\.plugins", "live pip entry-point group ENTRY_POINTS_GROUP"),
     (r"persist:hermes-remote-oauth",
@@ -167,6 +180,21 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"taskkill.*hermes\.exe|hermes\.exe.*taskkill", "OLD-binary termination — cleanup"),
     (r"looks_like_gateway_command_line|_gateway_runtime_command_line",
      "OLD gateway command-line detection helper"),
+    (r"resolve_hermes\b|venv_hermes\b|force_kill_other_hermes|resolve_hermes_desktop_app|"
+     r"launch_hermes_desktop|the hermes CLI|venv shim.*hermes|hermes <args>|&hermes,|"
+     r"venv.*bin.*hermes|isn't named hermes\.exe|\$HermesHome",
+     "bootstrap-installer (src-tauri) CLI-resolution + OLD-straggler-kill + Tauri IPC-command "
+     "family — a self-consistent, test-asserted internal identity the base rebrand commit "
+     "deliberately left unchanged (IPC command names are a JS<->Rust wire contract). The "
+     "`venv/bin/hermes` shim path + PowerShell $HermesHome ref pair with the desktop install "
+     "root; whether that binary is `hermes` or `lliam-gov` is a flagged D-level follow-up"),
+    (r"local_app_data\.join\(\"hermes\"\)",
+     "Rust legacy Windows home path (LOCALAPPDATA/hermes) — migrate-from"),
+    (r"hermes-swap-test-|hermes-bootstrap-test-|hermes-desktop-build-",
+     "Rust #[cfg(test)] temp-dir fixture prefix — opaque test data"),
+    (r"\.hermes-update-(new|old|in-progress)",
+     "cross-process update marker filename — written by Tauri, read by electron "
+     "(apps/desktop/electron/update-marker.cjs); both sides must agree, so kept"),
     (r'setproctitle\(\s*"hermes"\)|prctl\(15,\s*b"hermes"|pthread_setname_np\(\s*b"hermes"|process title to .hermes',
      "process title 'hermes' — coordinated with the pkill/pgrep self-termination "
      "guard (tools/approval.py) that blocks killing the running gateway; kept so "
@@ -247,6 +275,13 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r'_agent\s*=\s*"hermes"', "test fixture provider-agent value — opaque data"),
     (r"hermes@(test|localhost)", "test fixture email — opaque data"),
     (r"hermes/feat", "test fixture git branch name — opaque data"),
+    (r'hermes-\{short_id\}|hermes/\{wt_name\}|``hermes/\*``|hermes/\*.*branch',
+     "worktree/branch naming prefix — the create-side and the prune-side matcher are a "
+     "coordinated pair, test-asserted (tests/cli/test_worktree.py); existing user worktrees/"
+     "branches carry this prefix, so renaming would strand them"),
+    (r"NOUS HERMES",
+     "default compact-banner branding — test-asserted as intentional legacy Nous Hermes "
+     "attribution (test_default_compact_banner_keeps_legacy_nous_hermes_branding)"),
     (r"hermes-desktop-|hermes-relaunch-", "test tmp-file prefix — opaque data"),
     (r"hermes please help|\^hermes|@Hermes agent|MyHermesBot",
      "wake-word / bot-name test fixture — opaque data"),
