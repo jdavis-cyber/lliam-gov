@@ -136,7 +136,7 @@ def slack_manifest_command(args) -> int:
     Flags (all parsed in ``lliam_cli/main.py``):
       --write [PATH]  Write to file instead of stdout (default path:
                       ``$HERMES_HOME/slack-manifest.json``)
-      --name NAME     Override the bot display name (default: "Hermes")
+      --name NAME     Override the bot display name (default: "Lliam-GOV")
       --description DESC  Override the bot description
       --slashes-only  Emit only the ``features.slash_commands`` array (for
                       merging into an existing manifest manually)
@@ -145,8 +145,8 @@ def slack_manifest_command(args) -> int:
                       DMs render as a flat chat where bare slash commands
                       work inline instead of the Assistant thread pane.
     """
-    name = getattr(args, "name", None) or "Hermes"
-    description = getattr(args, "description", None) or "Your Hermes agent on Slack"
+    name = getattr(args, "name", None) or "Lliam-GOV"
+    description = getattr(args, "description", None) or "Your Lliam-GOV agent on Slack"
     include_assistant = not getattr(args, "no_assistant", False)
 
     if getattr(args, "slashes_only", False):

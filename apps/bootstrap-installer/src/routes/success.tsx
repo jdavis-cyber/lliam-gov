@@ -5,7 +5,7 @@ import { launchHermesDesktop } from '../store'
 import { Rocket, AlertCircle } from 'lucide-react'
 
 /*
- * Success screen. HERMES AGENT wordmark stays as the visual anchor
+ * Success screen. LLIAM-GOV wordmark stays as the visual anchor
  * (same Collapse Bold treatment as Welcome + the desktop chat intro),
  * with a status line below.
  *
