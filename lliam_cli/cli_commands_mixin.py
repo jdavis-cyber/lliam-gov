@@ -62,7 +62,7 @@ class CLICommandsMixin:
         mgr = self.agent._checkpoint_mgr
         if not mgr.enabled:
             print("  Checkpoints are not enabled.")
-            print("  Enable with: hermes --checkpoints")
+            print("  Enable with: lliam-gov --checkpoints")
             print("  Or in config.yaml: checkpoints: { enabled: true }")
             return
 

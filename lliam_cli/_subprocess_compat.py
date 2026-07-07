@@ -105,7 +105,7 @@ _CREATE_NO_WINDOW = 0x08000000
 # "detached" child with it. Critical for the post-update gateway watcher:
 # Electron spawns the Tauri updater inside its own job, the updater spawns
 # the watcher subprocess; without BREAKAWAY the watcher dies the instant
-# Electron exits, so the gateway never gets respawned after a `hermes
+# Electron exits, so the gateway never gets respawned after a `lliam-gov
 # update` triggered from the GUI. See fix/windows-gateway-reliability.
 _CREATE_BREAKAWAY_FROM_JOB = 0x01000000
 

@@ -722,7 +722,7 @@ def run_import(args) -> None:
                 # lliam_cli.profiles might not be available (fresh install)
                 if any(profiles_dir.iterdir()):
                     print(f"\n  Profiles detected but aliases could not be created.")
-                    print(f"  Run: lliam-gov profile list  (after installing hermes)")
+                    print(f"  Run: lliam-gov profile list  (after installing lliam-gov)")
 
         # Guidance
         print()

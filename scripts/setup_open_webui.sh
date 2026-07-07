@@ -287,7 +287,7 @@ start_foreground_hint() {
 }
 
 main() {
-  require_cmd hermes
+  require_cmd lliam-gov
   require_cmd curl
   require_cmd python3
 

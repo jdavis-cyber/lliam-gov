@@ -300,7 +300,7 @@ def _redact_sensitive(text: str) -> str:
 
 
 def _mime_for_message_type(mime: str) -> MessageType:
-    """Map a MIME string to a hermes MessageType.
+    """Map a MIME string to a lliam-gov MessageType.
 
     Anything not image/audio/video falls through to DOCUMENT so the agent
     still receives the file.
@@ -1527,7 +1527,7 @@ class GoogleChatAdapter(BasePlatformAdapter):
     async def _build_message_event(
         self, msg: Dict[str, Any], envelope: Dict[str, Any]
     ) -> Optional[MessageEvent]:
-        """Parse a Chat API message into a hermes MessageEvent."""
+        """Parse a Chat API message into a lliam-gov MessageEvent."""
         space = envelope.get("space") or msg.get("space") or {}
         space_name = space.get("name") or ""  # "spaces/XXX"
         space_type = (space.get("type") or space.get("spaceType") or "").upper()

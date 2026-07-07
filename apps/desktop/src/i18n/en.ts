@@ -1438,7 +1438,7 @@ export const en: Translations = {
       '/resume': 'resume a prior session',
       '/details': 'control transcript detail level',
       '/copy': 'copy selection or last assistant message',
-      '/quit': 'exit hermes'
+      '/quit': 'exit lliam-gov'
     },
     hotkeyDescs: {
       'composer.mention': 'reference files, folders, urls, git',

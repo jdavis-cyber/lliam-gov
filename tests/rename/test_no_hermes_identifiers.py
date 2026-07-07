@@ -369,6 +369,100 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
      "opaque test fixture identifiers seeded as data"),
 ]
 
+KEEP_PATTERNS += [
+    # --- Logger channel names (stable log-routing namespace) ---
+    (r'getLogger\("hermes\.[a-z_.]+"\)|"hermes\.[a-z_]+\.[a-z_.]+"',
+     "logging.getLogger('hermes.<x>') channel name — stable log-routing namespace"),
+    # --- External API routing / wire tags (functional routing keys, not display) ---
+    (r"x-sm-source|sm_source|x-sdk-runtime|from=hermes|tp=hermes|connect=hermes|container_tag",
+     "external memory/API routing header/query tag ('hermes') — functional routing key sent to a 3rd party"),
+    (r"hermes-plugin\b", "x-sdk-runtime plugin tag value — external wire"),
+    # --- External-service peer/workspace/host default identifiers ---
+    (r'hermes-default|hermes-assistant|HOST = "hermes"|ai_peer.*"hermes"|_acct_id.*"hermes"|'
+     r'"hermes-\{identity\}"|hermes-\{identity\}|hermes-coder|hermes-\{profile\}|hermes\.<profile>',
+     "external memory-service peer/workspace/host/container default identifier — opaque data"),
+    (r"_DEFAULT_CONTAINER_TAG = \"hermes\"|default_headers.*hermes|HermesMeetSink|hermes-meet-node|"
+     r'source: str = "hermes-desktop"|"hermes-desktop"',
+     "external-service default container/source/display identifier — opaque data / wire tag"),
+    # --- Plugin / engine registry ids (external or registered) ---
+    (r"hermes-memory-store|hermes-lcm|hermes-ink|hermes-achievements|hermes-kanban",
+     "plugin/engine registry id or external package/repo name — registered identifier"),
+    (r"HermesPluginSDK|HermesMCPOAuthProvider|HermesSweEnv|HermesSetupBot|HermesDebugBoundary|"
+     r"HermesMeetSink|HermesDialog",
+     "public SDK type / provider-class / benchmark-env / boundary token — API surface or "
+     "registered identifier kept to avoid breaking a wire/import/registry contract"),
+    # --- Web/desktop persisted-state + DOM identifiers (no/first-paint migration) ---
+    (r"hermes-locale|hermes-sidebar-collapsed|hermes-sidebar-plugin|persist:hermes-[a-z]+|"
+     r"data-hermes-plugin|hermes-boot-|hermes-chat-xterm-host|hermes-fade-in|hermes:dev-session-token|"
+     r'"hermes":\)|\|hermes\):|about\|hermes',
+     "web/desktop localStorage key, session-partition, DOM class/attr, or URL-scheme literal — "
+     "persisted-state / first-paint contract; renaming orphans state or needs coordinated migration"),
+    # --- Detection / kill / classification regexes (must keep matching legacy 'hermes') ---
+    (r"lliam-gov\|lliam\|hermes|CLAUDE\|CODEX\|HERMES|hermes\\s\+gateway|hermes.*gateway|"
+     r'base == "hermes"|base\.startswith\("hermes|"hermes" in|"off", "default", "disable", "hermes"|'
+     r"hermes\[-_ \]\?\[34\]|kickstart.*hermes|systemctl.*hermes|p\?kill.*hermes|hermes-brain",
+     "gateway/service/model DETECTION or kill regex — must keep matching legacy 'hermes' units/models"),
+    # --- Internal temp-dir / task / thread / container-name prefixes (opaque) ---
+    (r"hermes-ssh|hermes-sync-back-|hermes-overlays|hermes-cmd-stt-|hermes-local-stt-|"
+     r"hermes-skills-safe-|hermes-core-constraints-|hermes-bws-|hermes-osint|hermes-lsp-loop|"
+     r"hermes-\{task_id|hermes-\{|hermes-\$\{|hermes-<|daytona.*hermes|sandbox_name.*hermes|"
+     r'mkdtemp.*hermes|prefix=f?"hermes-|prefix="hermes-|/ "hermes-|hermes-dialog-bridge|'
+     r"hermes-macos-electron-binary-fallback",
+     "internal temp-dir / task / thread / generated-container name prefix — opaque runtime identifier"),
+    # --- ntfy / feishu / social wire tags + skills metadata key ---
+    (r'"hermes-in"|"hermes-out"|hermes-in\b|hermes-ig-embed|hermes-tt-embed|hermes-tw-embed',
+     "ntfy topic / social-embed element id — wire/registered identifier"),
+    (r'^\s*hermes:\s*$|metadata.*hermes|meta\.get\("hermes"\)|get\("hermes"\)|"  hermes:"|"hermes:"',
+     "SKILL.md/blueprint frontmatter `hermes:` metadata key — schema key read by the loader"),
+    # --- ASCII / pentest / creative literal art & payload tokens (opaque) ---
+    (r"HERMES</span>|HERMES.*font|pyfiglet .HERMES|text=HERMES|HERMES-PENTEST|HERMESPENTEST|"
+     r"echo HERMES|HERMES ONLINE|hermes-chan|hermes-san|hermes-web-pentest|hermes-pentest|"
+     r"hermes-comfyui|hermes-fast|hermes-audit|hermes-issues|hermes-system",
+     "ASCII-art / pentest-payload / creative-copy / example literal — opaque string, not the display name"),
+    # --- Nix package pnames + Rust crate + PowerShell param (internal build identifiers) ---
+    (r'pname = "hermes-(tui|web|desktop)"|mainProgram = "hermes-desktop"|"hermes-tui"|"hermes-web"|'
+     r'name = "hermes-bootstrap"|hermes-bootstrap|hermes-config-(attrs|merge)|hermes-documents|'
+     r"hermes-container-entrypoint|repo = \"hermes-lcm\"|hermes-config-\*",
+     "internal Nix package pname / Rust crate name / build-derivation name — build-time identifier, "
+     "not the shipped display name (the shipped artifacts are Lliam-GOV*)"),
+    (r"-HermesHome\b", "PowerShell -HermesHome install param — back-compat with install.ps1"),
+    # --- Env-compat rebrand shims (migrate-from) ---
+    (r"rebrandEnv|rebrand.*hermes|hermes -> lliam|hermes \*|legacy .hermes\*|hermes\* localStorage|"
+     r"Migrate legacy .hermes",
+     "env/storage-key rebrand-compat shim comment — describes the migrate-from side"),
+    # --- Codex/copilot provider token help + misc CLI-adjacent kept refs ---
+    (r"copilot.*provider.*hermes|Copilot subscription token.*hermes",
+     "provider help string referencing the kept internal token flow"),
+    # --- i18n message KEYS (the values are already Lliam-GOV; keys are code identifiers) ---
+    (r"updateHermes|updatingHermes|latest_hint",
+     "i18n message-KEY name (value already reads 'Lliam-GOV') — renaming the key means "
+     "renaming every locale file + call site in lockstep; kept as an internal string key"),
+    # --- OAuth client_id + pub/sub example ---
+    (r"client_id:\s*hermes-dashboard|hermes-dashboard\b",
+     "dashboard OAuth client_id — registered identifier / config contract"),
+    (r"hermes-chat-events", "Pub/Sub topic example name — opaque data"),
+    # --- Legacy home literal forms consumed by the migration / default-home resolver ---
+    (r'_get_platform_default_home\("hermes"\)|state_home / "hermes"|/ "hermes" /|'
+     r'AppData.*hermes|Local.hermes|home consulted only by the one-time migration',
+     "legacy home-dir literal 'hermes' — the migrate-from default consulted only by migration"),
+    # --- Uninstall / backend-probe DETECTION of the OLD install ---
+    (r'PATH line containing hermes|component contains "hermes"|chermes-foo|ephermeral|'
+     r"hermes-desktop\$|hermes\.desktop|stale hermes\.cmd|hermes\.cmd shim|to a hermes|"
+     r'remove any PATH.*hermes|entry whose path.*hermes',
+     "uninstall / backend-probe DETECTION + cleanup of the OLD 'hermes' install — must keep "
+     "matching the legacy name to find and remove it"),
+    # --- Shell-completion function name registered for the new command ---
+    (r"_hermes\(\)|compdef _hermes|_hermes\b",
+     "zsh/bash completion function name — internal identifier registered FOR the lliam-gov "
+     "command (see `compdef _hermes lliam-gov lliam`); renaming is cosmetic-only churn"),
+    # --- git worktree branch prefix (cjs side of the kept create/prune pair) ---
+    (r"hermes/\$\{slug\}|hermes/\$\{|`hermes/",
+     "desktop git-worktree branch prefix — cjs counterpart of the kept worktree naming pair"),
+    # --- kanban/godmode opaque account/model data ---
+    (r'kc_account="\$\{2:-hermes\}|check_key.*hermes|return "hermes"|installed hermes CLI',
+     "kanban service-account default / godmode model-name data / skill diagnostic — opaque data"),
+]
+
 _COMPILED = [(re.compile(rx, re.IGNORECASE), why) for rx, why in KEEP_PATTERNS]
 
 

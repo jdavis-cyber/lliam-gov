@@ -266,7 +266,7 @@ def main():
     # MCP tool discovery — runs in a background daemon thread so a slow or
     # unreachable MCP server can't freeze TUI startup.  Previously this ran
     # inline before ``gateway.ready``, which meant any configured-but-down
-    # server stalled the whole shell on "summoning hermes…" for the full
+    # server stalled the whole shell on "summoning lliam-gov…" for the full
     # connect-retry backoff (e.g. a dead stdio/http server burns 1+2+4s of
     # retries → ~7s of dead air before the composer appears).  Discovery is
     # idempotent and registers tools into the shared registry as servers

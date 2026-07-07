@@ -132,7 +132,7 @@ def configure_windows_stdio() -> bool:
     # subprocess calls (bash, rg, grep, etc.) resolve even in sessions
     # that started before the User PATH broadcast reached them.  When
     # install.ps1 adds these to User PATH via SetEnvironmentVariable,
-    # already-running shells don't see the change — which means hermes
+    # already-running shells don't see the change — which means lliam-gov
     # launched from the install session won't find rg / bash / grep
     # even though they're "installed".  Prepending the known paths here
     # closes that gap.  No-op when the paths don't exist (e.g. system-Git
@@ -232,7 +232,7 @@ def _augment_path_with_known_tools() -> None:
         os.path.join(local_appdata, "hermes", "git", "usr", "bin"),
         # Lliam-GOV venv Scripts directory — host of the hermes.exe shim itself,
         # also where any pip-installed console scripts land.  Usually already
-        # on PATH when the user invokes hermes, but harmless to include.
+        # on PATH when the user invokes lliam-gov, but harmless to include.
         os.path.join(local_appdata, "hermes", "hermes-agent", "venv", "Scripts"),
         # WinGet packages directory — where ``winget install`` drops CLI
         # shims by default (ripgrep lands here as rg.exe).  Covers the case

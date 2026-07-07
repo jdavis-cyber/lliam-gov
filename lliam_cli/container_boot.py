@@ -263,7 +263,7 @@ def _strip_container_argv_prefix(argv: Sequence[str]) -> list[str]:
     ``main-wrapper.sh`` token: that wrapper path is the stable boundary the
     image owns, and the subcommand always follows it. Pre-s6 / direct
     ``lliam-gov`` invocations carry no wrapper, so fall back to peeling a bare
-    ``init`` prefix. The wrapper re-execs ``hermes <subcommand>``, so an
+    ``init`` prefix. The wrapper re-execs ``lliam-gov <subcommand>``, so an
     explicit leading ``lliam-gov`` is peeled too. Shared by the legacy-gateway
     and dashboard role detectors.
     """
@@ -282,7 +282,7 @@ def _strip_container_argv_prefix(argv: Sequence[str]) -> list[str]:
         # Defensive: an `init` prefix with no wrapper token in argv.
         args = args[1:]
 
-    # The wrapper re-execs `hermes <subcommand>`; peel an explicit hermes.
+    # The wrapper re-execs `lliam-gov <subcommand>`; peel an explicit lliam-gov.
     if args and Path(args[0]).name == "hermes":
         args = args[1:]
     return args
@@ -422,7 +422,7 @@ def _register_service(scandir: Path, profile: str, *, start: bool) -> None:
         # BEFORE we publish the slot. Mirrors the same pre-creation
         # step in S6ServiceManager.register_profile_gateway — when
         # s6-svscan picks the published slot up, the s6-supervise it
-        # spawns will EEXIST our dirs/FIFOs and inherit hermes
+        # spawns will EEXIST our dirs/FIFOs and inherit lliam-gov
         # ownership, so runtime s6-svc / s6-svstat / s6-svwait calls
         # (all dispatched as the lliam-gov user) won't hit EACCES. See
         # ``_seed_supervise_skeleton`` in service_manager.py for the

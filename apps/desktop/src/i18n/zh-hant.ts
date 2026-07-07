@@ -1509,7 +1509,7 @@ export const zhHant = defineLocale({
       '/resume': '繼續之前的工作階段',
       '/details': '控制對話記錄的詳細程度',
       '/copy': '複製所選內容或最後一條助手訊息',
-      '/quit': '結束 hermes'
+      '/quit': '結束 lliam-gov'
     },
     hotkeyDescs: {
       'composer.mention': '參照檔案、資料夾、URL、git',

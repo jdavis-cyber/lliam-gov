@@ -362,7 +362,7 @@ def check_systemd_timing_alignment(drain_timeout: float) -> Optional[Dict[str, A
 
     # Query systemctl for TimeoutStopUSec.  Use --user OR system depending
     # on which manager actually owns the unit.  Try user first since
-    # that's the common case for hermes.
+    # that's the common case for lliam-gov.
     timeout_us: Optional[int] = None
     for flag in (["--user"], []):
         try:

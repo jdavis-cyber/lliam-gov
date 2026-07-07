@@ -536,7 +536,7 @@ def _looks_like_test_tempdir(path: str) -> bool:
     macOS routes ``/tmp`` through ``/private/var/folders/<…>/T`` which is
     what pytest's tempdir factory uses by default. If a HERMES_HOME pointing
     at one of those paths is burned into ``~/.codex/config.toml``, every
-    codex-routed hermes-tools call fails silently once the directory is GC'd.
+    codex-routed lliam-gov-tools call fails silently once the directory is GC'd.
 
     We err on the side of refusing — losing a (very unlikely) real
     ``~/.hermes`` symlink that happens to live under ``/private/var/folders``

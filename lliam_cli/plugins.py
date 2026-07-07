@@ -472,7 +472,7 @@ class PluginContext:
         The handler signature is ``fn(raw_args: str) -> str | None``.
         It may also be an async callable — the gateway dispatch handles both.
 
-        Unlike ``register_cli_command()`` (which creates ``hermes <subcommand>``
+        Unlike ``register_cli_command()`` (which creates ``lliam-gov <subcommand>``
         terminal commands), this registers in-session slash commands that users
         invoke during a conversation.
 

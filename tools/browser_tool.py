@@ -1337,7 +1337,7 @@ def _cleanup_inactive_browser_sessions():
 
 
 def _write_owner_pid(socket_dir: str, session_name: str) -> None:
-    """Record the current hermes PID as the owner of a browser socket dir.
+    """Record the current lliam-gov PID as the owner of a browser socket dir.
 
     Written atomically to ``<socket_dir>/<session_name>.owner_pid`` so the
     orphan reaper can distinguish daemons owned by a live lliam-gov process
@@ -1453,7 +1453,7 @@ def _reap_orphaned_browser_sessions():
 
     Ownership detection priority:
       1. ``<session>.owner_pid`` file (written by current code) — if the
-         referenced hermes PID is alive, leave the daemon alone regardless
+         referenced lliam-gov PID is alive, leave the daemon alone regardless
          of whether it's in *this* process's ``_active_sessions``.  This is
          cross-process safe: two concurrent lliam-gov instances won't reap each
          other's daemons.
@@ -2153,7 +2153,7 @@ def _run_browser_command(
             f"agent-browser-{session_info['session_name']}"
         )
         os.makedirs(task_socket_dir, mode=0o700, exist_ok=True)
-        # Record this hermes PID as the session owner (cross-process safe
+        # Record this lliam-gov PID as the session owner (cross-process safe
         # orphan detection — see _write_owner_pid).
         _write_owner_pid(task_socket_dir, session_info['session_name'])
         logger.debug("browser cmd=%s task=%s socket_dir=%s (%d chars)",

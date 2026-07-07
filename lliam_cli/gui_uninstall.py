@@ -277,8 +277,8 @@ def uninstall_gui(lliam_home: "Path | None" = None, *, remove_userdata: bool = T
     if sys.platform.startswith("linux"):
         log_info(
             "If you installed the desktop via a .deb / .rpm package, remove it "
-            "with your package manager (e.g. 'sudo apt remove hermes' or "
-            "'sudo dnf remove hermes'). AppImage builds are a single file you "
+            "with your package manager (e.g. 'sudo apt remove lliam-gov' or "
+            "'sudo dnf remove lliam-gov'). AppImage builds are a single file you "
             "can delete from wherever you saved it."
         )
 

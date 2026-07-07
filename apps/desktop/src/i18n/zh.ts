@@ -1620,7 +1620,7 @@ export const zh: Translations = {
       '/resume': '恢复之前的会话',
       '/details': '控制对话记录的详细程度',
       '/copy': '复制所选内容或最后一条助手消息',
-      '/quit': '退出 hermes'
+      '/quit': '退出 lliam-gov'
     },
     hotkeyDescs: {
       'composer.mention': '引用文件、文件夹、URL、git',
