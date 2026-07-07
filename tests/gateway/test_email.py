@@ -261,7 +261,7 @@ class TestDispatchMessage(unittest.TestCase):
         msg_data = {
             "uid": b"1",
             "sender_addr": "hermes@test.com",
-            "sender_name": "Hermes",
+            "sender_name": "Lliam-GOV",
             "subject": "Test",
             "message_id": "<msg1@test.com>",
             "in_reply_to": "",
@@ -786,7 +786,7 @@ class TestThreadContext(unittest.TestCase):
             self.assertFalse(send_call["Subject"].startswith("Re: Re:"))
 
     def test_no_thread_context_uses_default_subject(self):
-        """Without thread context, subject should be 'Re: Hermes Agent'."""
+        """Without thread context, subject should be 'Re: Lliam-GOV'."""
         adapter = self._make_adapter()
 
         with patch("smtplib.SMTP") as mock_smtp:
@@ -796,7 +796,7 @@ class TestThreadContext(unittest.TestCase):
             adapter._send_email("newuser@test.com", "Hello!", None)
 
             send_call = mock_server.send_message.call_args[0][0]
-            self.assertEqual(send_call["Subject"], "Re: Hermes Agent")
+            self.assertEqual(send_call["Subject"], "Re: Lliam-GOV")
             self.assertIn("Date", send_call)
 
 
@@ -825,7 +825,7 @@ class TestSendMethods(unittest.TestCase):
             mock_smtp.return_value = mock_server
 
             result = asyncio.run(
-                adapter.send("user@test.com", "Hello from Hermes!")
+                adapter.send("user@test.com", "Hello from Lliam-GOV!")
             )
 
             self.assertTrue(result.success)
@@ -1171,7 +1171,7 @@ class TestSendEmailStandalone(unittest.TestCase):
             _, kwargs = mock_server.starttls.call_args
             self.assertIsInstance(kwargs["context"], ssl.SSLContext)
             send_call = mock_server.send_message.call_args[0][0]
-            self.assertEqual(send_call["Subject"], "Hermes Agent")
+            self.assertEqual(send_call["Subject"], "Lliam-GOV")
             self.assertIn("Date", send_call)
             self.assertEqual(send_call["To"], "user@test.com")
             self.assertEqual(send_call["From"], "hermes@test.com")
@@ -1549,7 +1549,7 @@ class TestConnectionConfigResolution(unittest.TestCase):
 
     def test_falls_back_to_platform_config_extra(self):
         """When env vars are absent, settings come from PlatformConfig.extra —
-        the same dict gateway.config populates and `hermes config show` reads."""
+        the same dict gateway.config populates and `lliam-gov config show` reads."""
         from gateway.config import PlatformConfig
         from plugins.platforms.email.adapter import EmailAdapter
         cfg = PlatformConfig(enabled=True)

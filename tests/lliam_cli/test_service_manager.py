@@ -74,7 +74,7 @@ def test_detect_service_manager_s6_keys_off_s6_running_not_is_container(
 ) -> None:
     """Regression: Fly runs s6-overlay as PID 1 in a Firecracker microVM, which
     is not a Docker/Podman container. Gating s6 detection on is_container() made
-    the dispatch path inert on Fly, so `hermes gateway restart` spawned a
+    the dispatch path inert on Fly, so `lliam-gov gateway restart` spawned a
     foreground gateway that fought the supervised one. Detection must key off
     s6 being PID 1 (`_s6_running`) alone."""
     monkeypatch.setattr(
@@ -153,7 +153,7 @@ def test_s6_running_false_when_comm_unreadable(
 ) -> None:
     """Regression: /proc/1/exe was unreadable to UID 10000 and
     resolve() silently returned the unresolved path, making detection
-    always-False inside the container under the hermes user. The new
+    always-False inside the container under the lliam-gov user. The new
     probe must FAIL CLOSED — not raise — when /proc/1/comm can't be
     read.
     """
@@ -430,7 +430,7 @@ def test_s6_manager_kind_and_supports_registration() -> None:
 #
 # The skeleton helper pre-creates the dirs and FIFOs that s6-supervise
 # would otherwise create as root mode 0700, locking out the
-# unprivileged hermes user from every lifecycle op. These tests run
+# unprivileged lliam-gov user from every lifecycle op. These tests run
 # against tmp_path and assert the produced layout — the live-container
 # verification (against real s6-svc / s6-svstat) lives in
 # tests/docker/test_s6_profile_gateway_integration.py.
@@ -855,7 +855,7 @@ def test_lifecycle_raises_gateway_not_registered_for_missing_slot(
     assert excinfo.value.service == "gateway-typo"
     msg = str(excinfo.value)
     assert "'typo'" in msg
-    assert "hermes profile create typo" in msg
+    assert "lliam-gov profile create typo" in msg
     # And critically: s6-svc was NOT invoked.
     assert not any(c[0] == "s6-svc" for c in fake_subprocess_run)
 
@@ -952,7 +952,7 @@ def test_s6_is_running_parses_svstat(
 # ---------------------------------------------------------------------------
 # S6 stop writes a planned-stop marker (issue #42675)
 #
-# `hermes gateway stop` inside a container dispatches through
+# `lliam-gov gateway stop` inside a container dispatches through
 # S6ServiceManager.stop() -> `s6-svc -d`, which SIGTERMs the gateway.
 # That SIGTERM is indistinguishable from the one s6/Docker sends on a
 # container restart unless we mark the intentional stop first. Without
@@ -1063,7 +1063,7 @@ def test_s6_log_run_chowns_gateways_parent(s6_scandir, fake_subprocess_run) -> N
     Regression guard for #45258: `mkdir -p` creates the gateways/ parent
     root-owned on a root-context boot, and a leaf-only chown leaves it that
     way. Every profile registered later then runs its log service as the
-    dropped hermes user and s6-log crash-loops on `mkdir: Permission denied`.
+    dropped lliam-gov user and s6-log crash-loops on `mkdir: Permission denied`.
     """
     mgr = S6ServiceManager(scandir=s6_scandir)
     mgr.register_profile_gateway("coder")
