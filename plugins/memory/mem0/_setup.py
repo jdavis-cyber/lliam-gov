@@ -826,7 +826,7 @@ def _check_min_dep_version() -> None:
 
 
 def post_setup(lliam_home: str, config: dict) -> None:
-    """Entry point called by hermes memory setup framework.
+    """Entry point called by lliam-gov memory setup framework.
 
     Only intercepts when OSS mode is requested (via --mode oss flag or
     interactive picker). For platform mode, returns without action so the

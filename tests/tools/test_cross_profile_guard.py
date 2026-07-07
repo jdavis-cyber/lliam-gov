@@ -20,7 +20,7 @@ import pytest
 
 @pytest.fixture
 def fake_lliam(tmp_path, monkeypatch):
-    """Build a two-profile Hermes layout and point HERMES_HOME at
+    """Build a two-profile Lliam-GOV layout and point HERMES_HOME at
     the hermes-security profile (matching the original-incident shape).
     """
     root = tmp_path / "fake-hermes"
@@ -250,9 +250,9 @@ class TestSystemPromptActiveProfile:
         # explicit user direction.
         from pathlib import Path
         src = Path("agent/system_prompt.py").read_text()
-        assert "Active Hermes profile" in src
+        assert "Active Lliam-GOV profile" in src
         assert "cross_profile=True" in src
         assert "~/.hermes/profiles/" in src
         # Both branches present (default and named profile).
-        assert "Active Hermes profile: default" in src
-        assert "Active Hermes profile: {active_profile}" in src
+        assert "Active Lliam-GOV profile: default" in src
+        assert "Active Lliam-GOV profile: {active_profile}" in src

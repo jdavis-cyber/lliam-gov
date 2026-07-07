@@ -1,4 +1,4 @@
-# Hermes Achievements Performance Spec (Post-Hackathon)
+# Lliam-GOV Achievements Performance Spec (Post-Hackathon)
 
 Status: Draft (no code changes yet)
 Owner: hermes-achievements plugin

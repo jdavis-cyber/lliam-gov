@@ -1,4 +1,4 @@
-"""Tests for `hermes photon setup`'s access auto-configuration.
+"""Tests for `lliam-gov photon setup`'s access auto-configuration.
 
 `_autoconfigure_access` allowlists the operator and points the cron home
 channel at their DM, writing to the per-test ~/.hermes/.env (the hermetic
@@ -106,5 +106,5 @@ def test_setup_hint_uses_gateway_service_command(monkeypatch: pytest.MonkeyPatch
 
     assert rc == 0
     out = capsys.readouterr().out
-    assert "Start the gateway:  hermes gateway start" in out
+    assert "Start the gateway:  lliam-gov gateway start" in out
     assert "--platform photon" not in out

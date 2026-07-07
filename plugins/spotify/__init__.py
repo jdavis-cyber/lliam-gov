@@ -18,7 +18,7 @@ Why a plugin instead of a top-level ``tools/`` file?
 - Bundled + ``kind: backend`` auto-loads on startup just like image_gen
   backends — no user opt-in needed, no ``plugins.enabled`` config.
 
-The Spotify auth flow (``hermes auth spotify``), CLI plumbing, and docs
+The Spotify auth flow (``lliam-gov auth spotify``), CLI plumbing, and docs
 are unchanged. This move is purely structural.
 """
 

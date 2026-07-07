@@ -1,6 +1,6 @@
 """tools/input_integrity.py — Lliam-GOV input-integrity & path-safety gate.
 
-ADDITIVE OVERLAY MODULE — no existing Hermes/Lliam module, file, CLI command,
+ADDITIVE OVERLAY MODULE — no existing Lliam-GOV/Lliam module, file, CLI command,
 tool name, or scanner identifier is renamed, moved, or refactored. (PATH-FREEZE.)
 
 Realizes (the P0.5 hardening — "treat untrusted content as hostile"):

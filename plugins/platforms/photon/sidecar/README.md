@@ -1,7 +1,7 @@
 # Photon sidecar
 
-Small Node helper that bridges Hermes Agent to Photon's Spectrum SDK
-(`spectrum-ts`).  Hermes is Python; Photon has no public HTTP
+Small Node helper that bridges Lliam-GOV to Photon's Spectrum SDK
+(`spectrum-ts`).  Lliam-GOV is Python; Photon has no public HTTP
 send-message endpoint today; replies therefore go through this sidecar.
 
 The sidecar:
@@ -20,7 +20,7 @@ cd plugins/platforms/photon/sidecar
 npm install
 ```
 
-The Hermes plugin's `hermes photon setup` command runs `npm install`
+The Lliam-GOV plugin's `lliam-gov photon setup` command runs `npm install`
 here automatically.
 
 ## Run standalone

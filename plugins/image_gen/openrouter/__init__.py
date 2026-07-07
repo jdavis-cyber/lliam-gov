@@ -290,7 +290,7 @@ class OpenRouterCompatImageProvider(ImageGenProvider):
             return error_response(
                 error=(
                     f"No {self._display} credentials found. "
-                    f"Configure {self._display} in `hermes tools` → Image Generation."
+                    f"Configure {self._display} in `lliam-gov tools` → Image Generation."
                 ),
                 error_type="missing_api_key",
                 provider=self._name,
@@ -323,7 +323,7 @@ class OpenRouterCompatImageProvider(ImageGenProvider):
             "Content-Type": "application/json",
             # OpenRouter attribution headers (harmless against Nous Portal).
             "HTTP-Referer": "https://github.com/NousResearch/hermes-agent",
-            "X-Title": "Hermes Agent",
+            "X-Title": "Lliam-GOV",
         }
         last_error: Optional[Dict[str, Any]] = None
         for i, model_id in enumerate(model_chain):

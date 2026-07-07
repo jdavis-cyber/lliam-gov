@@ -3178,7 +3178,7 @@ DELEGATE_TASK_SCHEMA = {
                     "See agent/copilot_acp_client.py for the implementation. "
                     "IMPORTANT: Do NOT set this unless the user has explicitly told you "
                     "a specific ACP-compatible CLI is installed and configured. "
-                    "Leave empty to use the parent's default transport (Hermes subagents)."
+                    "Leave empty to use the parent's default transport (Lliam-GOV subagents)."
                 ),
             },
             "acp_args": {

@@ -164,7 +164,7 @@ def build_turn_context(
     except Exception:
         pass
 
-    # Tag log records on this thread with the session ID for ``hermes logs``.
+    # Tag log records on this thread with the session ID for ``lliam-gov logs``.
     set_session_context(agent.session_id)
 
     # Bind the skill write-origin ContextVar for this thread.

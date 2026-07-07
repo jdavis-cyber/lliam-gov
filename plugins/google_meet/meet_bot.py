@@ -2,7 +2,7 @@
 
 Runs as a standalone subprocess spawned by ``process_manager.py``. Reads config
 from env vars, writes status + transcript to files under
-``$HERMES_HOME/workspace/meetings/<meeting-id>/``. The main hermes process
+``$HERMES_HOME/workspace/meetings/<meeting-id>/``. The main lliam-gov process
 reads those files via the ``meet_*`` tools — no IPC beyond filesystem.
 
 The scraping strategy mirrors OpenUtter (sumansid/openutter): we don't parse
@@ -450,7 +450,7 @@ def run_bot() -> int:  # noqa: C901 — orchestration, explicit branches
     out_dir_env = getenv_compat("MEET_OUT_DIR", "").strip()
     headed = getenv_compat("MEET_HEADED", "").lower() in {"1", "true", "yes"}
     auth_state = getenv_compat("MEET_AUTH_STATE", "").strip()
-    guest_name = getenv_compat("MEET_GUEST_NAME", "Hermes Agent")
+    guest_name = getenv_compat("MEET_GUEST_NAME", "Lliam-GOV")
     duration_s = _parse_duration(getenv_compat("MEET_DURATION", ""))
     # v2: optional realtime mode. Enabled when HERMES_MEET_MODE=realtime.
     mode = getenv_compat("MEET_MODE", "transcribe").strip().lower()

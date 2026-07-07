@@ -494,7 +494,7 @@ class FALVideoGenProvider(VideoGenProvider):
                 error=(
                     "No FAL backend available. Either set FAL_KEY "
                     "(run `lliam-gov tools` → Video Generation → FAL to configure) "
-                    "or sign in to Nous (`hermes setup`) for managed gateway access."
+                    "or sign in to Nous (`lliam-gov setup`) for managed gateway access."
                 ),
                 error_type="auth_required",
                 provider="fal",

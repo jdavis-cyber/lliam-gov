@@ -12,8 +12,8 @@ video generation provider. Mirrors the ``image_generate`` design:
 - Each provider lives under ``plugins/video_gen/<name>/``.
 
 The tool itself is intentionally backend-agnostic and ships **no in-tree
-provider** — turn on a backend by enabling a plugin (``hermes plugins
-enable video_gen/<name>``) and selecting it in ``hermes tools`` → Video
+provider** — turn on a backend by enabling a plugin (``lliam-gov plugins
+enable video_gen/<name>``) and selecting it in ``lliam-gov tools`` → Video
 Generation.
 
 Unified surface
@@ -249,7 +249,7 @@ def _missing_provider_error(configured: Optional[str]) -> str:
         msg = (
             f"video_gen.provider='{configured}' is set but no plugin "
             f"registered that name. Run `lliam-gov plugins list` to see "
-            f"installed video gen backends, or `hermes tools` → Video "
+            f"installed video gen backends, or `lliam-gov tools` → Video "
             f"Generation to pick one."
         )
         return json.dumps(error_response(
@@ -408,7 +408,7 @@ def _handle_video_generate(args: Dict[str, Any], **_kw: Any) -> str:
 #
 # Memoization: model_tools.get_tool_definitions() keys its cache on
 # config.yaml mtime, so when the user changes provider/model via
-# `hermes tools` or `/skills`, the schema rebuilds automatically.
+# `lliam-gov tools` or `/skills`, the schema rebuilds automatically.
 
 
 _GENERIC_DESCRIPTION = (
@@ -417,7 +417,7 @@ _GENERIC_DESCRIPTION = (
     "generation backend. Pass `image_url` to animate that image; omit it "
     "to generate from text alone. The backend auto-routes to the right "
     "endpoint. The backend and model family are user-configured via "
-    "`hermes tools` → Video Generation; the agent does not pick them. "
+    "`lliam-gov tools` → Video Generation; the agent does not pick them. "
     "Long-running generations may take 30 seconds to several minutes — "
     "the call blocks until the video is ready. Returns the result in the "
     "`video` field — either an HTTP URL or an absolute file path. To show "

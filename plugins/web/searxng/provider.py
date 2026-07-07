@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 def _searxng_url() -> str:
-    """Return SEARXNG_URL from Hermes config-aware env, falling back to process env."""
+    """Return SEARXNG_URL from Lliam-GOV config-aware env, falling back to process env."""
     try:
         from lliam_cli.config import get_env_value
 

@@ -1,6 +1,6 @@
 """tools/tool_policy.py — Lliam-GOV skill/tool enablement gate (least functionality).
 
-ADDITIVE OVERLAY MODULE — no existing Hermes/Lliam module, file, CLI command,
+ADDITIVE OVERLAY MODULE — no existing Lliam-GOV/Lliam module, file, CLI command,
 tool name, skill path, or scanner identifier is renamed, moved, or refactored by
 anything in here. (PATH-FREEZE.)
 
@@ -240,7 +240,7 @@ def _tag_denied_installed_names() -> Set[str]:
     for d in dirs:
         try:
             # Match the loader's nested-aware traversal (category/name/SKILL.md),
-            # not just top-level */SKILL.md. Hermes discovery walks skills
+            # not just top-level */SKILL.md. Lliam-GOV discovery walks skills
             # recursively via iter_skill_index_files, so a re-vendored offensive
             # skill placed under a supported nested category is still registered
             # — the deny-tag backstop must cover the same paths or it is bypassed

@@ -75,7 +75,7 @@ _MODELS: Dict[str, Dict[str, Any]] = {
 
 DEFAULT_MODEL = "krea-2-medium"
 
-# Hermes uses 3 abstract aspect ratios. Map to Krea's enum (which is wider).
+# Lliam-GOV uses 3 abstract aspect ratios. Map to Krea's enum (which is wider).
 # Krea accepts: 1:1, 4:3, 3:2, 16:9, 2.35:1, 4:5, 2:3, 9:16
 _ASPECT_MAP = {
     "landscape": "16:9",
@@ -346,7 +346,7 @@ class KreaImageGenProvider(ImageGenProvider):
                         "Generation → Krea to configure, get a key at "
                         "https://www.krea.ai/settings/api-tokens, or sign in to "
                         "a Nous account with the managed Krea gateway enabled "
-                        "(`hermes setup`)."
+                        "(`lliam-gov setup`)."
                     ),
                     error_type="auth_required",
                     provider="krea",
@@ -473,7 +473,7 @@ class KreaImageGenProvider(ImageGenProvider):
                         f"Model '{model_id}' may not be enabled/priced on the "
                         "Nous Portal's Krea gateway. Set KREA_API_KEY to use "
                         "Krea directly, or pick a different model via "
-                        "`hermes tools` → Image Generation."
+                        "`lliam-gov tools` → Image Generation."
                     )
                 )
                 return error_response(

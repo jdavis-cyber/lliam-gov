@@ -168,7 +168,7 @@ def check_firecrawl_api_key() -> bool:
     """Return True when Firecrawl backend (direct or gateway) is usable.
 
     Re-exported by :mod:`tools.web_tools` for backward compatibility with
-    existing tests and the ``hermes tools`` setup flow.
+    existing tests and the ``lliam-gov tools`` setup flow.
     """
     return _has_direct_firecrawl_config() or _is_tool_gateway_ready()
 
