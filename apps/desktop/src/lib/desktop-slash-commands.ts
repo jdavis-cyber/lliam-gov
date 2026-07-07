@@ -259,7 +259,7 @@ export function resolveDesktopCommand(command: string): DesktopCommandSpec | nul
   return SPEC_BY_NAME.get(canonicalDesktopSlashCommand(command)) ?? null
 }
 
-function isKnownHermesSlashCommand(command: string): boolean {
+function isKnownLliamSlashCommand(command: string): boolean {
   const normalized = normalizeCommand(command)
 
   return SPEC_BY_NAME.has(normalized) || ALIAS_TO_CANONICAL.has(normalized)
@@ -278,7 +278,7 @@ export function isDesktopSlashExtensionCommand(command: string): boolean {
     return false
   }
 
-  return !isKnownHermesSlashCommand(normalized)
+  return !isKnownLliamSlashCommand(normalized)
 }
 
 /** Gates execution: true unless the command is a known no-desktop-surface command. */

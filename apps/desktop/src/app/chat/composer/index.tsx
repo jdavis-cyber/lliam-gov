@@ -13,7 +13,7 @@ import {
   useState
 } from 'react'
 
-import { hermesDirectiveFormatter, type SlashChipKind } from '@/components/assistant-ui/directive-text'
+import { lliamDirectiveFormatter, type SlashChipKind } from '@/components/assistant-ui/directive-text'
 import { composerFill, composerSurfaceGlass } from '@/components/chat/composer-dock'
 import { Button } from '@/components/ui/button'
 import { useMediaQuery } from '@/hooks/use-media-query'
@@ -900,7 +900,7 @@ export function ChatBar({
       return
     }
 
-    const serialized = hermesDirectiveFormatter.serialize(item)
+    const serialized = lliamDirectiveFormatter.serialize(item)
     const starter = serialized.endsWith(':')
 
     // Picking a bare arg-taking command (e.g. `/personality`) shouldn't commit

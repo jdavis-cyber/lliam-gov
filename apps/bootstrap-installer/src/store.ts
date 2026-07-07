@@ -71,7 +71,7 @@ export const $route = atom<Route>('welcome')
 export const $mode = atom<AppMode>('install')
 export const $bootstrap = atom<BootstrapStateModel>(INITIAL)
 export const $logPath = atom<string | null>(null)
-export const $hermesHome = atom<string | null>(null)
+export const $lliamHome = atom<string | null>(null)
 
 export const $progress = computed($bootstrap, (b) => {
   const total = b.stageOrder.length
@@ -135,13 +135,13 @@ export async function initialize(): Promise<void> {
 
   // Pull static info on mount for the diagnostics footer.
   try {
-    const [logPath, hermesHome, mode] = await Promise.all([
+    const [logPath, lliamHome, mode] = await Promise.all([
       invoke<string>('get_log_path'),
       invoke<string>('get_hermes_home'),
       invoke<AppMode>('get_mode')
     ])
     $logPath.set(logPath)
-    $hermesHome.set(hermesHome)
+    $lliamHome.set(lliamHome)
     $mode.set(mode)
   } catch (err) {
     console.warn('failed to fetch installer paths', err)
@@ -267,7 +267,7 @@ export async function cancelInstall(): Promise<void> {
   await invoke('cancel_bootstrap')
 }
 
-export async function launchHermesDesktop(): Promise<void> {
+export async function launchLliamDesktop(): Promise<void> {
   const installRoot = $bootstrap.get().installRoot
   if (!installRoot) throw new Error('no install root')
   await invoke('launch_hermes_desktop', { installRoot })

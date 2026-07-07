@@ -34,14 +34,14 @@ const {
   SESSION_WINDOW_MIN_HEIGHT,
   SESSION_WINDOW_MIN_WIDTH
 } = require('./session-windows.cjs')
-const { canImportHermesCli, verifyHermesCli } = require('./backend-probes.cjs')
+const { canImportLliamCli, verifyLliamCli } = require('./backend-probes.cjs')
 const { createLinkTitleWindow } = require('./link-title-window.cjs')
 const { probeGatewayWebSocket } = require('./gateway-ws-probe.cjs')
 const { adoptServedDashboardToken } = require('./dashboard-token.cjs')
 const { waitForDashboardPortAnnouncement } = require('./backend-ready.cjs')
 const { serializeJsonBody, setJsonRequestHeaders } = require('./oauth-net-request.cjs')
 const { fetchMarketplaceThemes, searchMarketplaceThemes } = require('./vscode-marketplace.cjs')
-const { buildDesktopBackendEnv, normalizeHermesHomeRoot } = require('./backend-env.cjs')
+const { buildDesktopBackendEnv, normalizeLliamHomeRoot } = require('./backend-env.cjs')
 const { readWindowsUserEnvVar } = require('./windows-user-env.cjs')
 const { readWslWindowsClipboardImage } = require('./wsl-clipboard-image.cjs')
 const { nativeOverlayWidth: computeNativeOverlayWidth } = require('./titlebar-overlay-width.cjs')
@@ -293,8 +293,8 @@ if (INSTALL_STAMP) {
 // LLIAM_DESKTOP_USER_DATA_DIR (used by test:desktop:fresh) puts the sandbox
 // HERMES_HOME beneath the throwaway userData dir so a fresh-install run never
 // touches the user's real ~/.hermes / %LOCALAPPDATA%\hermes.
-function resolveHermesHome() {
-  if (process.env.HERMES_HOME) return normalizeHermesHomeRoot(process.env.HERMES_HOME)
+function resolveLliamHome() {
+  if (process.env.HERMES_HOME) return normalizeLliamHomeRoot(process.env.HERMES_HOME)
   if (USER_DATA_OVERRIDE) return path.join(path.resolve(USER_DATA_OVERRIDE), 'hermes-home')
   if (IS_WINDOWS) {
     // A GUI app launched from Explorer inherits the environment block captured
@@ -304,7 +304,7 @@ function resolveHermesHome() {
     // inference provider configured" despite a valid configured home (#45471).
     // Consult the live User-scoped registry value before the default below.
     const fromRegistry = readWindowsUserEnvVar('HERMES_HOME')
-    if (fromRegistry) return normalizeHermesHomeRoot(fromRegistry)
+    if (fromRegistry) return normalizeLliamHomeRoot(fromRegistry)
   }
   if (IS_WINDOWS && process.env.LOCALAPPDATA) {
     const localappdata = path.join(process.env.LOCALAPPDATA, 'hermes')
@@ -317,9 +317,9 @@ function resolveHermesHome() {
   return path.join(app.getPath('home'), '.hermes')
 }
 
-const HERMES_HOME = resolveHermesHome()
+const HERMES_HOME = resolveLliamHome()
 
-function hermesManagedNodePathEntries() {
+function lliamManagedNodePathEntries() {
   // NOTE: keep this ordering in sync with iter_hermes_node_dirs() in
   // hermes_constants.py — this Node main process cannot import the Python
   // module, so the platform-ordering rule is mirrored here.
@@ -329,8 +329,8 @@ function hermesManagedNodePathEntries() {
   return entries.filter(directoryExists)
 }
 
-function pathWithHermesManagedNode(...entries) {
-  return [...hermesManagedNodePathEntries(), ...entries, process.env.PATH].filter(Boolean).join(path.delimiter)
+function pathWithLliamManagedNode(...entries) {
+  return [...lliamManagedNodePathEntries(), ...entries, process.env.PATH].filter(Boolean).join(path.delimiter)
 }
 
 // ACTIVE_HERMES_ROOT — the canonical mutable Hermes install. Same path
@@ -343,7 +343,7 @@ const VENV_ROOT = path.join(ACTIVE_HERMES_ROOT, 'venv')
 // (Phase 1D) after install.ps1 has completed all stages and the user has
 // finished initial configuration. Presence of this marker means the install
 // is in a known-good state and we can skip the bootstrap flow on subsequent
-// boots, going straight to `resolveHermesBackend()`. Missing or stale marker
+// boots, going straight to `resolveLliamBackend()`. Missing or stale marker
 // means we re-run the bootstrap; install.ps1's stages are idempotent so a
 // re-run on an already-good install just discovers everything in place.
 //
@@ -357,7 +357,7 @@ const DESKTOP_CONNECTION_CONFIG_PATH = path.join(app.getPath('userData'), 'conne
 const DESKTOP_UPDATE_CONFIG_PATH = path.join(app.getPath('userData'), 'updates.json')
 const DESKTOP_WINDOW_STATE_PATH = path.join(app.getPath('userData'), 'window-state.json')
 // active-profile.json records which Hermes profile the desktop launches its
-// local backend as. When set, startHermes() passes `hermes --profile <name>
+// local backend as. When set, startLliam() passes `hermes --profile <name>
 // dashboard …`, which deterministically pins HERMES_HOME (see
 // _apply_profile_override in hermes_cli/main.py) and bypasses the sticky
 // ~/.hermes/active_profile file. Unset (null) preserves the legacy behavior:
@@ -692,7 +692,7 @@ if (IS_WINDOWS) {
 // the seed here just covers the first open and any non-menu invocation path.
 app.setAboutPanelOptions({
   applicationName: APP_NAME,
-  applicationVersion: resolveHermesVersion(),
+  applicationVersion: resolveLliamVersion(),
   copyright: 'Copyright © 2026 Nous Research'
 })
 
@@ -757,11 +757,11 @@ function registerMediaProtocol() {
 }
 
 let mainWindow = null
-let hermesProcess = null
+let lliamProcess = null
 let connectionPromise = null
 // Additional per-profile backends, keyed by profile name. The PRIMARY backend
-// (the desktop's launch profile) stays managed by hermesProcess +
-// connectionPromise + startHermes(); this pool only holds EXTRA profile
+// (the desktop's launch profile) stays managed by lliamProcess +
+// connectionPromise + startLliam(); this pool only holds EXTRA profile
 // backends spawned lazily when a session belongs to a different profile. A user
 // with no named profiles never populates this map, so their experience is
 // byte-for-byte the single-backend behavior.
@@ -785,7 +785,7 @@ const RENDERER_RELOAD_WINDOW_MS = 60_000
 const RENDERER_RELOAD_MAX = 3
 let rendererReloadTimes = []
 // Latched bootstrap failure: when the first-launch install fails, we hold
-// onto the error so subsequent startHermes() calls (e.g. the renderer's
+// onto the error so subsequent startLliam() calls (e.g. the renderer's
 // ensureGatewayOpen retrying after the WS won't open) return the same error
 // instead of re-running install.ps1 in a hot loop. Cleared explicitly by
 // the renderer's "Reload and retry" path or by quitting the app.
@@ -798,7 +798,7 @@ let backendStartFailure = null
 let bootstrapAbortController = null
 let connectionConfigCache = null
 let connectionConfigCacheMtime = null
-const hermesLog = []
+const lliamLog = []
 const previewWatchers = new Map()
 let previewShortcutActive = false
 let desktopLogBuffer = ''
@@ -912,9 +912,9 @@ function rememberLog(chunk) {
   const text = String(chunk || '').trim()
   if (!text) return
   const lines = text.split(/\r?\n/).map(line => `[hermes] ${line}`)
-  hermesLog.push(...lines)
-  if (hermesLog.length > 300) {
-    hermesLog.splice(0, hermesLog.length - 300)
+  lliamLog.push(...lines)
+  if (lliamLog.length > 300) {
+    lliamLog.splice(0, lliamLog.length - 300)
   }
 
   desktopLogBuffer += `${lines.join('\n')}\n`
@@ -1309,7 +1309,7 @@ function isCommandScript(command) {
   return IS_WINDOWS && /\.(cmd|bat)$/i.test(command || '')
 }
 
-function unwrapWindowsVenvHermesCommand(command, dashboardArgs) {
+function unwrapWindowsVenvLliamCommand(command, dashboardArgs) {
   if (!IS_WINDOWS || !command || isCommandScript(command)) return null
 
   const resolved = path.resolve(String(command))
@@ -1374,7 +1374,7 @@ function looksLikeDesktopAppBinary(commandPath) {
   )
 }
 
-function isHermesSourceRoot(root) {
+function isLliamSourceRoot(root) {
   return directoryExists(root) && fileExists(path.join(root, 'hermes_cli', 'main.py'))
 }
 
@@ -1602,11 +1602,11 @@ function toNoConsolePython(pythonPath) {
 function applyWindowsNoConsoleSpawnHints(backend) {
   if (!IS_WINDOWS || !backend?.command) return backend
 
-  const usesHermesModule =
+  const usesLliamModule =
     backend.kind === 'python' ||
     (Array.isArray(backend.args) && backend.args[0] === '-m' && backend.args[1] === 'hermes_cli.main')
 
-  if (!usesHermesModule) return backend
+  if (!usesLliamModule) return backend
 
   backend.command = toNoConsolePython(backend.command)
   if (/pythonw\.exe$/i.test(path.basename(String(backend.command || '')))) {
@@ -1701,8 +1701,8 @@ function resolveGhBinary() {
   return _ghBinaryCache
 }
 
-function recentHermesLog() {
-  return hermesLog.slice(-20).join('\n')
+function recentLliamLog() {
+  return lliamLog.slice(-20).join('\n')
 }
 
 // ─── Self-update (git-pull against the running backend's hermes root) ──────
@@ -1766,8 +1766,8 @@ const schedulePersistWindowState = debounce(persistWindowState, 250)
 function resolveUpdateRoot() {
   const candidates = [
     process.env.LLIAM_DESKTOP_HERMES_ROOT && path.resolve(process.env.LLIAM_DESKTOP_HERMES_ROOT),
-    !IS_PACKAGED && isHermesSourceRoot(SOURCE_REPO_ROOT) ? SOURCE_REPO_ROOT : null,
-    isHermesSourceRoot(ACTIVE_HERMES_ROOT) ? ACTIVE_HERMES_ROOT : null
+    !IS_PACKAGED && isLliamSourceRoot(SOURCE_REPO_ROOT) ? SOURCE_REPO_ROOT : null,
+    isLliamSourceRoot(ACTIVE_HERMES_ROOT) ? ACTIVE_HERMES_ROOT : null
   ].filter(Boolean)
 
   return candidates.find(c => directoryExists(path.join(c, '.git'))) || candidates[0] || ACTIVE_HERMES_ROOT
@@ -2020,7 +2020,7 @@ function repairMacUpdaterHelper(updater) {
 // Path to the venv shim whose lock decides whether `hermes update` can write
 // fresh entry points. On Windows this is the file the running backend
 // `hermes.exe` holds open; on POSIX it's never mandatory-locked.
-function venvHermesShimPath(updateRoot) {
+function venvLliamShimPath(updateRoot) {
   return IS_WINDOWS
     ? path.join(updateRoot, 'venv', 'Scripts', 'hermes.exe')
     : path.join(updateRoot, 'venv', 'bin', 'hermes')
@@ -2072,7 +2072,7 @@ function forceKillProcessTree(pid) {
 
 // Before handing off the update on Windows, the desktop MUST stop every backend
 // it spawned and WAIT for the venv shim to actually unlock. The old code did
-// `hermesProcess.kill('SIGTERM')` + `app.quit()` fire-and-forget: SIGTERM on
+// `lliamProcess.kill('SIGTERM')` + `app.quit()` fire-and-forget: SIGTERM on
 // Windows doesn't reap the backend's grandchildren, and quit didn't wait for
 // teardown, so the updater raced a still-locked `hermes.exe`, the quarantine
 // rename failed, uv's `pip install` hit "Access is denied", and the git path
@@ -2105,15 +2105,15 @@ async function releaseBackendLock(updateRoot, tag) {
 
   // Collect every backend PID the desktop owns: primary window backend + pool.
   const pids = []
-  if (hermesProcess && Number.isInteger(hermesProcess.pid)) pids.push(hermesProcess.pid)
+  if (lliamProcess && Number.isInteger(lliamProcess.pid)) pids.push(lliamProcess.pid)
   for (const entry of backendPool.values()) {
     if (entry.process && Number.isInteger(entry.process.pid)) pids.push(entry.process.pid)
   }
 
   // Graceful first (lets Python flush), then tree-kill to catch grandchildren.
-  if (hermesProcess && !hermesProcess.killed) {
+  if (lliamProcess && !lliamProcess.killed) {
     try {
-      hermesProcess.kill('SIGTERM')
+      lliamProcess.kill('SIGTERM')
     } catch {
       void 0
     }
@@ -2121,7 +2121,7 @@ async function releaseBackendLock(updateRoot, tag) {
   stopAllPoolBackends()
   for (const pid of pids) forceKillProcessTree(pid)
 
-  const shim = venvHermesShimPath(updateRoot)
+  const shim = venvLliamShimPath(updateRoot)
   const deadlineMs = Date.now() + 15000
   while (Date.now() < deadlineMs) {
     if (!isShimLocked(shim)) {
@@ -2219,7 +2219,7 @@ async function applyUpdates(opts = {}) {
       env: {
         ...process.env,
         HERMES_HOME,
-        PATH: pathWithHermesManagedNode(venvBin)
+        PATH: pathWithLliamManagedNode(venvBin)
       },
       detached: true,
       stdio: 'ignore',
@@ -2257,7 +2257,7 @@ async function handOffWindowsBootstrapRecovery(reason) {
     ? await resolveHealedBranch(updateRoot, configuredBranch || DEFAULT_UPDATE_BRANCH)
     : configuredBranch || DEFAULT_UPDATE_BRANCH
   const venvBin = path.join(updateRoot, 'venv', IS_WINDOWS ? 'Scripts' : 'bin')
-  const venvHermes = path.join(venvBin, IS_WINDOWS ? 'hermes.exe' : 'hermes')
+  const venvLliam = path.join(venvBin, IS_WINDOWS ? 'hermes.exe' : 'hermes')
   const venvPython = path.join(venvBin, IS_WINDOWS ? 'python.exe' : 'python')
   // Choose the gentle in-place --update when ANY real-install signal is present,
   // not just the `hermes.exe` console-script shim. That shim is generated at the
@@ -2267,7 +2267,7 @@ async function handOffWindowsBootstrapRecovery(reason) {
   // and the bootstrap-complete marker are present earlier and are better signals.
   const haveRealInstall =
     fileExists(venvPython) ||
-    fileExists(venvHermes) ||
+    fileExists(venvLliam) ||
     fileExists(path.join(updateRoot, '.hermes-bootstrap-complete'))
   const updaterArgs = haveRealInstall ? ['--update', '--branch', branch] : ['--repair', '--branch', branch]
 
@@ -2278,7 +2278,7 @@ async function handOffWindowsBootstrapRecovery(reason) {
     env: {
       ...process.env,
       HERMES_HOME,
-      PATH: pathWithHermesManagedNode(venvBin)
+      PATH: pathWithLliamManagedNode(venvBin)
     },
     detached: true,
     stdio: 'ignore',
@@ -2302,9 +2302,9 @@ async function handOffWindowsBootstrapRecovery(reason) {
 
 // Resolve the hermes CLI to drive an in-app update: prefer the venv shim in
 // the install we're updating, fall back to `hermes` on PATH.
-function resolveHermesCliBinary(updateRoot) {
-  const venvHermes = path.join(updateRoot, 'venv', 'bin', 'hermes')
-  if (fileExists(venvHermes)) return venvHermes
+function resolveLliamCliBinary(updateRoot) {
+  const venvLliam = path.join(updateRoot, 'venv', 'bin', 'hermes')
+  if (fileExists(venvLliam)) return venvLliam
   return findOnPath('hermes') || null
 }
 
@@ -2358,7 +2358,7 @@ function shellQuote(value) {
 // restart to load the new GUI" if the swap can't be performed.
 async function applyUpdatesPosixInApp() {
   const updateRoot = resolveUpdateRoot()
-  const hermes = resolveHermesCliBinary(updateRoot)
+  const hermes = resolveLliamCliBinary(updateRoot)
   if (!hermes) {
     emitUpdateProgress({ stage: 'manual', message: 'hermes update', percent: null })
     return { ok: true, manual: true, command: 'hermes update', hermesRoot: updateRoot }
@@ -2369,7 +2369,7 @@ async function applyUpdatesPosixInApp() {
   // Node lives directly under %LOCALAPPDATA%\hermes\node, not node\bin.
   const env = {
     HERMES_HOME,
-    PATH: pathWithHermesManagedNode(path.join(updateRoot, 'venv', 'bin'))
+    PATH: pathWithLliamManagedNode(path.join(updateRoot, 'venv', 'bin'))
   }
 
   // `hermes update` reaps stale `hermes dashboard` backends (a code update
@@ -2384,8 +2384,8 @@ async function applyUpdatesPosixInApp() {
   // the update reaper. _kill_stale_dashboard_processes accepts a comma-separated
   // list (a single int still parses for back-compat).
   const desktopChildPids = []
-  if (hermesProcess && Number.isInteger(hermesProcess.pid)) {
-    desktopChildPids.push(hermesProcess.pid)
+  if (lliamProcess && Number.isInteger(lliamProcess.pid)) {
+    desktopChildPids.push(lliamProcess.pid)
   }
   for (const entry of backendPool.values()) {
     if (entry.process && Number.isInteger(entry.process.pid)) {
@@ -2645,9 +2645,9 @@ function readBootstrapMarker() {
 function isActiveRuntimeUsable() {
   const venvPython = getVenvPython(VENV_ROOT)
   return (
-    isHermesSourceRoot(ACTIVE_HERMES_ROOT) &&
+    isLliamSourceRoot(ACTIVE_HERMES_ROOT) &&
     fileExists(venvPython) &&
-    canImportHermesCli(venvPython, {
+    canImportLliamCli(venvPython, {
       env: {
         PYTHONPATH: [ACTIVE_HERMES_ROOT, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter)
       }
@@ -2737,7 +2737,7 @@ function isPackagedInstallPath(dir) {
   })
 }
 
-function resolveHermesCwd() {
+function resolveLliamCwd() {
   // In a packaged build, `process.cwd()` resolves to the install root (e.g.
   // `…/win-unpacked` on Windows or `/Applications/Hermes.app/Contents/...`
   // on macOS). Sessions spawned there leave files inside the app bundle
@@ -2772,7 +2772,7 @@ function sanitizeWorkspaceCwd(cwd) {
   const trimmed = typeof cwd === 'string' ? cwd.trim() : ''
 
   if (!trimmed || isPackagedInstallPath(trimmed)) {
-    return { cwd: resolveHermesCwd(), sanitized: Boolean(trimmed) }
+    return { cwd: resolveLliamCwd(), sanitized: Boolean(trimmed) }
   }
 
   try {
@@ -2785,7 +2785,7 @@ function sanitizeWorkspaceCwd(cwd) {
     // Fall through to the resolved default.
   }
 
-  return { cwd: resolveHermesCwd(), sanitized: Boolean(trimmed) }
+  return { cwd: resolveLliamCwd(), sanitized: Boolean(trimmed) }
 }
 
 // Persisted "Default project directory" — surfaced as a setting in the
@@ -2878,11 +2878,11 @@ function createActiveBackend(dashboardArgs) {
   })
 }
 
-function resolveHermesBackend(dashboardArgs) {
+function resolveLliamBackend(dashboardArgs) {
   // 1. Explicit override -- LLIAM_DESKTOP_HERMES_ROOT points at a developer
   //    checkout. Honour it as-is (no bootstrap; the user is driving).
   const overrideRoot = process.env.LLIAM_DESKTOP_HERMES_ROOT && path.resolve(process.env.LLIAM_DESKTOP_HERMES_ROOT)
-  if (overrideRoot && isHermesSourceRoot(overrideRoot)) {
+  if (overrideRoot && isLliamSourceRoot(overrideRoot)) {
     const backend = createPythonBackend(overrideRoot, `Hermes source at ${overrideRoot}`, dashboardArgs)
     if (backend) return backend
   }
@@ -2890,8 +2890,8 @@ function resolveHermesBackend(dashboardArgs) {
   // 2. Development source -- when running `npm run dev` from a checkout, the
   //    cloned repo at SOURCE_REPO_ROOT takes precedence over ACTIVE and any
   //    installed `hermes` on PATH so local Python edits are actually exercised.
-  //    (In dev with no checkout, SOURCE_REPO_ROOT won't pass isHermesSourceRoot.)
-  if (!IS_PACKAGED && isHermesSourceRoot(SOURCE_REPO_ROOT)) {
+  //    (In dev with no checkout, SOURCE_REPO_ROOT won't pass isLliamSourceRoot.)
+  if (!IS_PACKAGED && isLliamSourceRoot(SOURCE_REPO_ROOT)) {
     const backend = createPythonBackend(SOURCE_REPO_ROOT, `Hermes source at ${SOURCE_REPO_ROOT}`, dashboardArgs)
     if (backend) return backend
   }
@@ -2912,31 +2912,31 @@ function resolveHermesBackend(dashboardArgs) {
   //    don't want to take ownership of an install we didn't perform.
   //    LLIAM_DESKTOP_IGNORE_EXISTING=1 forces the bootstrap path for testing.
   if (process.env.LLIAM_DESKTOP_IGNORE_EXISTING !== '1') {
-    let hermesCommand = null
-    const hermesOverride = process.env.LLIAM_DESKTOP_HERMES
+    let lliamCommand = null
+    const lliamOverride = process.env.LLIAM_DESKTOP_HERMES
 
-    if (hermesOverride) {
-      const resolvedOverride = findOnPath(hermesOverride)
+    if (lliamOverride) {
+      const resolvedOverride = findOnPath(lliamOverride)
       if (resolvedOverride) {
-        hermesCommand = resolvedOverride
-      } else if (!isWindowsBinaryPathInWsl(hermesOverride, { isWsl: IS_WSL })) {
-        hermesCommand = hermesOverride
+        lliamCommand = resolvedOverride
+      } else if (!isWindowsBinaryPathInWsl(lliamOverride, { isWsl: IS_WSL })) {
+        lliamCommand = lliamOverride
       } else {
-        rememberLog(`Ignoring Windows Hermes override under WSL: ${hermesOverride}`)
+        rememberLog(`Ignoring Windows Hermes override under WSL: ${lliamOverride}`)
       }
     } else {
-      hermesCommand = findOnPath('hermes')
+      lliamCommand = findOnPath('hermes')
     }
 
-    if (hermesCommand) {
-      if (looksLikeDesktopAppBinary(hermesCommand)) {
-        rememberLog(`Ignoring desktop app executable on PATH while resolving Hermes CLI: ${hermesCommand}`)
-        hermesCommand = null
+    if (lliamCommand) {
+      if (looksLikeDesktopAppBinary(lliamCommand)) {
+        rememberLog(`Ignoring desktop app executable on PATH while resolving Hermes CLI: ${lliamCommand}`)
+        lliamCommand = null
       }
     }
 
-    if (hermesCommand) {
-      const unwrapped = unwrapWindowsVenvHermesCommand(hermesCommand, dashboardArgs)
+    if (lliamCommand) {
+      const unwrapped = unwrapWindowsVenvLliamCommand(lliamCommand, dashboardArgs)
       if (unwrapped) {
         return unwrapped
       }
@@ -2948,12 +2948,12 @@ function resolveHermesBackend(dashboardArgs) {
       // dead backend instead of the first-launch installer. The cheap
       // `--version` probe (see backend-probes.cjs) catches that case
       // and lets the resolver fall through to step 6 / bootstrap.
-      const shellForProbe = isCommandScript(hermesCommand)
-      if (verifyHermesCli(hermesCommand, { shell: shellForProbe })) {
+      const shellForProbe = isCommandScript(lliamCommand)
+      if (verifyLliamCli(lliamCommand, { shell: shellForProbe })) {
         return (
-          unwrapWindowsVenvHermesCommand(hermesCommand, dashboardArgs) || {
-            label: `existing Hermes CLI at ${hermesCommand}`,
-            command: hermesCommand,
+          unwrapWindowsVenvLliamCommand(lliamCommand, dashboardArgs) || {
+            label: `existing Hermes CLI at ${lliamCommand}`,
+            command: lliamCommand,
             args: dashboardArgs,
             bootstrap: false,
             env: {},
@@ -2963,7 +2963,7 @@ function resolveHermesBackend(dashboardArgs) {
         )
       }
       rememberLog(
-        `Ignoring existing Hermes CLI at ${hermesCommand}: --version probe failed; falling through to bootstrap.`
+        `Ignoring existing Hermes CLI at ${lliamCommand}: --version probe failed; falling through to bootstrap.`
       )
     }
   }
@@ -2981,7 +2981,7 @@ function resolveHermesBackend(dashboardArgs) {
     // Verify the import works before trusting the candidate; on
     // failure, fall through to step 6 so the bootstrap runner pulls
     // a uv-managed 3.11 into %LOCALAPPDATA%\hermes\hermes-agent\venv.
-    if (canImportHermesCli(python)) {
+    if (canImportLliamCli(python)) {
       return applyWindowsNoConsoleSpawnHints({
         kind: 'python',
         label: `installed hermes_cli module via ${python}`,
@@ -3002,7 +3002,7 @@ function resolveHermesBackend(dashboardArgs) {
   //    explaining what's missing.
   //
   //    We deliberately do NOT throw here -- throwing inside
-  //    resolveHermesBackend was the old "no payload" path and forced the
+  //    resolveLliamBackend was the old "no payload" path and forced the
   //    user into a dead end. With the bootstrap protocol, "no install yet"
   //    is a recoverable state the GUI can drive through.
   return {
@@ -3027,7 +3027,7 @@ async function ensureRuntime(backend) {
     return applyWindowsNoConsoleSpawnHints(backend)
   }
 
-  // backend.kind === 'bootstrap-needed' means resolveHermesBackend couldn't
+  // backend.kind === 'bootstrap-needed' means resolveLliamBackend couldn't
   // find anything to spawn. Hand off to the bootstrap runner which drives the
   // platform installer, writes the bootstrap-complete marker on success, then
   // we re-resolve to get the now-installed backend.
@@ -3111,7 +3111,7 @@ async function ensureRuntime(backend) {
       )
       bootstrapError.isBootstrapFailure = true
       bootstrapError.failedStage = bootstrapResult.failedStage || null
-      // Latch the failure so subsequent startHermes() calls return this
+      // Latch the failure so subsequent startLliam() calls return this
       // same error without re-running install.ps1.  Cleared by the
       // lliam:bootstrap:reset IPC (renderer's "Reload and retry").
       bootstrapFailure = bootstrapError
@@ -3121,7 +3121,7 @@ async function ensureRuntime(backend) {
     rememberLog('[bootstrap] bootstrap complete; marker written. Re-resolving backend.')
     // Re-resolve now that the install exists. The new resolution lands in
     // step 3 (bootstrap-complete marker) and we recurse to wire venvPython.
-    return ensureRuntime(resolveHermesBackend(backend.args))
+    return ensureRuntime(resolveLliamBackend(backend.args))
   }
 
   // bootstrap=true with a real backend (createActiveBackend path) means we
@@ -3130,7 +3130,7 @@ async function ensureRuntime(backend) {
   // sync flow exited through, minus all the factory/pip/marker machinery
   // (install.ps1 owns those concerns now and the bootstrap-complete marker
   // attests they ran successfully).
-  if (!isHermesSourceRoot(ACTIVE_HERMES_ROOT)) {
+  if (!isLliamSourceRoot(ACTIVE_HERMES_ROOT)) {
     throw new Error(
       `Hermes install at ${ACTIVE_HERMES_ROOT} is missing or incomplete. ` +
         'Reinstall via the desktop installer or scripts/install.ps1.'
@@ -3158,7 +3158,7 @@ async function ensureRuntime(backend) {
     // means we have a half-installed checkout: .git exists, source files
     // exist, but venv is missing or broken. This shouldn't happen in
     // normal flow because isBootstrapComplete() requires
-    // isHermesSourceRoot() and the bootstrap writes the marker only after
+    // isLliamSourceRoot() and the bootstrap writes the marker only after
     // install.ps1 succeeds. If we hit this, the user (or a deleted venv)
     // broke the invariant; tell them to re-run the install.
     throw new Error(
@@ -3671,7 +3671,7 @@ function expandUserPath(filePath) {
 
 async function previewFileTarget(rawTarget, baseDir) {
   const raw = String(rawTarget || '').trim()
-  const base = baseDir ? path.resolve(expandUserPath(baseDir)) : resolveHermesCwd()
+  const base = baseDir ? path.resolve(expandUserPath(baseDir)) : resolveLliamCwd()
   let resolved = resolveRequestedPathForIpc(/^file:/i.test(raw) ? raw : expandUserPath(raw), {
     baseDir: base,
     purpose: 'Preview target'
@@ -3813,7 +3813,7 @@ function closePreviewWatchers() {
   }
 }
 
-async function waitForHermes(baseUrl, token) {
+async function waitForLliam(baseUrl, token) {
   const deadline = Date.now() + 45_000
   let lastError = null
 
@@ -5034,7 +5034,7 @@ async function testDesktopConnectionConfig(input = {}) {
       token = decryptDesktopSecret(block.token)
     }
   } else {
-    const remote = (await resolveRemoteBackend(key)) || (await startHermes())
+    const remote = (await resolveRemoteBackend(key)) || (await startLliam())
     baseUrl = remote.baseUrl
     token = remote.token
     authMode = normAuthMode(remote.authMode)
@@ -5082,26 +5082,26 @@ function resetBootProgressForReconnect() {
   )
 }
 
-function resetHermesConnection() {
+function resetLliamConnection() {
   connectionPromise = null
   backendStartFailure = null
 
-  if (hermesProcess && !hermesProcess.killed) {
-    hermesProcess.kill('SIGTERM')
+  if (lliamProcess && !lliamProcess.killed) {
+    lliamProcess.kill('SIGTERM')
   }
 
-  hermesProcess = null
+  lliamProcess = null
   resetBootProgressForReconnect()
 }
 
 // Re-home the primary backend: reset connection state, then wait for the live
 // dashboard process to actually exit (SIGKILL after 5s) so the next
-// startHermes() spawns fresh instead of racing the dying one. Shared by the
+// startLliam() spawns fresh instead of racing the dying one. Shared by the
 // connection-config and profile switch flows.
 async function teardownPrimaryBackendAndWait() {
-  // Capture the reference before resetHermesConnection() nulls hermesProcess.
-  const dying = hermesProcess && !hermesProcess.killed ? hermesProcess : null
-  resetHermesConnection()
+  // Capture the reference before resetLliamConnection() nulls lliamProcess.
+  const dying = lliamProcess && !lliamProcess.killed ? lliamProcess : null
+  resetLliamConnection()
 
   await waitForBackendExit(dying)
 }
@@ -5142,14 +5142,14 @@ function primaryProfileKey() {
 }
 
 // Resolve a backend connection for the given profile. Routes the primary
-// profile to startHermes() (the window backend: boot UI, bootstrap, remote
+// profile to startLliam() (the window backend: boot UI, bootstrap, remote
 // mode), and any OTHER profile to a lazily-spawned pool backend. An empty /
 // unknown profile resolves to the primary, so all legacy callers are unchanged.
 async function ensureBackend(profile) {
   const key = profile && String(profile).trim() ? String(profile).trim() : primaryProfileKey()
 
   if (key === primaryProfileKey()) {
-    return startHermes()
+    return startLliam()
   }
 
   const existing = backendPool.get(key)
@@ -5218,7 +5218,7 @@ function startPoolIdleReaper() {
 }
 
 // Spawn an additional dashboard backend pinned to a named profile. Mirrors the
-// local-spawn portion of startHermes() but without the boot-progress UI,
+// local-spawn portion of startLliam() but without the boot-progress UI,
 // bootstrap, or remote handling (those belong to the primary backend only).
 async function spawnPoolBackend(profile, entry) {
   // A profile may point at its OWN remote backend (connection.json
@@ -5229,11 +5229,11 @@ async function spawnPoolBackend(profile, entry) {
   // tolerate.
   const remote = await resolveRemoteBackend(profile)
   if (remote) {
-    await waitForHermes(remote.baseUrl, remote.token)
+    await waitForLliam(remote.baseUrl, remote.token)
     return {
       ...remote,
       profile,
-      logs: hermesLog.slice(-80),
+      logs: lliamLog.slice(-80),
       ...getWindowState()
     }
   }
@@ -5243,8 +5243,8 @@ async function spawnPoolBackend(profile, entry) {
   // step 3 in hermes_cli/main.py), so the child re-homes to this profile.
   // --port 0: the OS assigns an ephemeral port; the child announces it on stdout.
   const dashboardArgs = ['--profile', profile, 'dashboard', '--no-open', '--host', '127.0.0.1', '--port', '0']
-  const backend = await ensureRuntime(resolveHermesBackend(dashboardArgs))
-  const hermesCwd = resolveHermesCwd()
+  const backend = await ensureRuntime(resolveLliamBackend(dashboardArgs))
+  const lliamCwd = resolveLliamCwd()
   const webDist = resolveWebDist()
   const readyFile = backend.readyFile ? makeDashboardReadyFile() : null
 
@@ -5254,7 +5254,7 @@ async function spawnPoolBackend(profile, entry) {
     backend.command,
     backend.args,
     hiddenWindowsChildOptions({
-      cwd: hermesCwd,
+      cwd: lliamCwd,
       env: {
         ...process.env,
         HERMES_HOME,
@@ -5262,7 +5262,7 @@ async function spawnPoolBackend(profile, entry) {
         // Pin the gateway's tool/terminal cwd to the same directory we chose for
         // the child process. Inherited TERMINAL_CWD (or a stale config bridge)
         // can still point at the install dir even when spawn cwd is home.
-        TERMINAL_CWD: hermesCwd,
+        TERMINAL_CWD: lliamCwd,
         // rename R.8a: set the new LLIAM_ names (the Python readers resolve
         // LLIAM_ first, legacy HERMES_ as a transition fallback).
         LLIAM_DASHBOARD_SESSION_TOKEN: token,
@@ -5310,7 +5310,7 @@ async function spawnPoolBackend(profile, entry) {
   entry.port = port
 
   const baseUrl = `http://127.0.0.1:${port}`
-  await Promise.race([waitForHermes(baseUrl, token), startFailed])
+  await Promise.race([waitForLliam(baseUrl, token), startFailed])
   ready = true
   const authToken = await adoptServedDashboardToken(baseUrl, token, {
     childAlive: () => child.exitCode === null && !child.killed,
@@ -5327,7 +5327,7 @@ async function spawnPoolBackend(profile, entry) {
     token: authToken,
     profile,
     wsUrl: `ws://127.0.0.1:${port}/api/ws?token=${encodeURIComponent(authToken)}`,
-    logs: hermesLog.slice(-80),
+    logs: lliamLog.slice(-80),
     ...getWindowState()
   }
 }
@@ -5409,9 +5409,9 @@ async function prepareProfileDeleteRequest(request) {
   await teardownPoolBackendAndWait(profile)
 }
 
-async function startHermes() {
+async function startLliam() {
   // Latched-failure short-circuit: once bootstrap has failed in this
-  // process, every subsequent startHermes() call re-throws the same error
+  // process, every subsequent startLliam() call re-throws the same error
   // without re-running install.ps1. This prevents the renderer's
   // ensureGatewayOpen retries (and any other getConnection callers) from
   // restarting a 5-10 minute install loop while the user is still reading
@@ -5431,7 +5431,7 @@ async function startHermes() {
     const remote = await resolveRemoteBackend(primaryProfileKey())
     if (remote) {
       await advanceBootProgress('backend.remote', `Connecting to remote Hermes backend at ${remote.baseUrl}`, 24)
-      await waitForHermes(remote.baseUrl, remote.token)
+      await waitForLliam(remote.baseUrl, remote.token)
       updateBootProgress({
         phase: 'backend.ready',
         message: 'Remote Hermes backend is ready',
@@ -5446,7 +5446,7 @@ async function startHermes() {
         authMode: remote.authMode || 'token',
         token: remote.token,
         wsUrl: remote.wsUrl,
-        logs: hermesLog.slice(-80),
+        logs: lliamLog.slice(-80),
         ...getWindowState()
       }
     }
@@ -5472,23 +5472,23 @@ async function startHermes() {
       dashboardArgs.unshift('--profile', activeProfile)
     }
     await advanceBootProgress('backend.runtime', 'Resolving Hermes runtime', 28)
-    const backend = await ensureRuntime(resolveHermesBackend(dashboardArgs))
-    const hermesCwd = resolveHermesCwd()
+    const backend = await ensureRuntime(resolveLliamBackend(dashboardArgs))
+    const lliamCwd = resolveLliamCwd()
     const webDist = resolveWebDist()
     const readyFile = backend.readyFile ? makeDashboardReadyFile() : null
 
     await advanceBootProgress('backend.spawn', `Starting Hermes backend via ${backend.label}`, 84)
     rememberLog(`Starting Hermes backend via ${backend.label}`)
 
-    hermesProcess = spawn(
+    lliamProcess = spawn(
       backend.command,
       backend.args,
       hiddenWindowsChildOptions({
-        cwd: hermesCwd,
+        cwd: lliamCwd,
         env: {
           ...process.env,
           // Explicitly pin HERMES_HOME for the child so Python's get_hermes_home()
-          // resolves to the SAME location our resolveHermesHome() picked. Without
+          // resolves to the SAME location our resolveLliamHome() picked. Without
           // this pin, Python falls back to ~/.hermes on every platform — fine on
           // mac/linux (where our default matches), but on Windows our default is
           // %LOCALAPPDATA%\hermes, which differs from C:\Users\<u>\.hermes.
@@ -5497,7 +5497,7 @@ async function startHermes() {
           // can't reliably do that, so we set it inline for every spawn.
           HERMES_HOME,
           ...backend.env,
-          TERMINAL_CWD: hermesCwd,
+          TERMINAL_CWD: lliamCwd,
           // rename R.8a: set the new LLIAM_ names (Python readers resolve
           // LLIAM_ first, legacy HERMES_ as a transition fallback).
           LLIAM_DASHBOARD_SESSION_TOKEN: token,
@@ -5512,14 +5512,14 @@ async function startHermes() {
       })
     )
 
-    hermesProcess.stdout.on('data', rememberLog)
-    hermesProcess.stderr.on('data', rememberLog)
+    lliamProcess.stdout.on('data', rememberLog)
+    lliamProcess.stderr.on('data', rememberLog)
     let backendReady = false
     let rejectBackendStart = null
     const backendStartFailed = new Promise((_resolve, reject) => {
       rejectBackendStart = reject
     })
-    hermesProcess.once('error', error => {
+    lliamProcess.once('error', error => {
       rememberLog(`Hermes backend failed to start: ${error.message}`)
       updateBootProgress(
         {
@@ -5530,14 +5530,14 @@ async function startHermes() {
         },
         { allowDecrease: true }
       )
-      hermesProcess = null
+      lliamProcess = null
       connectionPromise = null
       sendBackendExit({ code: null, signal: null, error: error.message })
       rejectBackendStart?.(error)
     })
-    hermesProcess.once('exit', (code, signal) => {
+    lliamProcess.once('exit', (code, signal) => {
       rememberLog(`Hermes backend exited (${signal || code})`)
-      hermesProcess = null
+      lliamProcess = null
       connectionPromise = null
       sendBackendExit({ code, signal })
       if (!backendReady) {
@@ -5553,7 +5553,7 @@ async function startHermes() {
         )
         rejectBackendStart?.(
           new Error(
-            `Hermes backend exited before it became ready (${signal || code}). Log: ${DESKTOP_LOG_PATH}\n${recentHermesLog()}`
+            `Hermes backend exited before it became ready (${signal || code}). Log: ${DESKTOP_LOG_PATH}\n${recentLliamLog()}`
           )
         )
       }
@@ -5562,7 +5562,7 @@ async function startHermes() {
     await advanceBootProgress('backend.port', 'Waiting for Hermes backend to launch', 86)
     // Discover the ephemeral port the child bound to
     const port = await Promise.race([
-      waitForDashboardPortAnnouncement(hermesProcess, { readyFile }),
+      waitForDashboardPortAnnouncement(lliamProcess, { readyFile }),
       backendStartFailed
     ])
     if (readyFile) {
@@ -5571,12 +5571,12 @@ async function startHermes() {
 
     const baseUrl = `http://127.0.0.1:${port}`
     await advanceBootProgress('backend.wait', 'Waiting for Hermes backend to become ready', 90)
-    await Promise.race([waitForHermes(baseUrl, token), backendStartFailed])
+    await Promise.race([waitForLliam(baseUrl, token), backendStartFailed])
     backendReady = true
     backendStartFailure = null
     const authToken = await adoptServedDashboardToken(baseUrl, token, {
-      // The exit/error handlers null hermesProcess when the child dies.
-      childAlive: () => hermesProcess !== null && hermesProcess.exitCode === null && !hermesProcess.killed,
+      // The exit/error handlers null lliamProcess when the child dies.
+      childAlive: () => lliamProcess !== null && lliamProcess.exitCode === null && !lliamProcess.killed,
       rememberLog
     })
     updateBootProgress({
@@ -5594,7 +5594,7 @@ async function startHermes() {
       authMode: 'token',
       token: authToken,
       wsUrl: `ws://127.0.0.1:${port}/api/ws?token=${encodeURIComponent(authToken)}`,
-      logs: hermesLog.slice(-80),
+      logs: lliamLog.slice(-80),
       ...getWindowState()
     }
   })().catch(error => {
@@ -5985,7 +5985,7 @@ function createWindow() {
     restorePersistedZoomLevel(mainWindow)
     broadcastBootProgress()
     sendWindowStateChanged()
-    startHermes().catch(error => rememberLog(error.stack || error.message))
+    startLliam().catch(error => rememberLog(error.stack || error.message))
   })
 }
 
@@ -6022,10 +6022,10 @@ ipcMain.handle('lliam:connection:revalidate', async () => {
     return { ok: true, rebuilt: false }
   } catch {
     // Unreachable remote: drop the stale cache so the renderer's next reconnect
-    // tick rebuilds a fresh, reachable descriptor. resetHermesConnection only
+    // tick rebuilds a fresh, reachable descriptor. resetLliamConnection only
     // nulls connectionPromise for a remote (no child to SIGTERM).
     rememberLog('Cached remote Hermes backend failed liveness probe; dropping stale connection.')
-    resetHermesConnection()
+    resetLliamConnection()
     return { ok: true, rebuilt: true }
   }
 })
@@ -6173,7 +6173,7 @@ ipcMain.on('lliam:pet-overlay:control', (_event, payload) => {
 })
 ipcMain.handle('lliam:bootstrap:reset', async () => {
   // Renderer's "Reload and retry" path. Clear the latched failure and
-  // reset connection state so the next startHermes() call restarts the
+  // reset connection state so the next startLliam() call restarts the
   // full backend flow (including a fresh runBootstrap pass).
   rememberLog('[bootstrap] reset requested by renderer; clearing latched failure')
   await teardownPrimaryBackendAndWait()
@@ -6193,7 +6193,7 @@ ipcMain.handle('lliam:bootstrap:reset', async () => {
 })
 ipcMain.handle('lliam:bootstrap:repair', async () => {
   // Forceful repair: drop the bootstrap-complete marker so the next
-  // startHermes() re-runs the full installer (refreshing a broken/partial
+  // startLliam() re-runs the full installer (refreshing a broken/partial
   // venv), and clear any latched failure + live connection. The renderer
   // reloads afterwards to re-drive the boot flow from scratch.
   rememberLog('[bootstrap] repair requested by renderer; clearing marker + latched failure')
@@ -6206,7 +6206,7 @@ ipcMain.handle('lliam:bootstrap:repair', async () => {
   }
   bootstrapFailure = null
   backendStartFailure = null
-  resetHermesConnection()
+  resetLliamConnection()
   return { ok: true }
 })
 ipcMain.handle('lliam:bootstrap:cancel', async () => {
@@ -6654,12 +6654,12 @@ ipcMain.handle('lliam:openPreviewInBrowser', async (_event, url) => {
 
 // User-configurable default project directory. The renderer reads this on
 // settings mount and seeds the value into the picker; writing back persists
-// it via writeDefaultProjectDir so resolveHermesCwd picks it up on the next
+// it via writeDefaultProjectDir so resolveLliamCwd picks it up on the next
 // session spawn (no app restart needed).
 ipcMain.handle('lliam:setting:defaultProjectDir:get', async () => ({
   dir: readDefaultProjectDir(),
   defaultLabel: app.getPath('home'),
-  resolvedCwd: resolveHermesCwd()
+  resolvedCwd: resolveLliamCwd()
 }))
 
 ipcMain.handle('lliam:workspace:sanitize', async (_event, cwd) => sanitizeWorkspaceCwd(cwd))
@@ -6709,7 +6709,7 @@ ipcMain.handle('lliam:logs:reveal', async () => {
   }
 })
 
-ipcMain.handle('lliam:logs:recent', async () => ({ path: DESKTOP_LOG_PATH, lines: hermesLog.slice(-200) }))
+ipcMain.handle('lliam:logs:recent', async () => ({ path: DESKTOP_LOG_PATH, lines: lliamLog.slice(-200) }))
 
 function isExecutableFile(filePath) {
   if (!filePath || !path.isAbsolute(filePath)) {
@@ -7151,7 +7151,7 @@ ipcMain.handle('lliam:updates:branch:set', async (_event, name) => {
 // real Hermes version instead of the Electron app's own package.json version,
 // which historically drifted (stuck at 0.0.2). Falls back to app.getVersion()
 // when the source tree can't be read (e.g. a packaged build without the repo).
-function resolveHermesVersion() {
+function resolveLliamVersion() {
   try {
     const root = resolveUpdateRoot()
     const initPath = path.join(root, 'hermes_cli', '__init__.py')
@@ -7175,14 +7175,14 @@ function resolveHermesVersion() {
 function showAboutPanelFresh() {
   app.setAboutPanelOptions({
     applicationName: APP_NAME,
-    applicationVersion: resolveHermesVersion(),
+    applicationVersion: resolveLliamVersion(),
     copyright: 'Copyright © 2026 Nous Research'
   })
   app.showAboutPanel()
 }
 
 ipcMain.handle('lliam:version', async () => ({
-  appVersion: resolveHermesVersion(),
+  appVersion: resolveLliamVersion(),
   electronVersion: process.versions.electron,
   nodeVersion: process.versions.node,
   platform: process.platform,
@@ -7215,7 +7215,7 @@ async function getUninstallSummary() {
   // probe fails — the renderer still needs *something* to render options from.
   const fallback = () => ({
     hermes_home: HERMES_HOME,
-    agent_installed: isHermesSourceRoot(agentRoot) && fileExists(py),
+    agent_installed: isLliamSourceRoot(agentRoot) && fileExists(py),
     gui_installed: true,
     source_built_artifacts: [],
     packaged_app_paths: [],
@@ -7574,8 +7574,8 @@ app.on('before-quit', () => {
     disposeTerminalSession(id)
   }
 
-  if (hermesProcess && !hermesProcess.killed) {
-    hermesProcess.kill('SIGTERM')
+  if (lliamProcess && !lliamProcess.killed) {
+    lliamProcess.kill('SIGTERM')
   }
   stopAllPoolBackends()
 })

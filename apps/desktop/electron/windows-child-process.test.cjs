@@ -35,10 +35,10 @@ test('desktop background child processes opt into hidden Windows consoles', () =
   requireHiddenChildOptions(source, /spawn\(\s*command,\s*args/)
   requireHiddenChildOptions(source, "spawn('curl'")
   requireHiddenChildOptions(source, /spawn\(\s*backend\.command,\s*backend\.args/)
-  requireHiddenChildOptions(source, /hermesProcess = spawn\(\s*backend\.command,\s*backend\.args/)
+  requireHiddenChildOptions(source, /lliamProcess = spawn\(\s*backend\.command,\s*backend\.args/)
   requireHiddenChildOptions(source, /spawn\(\s*py,\s*\['-m', 'hermes_cli\.main', 'uninstall', '--gui-summary'\]/)
 
-  assert.match(source, /function unwrapWindowsVenvHermesCommand\(command, dashboardArgs\)/)
+  assert.match(source, /function unwrapWindowsVenvLliamCommand\(command, dashboardArgs\)/)
   assert.match(source, /existing Hermes no-console Python at/)
   assert.match(source, /function getNoConsoleVenvPython\(venvRoot\)/)
   assert.match(source, /function toNoConsolePython\(pythonPath\)/)

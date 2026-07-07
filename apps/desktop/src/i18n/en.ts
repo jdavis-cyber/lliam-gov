@@ -880,7 +880,7 @@ export const en: Translations = {
     noSessions: 'No sessions yet.',
     gatewayRunning: 'Messaging gateway running',
     gatewayStopped: 'Messaging gateway stopped',
-    hermesActiveSessions: (version, count) => `LLIAM-GOV ${version} · Active sessions ${count}`,
+    lliamActiveSessions: (version, count) => `LLIAM-GOV ${version} · Active sessions ${count}`,
     restartGateway: 'Restart gateway',
     gatewayRestartFailed: 'Gateway restart failed.',
     updateLliam: 'Update LLIAM-GOV',

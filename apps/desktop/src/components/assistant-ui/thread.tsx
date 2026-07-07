@@ -60,7 +60,7 @@ import {
 } from '@/app/chat/hooks/use-composer-actions'
 import { uploadComposerAttachment } from '@/app/session/hooks/use-prompt-actions'
 import { ClarifyTool } from '@/components/assistant-ui/clarify-tool'
-import { DirectiveContent, hermesDirectiveFormatter } from '@/components/assistant-ui/directive-text'
+import { DirectiveContent, lliamDirectiveFormatter } from '@/components/assistant-ui/directive-text'
 import { MarkdownText, MarkdownTextContent } from '@/components/assistant-ui/markdown-text'
 import { ThreadMessageList } from '@/components/assistant-ui/thread-list'
 import { ThreadTimeline } from '@/components/assistant-ui/thread-timeline'
@@ -1468,7 +1468,7 @@ const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sessionId }
         return
       }
 
-      const serialized = hermesDirectiveFormatter.serialize(item)
+      const serialized = lliamDirectiveFormatter.serialize(item)
       const starter = serialized.endsWith(':')
       const text = starter || serialized.endsWith(' ') ? serialized : `${serialized} `
       const directive = !starter && serialized.match(/^@([^:]+):(.+)$/)

@@ -61,7 +61,7 @@ test('Windows bootstrap recovery chooses --update when any real-install signal i
   // The old too-narrow check (only venv\Scripts\hermes.exe) must not return.
   assert.doesNotMatch(
     source,
-    /updaterArgs = fileExists\(venvHermes\) \?/,
+    /updaterArgs = fileExists\(venvLliam\) \?/,
     'recovery regressed to gating only on the hermes.exe shim, which forces destructive --repair'
   )
 })

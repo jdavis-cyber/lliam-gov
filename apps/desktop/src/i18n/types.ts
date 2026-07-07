@@ -766,7 +766,7 @@ export interface Translations {
     noSessions: string
     gatewayRunning: string
     gatewayStopped: string
-    hermesActiveSessions: (version: string, count: number) => string
+    lliamActiveSessions: (version: string, count: number) => string
     restartGateway: string
     gatewayRestartFailed: string
     updateLliam: string

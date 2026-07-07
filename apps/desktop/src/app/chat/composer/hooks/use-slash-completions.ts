@@ -213,7 +213,7 @@ export function useSlashCompletions(options: {
       meta,
       group: textValue(entry.group),
       action: textValue(entry.action),
-      // Provide rawText so hermesDirectiveFormatter.serialize uses the
+      // Provide rawText so lliamDirectiveFormatter.serialize uses the
       // direct-insertion path instead of the legacy @type:id fallback.
       // Without this, the item.id (which includes a "|index" suffix for
       // trigger-adapter uniqueness) leaks into the serialized chip text

@@ -378,7 +378,7 @@ export function CommandCenterView({ initialSection, onClose, onDeleteSession, on
                           </span>
                         </div>
                         <div className="mt-1 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-                          {cc.hermesActiveSessions(status.version, status.active_sessions)}
+                          {cc.lliamActiveSessions(status.version, status.active_sessions)}
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">

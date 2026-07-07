@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { type CSSProperties } from 'react'
 import { Button } from '../components/button'
-import { launchHermesDesktop } from '../store'
+import { launchLliamDesktop } from '../store'
 import { Rocket, AlertCircle } from 'lucide-react'
 
 /*
@@ -12,7 +12,7 @@ import { Rocket, AlertCircle } from 'lucide-react'
  * Launching the desktop can fail (e.g. Stage-Desktop was skipped and
  * Hermes.exe doesn't exist). We catch the Tauri error and surface it
  * inline rather than silently doing nothing — the previous version
- * had `onClick={() => void launchHermesDesktop()}` which swallowed
+ * had `onClick={() => void launchLliamDesktop()}` which swallowed
  * the rejection and left the user staring at an unresponsive button.
  */
 export default function Success() {
@@ -23,7 +23,7 @@ export default function Success() {
     setError(null)
     setLaunching(true)
     try {
-      await launchHermesDesktop()
+      await launchLliamDesktop()
       // On success the installer exits — control never returns here.
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)

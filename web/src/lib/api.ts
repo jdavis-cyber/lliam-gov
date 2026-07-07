@@ -852,9 +852,9 @@ export const api = {
   // Gateway / update actions
   restartGateway: () =>
     fetchJSON<ActionResponse>("/api/gateway/restart", { method: "POST" }),
-  updateHermes: () =>
+  updateLliam: () =>
     fetchJSON<ActionResponse>("/api/hermes/update", { method: "POST" }),
-  checkHermesUpdate: (force = false) =>
+  checkLliamUpdate: (force = false) =>
     fetchJSON<UpdateCheckResponse>(
       `/api/hermes/update/check${force ? "?force=true" : ""}`,
     ),

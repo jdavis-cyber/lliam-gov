@@ -209,7 +209,7 @@ export default function SystemPage() {
       api.getPortal(),
       // Cached (non-forced) check so the version row shows update status on
       // load without a separate effect / a forced network round-trip.
-      api.checkHermesUpdate(false),
+      api.checkLliamUpdate(false),
     ])
       .then(([s, st, m, p, c, h, cur, prt, upd]) => {
         if (s.status === "fulfilled") setStatus(s.value);
@@ -389,7 +389,7 @@ export default function SystemPage() {
       if (status?.can_update_hermes === false) return;
       setCheckingUpdate(true);
       try {
-        const info = await api.checkHermesUpdate(force);
+        const info = await api.checkLliamUpdate(force);
         setUpdateInfo(info);
         if (force) {
           if (info.update_available) {
@@ -426,7 +426,7 @@ export default function SystemPage() {
       return;
     }
     try {
-      const resp = await api.updateHermes();
+      const resp = await api.updateLliam();
       if (!resp.ok) {
         showToast(
           resp.message ??
@@ -511,7 +511,7 @@ export default function SystemPage() {
   }
 
   const gatewayRunning = status?.gateway_running;
-  const canUpdateHermes = status?.can_update_hermes !== false;
+  const canUpdateLliam = status?.can_update_hermes !== false;
   const validEvents = hooks?.valid_events?.length
     ? hooks.valid_events
     : HOOK_EVENTS_FALLBACK;
@@ -521,7 +521,7 @@ export default function SystemPage() {
       <Toast toast={toast} />
 
       <ConfirmDialog
-        open={canUpdateHermes && updateConfirmOpen}
+        open={canUpdateLliam && updateConfirmOpen}
         onCancel={() => setUpdateConfirmOpen(false)}
         onConfirm={() => void applyUpdate()}
         title="Update Hermes?"
@@ -700,7 +700,7 @@ export default function SystemPage() {
                 <div className="text-xs uppercase tracking-wider text-muted-foreground">Hermes</div>
                 <div className="flex items-center gap-2">
                   <span>v{stats?.hermes_version}</span>
-                  {canUpdateHermes &&
+                  {canUpdateLliam &&
                     updateInfo &&
                     (updateInfo.update_available ? (
                       <Badge tone="warning">
@@ -761,7 +761,7 @@ export default function SystemPage() {
                 CPU / memory / disk metrics.
               </p>
             )}
-            {canUpdateHermes && (
+            {canUpdateLliam && (
               <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
                 <Button
                   size="sm"

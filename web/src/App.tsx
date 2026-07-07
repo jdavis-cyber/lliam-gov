@@ -903,7 +903,7 @@ function SidebarSystemActions({
   const navigate = useNavigate();
   const { activeAction, isBusy, isRunning, pendingAction, runAction } =
     useSystemActions();
-  const canUpdateHermes = status?.can_update_hermes === true;
+  const canUpdateLliam = status?.can_update_hermes === true;
 
   const items: SystemActionItem[] = [
     {
@@ -914,12 +914,12 @@ function SidebarSystemActions({
       spin: true,
     },
   ];
-  if (canUpdateHermes) {
+  if (canUpdateLliam) {
     items.push({
       action: "update",
       icon: Download,
-      label: t.status.updateHermes,
-      runningLabel: t.status.updatingHermes,
+      label: t.status.updateLliam,
+      runningLabel: t.status.updatingLliam,
       spin: false,
     });
   }
