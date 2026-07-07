@@ -188,7 +188,7 @@ model:
 # Commands run directly on your machine in the current directory
 # -----------------------------------------------------------------------------
 # Working directory behavior:
-#   - CLI (`lliam-gov` command): Uses "." (current directory where you run hermes)
+#   - CLI (`lliam-gov` command): Uses "." (current directory where you run lliam-gov)
 #   - Gateway/messaging/cron: Uses terminal.cwd here; legacy .env cwd values are deprecated
 terminal:
   backend: "local"

@@ -221,7 +221,9 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"hermesbot-cron", "IRC handle — external"),
     (r"hermes-telegram|hermes-acp|hermes-achievements|hermes-update",
      "registered plugin/integration ids — external/contract"),
-    (r'"hermes-[a-z][a-z-]*"',
+    (r'"?hermes-(api-server|cron|discord|whatsapp|slack|signal|sms|webhook|email|matrix|'
+     r'mattermost|dingtalk|feishu|weixin|qqbot|wecom|wecom-callback|yuanbao|bluebubbles|'
+     r'homeassistant|teams|google_chat|telegram|gateway|acp|cli)"?|\[hermes-[a-z_]+\]',
      "toolset/platform-preset config key (cli-config.yaml.example platform_toolsets namespace) — "
      "user-facing config contract; renaming breaks existing configs + string-equality tests"),
     (r'hermes-\*|hermes-<|startswith\("hermes-"\)|"hermes-"|\[len\("hermes-"\)',
@@ -253,6 +255,24 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
      r'default = "hermes"|host-installed hermes|interpreter as hermes',
      "NixOS module OS user/group identity — same inherited runtime-account contract as docker/**"),
     (r"rtk-hermes", "external third-party repo name (rtk-hermes) — not this product"),
+    (r"hermes:hermes|hermes-owned|unprivileged hermes|the .hermes. user|'hermes'|"
+     r"drops from root to the .hermes.|chown.*hermes",
+     "s6/service OS-account identity (hermes user/group) — same inherited runtime-account "
+     "contract as docker/** and the NixOS module"),
+    (r"hermes-profile|hermes-task-id|label=hermes|hermes-\{uuid|hermes-\{_?uuid|"
+     r"hermes-tagged|hermes-created|hermes-\{.*hex",
+     "Docker container-management label / generated container name — runtime contract for "
+     "cross-process container reuse + sweep (tools/environments/docker.py)"),
+    (r'bank_?[iI]d.*hermes|"hermes":|"hermes",\s*(llm_provider|status|profile)?|'
+     r'default:\s*hermes\)|get\(.profile., .hermes.\)|_bank_id = "hermes"|'
+     r'"bankId":.*"hermes"|setdefault\(.bank_id., .hermes.\)|hermes-\{user\}',
+     "Hindsight memory-bank / profile default identifier value — opaque data pointing at an "
+     "external memory bank; changing it silently switches which bank is addressed"),
+    (r'profile or "hermes"',
+     "Hindsight profile fallback default value — opaque data (see bank_id keep)"),
+    (r"hermes-cleanup-\{|directory is hermes-|is hermes-$",
+     "internal docker-cleanup thread name / wrapped 'hermes-owned' comment — "
+     "container-management identity, opaque"),
 
     # --- Incident / proper-noun ---
     (r"hermes-0day", "security incident proper-noun name"),
