@@ -3,7 +3,7 @@
   "productName": "Lliam-GOV",
   "private": true,
   "version": "0.17.0",
-  "description": "Native desktop shell for Lliam-GOV (governed Hermes Agent fork).",
+  "description": "Native desktop shell for Lliam-GOV (governed Lliam-GOV fork).",
   "author": "Nous Research",
   "type": "module",
   "main": "electron/main.cjs",
@@ -232,7 +232,7 @@
       ]
     },
     "win": {
-      "legalTrademarks": "Hermes",
+      "legalTrademarks": "Lliam-GOV",
       "target": [
         "nsis",
         "msi"
@@ -242,7 +242,7 @@
     "linux": {
       "category": "Development",
       "maintainer": "Nous Research <support@nousresearch.com>",
-      "synopsis": "Native desktop shell for Lliam-GOV (governed Hermes Agent fork).",
+      "synopsis": "Native desktop shell for Lliam-GOV (governed Lliam-GOV fork).",
       "target": [
         "AppImage",
         "deb",

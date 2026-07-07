@@ -2204,7 +2204,7 @@ export const en: Translations = {
       success: platform => `Handed off to ${platform}. Resume here anytime.`,
       systemNote: platform => `↻ Handed off to ${platform} — resume here anytime.`,
       failed: error => `Handoff failed: ${error}`,
-      timedOut: 'Timed out waiting for the gateway. Is `hermes gateway` running?'
+      timedOut: 'Timed out waiting for the gateway. Is `lliam-gov gateway` running?'
     }
   },
 

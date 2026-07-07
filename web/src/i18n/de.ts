@@ -120,8 +120,8 @@ export const de: Translations = {
     starting: "Startet",
     startedInBackground: "Im Hintergrund gestartet — siehe Protokolle für den Fortschritt",
     stopped: "Gestoppt",
-    updateHermes: "Hermes aktualisieren",
-    updatingHermes: "Hermes wird aktualisiert…",
+    updateHermes: "Lliam-GOV aktualisieren",
+    updatingHermes: "Lliam-GOV wird aktualisiert…",
     waitingForOutput: "Warte auf Ausgabe…",
   },
 
@@ -320,7 +320,7 @@ export const de: Translations = {
     enableRuntime: "Aktivieren",
     forceReinstall: "Neuinstallation erzwingen (bestehenden Ordner zuerst löschen)",
     headline:
-      "Hermes-Plugins entdecken, installieren, aktivieren und aktualisieren (entspricht `hermes plugins`).",
+      "Lliam-GOV-Plugins entdecken, installieren, aktivieren und aktualisieren (entspricht `lliam-gov plugins`).",
     identifierLabel: "Git-URL oder owner/repo",
     inactive: "inaktiv",
     installBtn: "Installieren",
@@ -485,11 +485,11 @@ export const de: Translations = {
   achievements: {
     hero: {
       kicker: "Agentic Gamerscore",
-      title: "Hermes Achievements",
+      title: "Lliam-GOV Achievements",
       subtitle:
-        "Sammelbare Hermes-Abzeichen, verdient durch echten Sitzungsverlauf. Bekannte, noch nicht abgeschlossene Achievements werden als Entdeckt angezeigt; geheime Achievements bleiben verborgen, bis das erste passende Verhalten auftritt.",
+        "Sammelbare Lliam-GOV-Abzeichen, verdient durch echten Sitzungsverlauf. Bekannte, noch nicht abgeschlossene Achievements werden als Entdeckt angezeigt; geheime Achievements bleiben verborgen, bis das erste passende Verhalten auftritt.",
       scan_subtitle:
-        "Hermes-Sitzungsverlauf wird gescannt. Der erste Scan kann bei umfangreichem Verlauf 5–10 Sekunden dauern.",
+        "Lliam-GOV-Sitzungsverlauf wird gescannt. Der erste Scan kann bei umfangreichem Verlauf 5–10 Sekunden dauern.",
     },
     actions: {
       rescan: "Neu scannen",
@@ -504,7 +504,7 @@ export const de: Translations = {
       highest_tier: "Höchste Stufe",
       highest_tier_hint: "Copper → Silver → Gold → Diamond → Olympian",
       latest: "Neueste",
-      latest_hint_empty: "nutze Hermes mehr",
+      latest_hint_empty: "nutze Lliam-GOV mehr",
       none_yet: "Noch keine",
     },
     state: {
@@ -535,10 +535,10 @@ export const de: Translations = {
       tiers_header: "Stufen",
       secret_header: "Geheime Achievements",
       secret_body:
-        "Geheimnisse verbergen ihren genauen Auslöser. Sobald Hermes ein verwandtes Signal erkennt, wird die Karte zu Entdeckt und zeigt ihre Anforderung an.",
+        "Geheimnisse verbergen ihren genauen Auslöser. Sobald Lliam-GOV ein verwandtes Signal erkennt, wird die Karte zu Entdeckt und zeigt ihre Anforderung an.",
       scan_status_header: "Scan-Status",
       scan_status_body:
-        "Hermes scannt den lokalen Verlauf einmalig, danach erscheinen die Karten automatisch. Es ist nichts hängengeblieben, wenn dies ein paar Sekunden dauert.",
+        "Lliam-GOV scannt den lokalen Verlauf einmalig, danach erscheinen die Karten automatisch. Es ist nichts hängengeblieben, wenn dies ein paar Sekunden dauert.",
       what_scanned_header: "Was gescannt wird",
       what_scanned_body:
         "Sitzungen, Tool-Aufrufe, Modell-Metadaten, Fehler, Achievements und lokaler Freischaltstatus.",

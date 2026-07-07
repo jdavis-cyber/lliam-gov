@@ -184,7 +184,7 @@ if (REMOTE_DISPLAY_REASON) {
   // with only --disable-gpu: force compositing onto the CPU too.
   app.commandLine.appendSwitch('disable-gpu-compositing')
   console.log(
-    `[hermes] remote display detected (${REMOTE_DISPLAY_REASON}); disabling GPU hardware acceleration to prevent flicker`
+    `[lliam-gov] remote display detected (${REMOTE_DISPLAY_REASON}); disabling GPU hardware acceleration to prevent flicker`
   )
 }
 
@@ -195,7 +195,7 @@ if (IS_WSL && !REMOTE_DISPLAY_REASON && fs.existsSync('/dev/dxg')) {
   app.commandLine.appendSwitch('ignore-gpu-blocklist')
   app.commandLine.appendSwitch('enable-gpu-rasterization')
   app.commandLine.appendSwitch('enable-zero-copy')
-  console.log('[hermes] WSL GPU passthrough (/dev/dxg) detected; enabling GPU acceleration')
+  console.log('[lliam-gov] WSL GPU passthrough (/dev/dxg) detected; enabling GPU acceleration')
 }
 
 ipcMain.handle('lliam:get-remote-display-reason', () => REMOTE_DISPLAY_REASON)
@@ -245,7 +245,7 @@ function loadInstallStamp() {
       if (parsed && typeof parsed === 'object' && typeof parsed.commit === 'string' && parsed.commit.length >= 7) {
         if (parsed.schemaVersion !== INSTALL_STAMP_SCHEMA_VERSION) {
           console.warn(
-            `[hermes] install-stamp.json schemaVersion ${parsed.schemaVersion} != expected ${INSTALL_STAMP_SCHEMA_VERSION}; ignoring`
+            `[lliam-gov] install-stamp.json schemaVersion ${parsed.schemaVersion} != expected ${INSTALL_STAMP_SCHEMA_VERSION}; ignoring`
           )
           continue
         }
@@ -268,17 +268,17 @@ function loadInstallStamp() {
 const INSTALL_STAMP = loadInstallStamp()
 if (INSTALL_STAMP) {
   console.log(
-    `[hermes] install stamp: ${INSTALL_STAMP.commit.slice(0, 12)}${INSTALL_STAMP.branch ? ` (${INSTALL_STAMP.branch})` : ''}${INSTALL_STAMP.dirty ? ' [DIRTY]' : ''} from ${INSTALL_STAMP.source || 'unknown'}`
+    `[lliam-gov] install stamp: ${INSTALL_STAMP.commit.slice(0, 12)}${INSTALL_STAMP.branch ? ` (${INSTALL_STAMP.branch})` : ''}${INSTALL_STAMP.dirty ? ' [DIRTY]' : ''} from ${INSTALL_STAMP.source || 'unknown'}`
   )
 } else if (IS_PACKAGED) {
   // Dev builds without a stamp are normal; packaged builds without one
   // mean the bootstrap won't know what to clone. Surface clearly.
   console.error(
-    '[hermes] WARNING: no install-stamp.json found in packaged build. First-launch bootstrap will not have a pinned ref to install.'
+    '[lliam-gov] WARNING: no install-stamp.json found in packaged build. First-launch bootstrap will not have a pinned ref to install.'
   )
 }
 
-// HERMES_HOME — the user-facing root for everything Hermes-related. Mirrors
+// HERMES_HOME — the user-facing root for everything Lliam-GOV-related. Mirrors
 // scripts/install.ps1's $HermesHome and scripts/install.sh's $HERMES_HOME.
 //
 // Defaults:
@@ -333,7 +333,7 @@ function pathWithLliamManagedNode(...entries) {
   return [...lliamManagedNodePathEntries(), ...entries, process.env.PATH].filter(Boolean).join(path.delimiter)
 }
 
-// ACTIVE_HERMES_ROOT — the canonical mutable Hermes install. Same path
+// ACTIVE_HERMES_ROOT — the canonical mutable Lliam-GOV install. Same path
 // install.ps1 / install.sh use, so a desktop-only user and a CLI-only user end
 // up with identical layouts and can share one install.
 const ACTIVE_HERMES_ROOT = path.join(HERMES_HOME, 'hermes-agent')
@@ -356,7 +356,7 @@ const BOOTSTRAP_MARKER_SCHEMA_VERSION = 1
 const DESKTOP_CONNECTION_CONFIG_PATH = path.join(app.getPath('userData'), 'connection.json')
 const DESKTOP_UPDATE_CONFIG_PATH = path.join(app.getPath('userData'), 'updates.json')
 const DESKTOP_WINDOW_STATE_PATH = path.join(app.getPath('userData'), 'window-state.json')
-// active-profile.json records which Hermes profile the desktop launches its
+// active-profile.json records which Lliam-GOV profile the desktop launches its
 // local backend as. When set, startLliam() passes `hermes --profile <name>
 // dashboard …`, which deterministically pins HERMES_HOME (see
 // _apply_profile_override in hermes_cli/main.py) and bypasses the sticky
@@ -686,9 +686,9 @@ app.setName(APP_NAME)
 if (IS_WINDOWS) {
   app.setAppUserModelId('com.secondorderstrategy.lliam-gov')
 }
-// Seed the native About panel with the live Hermes version. This is refreshed
+// Seed the native About panel with the live Lliam-GOV version. This is refreshed
 // on every open via the explicit "About" menu handler (refreshAboutPanel), so
-// an in-place `hermes update` mid-session is reflected without an app restart;
+// an in-place `lliam-gov update` mid-session is reflected without an app restart;
 // the seed here just covers the first open and any non-menu invocation path.
 app.setAboutPanelOptions({
   applicationName: APP_NAME,
@@ -791,7 +791,7 @@ let rendererReloadTimes = []
 // the renderer's "Reload and retry" path or by quitting the app.
 let bootstrapFailure = null
 // Latched non-bootstrap backend spawn failure — stops getConnection() from
-// respawning hermes dashboard children in a tight loop while boot is broken.
+// respawning lliam-gov dashboard children in a tight loop while boot is broken.
 let backendStartFailure = null
 // Active first-launch install, so the renderer's Cancel button (and app quit)
 // can abort the in-flight install.sh/ps1 instead of leaving it running.
@@ -808,7 +808,7 @@ let nativeThemeListenerInstalled = false
 let bootProgressState = {
   error: null,
   fakeMode: BOOT_FAKE_MODE,
-  message: 'Waiting to start Hermes backend',
+  message: 'Waiting to start Lliam-GOV backend',
   phase: 'idle',
   progress: 0,
   running: false,
@@ -911,7 +911,7 @@ function scheduleDesktopLogFlush() {
 function rememberLog(chunk) {
   const text = String(chunk || '').trim()
   if (!text) return
-  const lines = text.split(/\r?\n/).map(line => `[hermes] ${line}`)
+  const lines = text.split(/\r?\n/).map(line => `[lliam-gov] ${line}`)
   lliamLog.push(...lines)
   if (lliamLog.length > 300) {
     lliamLog.splice(0, lliamLog.length - 300)
@@ -1255,7 +1255,7 @@ async function waitForUpdateToFinish() {
   while (marker && Date.now() < deadline) {
     await advanceBootProgress(
       'backend.update-wait',
-      'An update is finishing — Hermes will start automatically when it completes…',
+      'An update is finishing — Lliam-GOV will start automatically when it completes…',
       12
     )
     await new Promise(r => setTimeout(r, UPDATE_WAIT_POLL_MS))
@@ -1288,7 +1288,7 @@ function findOnPath(command) {
   // On Windows, try PATHEXT extensions BEFORE the bare (empty-extension) name.
   // A real command must resolve via its .exe/.cmd (Windows command-resolution
   // semantics consult PATHEXT); an extensionless file — e.g. a Git-Bash
-  // shell-script shim named `hermes` — must not shadow `hermes.cmd`/`hermes.exe`.
+  // shell-script shim named `lliam-gov` — must not shadow `hermes.cmd`/`hermes.exe`.
   // The empty entry is kept LAST so callers that already include the extension
   // (py.exe, pwsh.exe, powershell.exe) still resolve.
   const extensions = IS_WINDOWS
@@ -1324,7 +1324,7 @@ function unwrapWindowsVenvLliamCommand(command, dashboardArgs) {
 
   const root = path.dirname(venvRoot)
   return {
-    label: `existing Hermes no-console Python at ${python}`,
+    label: `existing Lliam-GOV no-console Python at ${python}`,
     command: python,
     args: ['-m', 'hermes_cli.main', ...dashboardArgs],
     bootstrap: false,
@@ -1417,7 +1417,7 @@ function findSystemPython() {
   //      miss real Python 3.13 installs (user-reported case).
   //
   // We also restrict ourselves to Python 3.11–3.13. 3.14 is the latest
-  // CPython but several Hermes deps (notably pywinpty's Rust-built
+  // CPython but several Lliam-GOV deps (notably pywinpty's Rust-built
   // windows_x86_64_msvc crate) don't yet publish 3.14 wheels, and
   // `pip install -e .` falls back to source-build, which fails without
   // a Rust toolchain. install.ps1 sidesteps this by pinning to 3.11
@@ -1515,7 +1515,7 @@ function findSystemPython() {
   return null
 }
 
-// findGitBash — locate bash.exe on Windows. Hermes' terminal tool requires
+// findGitBash — locate bash.exe on Windows. Lliam-GOV' terminal tool requires
 // bash (POSIX shell), and on Windows that's almost always Git for Windows'
 // bundled Git Bash. We check the same set of locations tools/environments/
 // local.py:_find_bash() checks at runtime, so a positive result here means
@@ -1705,7 +1705,7 @@ function recentLliamLog() {
   return lliamLog.slice(-20).join('\n')
 }
 
-// ─── Self-update (git-pull against the running backend's hermes root) ──────
+// ─── Self-update (git-pull against the running backend's lliam-gov root) ──────
 
 function readDesktopUpdateConfig() {
   try {
@@ -1982,7 +1982,7 @@ let isQuittingForHandoff = false
 // Resolve the staged updater binary. The Tauri installer copies itself to
 // HERMES_HOME/hermes-setup.exe on a successful install (see
 // apps/bootstrap-installer paths::copy_self_to_hermes_home). That binary owns
-// ALL repo mutation — running `hermes update` + rebuilding the desktop — so
+// ALL repo mutation — running `lliam-gov update` + rebuilding the desktop — so
 // the desktop never touches its own bits while running. Returns null when the
 // updater isn't staged (e.g. a dev/source run that never went through the
 // installer); callers degrade gracefully.
@@ -2017,7 +2017,7 @@ function repairMacUpdaterHelper(updater) {
   }
 }
 
-// Path to the venv shim whose lock decides whether `hermes update` can write
+// Path to the venv shim whose lock decides whether `lliam-gov update` can write
 // fresh entry points. On Windows this is the file the running backend
 // `hermes.exe` holds open; on POSIX it's never mandatory-locked.
 function venvLliamShimPath(updateRoot) {
@@ -2053,7 +2053,7 @@ function isShimLocked(shimPath) {
 
 // Force-kill the entire process TREE rooted at each PID. Node's child.kill()
 // only signals the direct child, so on Windows a backend `hermes.exe` that
-// spawned its own grandchildren (a `hermes` REPL, a pty terminal session, the
+// spawned its own grandchildren (a `lliam-gov` REPL, a pty terminal session, the
 // gateway) would survive and keep the venv shim locked. taskkill /T /F reaps
 // the whole tree synchronously. Windows-only: this is called solely from the
 // Windows shim-unlock path, and the backend is NOT spawned detached (so it's
@@ -2138,8 +2138,8 @@ async function releaseBackendLock(updateRoot, tag) {
 //
 // The desktop is a pure consumer: it does NOT git pull / pip install / rebuild
 // itself (the old open-coded git dance lived here and drifted from
-// `hermes update`). Instead we spawn the staged Hermes-Setup binary with
-// --update and quit, so it can run `hermes update` (which refuses while we
+// `lliam-gov update`). Instead we spawn the staged Lliam-GOV-Setup binary with
+// --update and quit, so it can run `lliam-gov update` (which refuses while we
 // hold the venv shim) and rebuild the desktop with our exe already gone.
 //
 // Detection (checkUpdates / commit changelog / "N behind") stays in the UI;
@@ -2156,32 +2156,32 @@ async function applyUpdates(opts = {}) {
       // macOS/Linux drag-install: no staged Tauri hermes-setup. Unlike Windows
       // (where a venv-shim file lock forces the quit→hand-off→rebuild dance),
       // there's no mandatory file locking here, so the desktop can drive the
-      // whole update itself: `hermes update` (backend) + `hermes desktop
+      // whole update itself: `lliam-gov update` (backend) + `lliam-gov desktop
       // --build-only` (OS-aware GUI rebuild), then swap the running .app bundle
       // with the freshly built one and relaunch.
       return await applyUpdatesPosixInApp(opts)
     }
     if (!updater) {
       // No staged updater binary — this is a CLI-installed user (they ran
-      // `hermes desktop`, never the Tauri installer that self-copies
-      // hermes-setup.exe into HERMES_HOME). They DO have a working `hermes`
+      // `lliam-gov desktop`, never the Tauri installer that self-copies
+      // hermes-setup.exe into HERMES_HOME). They DO have a working `lliam-gov`
       // on PATH / in the venv, so the correct path is the one-liner in their
       // native medium. We show the EXACT command, branch-pinned to the
-      // checkout they're on — bare `hermes update` defaults to main and would
+      // checkout they're on — bare `lliam-gov update` defaults to main and would
       // silently switch a bb/gui (or any non-main) install off-branch. Mirror
       // the GUI button's contract: append --branch <current> for non-main
       // checkouts, keep it bare for main so the card stays clean.
       const updateRoot = resolveUpdateRoot()
-      let command = 'hermes update'
+      let command = 'lliam-gov update'
       try {
         const head = await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: updateRoot })
         const current = (head.stdout || '').trim()
         if (head.code === 0 && current && current !== 'HEAD') {
           const branch = await resolveHealedBranch(updateRoot, current)
-          if (branch !== 'main') command = `hermes update --branch ${branch}`
+          if (branch !== 'main') command = `lliam-gov update --branch ${branch}`
         }
       } catch {
-        // Best-effort: fall back to bare `hermes update` if branch detection fails.
+        // Best-effort: fall back to bare `lliam-gov update` if branch detection fails.
       }
       rememberLog(`[updates] no staged updater; surfacing manual \`${command}\` for CLI install at ${updateRoot}`)
       emitUpdateProgress({ stage: 'manual', message: command, percent: null })
@@ -2191,7 +2191,7 @@ async function applyUpdates(opts = {}) {
     emitUpdateProgress({
       stage: 'restart',
       message:
-        'Updating Hermes — this window will close and the updater will open. Don’t reopen Hermes yourself; it restarts automatically when the update finishes.',
+        'Updating Lliam-GOV — this window will close and the updater will open. Don’t reopen Lliam-GOV yourself; it restarts automatically when the update finishes.',
       percent: 100
     })
     repairMacUpdaterHelper(updater)
@@ -2213,7 +2213,7 @@ async function applyUpdates(opts = {}) {
     await releaseBackendLockForUpdate(updateRoot)
 
     // Detached so the updater outlives this process — it needs us GONE before
-    // `hermes update` will run (the venv shim is locked while we live).
+    // `lliam-gov update` will run (the venv shim is locked while we live).
     const child = spawn(updater, updaterArgs, {
       cwd: HERMES_HOME,
       env: {
@@ -2301,7 +2301,7 @@ async function handOffWindowsBootstrapRecovery(reason) {
 }
 
 // Resolve the hermes CLI to drive an in-app update: prefer the venv shim in
-// the install we're updating, fall back to `hermes` on PATH.
+// the install we're updating, fall back to `lliam-gov` on PATH.
 function resolveLliamCliBinary(updateRoot) {
   const venvLliam = path.join(updateRoot, 'venv', 'bin', 'hermes')
   if (fileExists(venvLliam)) return venvLliam
@@ -2352,19 +2352,19 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`
 }
 
-// macOS/Linux in-app update: backend (`hermes update`) + OS-aware GUI rebuild
-// (`hermes desktop --build-only`), then atomically swap the running .app bundle
+// macOS/Linux in-app update: backend (`lliam-gov update`) + OS-aware GUI rebuild
+// (`lliam-gov desktop --build-only`), then atomically swap the running .app bundle
 // with the freshly built one and relaunch. Degrades to "backend updated,
 // restart to load the new GUI" if the swap can't be performed.
 async function applyUpdatesPosixInApp() {
   const updateRoot = resolveUpdateRoot()
   const hermes = resolveLliamCliBinary(updateRoot)
   if (!hermes) {
-    emitUpdateProgress({ stage: 'manual', message: 'hermes update', percent: null })
-    return { ok: true, manual: true, command: 'hermes update', hermesRoot: updateRoot }
+    emitUpdateProgress({ stage: 'manual', message: 'lliam-gov update', percent: null })
+    return { ok: true, manual: true, command: 'lliam-gov update', hermesRoot: updateRoot }
   }
 
-  // Put the Hermes-managed Node and the venv on PATH so `hermes desktop`'s
+  // Put the Lliam-managed Node and the venv on PATH so `lliam-gov desktop`'s
   // npm build can find them on a machine with no system Node. Windows portable
   // Node lives directly under %LOCALAPPDATA%\hermes\node, not node\bin.
   const env = {
@@ -2372,7 +2372,7 @@ async function applyUpdatesPosixInApp() {
     PATH: pathWithLliamManagedNode(path.join(updateRoot, 'venv', 'bin'))
   }
 
-  // `hermes update` reaps stale `hermes dashboard` backends (a code update
+  // `lliam-gov update` reaps stale `lliam-gov dashboard` backends (a code update
   // leaves the running process serving old Python against the freshly-updated
   // JS bundle). But OUR backend is one of those processes, and killing it
   // mid-update produces the boot→kill→crash loop in #37532 — the desktop
@@ -2409,15 +2409,15 @@ async function applyUpdatesPosixInApp() {
     // best effort
   }
 
-  emitUpdateProgress({ stage: 'update', message: 'Updating Hermes (git + dependencies)…', percent: 10 })
+  emitUpdateProgress({ stage: 'update', message: 'Updating Lliam-GOV (git + dependencies)…', percent: 10 })
   const updated = await runStreamedUpdate(hermes, ['update', '--yes', ...branchArgs], {
     cwd: updateRoot,
     env,
     stage: 'update'
   })
   if (updated.code !== 0) {
-    emitUpdateProgress({ stage: 'error', message: 'hermes update failed.', error: updated.error || 'update-failed' })
-    return { ok: false, error: 'hermes update failed' }
+    emitUpdateProgress({ stage: 'error', message: 'lliam-gov update failed.', error: updated.error || 'update-failed' })
+    return { ok: false, error: 'lliam-gov update failed' }
   }
 
   emitUpdateProgress({ stage: 'rebuild', message: 'Rebuilding the desktop app…', percent: 60 })
@@ -2433,13 +2433,13 @@ async function applyUpdatesPosixInApp() {
   if (rebuilt.code !== 0) {
     emitUpdateProgress({
       stage: 'error',
-      message: 'Backend updated, but the desktop rebuild failed. Restart Hermes to retry.',
+      message: 'Backend updated, but the desktop rebuild failed. Restart Lliam-GOV to retry.',
       error: rebuilt.error || 'rebuild-failed'
     })
     return { ok: false, backendUpdated: true, error: 'desktop rebuild failed' }
   }
 
-  // Linux in-app update terminal state (#45205). `hermes desktop --build-only`
+  // Linux in-app update terminal state (#45205). `lliam-gov desktop --build-only`
   // rebuilds the unpacked app in place under apps/desktop/release/<plat>-unpacked.
   // We can only HONESTLY relaunch into the new GUI when the *running* binary IS
   // that rebuilt one — i.e. execPath lives under release/<plat>-unpacked. The
@@ -2477,7 +2477,7 @@ async function applyUpdatesPosixInApp() {
     const outcome = decideRelaunchOutcome({ underUnpacked, sandboxOk })
 
     if (outcome === 'relaunch') {
-      emitUpdateProgress({ stage: 'restart', message: 'Restarting Hermes…', percent: 100 })
+      emitUpdateProgress({ stage: 'restart', message: 'Restarting Lliam-GOV…', percent: 100 })
       // Preserve launch context across the re-exec: replay the original args
       // (filtered of Electron internals) and the env/cwd that define which
       // backend/profile/root this instance talks to. Without this the
@@ -2510,7 +2510,7 @@ async function applyUpdatesPosixInApp() {
           backendUpdated: true,
           guiUpdated: false,
           manualRestart: true,
-          message: 'Backend updated. Quit and reopen Hermes to load the new version.'
+          message: 'Backend updated. Quit and reopen Lliam-GOV to load the new version.'
         }
       }
     }
@@ -2520,7 +2520,7 @@ async function applyUpdatesPosixInApp() {
         stage: 'guiSkew',
         message:
           'Backend updated, but the desktop app package was not changed. ' +
-          'Update or reinstall the Hermes desktop app to match.',
+          'Update or reinstall the Lliam-GOV desktop app to match.',
         percent: 100
       })
       rememberLog(
@@ -2544,7 +2544,7 @@ async function applyUpdatesPosixInApp() {
       sandboxBlocked: true,
       message:
         'Backend updated. The rebuilt app can’t relaunch automatically ' +
-        '(sandbox helper needs root). Quit and reopen Hermes to finish.'
+        '(sandbox helper needs root). Quit and reopen Lliam-GOV to finish.'
     }
   }
 
@@ -2559,7 +2559,7 @@ async function applyUpdatesPosixInApp() {
   if (!rebuiltApp || !targetApp) {
     emitUpdateProgress({
       stage: 'done',
-      message: 'Backend updated. Restart Hermes to load the new version.',
+      message: 'Backend updated. Restart Lliam-GOV to load the new version.',
       percent: 100
     })
     return { ok: true, backendUpdated: true, rebuiltApp: rebuiltApp || null }
@@ -2595,7 +2595,7 @@ fi
   } catch (err) {
     emitUpdateProgress({
       stage: 'done',
-      message: 'Backend + app updated. Restart Hermes to load the new version.',
+      message: 'Backend + app updated. Restart Lliam-GOV to load the new version.',
       percent: 100
     })
     rememberLog(`[updates] could not write swap script: ${err.message}; rebuilt app at ${rebuiltApp}`)
@@ -2717,7 +2717,7 @@ function resolveRendererIndex() {
   rememberLog(
     `[renderer] index.html not found — the desktop app was packaged without a ` +
       `renderer bundle. Tried: ${candidates.join(', ')}. ` +
-      `Rebuild with: hermes desktop --force-build`
+      `Rebuild with: lliam-gov desktop --force-build`
   )
   return candidates[0]
 }
@@ -2864,7 +2864,7 @@ function createActiveBackend(dashboardArgs) {
 
   return applyWindowsNoConsoleSpawnHints({
     kind: 'python',
-    label: `Hermes at ${ACTIVE_HERMES_ROOT}`,
+    label: `Lliam-GOV at ${ACTIVE_HERMES_ROOT}`,
     command,
     args: ['-m', 'hermes_cli.main', ...dashboardArgs],
     env: buildDesktopBackendEnv({
@@ -2883,16 +2883,16 @@ function resolveLliamBackend(dashboardArgs) {
   //    checkout. Honour it as-is (no bootstrap; the user is driving).
   const overrideRoot = process.env.LLIAM_DESKTOP_HERMES_ROOT && path.resolve(process.env.LLIAM_DESKTOP_HERMES_ROOT)
   if (overrideRoot && isLliamSourceRoot(overrideRoot)) {
-    const backend = createPythonBackend(overrideRoot, `Hermes source at ${overrideRoot}`, dashboardArgs)
+    const backend = createPythonBackend(overrideRoot, `Lliam-GOV source at ${overrideRoot}`, dashboardArgs)
     if (backend) return backend
   }
 
   // 2. Development source -- when running `npm run dev` from a checkout, the
   //    cloned repo at SOURCE_REPO_ROOT takes precedence over ACTIVE and any
-  //    installed `hermes` on PATH so local Python edits are actually exercised.
+  //    installed `lliam-gov` on PATH so local Python edits are actually exercised.
   //    (In dev with no checkout, SOURCE_REPO_ROOT won't pass isLliamSourceRoot.)
   if (!IS_PACKAGED && isLliamSourceRoot(SOURCE_REPO_ROOT)) {
-    const backend = createPythonBackend(SOURCE_REPO_ROOT, `Hermes source at ${SOURCE_REPO_ROOT}`, dashboardArgs)
+    const backend = createPythonBackend(SOURCE_REPO_ROOT, `Lliam-GOV source at ${SOURCE_REPO_ROOT}`, dashboardArgs)
     if (backend) return backend
   }
 
@@ -2901,12 +2901,12 @@ function resolveLliamBackend(dashboardArgs) {
   //    The bootstrap marker means install.ps1 stages finished and the user
   //    completed initial configuration; we trust the install and go straight
   //    to spawning hermes. Updates flow through the in-app update path
-  //    (applyUpdates -> git pull) or `hermes update` from the CLI.
+  //    (applyUpdates -> git pull) or `lliam-gov update` from the CLI.
   if (isBootstrapComplete()) {
     return createActiveBackend(dashboardArgs)
   }
 
-  // 4. Existing `hermes` on PATH -- installed via install.ps1 / install.sh from
+  // 4. Existing `lliam-gov` on PATH -- installed via install.ps1 / install.sh from
   //    a previous tool-only setup, or pip-installed system-wide. Use it but
   //    do NOT write a bootstrap marker; the user did this themselves and we
   //    don't want to take ownership of an install we didn't perform.
@@ -2922,7 +2922,7 @@ function resolveLliamBackend(dashboardArgs) {
       } else if (!isWindowsBinaryPathInWsl(lliamOverride, { isWsl: IS_WSL })) {
         lliamCommand = lliamOverride
       } else {
-        rememberLog(`Ignoring Windows Hermes override under WSL: ${lliamOverride}`)
+        rememberLog(`Ignoring Windows Lliam-GOV override under WSL: ${lliamOverride}`)
       }
     } else {
       lliamCommand = findOnPath('hermes')
@@ -2930,7 +2930,7 @@ function resolveLliamBackend(dashboardArgs) {
 
     if (lliamCommand) {
       if (looksLikeDesktopAppBinary(lliamCommand)) {
-        rememberLog(`Ignoring desktop app executable on PATH while resolving Hermes CLI: ${lliamCommand}`)
+        rememberLog(`Ignoring desktop app executable on PATH while resolving Lliam-GOV CLI: ${lliamCommand}`)
         lliamCommand = null
       }
     }
@@ -2941,7 +2941,7 @@ function resolveLliamBackend(dashboardArgs) {
         return unwrapped
       }
 
-      // Smoke-test the candidate before trusting it. A `hermes` shim
+      // Smoke-test the candidate before trusting it. A `lliam-gov` shim
       // left behind by a half-uninstalled pip install (or a venv
       // entry-point pointing at a deleted interpreter) still resolves
       // via findOnPath but explodes on spawn -- the user then sees a
@@ -2952,7 +2952,7 @@ function resolveLliamBackend(dashboardArgs) {
       if (verifyLliamCli(lliamCommand, { shell: shellForProbe })) {
         return (
           unwrapWindowsVenvLliamCommand(lliamCommand, dashboardArgs) || {
-            label: `existing Hermes CLI at ${lliamCommand}`,
+            label: `existing Lliam-GOV CLI at ${lliamCommand}`,
             command: lliamCommand,
             args: dashboardArgs,
             bootstrap: false,
@@ -2963,7 +2963,7 @@ function resolveLliamBackend(dashboardArgs) {
         )
       }
       rememberLog(
-        `Ignoring existing Hermes CLI at ${lliamCommand}: --version probe failed; falling through to bootstrap.`
+        `Ignoring existing Lliam-GOV CLI at ${lliamCommand}: --version probe failed; falling through to bootstrap.`
       )
     }
   }
@@ -3007,7 +3007,7 @@ function resolveLliamBackend(dashboardArgs) {
   //    is a recoverable state the GUI can drive through.
   return {
     kind: 'bootstrap-needed',
-    label: 'Hermes Agent not installed yet; bootstrap required',
+    label: 'Lliam-GOV not installed yet; bootstrap required',
     command: null,
     args: dashboardArgs,
     bootstrap: true,
@@ -3037,11 +3037,11 @@ async function ensureRuntime(backend) {
   // will rewire startup to spawn the window first and route bootstrap events
   // to a renderer-side install overlay.
   if (backend.kind === 'bootstrap-needed') {
-    rememberLog('[bootstrap] no Hermes install found; starting first-launch bootstrap')
+    rememberLog('[bootstrap] no Lliam-GOV install found; starting first-launch bootstrap')
 
     if (await handOffWindowsBootstrapRecovery('bootstrap-needed')) {
       const handoffError = new Error(
-        'Hermes recovery was handed off to Hermes Setup. The desktop will restart when recovery completes.'
+        'Lliam-GOV recovery was handed off to Lliam-GOV Setup. The desktop will restart when recovery completes.'
       )
       handoffError.isBootstrapFailure = true
       handoffError.bootstrapHandedOff = true
@@ -3096,7 +3096,7 @@ async function ensureRuntime(backend) {
     bootstrapAbortController = null
 
     if (bootstrapResult.cancelled) {
-      const cancelledError = new Error('Hermes install was cancelled.')
+      const cancelledError = new Error('Lliam-GOV install was cancelled.')
       cancelledError.isBootstrapFailure = true
       cancelledError.bootstrapCancelled = true
       bootstrapFailure = cancelledError
@@ -3105,7 +3105,7 @@ async function ensureRuntime(backend) {
 
     if (!bootstrapResult.ok) {
       const bootstrapError = new Error(
-        `Hermes bootstrap failed${bootstrapResult.failedStage ? ` at stage '${bootstrapResult.failedStage}'` : ''}: ` +
+        `Lliam-GOV bootstrap failed${bootstrapResult.failedStage ? ` at stage '${bootstrapResult.failedStage}'` : ''}: ` +
           `${bootstrapResult.error || 'unknown error'}. ` +
           `Check ${path.join(HERMES_HOME, 'logs', 'desktop.log')} for the full transcript.`
       )
@@ -3132,23 +3132,23 @@ async function ensureRuntime(backend) {
   // attests they ran successfully).
   if (!isLliamSourceRoot(ACTIVE_HERMES_ROOT)) {
     throw new Error(
-      `Hermes install at ${ACTIVE_HERMES_ROOT} is missing or incomplete. ` +
+      `Lliam-GOV install at ${ACTIVE_HERMES_ROOT} is missing or incomplete. ` +
         'Reinstall via the desktop installer or scripts/install.ps1.'
     )
   }
 
-  // On Windows, preflight Git Bash. Hermes' terminal tool calls bash.exe
+  // On Windows, preflight Git Bash. Lliam-GOV' terminal tool calls bash.exe
   // directly (tools/environments/local.py); without it the agent can't run
   // terminal commands. install.ps1's Stage-Git puts PortableGit at
   // %LOCALAPPDATA%\hermes\git\, which findGitBash() picks up, so for any
   // user who completed the bootstrap this is a no-op. For users who got
-  // here via an external `hermes` on PATH, this check still helps.
+  // here via an external `lliam-gov` on PATH, this check still helps.
   if (IS_WINDOWS && !findGitBash()) {
     throw new Error(
-      'Git for Windows is required for Hermes on Windows (provides Git Bash, ' +
+      'Git for Windows is required for Lliam-GOV on Windows (provides Git Bash, ' +
         "which the agent's terminal tool uses). Install it from " +
         'https://git-scm.com/download/win or run `winget install -e --id Git.Git`, ' +
-        'then relaunch Hermes.'
+        'then relaunch Lliam-GOV.'
     )
   }
 
@@ -3162,15 +3162,15 @@ async function ensureRuntime(backend) {
     // install.ps1 succeeds. If we hit this, the user (or a deleted venv)
     // broke the invariant; tell them to re-run the install.
     throw new Error(
-      `Hermes venv missing at ${VENV_ROOT}. Re-run the desktop installer or ` + '`scripts/install.ps1` to rebuild it.'
+      `Lliam-GOV venv missing at ${VENV_ROOT}. Re-run the desktop installer or ` + '`scripts/install.ps1` to rebuild it.'
     )
   }
 
   backend.command = getNoConsoleVenvPython(VENV_ROOT)
-  backend.label = `Hermes at ${ACTIVE_HERMES_ROOT} (venv: ${VENV_ROOT})`
+  backend.label = `Lliam-GOV at ${ACTIVE_HERMES_ROOT} (venv: ${VENV_ROOT})`
   updateBootProgress({
     phase: 'runtime.ready',
-    message: 'Hermes runtime is ready',
+    message: 'Lliam-GOV runtime is ready',
     progress: 82,
     running: true,
     error: null
@@ -3186,7 +3186,7 @@ function fetchJson(url, token, options = {}) {
     const timeoutMs = resolveTimeoutMs(options.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
 
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      reject(new Error(`Unsupported Hermes backend URL protocol: ${parsed.protocol}`))
+      reject(new Error(`Unsupported Lliam-GOV backend URL protocol: ${parsed.protocol}`))
       return
     }
 
@@ -3224,7 +3224,7 @@ function fetchJson(url, token, options = {}) {
             reject(
               new Error(
                 `Expected JSON from ${url} but got HTML (status ${res.statusCode}). ` +
-                  'The endpoint is likely missing on the Hermes backend.'
+                  'The endpoint is likely missing on the Lliam-GOV backend.'
               )
             )
             return
@@ -3240,7 +3240,7 @@ function fetchJson(url, token, options = {}) {
 
     req.on('error', reject)
     req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error(`Timed out connecting to Hermes backend after ${timeoutMs}ms`))
+      req.destroy(new Error(`Timed out connecting to Lliam-GOV backend after ${timeoutMs}ms`))
     })
     if (body) req.write(body)
     req.end()
@@ -3266,7 +3266,7 @@ function fetchPublicJson(url, options = {}) {
     const timeoutMs = resolveTimeoutMs(options.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
 
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      reject(new Error(`Unsupported Hermes backend URL protocol: ${parsed.protocol}`))
+      reject(new Error(`Unsupported Lliam-GOV backend URL protocol: ${parsed.protocol}`))
       return
     }
 
@@ -3298,7 +3298,7 @@ function fetchPublicJson(url, options = {}) {
             reject(
               new Error(
                 `Expected JSON from ${url} but got HTML (status ${res.statusCode}). ` +
-                  'The endpoint is likely missing on the Hermes backend.'
+                  'The endpoint is likely missing on the Lliam-GOV backend.'
               )
             )
             return
@@ -3314,7 +3314,7 @@ function fetchPublicJson(url, options = {}) {
 
     req.on('error', reject)
     req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error(`Timed out connecting to Hermes backend after ${timeoutMs}ms`))
+      req.destroy(new Error(`Timed out connecting to Lliam-GOV backend after ${timeoutMs}ms`))
     })
     if (body) req.write(body)
     req.end()
@@ -3827,7 +3827,7 @@ async function waitForLliam(baseUrl, token) {
     }
   }
 
-  throw new Error(`Hermes backend did not become ready: ${lastError?.message || 'timeout'}`)
+  throw new Error(`Lliam-GOV backend did not become ready: ${lastError?.message || 'timeout'}`)
 }
 
 function getWindowButtonPosition() {
@@ -3863,7 +3863,7 @@ function sendClosePreviewRequested() {
 
 // Tell the renderer the machine just woke. Sleep silently drops the
 // renderer's WebSocket to the local backend; the renderer reconnects on this
-// signal so the chat composer doesn't stay stuck on "Starting Hermes...".
+// signal so the chat composer doesn't stay stuck on "Starting Lliam-GOV...".
 function sendPowerResume() {
   if (!mainWindow || mainWindow.isDestroyed()) return
   const { webContents } = mainWindow
@@ -4269,7 +4269,7 @@ function installMediaPermissions() {
 // ---------------------------------------------------------------------------
 // OAuth remote-gateway auth.
 //
-// Hosted Hermes gateways gate the dashboard behind an OAuth provider (e.g.
+// Hosted Lliam-GOV gateways gate the dashboard behind an OAuth provider (e.g.
 // Nous Research) instead of a static session token. The auth model is
 // fundamentally different from the token path:
 //
@@ -4410,7 +4410,7 @@ function openOauthLoginWindow(baseUrl) {
       win = new BrowserWindow({
         width: 520,
         height: 720,
-        title: 'Sign in to Hermes gateway',
+        title: 'Sign in to Lliam-GOV gateway',
         autoHideMenuBar: true,
         webPreferences: {
           contextIsolation: true,
@@ -4465,7 +4465,7 @@ function fetchJsonViaOauthSession(url, options = {}) {
       return
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      reject(new Error(`Unsupported Hermes backend URL protocol: ${parsed.protocol}`))
+      reject(new Error(`Unsupported Lliam-GOV backend URL protocol: ${parsed.protocol}`))
       return
     }
     const body = serializeJsonBody(options.body)
@@ -4488,7 +4488,7 @@ function fetchJsonViaOauthSession(url, options = {}) {
       } catch {
         // already finished
       }
-      reject(new Error(`Timed out connecting to Hermes backend after ${timeoutMs}ms`))
+      reject(new Error(`Timed out connecting to Lliam-GOV backend after ${timeoutMs}ms`))
     }, timeoutMs)
 
     request.on('response', res => {
@@ -4823,7 +4823,7 @@ async function buildRemoteConnection(rawUrl, authMode, token, source) {
     // the authoritative liveness check.
     if (!(await hasLiveOauthSession(baseUrl))) {
       const err = new Error(
-        'Remote Hermes gateway uses OAuth, but you are not signed in. ' +
+        'Remote Lliam-GOV gateway uses OAuth, but you are not signed in. ' +
           'Open Settings → Gateway and click "Sign in", or switch back to Local.'
       )
       err.needsOauthLogin = true
@@ -4855,7 +4855,7 @@ async function buildRemoteConnection(rawUrl, authMode, token, source) {
 
   if (!token) {
     throw new Error(
-      'Remote Hermes gateway is selected, but no session token is saved. ' +
+      'Remote Lliam-GOV gateway is selected, but no session token is saved. ' +
         'Open Settings → Gateway and save a token, or switch back to Local.'
     )
   }
@@ -4896,7 +4896,7 @@ async function resolveRemoteBackend(profile) {
     if (!rawEnvToken) {
       throw new Error(
         'LLIAM_DESKTOP_REMOTE_URL is set but LLIAM_DESKTOP_REMOTE_TOKEN is not. ' +
-          'Both must be provided to connect to a remote Hermes backend.'
+          'Both must be provided to connect to a remote Lliam-GOV backend.'
       )
     }
     return buildRemoteConnection(rawEnvUrl, 'token', rawEnvToken, 'env')
@@ -4949,7 +4949,7 @@ async function requestJsonForProfile(profile, path, method, body) {
 
 async function probeRemoteAuthMode(rawUrl) {
   // Determine how a remote gateway expects callers to authenticate, WITHOUT
-  // sending any credentials. ``/api/status`` is public on every Hermes
+  // sending any credentials. ``/api/status`` is public on every Lliam-GOV
   // gateway (it backs the portal liveness probe) and reports:
   //   auth_required: true  → OAuth gate is engaged (cookie + ws-ticket auth)
   //   auth_required: false → loopback/--insecure: legacy session-token auth
@@ -5046,7 +5046,7 @@ async function testDesktopConnectionConfig(input = {}) {
   // connects — a separate transport with separate server-side guards (Host/
   // Origin, ws-ticket/token auth). Validating only the HTTP side produced a
   // false-positive "reachable" while the real boot still failed with "Could not
-  // connect to Hermes gateway". Mirror the renderer's connect here so the test
+  // connect to Lliam-GOV gateway". Mirror the renderer's connect here so the test
   // reflects the full path the app actually uses.
   const wsUrl = await resolveTestWsUrl(baseUrl, authMode, token, { mintTicket: mintGatewayWsTicket })
   // Skip the WS leg only when the runtime genuinely lacks a WebSocket (so an
@@ -5248,7 +5248,7 @@ async function spawnPoolBackend(profile, entry) {
   const webDist = resolveWebDist()
   const readyFile = backend.readyFile ? makeDashboardReadyFile() : null
 
-  rememberLog(`Starting Hermes backend for profile "${profile}" via ${backend.label}`)
+  rememberLog(`Starting Lliam-GOV backend for profile "${profile}" via ${backend.label}`)
 
   const child = spawn(
     backend.command,
@@ -5288,16 +5288,16 @@ async function spawnPoolBackend(profile, entry) {
     rejectStart = reject
   })
   child.once('error', error => {
-    rememberLog(`Hermes backend for profile "${profile}" failed to start: ${error.message}`)
+    rememberLog(`Lliam-GOV backend for profile "${profile}" failed to start: ${error.message}`)
     backendPool.delete(profile)
     rejectStart?.(error)
   })
   child.once('exit', (code, signal) => {
-    rememberLog(`Hermes backend for profile "${profile}" exited (${signal || code})`)
+    rememberLog(`Lliam-GOV backend for profile "${profile}" exited (${signal || code})`)
     backendPool.delete(profile)
     if (!ready) {
       rejectStart?.(
-        new Error(`Hermes backend for profile "${profile}" exited before it became ready (${signal || code}).`)
+        new Error(`Lliam-GOV backend for profile "${profile}" exited before it became ready (${signal || code}).`)
       )
     }
   })
@@ -5314,7 +5314,7 @@ async function spawnPoolBackend(profile, entry) {
   ready = true
   const authToken = await adoptServedDashboardToken(baseUrl, token, {
     childAlive: () => child.exitCode === null && !child.killed,
-    label: `Hermes backend for profile "${profile}"`,
+    label: `Lliam-GOV backend for profile "${profile}"`,
     rememberLog
   })
   entry.token = authToken
@@ -5425,16 +5425,16 @@ async function startLliam() {
   if (connectionPromise) return connectionPromise
 
   connectionPromise = (async () => {
-    await advanceBootProgress('backend.resolve', 'Resolving Hermes backend', 8)
+    await advanceBootProgress('backend.resolve', 'Resolving Lliam-GOV backend', 8)
     // Resolve for the desktop's primary profile so a per-profile remote
     // override on the active profile is honored (falls back to env / global).
     const remote = await resolveRemoteBackend(primaryProfileKey())
     if (remote) {
-      await advanceBootProgress('backend.remote', `Connecting to remote Hermes backend at ${remote.baseUrl}`, 24)
+      await advanceBootProgress('backend.remote', `Connecting to remote Lliam-GOV backend at ${remote.baseUrl}`, 24)
       await waitForLliam(remote.baseUrl, remote.token)
       updateBootProgress({
         phase: 'backend.ready',
-        message: 'Remote Hermes backend is ready',
+        message: 'Remote Lliam-GOV backend is ready',
         progress: 94,
         running: true,
         error: null
@@ -5471,14 +5471,14 @@ async function startLliam() {
     if (activeProfile) {
       dashboardArgs.unshift('--profile', activeProfile)
     }
-    await advanceBootProgress('backend.runtime', 'Resolving Hermes runtime', 28)
+    await advanceBootProgress('backend.runtime', 'Resolving Lliam-GOV runtime', 28)
     const backend = await ensureRuntime(resolveLliamBackend(dashboardArgs))
     const lliamCwd = resolveLliamCwd()
     const webDist = resolveWebDist()
     const readyFile = backend.readyFile ? makeDashboardReadyFile() : null
 
-    await advanceBootProgress('backend.spawn', `Starting Hermes backend via ${backend.label}`, 84)
-    rememberLog(`Starting Hermes backend via ${backend.label}`)
+    await advanceBootProgress('backend.spawn', `Starting Lliam-GOV backend via ${backend.label}`, 84)
+    rememberLog(`Starting Lliam-GOV backend via ${backend.label}`)
 
     lliamProcess = spawn(
       backend.command,
@@ -5520,11 +5520,11 @@ async function startLliam() {
       rejectBackendStart = reject
     })
     lliamProcess.once('error', error => {
-      rememberLog(`Hermes backend failed to start: ${error.message}`)
+      rememberLog(`Lliam-GOV backend failed to start: ${error.message}`)
       updateBootProgress(
         {
           error: error.message,
-          message: `Hermes backend failed to start: ${error.message}`,
+          message: `Lliam-GOV backend failed to start: ${error.message}`,
           phase: 'backend.error',
           running: false
         },
@@ -5536,12 +5536,12 @@ async function startLliam() {
       rejectBackendStart?.(error)
     })
     lliamProcess.once('exit', (code, signal) => {
-      rememberLog(`Hermes backend exited (${signal || code})`)
+      rememberLog(`Lliam-GOV backend exited (${signal || code})`)
       lliamProcess = null
       connectionPromise = null
       sendBackendExit({ code, signal })
       if (!backendReady) {
-        const message = `Hermes backend exited before it became ready (${signal || code}).`
+        const message = `Lliam-GOV backend exited before it became ready (${signal || code}).`
         updateBootProgress(
           {
             error: message,
@@ -5553,13 +5553,13 @@ async function startLliam() {
         )
         rejectBackendStart?.(
           new Error(
-            `Hermes backend exited before it became ready (${signal || code}). Log: ${DESKTOP_LOG_PATH}\n${recentLliamLog()}`
+            `Lliam-GOV backend exited before it became ready (${signal || code}). Log: ${DESKTOP_LOG_PATH}\n${recentLliamLog()}`
           )
         )
       }
     })
 
-    await advanceBootProgress('backend.port', 'Waiting for Hermes backend to launch', 86)
+    await advanceBootProgress('backend.port', 'Waiting for Lliam-GOV backend to launch', 86)
     // Discover the ephemeral port the child bound to
     const port = await Promise.race([
       waitForDashboardPortAnnouncement(lliamProcess, { readyFile }),
@@ -5570,7 +5570,7 @@ async function startLliam() {
     }
 
     const baseUrl = `http://127.0.0.1:${port}`
-    await advanceBootProgress('backend.wait', 'Waiting for Hermes backend to become ready', 90)
+    await advanceBootProgress('backend.wait', 'Waiting for Lliam-GOV backend to become ready', 90)
     await Promise.race([waitForLliam(baseUrl, token), backendStartFailed])
     backendReady = true
     backendStartFailure = null
@@ -5581,7 +5581,7 @@ async function startLliam() {
     })
     updateBootProgress({
       phase: 'backend.ready',
-      message: 'Hermes backend is ready. Finalizing desktop startup',
+      message: 'Lliam-GOV backend is ready. Finalizing desktop startup',
       progress: 94,
       running: true,
       error: null
@@ -5663,7 +5663,7 @@ function spawnSecondaryWindow({ sessionId, watch, newSession } = {}) {
     height: SESSION_WINDOW_MIN_HEIGHT,
     minWidth: SESSION_WINDOW_MIN_WIDTH,
     minHeight: SESSION_WINDOW_MIN_HEIGHT,
-    title: 'Hermes',
+    title: 'Lliam-GOV',
     titleBarStyle: 'hidden',
     titleBarOverlay: getTitleBarOverlayOptions(),
     trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
@@ -5722,7 +5722,7 @@ function createNewSessionWindow() {
 
 // The pet overlay: a single transparent, frameless, always-on-top window that
 // hosts ONLY the floating mascot. Shift-clicking the in-window pet "pops it out"
-// here so it can leave the app's bounds and stay visible while Hermes is
+// here so it can leave the app's bounds and stay visible while Lliam-GOV is
 // minimized (Codex-style task-completion glance). It carries no gateway
 // connection of its own — the main renderer is the single source of truth and
 // pushes pet state over IPC (lliam:pet-overlay:state); the overlay just renders
@@ -5754,7 +5754,7 @@ function spawnPetOverlayWindow(bounds) {
     // taskbar/alt-tab entry. On macOS, cmd-tab is app-level and this can make
     // the whole app look like it vanished when the only newly-created visible
     // window is a frameless overlay. Use NSPanel + Mission Control hiding below
-    // instead, leaving the main Hermes app as the Dock/cmd-tab anchor.
+    // instead, leaving the main Lliam-GOV app as the Dock/cmd-tab anchor.
     skipTaskbar: !IS_MAC,
     hasShadow: false,
     alwaysOnTop: true,
@@ -5764,7 +5764,7 @@ function spawnPetOverlayWindow(bounds) {
     hiddenInMissionControl: IS_MAC,
     // Non-activating: the overlay must never become the app's key/main window,
     // or it (a frameless, taskbar-skipping panel) becomes the app's switcher
-    // anchor and the Hermes icon drops out of cmd/alt-tab — especially when the
+    // anchor and the Lliam-GOV icon drops out of cmd/alt-tab — especially when the
     // main window is minimized. We flip this on only while the composer needs
     // the keyboard (see lliam:pet-overlay:set-focusable).
     focusable: false,
@@ -5792,7 +5792,7 @@ function spawnPetOverlayWindow(bounds) {
   try {
     // Electron docs: macOS may transform process type on each
     // setVisibleOnAllWorkspaces() call unless skipTransformProcessType=true,
-    // which briefly hides the Dock/cmd-tab presence. Keep Hermes in the normal
+    // which briefly hides the Dock/cmd-tab presence. Keep Lliam-GOV in the normal
     // ForegroundApplication class so shift-clicking the pet never drops the app
     // out of app switchers.
     win.setVisibleOnAllWorkspaces(
@@ -5863,7 +5863,7 @@ function createWindow() {
     ...computeWindowOptions(savedWindowState, screen.getAllDisplays()),
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
-    title: 'Hermes',
+    title: 'Lliam-GOV',
     // Frameless title bar on every platform so the renderer can paint the
     // "hide sidebar" button (and other left-side titlebar tools) flush with
     // the top edge — matching the macOS layout where the traffic lights sit
@@ -5994,7 +5994,7 @@ ipcMain.handle('lliam:connection', async (_event, profile) => ensureBackend(prof
 // so the 'exit'/'error' handlers that would clear a dead connectionPromise never
 // fire — once the remote becomes unreachable across a sleep/wake the renderer
 // re-dials the same dead descriptor forever and the composer stays stuck on
-// "Starting Hermes…". Before the renderer's backoff loop reconnects, it asks us
+// "Starting Lliam-GOV…". Before the renderer's backoff loop reconnects, it asks us
 // to confirm the cached PRIMARY backend is still reachable; if a remote one is
 // not, we drop the cache so the next getConnection() rebuilds it. Local backends
 // self-heal via their child 'exit' handler, so we never touch them here.
@@ -6024,7 +6024,7 @@ ipcMain.handle('lliam:connection:revalidate', async () => {
     // Unreachable remote: drop the stale cache so the renderer's next reconnect
     // tick rebuilds a fresh, reachable descriptor. resetLliamConnection only
     // nulls connectionPromise for a remote (no child to SIGTERM).
-    rememberLog('Cached remote Hermes backend failed liveness probe; dropping stale connection.')
+    rememberLog('Cached remote Lliam-GOV backend failed liveness probe; dropping stale connection.')
     resetLliamConnection()
     return { ok: true, rebuilt: true }
   }
@@ -6474,7 +6474,7 @@ ipcMain.handle('lliam:notify', (_event, payload) => {
   // and the body click still works.
   const actions = Array.isArray(payload?.actions) ? payload.actions : []
   const notification = new Notification({
-    title: payload?.title || 'Hermes',
+    title: payload?.title || 'Lliam-GOV',
     body: payload?.body || '',
     silent: Boolean(payload?.silent),
     actions: actions.map(action => ({ type: 'button', text: String(action?.text || '') }))
@@ -6851,7 +6851,7 @@ function terminalShellEnv() {
 
   // Strip color/theme-detection vars that ride along when Electron is launched
   // from a non-tty agent shell (Cursor's runner sets NO_COLOR/FORCE_COLOR=0
-  // /TERM=dumb; some terminals set COLORFGBG which would flip Hermes' TUI into
+  // /TERM=dumb; some terminals set COLORFGBG which would flip Lliam-GOV' TUI into
   // light-mode). Our PTY is a real xterm-compat terminal — force truecolor.
   delete env.NO_COLOR
   delete env.FORCE_COLOR
@@ -6860,7 +6860,7 @@ function terminalShellEnv() {
   env.COLORTERM = 'truecolor'
   env.LC_CTYPE = env.LC_CTYPE || 'UTF-8'
   env.TERM = 'xterm-256color'
-  env.TERM_PROGRAM = 'Hermes'
+  env.TERM_PROGRAM = 'Lliam-GOV'
   env.TERM_PROGRAM_VERSION = app.getVersion()
 
   // Let a hermes/--tui launched in this pane know it's embedded in the desktop
@@ -7054,7 +7054,7 @@ ipcMain.handle('lliam:git:scanRepos', async (_event, roots, options) => {
 
 ipcMain.handle('lliam:terminal:start', async (event, payload = {}) => {
   if (!nodePty) {
-    throw new Error('PTY support is unavailable. Reinstall desktop dependencies and restart Hermes.')
+    throw new Error('PTY support is unavailable. Reinstall desktop dependencies and restart Lliam-GOV.')
   }
 
   ensureSpawnHelperExecutable()
@@ -7146,9 +7146,9 @@ ipcMain.handle('lliam:updates:branch:set', async (_event, name) => {
   return { branch }
 })
 
-// Resolve the canonical Hermes version (the one `release.py` bumps in
+// Resolve the canonical Lliam-GOV version (the one `release.py` bumps in
 // hermes_cli/__init__.py + pyproject.toml) so the desktop About panel shows the
-// real Hermes version instead of the Electron app's own package.json version,
+// real Lliam-GOV version instead of the Electron app's own package.json version,
 // which historically drifted (stuck at 0.0.2). Falls back to app.getVersion()
 // when the source tree can't be read (e.g. a packaged build without the repo).
 function resolveLliamVersion() {
@@ -7168,8 +7168,8 @@ function resolveLliamVersion() {
   return app.getVersion()
 }
 
-// Re-resolve the live Hermes version and push it into the native About panel
-// just before showing it, so an in-place `hermes update` is reflected without
+// Re-resolve the live Lliam-GOV version and push it into the native About panel
+// just before showing it, so an in-place `lliam-gov update` is reflected without
 // an app restart. macOS only — `showAboutPanel()` is a no-op elsewhere, and the
 // other platforms don't use this menu item.
 function showAboutPanelFresh() {
@@ -7195,7 +7195,7 @@ ipcMain.handle('lliam:version', async () => ({
 //
 // The renderer's About → Danger Zone surfaces three options that mirror the
 // CLI exactly: GUI only, Lite (keep user data), Full. We ask the agent to do
-// the actual removal via `hermes uninstall …` so the cross-platform PATH /
+// the actual removal via `lliam-gov uninstall …` so the cross-platform PATH /
 // registry / service / node-symlink cleanup all lives in one place
 // (hermes_cli/uninstall.py + hermes_cli/gui_uninstall.py).
 //
@@ -7285,7 +7285,7 @@ async function runDesktopUninstall(mode) {
     return {
       ok: false,
       error: 'agent-missing',
-      message: `Can't run the uninstaller: no Hermes agent venv at ${VENV_ROOT}.`
+      message: `Can't run the uninstaller: no Lliam-GOV agent venv at ${VENV_ROOT}.`
     }
   }
 

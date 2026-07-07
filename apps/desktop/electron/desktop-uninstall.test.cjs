@@ -80,8 +80,8 @@ test('resolveRemovableAppPath: dev-run .app resolves (safety is shouldRemoveAppB
 
 test('resolveRemovableAppPath finds the install dir on Windows', () => {
   assert.equal(
-    resolveRemovableAppPath('C:\\Users\\x\\AppData\\Local\\Programs\\Hermes\\Hermes.exe', 'win32'),
-    'C:\\Users\\x\\AppData\\Local\\Programs\\Hermes'
+    resolveRemovableAppPath('C:\\Users\\x\\AppData\\Local\\Programs\\Lliam-GOV\\Hermes.exe', 'win32'),
+    'C:\\Users\\x\\AppData\\Local\\Programs\\Lliam-GOV'
   )
   assert.equal(
     resolveRemovableAppPath('C:\\Users\\x\\AppData\\Local\\hermes-desktop\\Hermes.exe', 'win32'),
@@ -95,8 +95,8 @@ test('resolveRemovableAppPath returns null for an unrecognized Windows dir', () 
 
 test('resolveRemovableAppPath uses APPIMAGE on Linux when set', () => {
   assert.equal(
-    resolveRemovableAppPath('/tmp/.mount_HermesXXXX/hermes', 'linux', { APPIMAGE: '/home/x/Apps/Hermes.AppImage' }),
-    '/home/x/Apps/Hermes.AppImage'
+    resolveRemovableAppPath('/tmp/.mount_HermesXXXX/hermes', 'linux', { APPIMAGE: '/home/x/Apps/Lliam-GOV.AppImage' }),
+    '/home/x/Apps/Lliam-GOV.AppImage'
   )
 })
 
@@ -209,7 +209,7 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
     pythonPath: 'C:\\hermes',
     agentRoot: 'C:\\hermes',
     uninstallArgs: ['-m', 'hermes_cli.uninstall', '--mode', 'full'],
-    appPath: 'C:\\Users\\x\\AppData\\Local\\Programs\\Hermes',
+    appPath: 'C:\\Users\\x\\AppData\\Local\\Programs\\Lliam-GOV',
     hermesHome: 'C:\\Users\\x\\AppData\\Local\\hermes'
   })
   assert.match(script, /@echo off/)
@@ -223,7 +223,7 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
   assert.doesNotMatch(script, /find "%PID%"/) // the old substring-prone form is gone
   // Removal is a retry loop (Windows releases dir handles lazily).
   assert.match(script, /:rmloop/)
-  assert.match(script, /rmdir \/s \/q "C:\\Users\\x\\AppData\\Local\\Programs\\Hermes" >nul 2>&1/)
+  assert.match(script, /rmdir \/s \/q "C:\\Users\\x\\AppData\\Local\\Programs\\Lliam-GOV" >nul 2>&1/)
   assert.match(script, /if %tries% geq 10 goto rmdone/)
   assert.match(script, /del "%~f0"/)
 })

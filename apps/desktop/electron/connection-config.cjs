@@ -231,7 +231,7 @@ function resolveAuthMode(inputAuthMode, existingAuthMode) {
 }
 
 /**
- * True if any cookie in `cookies` is a hermes session ACCESS-token cookie
+ * True if any cookie in `cookies` is a lliam-gov session ACCESS-token cookie
  * with a non-empty value. `cookies` is an array of {name, value} (the shape
  * Electron's session.cookies.get returns).
  *

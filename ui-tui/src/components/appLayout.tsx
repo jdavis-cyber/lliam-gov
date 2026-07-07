@@ -32,7 +32,7 @@ import { LiveTodoPanel, StreamingAssistant } from './streamingAssistant.js'
 import { TextInput, type TextInputMouseApi } from './textInput.js'
 
 // Petdex mascot — sits just above the composer, right-aligned. Renders
-// nothing unless a pet is installed + enabled (`hermes pets select <slug>`),
+// nothing unless a pet is installed + enabled (`lliam-gov pets select <slug>`),
 // so it's a no-op for everyone else.
 const PetPane = memo(function PetPane() {
   const { enabled, grid, kitty } = usePet()

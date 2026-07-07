@@ -87,7 +87,7 @@ npm run test:watch
 - `src/app/inputSelectionStore.ts` — nanostore exposing the active text-input selection handle
 - `src/app/gatewayContext.tsx` — React context for the gateway client
 - `src/app/gatewayRecovery.ts` — pure function that decides whether to respawn and resume after a gateway crash, with a 3-attempt / 60 s budget
-- `src/app/setupHandoff.ts` — launches external `hermes setup`, suspends Ink while it runs, opens a new session on success
+- `src/app/setupHandoff.ts` — launches external `lliam-gov setup`, suspends Ink while it runs, opens a new session on success
 - `src/app/scroll.ts` — scrolls the viewport while keeping the text selection anchor in sync
 - `src/app/interfaces.ts` — internal interfaces (ComposerActions, GatewayRpc, etc.)
 
@@ -248,7 +248,7 @@ The following commands are handled directly by the TUI client. Unrecognized comm
 `/credits` — Nous credit balance and browser top-up
 
 ### Setup (`setup.ts`)
-`/setup` — launches external `hermes setup` wizard, suspends Ink while it runs
+`/setup` — launches external `lliam-gov setup` wizard, suspends Ink while it runs
 
 ### Debug (`debug.ts`)
 `/heapdump`, `/mem` — V8 memory diagnostics
@@ -347,7 +347,7 @@ ui-tui/
       interfaces.ts                 internal interfaces (ComposerActions, GatewayRpc, etc.)
       overlayStore.ts               nanostores for overlay state
       scroll.ts                     viewport scroll with text-selection anchor sync
-      setupHandoff.ts               launches external hermes setup, suspends Ink while it runs
+      setupHandoff.ts               launches external lliam-gov setup, suspends Ink while it runs
       spawnHistoryStore.ts          ring buffer of finished subagent fan-out snapshots
       turnController.ts             stateful turn lifecycle driver (streaming, tools, reasoning)
       turnStore.ts                  nanostore for turn state (streaming, tools, reasoning, subagents)

@@ -120,8 +120,8 @@ export const ko: Translations = {
     starting: "시작 중",
     startedInBackground: "백그라운드에서 시작됨 — 진행 상황은 로그를 확인하세요",
     stopped: "중지됨",
-    updateHermes: "Hermes 업데이트",
-    updatingHermes: "Hermes 업데이트 중…",
+    updateHermes: "Lliam-GOV 업데이트",
+    updatingHermes: "Lliam-GOV 업데이트 중…",
     waitingForOutput: "출력 대기 중…",
   },
 
@@ -319,7 +319,7 @@ export const ko: Translations = {
     enableRuntime: "활성화",
     forceReinstall: "강제 재설치 (기존 폴더를 먼저 삭제)",
     headline:
-      "Hermes 플러그인을 검색, 설치, 활성화 및 업데이트합니다 (`hermes plugins` 동등).",
+      "Lliam-GOV 플러그인을 검색, 설치, 활성화 및 업데이트합니다 (`lliam-gov plugins` 동등).",
     identifierLabel: "Git URL 또는 owner/repo",
     inactive: "비활성",
     installBtn: "설치",
@@ -485,11 +485,11 @@ export const ko: Translations = {
   achievements: {
     hero: {
       kicker: "Agentic Gamerscore",
-      title: "Hermes Achievements",
+      title: "Lliam-GOV Achievements",
       subtitle:
-        "실제 세션 기록에서 획득하는 Hermes 컬렉터블 배지입니다. 알려져 있지만 아직 달성되지 않은 업적은 Discovered로 표시되며, Secret 업적은 일치하는 동작이 처음 나타날 때까지 숨겨집니다.",
+        "실제 세션 기록에서 획득하는 Lliam-GOV 컬렉터블 배지입니다. 알려져 있지만 아직 달성되지 않은 업적은 Discovered로 표시되며, Secret 업적은 일치하는 동작이 처음 나타날 때까지 숨겨집니다.",
       scan_subtitle:
-        "Hermes 세션 기록을 스캔하고 있습니다. 기록이 많으면 첫 스캔에 5~10초가 걸릴 수 있습니다.",
+        "Lliam-GOV 세션 기록을 스캔하고 있습니다. 기록이 많으면 첫 스캔에 5~10초가 걸릴 수 있습니다.",
     },
     actions: {
       rescan: "다시 스캔",

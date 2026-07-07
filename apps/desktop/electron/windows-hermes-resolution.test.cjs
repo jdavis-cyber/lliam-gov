@@ -1,12 +1,12 @@
 'use strict'
 
-// Regression guards for Windows `hermes` resolution in main.cjs.
+// Regression guards for Windows `lliam-gov` resolution in main.cjs.
 //
 // main.cjs has no module.exports, so these follow the repo's source-assertion
 // test pattern (see windows-child-process.test.cjs). They pin the two Windows
 // resolution bugs that caused desktop reinstall loops:
 //   1. findOnPath() tried the empty extension FIRST, so an extensionless
-//      Git-Bash `hermes` shim shadowed the real hermes.cmd/hermes.exe; the
+//      Git-Bash `lliam-gov` shim shadowed the real hermes.cmd/hermes.exe; the
 //      shim then failed the --version probe and the desktop fell through to a
 //      spurious bootstrap/repair.
 //   2. handOffWindowsBootstrapRecovery() chose --update vs the destructive

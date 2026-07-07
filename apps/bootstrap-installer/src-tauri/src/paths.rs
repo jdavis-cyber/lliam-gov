@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing_appender::non_blocking::WorkerGuard;
 
-/// Returns the canonical Hermes home directory, respecting $HERMES_HOME if set.
+/// Returns the canonical Lliam-GOV home directory, respecting $HERMES_HOME if set.
 pub fn hermes_home() -> PathBuf {
     if let Ok(override_path) = std::env::var("HERMES_HOME") {
         if !override_path.trim().is_empty() {

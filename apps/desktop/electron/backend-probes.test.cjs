@@ -40,7 +40,7 @@ test('canImportLliamCli returns false when binary does not exist', () => {
   assert.equal(canImportLliamCli(ghost), false)
 })
 
-test('hermes runtime import probe checks config dependencies', () => {
+test('lliam-gov runtime import probe checks config dependencies', () => {
   const probe = lliamRuntimeImportProbe()
   assert.match(probe, /\bimport yaml\b/)
   assert.match(probe, /\bimport hermes_cli\.config\b/)
@@ -59,7 +59,7 @@ test('verifyLliamCli returns false when binary does not exist', () => {
 
 test('verifyLliamCli returns true when --version exits 0', () => {
   // Write a tiny script that exits 0 regardless of args, then invoke
-  // it through node. This stands in for a working hermes binary --
+  // it through node. This stands in for a working lliam-gov binary --
   // verifyLliamCli only cares about the exit code.
   const scriptPath = path.join(os.tmpdir(), `hermes-probes-ok-${Date.now()}-${process.pid}.cjs`)
   fs.writeFileSync(scriptPath, 'process.exit(0)\n')

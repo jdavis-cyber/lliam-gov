@@ -48,7 +48,7 @@ export interface OAuthProviderStatus {
 export interface OAuthProvider {
   cli_command: string
   /** Shell command that clears an external provider's credentials, run in the
-   *  embedded terminal. Null when Hermes doesn't know how to remove it. */
+   *  embedded terminal. Null when Lliam-GOV doesn't know how to remove it. */
   disconnect_command?: null | string
   disconnect_hint?: null | string
   disconnectable?: boolean
@@ -117,7 +117,7 @@ export interface EnvVarInfo {
   is_set: boolean
   // Backend-derived provider grouping hints (from the unified provider catalog
   // in hermes_cli/provider_catalog.py). When present, the Keys tab groups by
-  // this provider identity — the SAME one `hermes model` uses — instead of
+  // this provider identity — the SAME one `lliam-gov model` uses — instead of
   // desktop-only env-var prefix guesses. Empty for non-provider env vars.
   provider?: string
   provider_label?: string
@@ -262,7 +262,7 @@ export interface ModelOptionProvider {
   authenticated?: boolean
   /** Auth flow for an unconfigured provider: "api_key" can be activated inline
    *  by pasting `key_env`; anything else (oauth_*, external, aws_sdk, …) needs
-   *  the `hermes model` CLI / onboarding OAuth flow. */
+   *  the `lliam-gov model` CLI / onboarding OAuth flow. */
   auth_type?: string
   /** Env var to paste an API key into, for unconfigured `api_key` providers. */
   key_env?: string
@@ -615,7 +615,7 @@ export interface ToolProvider {
   post_setup: string | null
   requires_nous_auth: boolean
   /** True when this is the provider currently written to config (mirrors the
-   *  CLI `hermes tools` active-provider detection). */
+   *  CLI `lliam-gov tools` active-provider detection). */
   is_active: boolean
 }
 
@@ -632,7 +632,7 @@ export interface ToolsetConfig {
  *  cua-driver runs on macOS, Windows, and Linux. `ready` is the single OS-aware
  *  readiness signal: on macOS both TCC grants (Accessibility + Screen
  *  Recording, which attach to cua-driver's own `com.trycua.driver` identity,
- *  not Hermes); elsewhere, driver health from `cua-driver doctor`. `null`
+ *  not Lliam-GOV); elsewhere, driver health from `cua-driver doctor`. `null`
  *  means unknown (binary missing / probe failed). */
 export interface ComputerUsePermissionSource {
   attribution?: string

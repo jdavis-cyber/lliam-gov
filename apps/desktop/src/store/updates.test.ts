@@ -191,7 +191,7 @@ describe('checkBackendUpdates', () => {
       behind: 2,
       update_available: true,
       can_apply: true,
-      update_command: 'hermes update',
+      update_command: 'lliam-gov update',
       message: null,
       commits: [{ sha: 'abc1234', summary: 'feat: x', author: 'a', at: 1 }]
     })
@@ -307,12 +307,12 @@ describe('applyUpdates terminal state', () => {
   })
 
   it('keeps the manual command state for CLI installs with no staged updater', async () => {
-    applyMock.mockResolvedValue({ ok: true, manual: true, command: 'hermes update' })
+    applyMock.mockResolvedValue({ ok: true, manual: true, command: 'lliam-gov update' })
 
     await applyUpdates()
 
     expect($updateApply.get().stage).toBe('manual')
-    expect($updateApply.get().command).toBe('hermes update')
+    expect($updateApply.get().command).toBe('lliam-gov update')
     expect($updateOverlayOpen.get()).toBe(true)
     expect(notifySpy).not.toHaveBeenCalled()
   })
@@ -349,7 +349,7 @@ describe('applyUpdates terminal state', () => {
       guiUpdated: false,
       manualRestart: true,
       sandboxBlocked: true,
-      message: 'Backend updated. Quit and reopen Hermes to finish.'
+      message: 'Backend updated. Quit and reopen Lliam-GOV to finish.'
     })
 
     const result = await applyUpdates()
@@ -394,7 +394,7 @@ describe('applyBackendUpdate recovery', () => {
       behind: 0,
       update_available: false,
       can_apply: true,
-      update_command: 'hermes update',
+      update_command: 'lliam-gov update',
       message: null
     })
 
@@ -424,7 +424,7 @@ describe('applyBackendUpdate recovery', () => {
       behind: 0,
       update_available: false,
       can_apply: true,
-      update_command: 'hermes update',
+      update_command: 'lliam-gov update',
       message: null
     })
 

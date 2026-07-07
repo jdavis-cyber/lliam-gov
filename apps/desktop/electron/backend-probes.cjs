@@ -3,7 +3,7 @@
  *
  * Cheap "does this candidate backend actually work" checks used by
  * resolveLliamBackend (main.cjs). The resolver walks a ladder of
- * candidates -- bootstrap marker, `hermes` on PATH, system Python with
+ * candidates -- bootstrap marker, `lliam-gov` on PATH, system Python with
  * hermes_cli installed -- and historically returned the first candidate
  * whose binary existed on disk. That assumption breaks when a user has
  * a pre-installed Python 3.11-3.13 (so findSystemPython() returns a
@@ -37,7 +37,7 @@ const { execFileSync } = require('node:child_process')
 const PROBE_TIMEOUT_MS = 5000
 
 /**
- * Return the Python snippet used to verify Hermes can import far enough to
+ * Return the Python snippet used to verify Lliam-GOV can import far enough to
  * launch the CLI. Kept exported for tests so dependency regressions are
  * caught without needing a real broken venv fixture.
  *
@@ -48,7 +48,7 @@ function lliamRuntimeImportProbe() {
 }
 
 /**
- * Return true iff the Hermes runtime import probe exits 0.
+ * Return true iff the Lliam-GOV runtime import probe exits 0.
  *
  * Used to gate the "fallback to system Python with hermes_cli installed"
  * rung of resolveLliamBackend. Without this, a system Python 3.11-3.13
@@ -84,9 +84,9 @@ function canImportLliamCli(pythonPath, opts = {}) {
 /**
  * Return true iff `<lliamCommand> --version` exits 0.
  *
- * Used to gate the "existing `hermes` on PATH" rung. Without this, a
+ * Used to gate the "existing `lliam-gov` on PATH" rung. Without this, a
  * stale hermes.cmd shim left behind by an uninstalled pip install (or
- * a half-built venv whose `hermes` entry-point points at a deleted
+ * a half-built venv whose `lliam-gov` entry-point points at a deleted
  * Python) survives findOnPath() and gets selected as the backend.
  *
  * We intentionally avoid invoking the command with the dashboard args

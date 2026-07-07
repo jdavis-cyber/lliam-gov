@@ -145,7 +145,7 @@ export async function fetchJSON<T>(
       return new Promise<T>(() => {});
     }
     // Loopback mode: ``_SESSION_TOKEN`` rotates on every server restart
-    // (``hermes update``, ``hermes gateway restart``, etc.). A tab kept
+    // (``lliam-gov update``, ``lliam-gov gateway restart``, etc.). A tab kept
     // open across the restart holds the OLD token in
     // ``window.__HERMES_SESSION_TOKEN__`` from the previous HTML render,
     // so every fetch returns 401. The HTML is served ``Cache-Control:
@@ -201,7 +201,7 @@ async function getSessionToken(): Promise<string> {
     _sessionToken = injected;
     return _sessionToken;
   }
-  throw new Error("Session token not available — page must be served by the Hermes dashboard server");
+  throw new Error("Session token not available — page must be served by the Lliam-GOV dashboard server");
 }
 
 /**
@@ -1621,7 +1621,7 @@ export interface StatusResponse {
    * fail-closed state (the dashboard will refuse to bind). */
   auth_providers?: string[];
   /** False when the dashboard is running in a hosted/managed layout where
-   * updates are handled by the outer launcher instead of ``hermes update``. */
+   * updates are handled by the outer launcher instead of ``lliam-gov update``. */
   can_update_hermes?: boolean;
   config_path: string;
   config_version: number;

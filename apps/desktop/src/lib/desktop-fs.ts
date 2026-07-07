@@ -40,7 +40,7 @@ function bridge() {
   const desktop = window.lliamDesktop
 
   if (!desktop) {
-    throw new Error('Hermes Desktop bridge is unavailable')
+    throw new Error('Lliam-GOV Desktop bridge is unavailable')
   }
 
   return desktop

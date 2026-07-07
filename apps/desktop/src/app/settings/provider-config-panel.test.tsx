@@ -23,7 +23,7 @@ function hindsightSchema(overrides: Partial<MemoryProviderConfig['fields'][numbe
       label: 'Mode',
       kind: 'select',
       value: 'cloud',
-      description: 'How Hermes connects to Hindsight.',
+      description: 'How Lliam-GOV connects to Hindsight.',
       placeholder: '',
       is_set: true,
       options: [
