@@ -237,6 +237,11 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"hermes-agent", "upstream product id / registered wire tag (portal, exa, copilot, honcho)"),
     (r'product=hermes|"topic":\s*"hermes', "registered wire product/topic tag — external"),
     (r"_ECHO_TAG|x-exa-integration", "registered integration tag value — external"),
+    (r"--client hermes|--client \{name\}.*hermes|归因.*hermes|agent 名称.*hermes",
+     "here-now skill --client attribution tag value 'hermes' — external routing/attribution tag"),
+    (r"%40hermes|%40hermes%3a|hermes%3ayour-server|@hermesbyt4|hermes龙虾|hermesbench|"
+     r"hermes\.coder|hermes-outreach|hermes-run|hermes\.process_input",
+     "matrix device-id URL encoding / handle / benchmark / fixture data — opaque external/data literal"),
     (r"hermes[-.]atof|hermes[-.]atif|hermes\.nemo_relay|hermes-session-\{|hermes\.turn\.|"
      r"hermes\.api\.(response|error)|hermes\.tool\.response|hermes\.[a-z_.]+\.(start|end|unmatched)",
      "NeMo observability telemetry event/file/subscriber name emitted to an external "
@@ -381,6 +386,13 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"hey hermes|ok hermes|HEY HERMES|hermes,|hermes do this|mention_patterns.*hermes|"
      r"SLACK_MENTION_PATTERNS.*hermes|matches_mention.*hermes|@hermes\b",
      "wake-word / mention-pattern fixture value a test asserts matching against — opaque data"),
+    (r'"[Hh]ermes help"|"[Hh]ermes agent|please ask Hermes|_is_bot_mentioned\(|_clean_mention_text\(|'
+     r'_strip_mention\(|_make_event\("[Hh]ermes|<at>Hermes</at>|"Hermes help me"|Can Hermes reply|'
+     r'ask Hermes about this',
+     "mention-detection input/expected fixture text a test passes to _is_bot_mentioned / "
+     "_clean_mention_text / _strip_mention and asserts on — opaque data"),
+    (r'"Hermes Server|guild_name.*Hermes|chat_name.*Hermes|Hermes Server / #|"Hermes is thinking',
+     "Discord/voice fixture guild/chat name + a 'thinking…' status message a test asserts — opaque data"),
     # --- Broad opaque test-fixture identifiers (task ids, session ids, hosts, tags a test uses as data) ---
     (r"hermes-managed|hermes-mytask|hermes-session-s\d|hermes-temp-hello|hermes-ok|hermes-ws-ok|"
      r"hermes-custom|hermes-local|hermes-at\b|hermes-mcp|hermes-test\b|hermes\.partner|hermes\.env\b|"

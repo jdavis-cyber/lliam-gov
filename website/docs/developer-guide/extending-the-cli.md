@@ -6,7 +6,7 @@ description: "Build wrapper CLIs that extend the Lliam-GOV TUI with custom widge
 
 # Extending the CLI
 
-Lliam-GOV exposes protected extension hooks on `HermesCLI` so wrapper CLIs can add widgets, keybindings, and layout customizations without overriding the 1000+ line `run()` method. This keeps your extension decoupled from internal changes.
+Lliam-GOV exposes protected extension hooks on `LliamCLI` so wrapper CLIs can add widgets, keybindings, and layout customizations without overriding the 1000+ line `run()` method. This keeps your extension decoupled from internal changes.
 
 ## Extension points
 
@@ -28,12 +28,12 @@ The first three are new protected hooks. The last two already existed.
 #!/usr/bin/env python3
 """my_cli.py — Example wrapper CLI that extends Lliam-GOV."""
 
-from cli import HermesCLI
+from cli import LliamCLI
 from prompt_toolkit.layout import FormattedTextControl, Window
 from prompt_toolkit.filters import Condition
 
 
-class MyCLI(HermesCLI):
+class MyCLI(LliamCLI):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

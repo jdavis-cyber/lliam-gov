@@ -1,12 +1,12 @@
 ---
-title: "Hermes Agent Skill Authoring — Author in-repo SKILL"
-sidebar_label: "Hermes Agent Skill Authoring"
+title: "Lliam-GOV Agent Skill Authoring — Author in-repo SKILL"
+sidebar_label: "Lliam-GOV Agent Skill Authoring"
 description: "Author in-repo SKILL"
 ---
 
 {/* This page is auto-generated from the skill's SKILL.md by website/scripts/generate-skill-docs.py. Edit the source SKILL.md, not this page. */}
 
-# Hermes Agent Skill Authoring
+# Lliam-GOV Agent Skill Authoring
 
 Author in-repo SKILL.md: frontmatter, validator, structure, and writing-quality principles.
 
@@ -17,7 +17,7 @@ Author in-repo SKILL.md: frontmatter, validator, structure, and writing-quality 
 | Source | Bundled (installed by default) |
 | Path | `skills/software-development/hermes-agent-skill-authoring` |
 | Version | `1.1.0` |
-| Author | Hermes Agent |
+| Author | Lliam-GOV Agent |
 | License | MIT |
 | Platforms | linux, macos, windows |
 
@@ -60,7 +60,7 @@ Peer-matched shape used by every skill under `skills/software-development/`:
 name: my-skill-name               # lowercase, hyphens, ≤64 chars (MAX_NAME_LENGTH)
 description: Use when <trigger>. <one-line behavior>.
 version: 1.1.0
-author: Hermes Agent
+author: Lliam-GOV Agent
 license: MIT
 metadata:
   hermes:
@@ -84,7 +84,7 @@ A skill exists to make the agent's process more predictable. Predictability does
 Use these quality checks when writing or editing any skill:
 
 1. **Optimize for process predictability.** Ask: what behavior should change when this skill loads? If a line does not change behavior, cut it.
-2. **Choose the right context load.** A model-invoked Hermes skill pays for its description every turn. Keep descriptions focused on trigger classes and the skill's distinctive behavior. Put details in the body or linked references.
+2. **Choose the right context load.** A model-invoked Lliam-GOV skill pays for its description every turn. Keep descriptions focused on trigger classes and the skill's distinctive behavior. Put details in the body or linked references.
 3. **Use an information hierarchy.** Put always-needed steps in `SKILL.md`; put branch-specific or bulky reference material in `references/`, `templates/`, or `scripts/` and point to it only when needed.
 4. **End steps with completion criteria.** Each ordered step should say how the agent knows it is done. Good criteria are checkable and, when it matters, exhaustive: "every modified file accounted for" beats "summarize changes."
 5. **Co-locate rules with the concept they govern.** Avoid scattering one idea across the file. Keep definition, caveats, examples, and verification near each other.

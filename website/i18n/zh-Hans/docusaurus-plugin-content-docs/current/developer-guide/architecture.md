@@ -53,7 +53,7 @@ description: "Lliam-GOV Agent 内部结构——主要子系统、执行路径�
 ```text
 lliam-gov-agent/
 ├── run_agent.py              # AIAgent — 核心对话循环（大文件）
-├── cli.py                    # HermesCLI — 交互式终端 UI（大文件）
+├── cli.py                    # LliamCLI — 交互式终端 UI（大文件）
 ├── model_tools.py            # 工具发现、schema 收集、分发
 ├── toolsets.py               # 工具分组与平台预设
 ├── lliam_state.py           # 带 FTS5 的 SQLite 会话/状态数据库
@@ -138,7 +138,7 @@ lliam-gov-agent/
 ### CLI 会话
 
 ```text
-用户输入 → HermesCLI.process_input()
+用户输入 → LliamCLI.process_input()
   → AIAgent.run_conversation()
     → prompt_builder.build_system_prompt()
     → runtime_provider.resolve_runtime_provider()
