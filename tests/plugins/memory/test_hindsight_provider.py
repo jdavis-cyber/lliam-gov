@@ -102,7 +102,7 @@ def _provider_for_mode(tmp_path, monkeypatch, mode: str):
     )
 
     provider = HindsightMemoryProvider()
-    provider.initialize(session_id="test-session", lliam_home=str(tmp_path), platform="cli")
+    provider.initialize(session_id="test-session", hermes_home=str(tmp_path), platform="cli")
     return provider
 
 
@@ -171,7 +171,7 @@ def provider(tmp_path, monkeypatch):
     )
 
     p = HindsightMemoryProvider()
-    p.initialize(session_id="test-session", lliam_home=str(tmp_path), platform="cli")
+    p.initialize(session_id="test-session", hermes_home=str(tmp_path), platform="cli")
     p._client = _make_mock_client()
     return p
 
@@ -198,7 +198,7 @@ def provider_with_config(tmp_path, monkeypatch):
         )
 
         p = HindsightMemoryProvider()
-        p.initialize(session_id="test-session", lliam_home=str(tmp_path), platform="cli")
+        p.initialize(session_id="test-session", hermes_home=str(tmp_path), platform="cli")
         p._client = _make_mock_client()
         return p
     return _make
@@ -1057,14 +1057,14 @@ class TestSyncTurn:
         monkeypatch.setattr("plugins.memory.hindsight.get_lliam_home", lambda: tmp_path)
 
         p1 = HindsightMemoryProvider()
-        p1.initialize(session_id="resumed-session", lliam_home=str(tmp_path), platform="cli")
+        p1.initialize(session_id="resumed-session", hermes_home=str(tmp_path), platform="cli")
 
         # Sleep just enough that the microsecond timestamp differs
         import time
         time.sleep(0.001)
 
         p2 = HindsightMemoryProvider()
-        p2.initialize(session_id="resumed-session", lliam_home=str(tmp_path), platform="cli")
+        p2.initialize(session_id="resumed-session", hermes_home=str(tmp_path), platform="cli")
 
         # Same session, but each process gets its own document_id
         assert p1._document_id != p2._document_id
@@ -1625,7 +1625,7 @@ class TestBankIdTemplate:
 
         p = HindsightMemoryProvider()
         # No agent_identity passed — template renders to "hermes-" which collapses to "hermes"
-        p.initialize(session_id="s1", lliam_home=str(tmp_path), platform="cli")
+        p.initialize(session_id="s1", hermes_home=str(tmp_path), platform="cli")
         assert p._bank_id == "hermes"
 
 
@@ -1718,7 +1718,7 @@ class TestAvailability:
         )
 
         p = HindsightMemoryProvider()
-        p.initialize(session_id="test-session", lliam_home=str(tmp_path), platform="cli")
+        p.initialize(session_id="test-session", hermes_home=str(tmp_path), platform="cli")
         assert p._mode == "disabled"
 
 
