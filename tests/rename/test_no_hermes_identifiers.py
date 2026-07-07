@@ -140,6 +140,7 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     # --- Contract literals: live keys / kwargs / wire fields ---
     (r"hermes_home", "live kwargs-dispatch key / var / detection substring for HERMES_HOME"),
     (r"hermes_root", "live argparse dest / dispatch key (paired with --lliam-root alias)"),
+    (r"<hermes-root>", "doc placeholder for the resolved root dir (paired with the kept root contract)"),
     (r"hermesRoot|active_hermes_root", "live JS/electron config key for the resolved root"),
     (r"hermes_version", "contract field name in status/version payloads"),
     (r"hermes_bin", "contract field: resolved gateway binary path"),
@@ -165,6 +166,19 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"hermes_agent\.plugins", "live pip entry-point group ENTRY_POINTS_GROUP"),
     (r"persist:hermes-remote-oauth",
      "electron session-partition storage key — renaming orphans persisted OAuth sessions"),
+    (r"hermes-dashboard-theme|hermes-dashboard-font|hermes-theme-custom-css|"
+     r"data-hermes-theme-(css|font)|hermes-dashboard-[a-z-]+",
+     "web-dashboard localStorage key / DOM data-attribute — persisted-state contract with no "
+     "migration path (unlike the desktop keys); renaming orphans user prefs"),
+    (r"currentHermesSessionId|rootHermesSessionId|parentHermesSessionId|previousHermesSessionId",
+     "ACP provenance session-id JSON key — external wire contract, test-asserted "
+     "(tests/acp/test_session_provenance.py)"),
+    (r"hermes:fs:[a-zA-Z]+|hermes:[a-z]+:[a-z]+",
+     "electron IPC channel name — JS<->main wire contract"),
+    (r"hermes-auth-store", "auth-record source tag — persisted/contract field"),
+    (r"can_update_hermes", "dashboard capability JSON field — wire contract"),
+    (r"hermes-webui", "upstream/container WebUI image name — inherited image identity"),
+    (r'"hermes" in mid\.lower\(\)', "legacy message-id substring DETECTION — keep matching old ids"),
 
     # --- Legacy service / process detection markers (detecting/cleaning OLD binary) ---
     (r"hermes-gateway", "legacy service/process name — detection marker"),
@@ -246,6 +260,8 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     # --- Wire attribution to 3rd-party APIs (X-Title / User-Agent / registry name) ---
     (r'X-Title.*Hermes Agent|"Hermes Agent"', "OpenRouter X-Title / ACP registry name — wire attribution"),
     (r"Hermes-Watcher|Hermes[- ]Agent[/ ]", "User-Agent value sent to 3rd-party API"),
+    (r"HermesDashboard/|hermes-dashboard/1\.0",
+     "User-Agent value the dashboard sends to 3rd-party APIs — wire attribution"),
     (r"codex_cli_rs|graph-client|x-exa", "3rd-party User-Agent/integration value on a hermes line"),
 
     # --- Upstream (D4): Nous Research / Hermes-4 model + repo attribution ---
@@ -283,6 +299,14 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
      "external memory bank; changing it silently switches which bank is addressed"),
     (r'profile or "hermes"',
      "Hindsight profile fallback default value — opaque data (see bank_id keep)"),
+    (r'"hermes-user"|"hermes-pgvector"|_PGVECTOR_PASSWORD = "hermes"|agent_id.*"hermes"|'
+     r'"USER", "hermes|Agent ID \[hermes\]|user_id.*hermes-user',
+     "mem0 default user_id/agent_id/container/password identifier value — opaque data / "
+     "external-service default; changing it addresses a different memory namespace"),
+    (r'exec_user", "hermes"|exec_user.*hermes',
+     "container exec_user default 'hermes' — OS-account identity default"),
+    (r"#hermes\b|hermes-bot\b|nickname.*hermes|IRC.*hermes",
+     "IRC channel/nick example + default bot nickname — opaque config data / external handle"),
     (r"hermes-cleanup-\{|directory is hermes-|is hermes-$",
      "internal docker-cleanup thread name / wrapped 'hermes-owned' comment — "
      "container-management identity, opaque"),
@@ -318,7 +342,7 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"NOUS HERMES",
      "default compact-banner branding — test-asserted as intentional legacy Nous Hermes "
      "attribution (test_default_compact_banner_keeps_legacy_nous_hermes_branding)"),
-    (r"hermes-desktop-|hermes-relaunch-", "test tmp-file prefix — opaque data"),
+    (r"hermes-desktop-|hermes-relaunch-|hermes-pty-active-", "tmp-file prefix — opaque data"),
     (r"hermes please help|\^hermes|@Hermes agent|MyHermesBot",
      "wake-word / bot-name test fixture — opaque data"),
     (r"hermes-security", "test host-key/profile fixture — opaque data"),

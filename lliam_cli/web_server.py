@@ -2498,7 +2498,7 @@ def _dashboard_spawn_executable() -> str:
 
 
 def _spawn_lliam_action(subcommand: List[str], name: str) -> subprocess.Popen:
-    """Spawn ``hermes <subcommand>`` detached and record the Popen handle.
+    """Spawn ``lliam-gov <subcommand>`` detached and record the Popen handle.
 
     Uses the running interpreter's ``lliam_cli.main`` module so the action
     inherits the same venv/PYTHONPATH the web server is using.
@@ -11546,7 +11546,7 @@ async def get_models_analytics(days: int = 30, profile: Optional[str] = None):
 # ---------------------------------------------------------------------------
 # /api/pty — PTY-over-WebSocket bridge for the dashboard "Chat" tab.
 #
-# The endpoint spawns the same ``hermes --tui`` binary the CLI uses, behind
+# The endpoint spawns the same ``lliam-gov --tui`` binary the CLI uses, behind
 # a POSIX pseudo-terminal, and forwards bytes + resize escapes across a
 # WebSocket.  The browser renders the ANSI through xterm.js (see
 # web/src/pages/ChatPage.tsx).

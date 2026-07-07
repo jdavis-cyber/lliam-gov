@@ -113,7 +113,7 @@ def _build_server() -> Any:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:  # pragma: no cover - install hint
         raise ImportError(
-            f"hermes-tools MCP server requires the 'mcp' package: {exc}"
+            f"lliam-gov-tools MCP server requires the 'mcp' package: {exc}"
         ) from exc
 
     # Discover Lliam-GOV tools so dispatch works.
@@ -187,7 +187,7 @@ def _build_server() -> Any:
         exposed_count += 1
 
     logger.info(
-        "hermes-tools MCP server registered %d/%d tools",
+        "lliam-gov-tools MCP server registered %d/%d tools",
         exposed_count,
         len(EXPOSED_TOOLS),
     )
@@ -214,7 +214,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     try:
         server = _build_server()
     except ImportError as exc:
-        sys.stderr.write(f"hermes-tools MCP server cannot start: {exc}\n")
+        sys.stderr.write(f"lliam-gov-tools MCP server cannot start: {exc}\n")
         return 2
 
     # FastMCP runs with stdio transport by default when launched as a
@@ -224,8 +224,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     except KeyboardInterrupt:
         return 0
     except Exception as exc:
-        logger.exception("hermes-tools MCP server crashed")
-        sys.stderr.write(f"hermes-tools MCP server error: {exc}\n")
+        logger.exception("lliam-gov-tools MCP server crashed")
+        sys.stderr.write(f"lliam-gov-tools MCP server error: {exc}\n")
         return 1
     return 0
 
