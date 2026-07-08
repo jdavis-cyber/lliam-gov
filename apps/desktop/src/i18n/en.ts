@@ -66,7 +66,7 @@ export const en: Translations = {
       loadingSettings: 'Loading LLIAM-GOV settings',
       loadingSessions: 'Loading recent sessions',
       startingDesktopConnection: 'Starting desktop connection',
-      startingHermesDesktop: 'Starting LLIAM-GOV Desktop…'
+      startingLliamDesktop: 'Starting LLIAM-GOV Desktop…'
     },
     errors: {
       backgroundExited: 'LLIAM-GOV background process exited.',
@@ -116,7 +116,7 @@ export const en: Translations = {
     backendOutOfDateTitle: 'Backend out of date',
     backendOutOfDateMessage:
       'Your LLIAM-GOV backend is older than this desktop build and may not work correctly. Update to align them.',
-    updateHermes: 'Update LLIAM-GOV',
+    updateLliam: 'Update LLIAM-GOV',
     updateReadyTitle: 'Update ready',
     updateReadyMessage: count => `${count} new change${count === 1 ? '' : 's'} available.`,
     seeWhatsNew: "See what's new",
@@ -518,7 +518,7 @@ export const en: Translations = {
         `Connection used only when “${profile}” is the active profile. Set it to Local to inherit the default.`,
       envOverrideTitle: 'Environment variables are controlling this desktop session.',
       envOverrideDesc:
-        'Unset HERMES_DESKTOP_REMOTE_URL and HERMES_DESKTOP_REMOTE_TOKEN to use the saved setting below.',
+        'Unset LLIAM_DESKTOP_REMOTE_URL and LLIAM_DESKTOP_REMOTE_TOKEN to use the saved setting below.',
       localTitle: 'Local gateway',
       localDesc: 'Start a private LLIAM-GOV backend on localhost. This is the default and works offline.',
       remoteTitle: 'Remote gateway',
@@ -880,10 +880,10 @@ export const en: Translations = {
     noSessions: 'No sessions yet.',
     gatewayRunning: 'Messaging gateway running',
     gatewayStopped: 'Messaging gateway stopped',
-    hermesActiveSessions: (version, count) => `LLIAM-GOV ${version} · Active sessions ${count}`,
+    lliamActiveSessions: (version, count) => `LLIAM-GOV ${version} · Active sessions ${count}`,
     restartGateway: 'Restart gateway',
     gatewayRestartFailed: 'Gateway restart failed.',
-    updateHermes: 'Update LLIAM-GOV',
+    updateLliam: 'Update LLIAM-GOV',
     actionRunning: 'running',
     actionDone: 'done',
     actionFailed: 'failed',
@@ -1438,7 +1438,7 @@ export const en: Translations = {
       '/resume': 'resume a prior session',
       '/details': 'control transcript detail level',
       '/copy': 'copy selection or last assistant message',
-      '/quit': 'exit hermes'
+      '/quit': 'exit lliam-gov'
     },
     hotkeyDescs: {
       'composer.mention': 'reference files, folders, urls, git',
@@ -2204,7 +2204,7 @@ export const en: Translations = {
       success: platform => `Handed off to ${platform}. Resume here anytime.`,
       systemNote: platform => `↻ Handed off to ${platform} — resume here anytime.`,
       failed: error => `Handoff failed: ${error}`,
-      timedOut: 'Timed out waiting for the gateway. Is `hermes gateway` running?'
+      timedOut: 'Timed out waiting for the gateway. Is `lliam-gov gateway` running?'
     }
   },
 

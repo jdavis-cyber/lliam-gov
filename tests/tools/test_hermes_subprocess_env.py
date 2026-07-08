@@ -15,9 +15,9 @@ import os
 from unittest.mock import patch
 
 from tools.environments.local import (
-    hermes_subprocess_env,
+    lliam_subprocess_env,
     _ALWAYS_STRIP_KEYS,
-    _HERMES_PROVIDER_ENV_FORCE_PREFIX,
+    _LLIAM_PROVIDER_ENV_FORCE_PREFIX,
 )
 
 
@@ -48,7 +48,7 @@ def _build(extra=None, *, inherit_credentials=False):
     if extra:
         env.update(extra)
     with patch.dict(os.environ, env, clear=True):
-        return hermes_subprocess_env(inherit_credentials=inherit_credentials)
+        return lliam_subprocess_env(inherit_credentials=inherit_credentials)
 
 
 class TestStripByDefault:
@@ -70,8 +70,8 @@ class TestStripByDefault:
         assert result["MY_APP_VAR"] == "keep-me"
 
     def test_force_prefix_hints_stripped(self):
-        result = _build({f"{_HERMES_PROVIDER_ENV_FORCE_PREFIX}OPENAI_API_KEY": "sk-x"})
-        assert f"{_HERMES_PROVIDER_ENV_FORCE_PREFIX}OPENAI_API_KEY" not in result
+        result = _build({f"{_LLIAM_PROVIDER_ENV_FORCE_PREFIX}OPENAI_API_KEY": "sk-x"})
+        assert f"{_LLIAM_PROVIDER_ENV_FORCE_PREFIX}OPENAI_API_KEY" not in result
         assert "OPENAI_API_KEY" not in result
 
     def test_pythonutf8_set(self):
@@ -139,7 +139,7 @@ class TestBrowserPassthroughPattern:
             "TELEGRAM_BOT_TOKEN": "bot-should-go",
         }
         with patch.dict(os.environ, {**_SAFE_SAMPLE, **leaked}, clear=True):
-            env = hermes_subprocess_env(inherit_credentials=False)
+            env = lliam_subprocess_env(inherit_credentials=False)
             for key in _BROWSER_PASSTHROUGH_KEYS:
                 if key in os.environ:
                     env[key] = os.environ[key]

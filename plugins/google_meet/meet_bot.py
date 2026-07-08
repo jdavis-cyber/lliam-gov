@@ -2,7 +2,7 @@
 
 Runs as a standalone subprocess spawned by ``process_manager.py``. Reads config
 from env vars, writes status + transcript to files under
-``$HERMES_HOME/workspace/meetings/<meeting-id>/``. The main hermes process
+``$HERMES_HOME/workspace/meetings/<meeting-id>/``. The main lliam-gov process
 reads those files via the ``meet_*`` tools — no IPC beyond filesystem.
 
 The scraping strategy mirrors OpenUtter (sumansid/openutter): we don't parse
@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import signal
 import sys
@@ -445,18 +446,18 @@ def _mac_audio_device_index(device_name: str) -> str:
 
 
 def run_bot() -> int:  # noqa: C901 — orchestration, explicit branches
-    url = os.environ.get("HERMES_MEET_URL", "").strip()
-    out_dir_env = os.environ.get("HERMES_MEET_OUT_DIR", "").strip()
-    headed = os.environ.get("HERMES_MEET_HEADED", "").lower() in {"1", "true", "yes"}
-    auth_state = os.environ.get("HERMES_MEET_AUTH_STATE", "").strip()
-    guest_name = os.environ.get("HERMES_MEET_GUEST_NAME", "Hermes Agent")
-    duration_s = _parse_duration(os.environ.get("HERMES_MEET_DURATION", ""))
+    url = getenv_compat("MEET_URL", "").strip()
+    out_dir_env = getenv_compat("MEET_OUT_DIR", "").strip()
+    headed = getenv_compat("MEET_HEADED", "").lower() in {"1", "true", "yes"}
+    auth_state = getenv_compat("MEET_AUTH_STATE", "").strip()
+    guest_name = getenv_compat("MEET_GUEST_NAME", "Lliam-GOV")
+    duration_s = _parse_duration(getenv_compat("MEET_DURATION", ""))
     # v2: optional realtime mode. Enabled when HERMES_MEET_MODE=realtime.
-    mode = os.environ.get("HERMES_MEET_MODE", "transcribe").strip().lower()
-    realtime_model = os.environ.get("HERMES_MEET_REALTIME_MODEL", "gpt-realtime")
-    realtime_voice = os.environ.get("HERMES_MEET_REALTIME_VOICE", "alloy")
-    realtime_instructions = os.environ.get("HERMES_MEET_REALTIME_INSTRUCTIONS", "")
-    realtime_api_key = os.environ.get("HERMES_MEET_REALTIME_KEY") or os.environ.get("OPENAI_API_KEY", "")
+    mode = getenv_compat("MEET_MODE", "transcribe").strip().lower()
+    realtime_model = getenv_compat("MEET_REALTIME_MODEL", "gpt-realtime")
+    realtime_voice = getenv_compat("MEET_REALTIME_VOICE", "alloy")
+    realtime_instructions = getenv_compat("MEET_REALTIME_INSTRUCTIONS", "")
+    realtime_api_key = getenv_compat("MEET_REALTIME_KEY") or os.environ.get("OPENAI_API_KEY", "")
 
     if not url or not _is_safe_meet_url(url):
         sys.stderr.write(
@@ -616,7 +617,7 @@ def run_bot() -> int:  # noqa: C901 — orchestration, explicit branches
             #   * periodically flushing realtime counters into status.json
             deadline = (time.time() + duration_s) if duration_s else None
             lobby_deadline = time.time() + float(
-                os.environ.get("HERMES_MEET_LOBBY_TIMEOUT", "300")
+                getenv_compat("MEET_LOBBY_TIMEOUT", "300")
             )
             last_admission_check = 0.0
             while not stop_flag["stop"]:

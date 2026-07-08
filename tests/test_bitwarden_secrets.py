@@ -2,7 +2,7 @@
 
 We never hit GitHub or Bitwarden in tests — subprocess + urllib are
 mocked so the suite stays fast and offline-safe.  The "live" pull and
-binary download are exercised manually by `hermes secrets bitwarden
+binary download are exercised manually by `lliam-gov secrets bitwarden
 setup` outside of pytest.
 """
 
@@ -39,15 +39,15 @@ def _reset_caches():
 
 
 @pytest.fixture
-def hermes_home(tmp_path, monkeypatch):
-    """Point Hermes at an isolated home directory."""
+def lliam_home(tmp_path, monkeypatch):
+    """Point Lliam-GOV at an isolated home directory."""
     home = tmp_path / ".hermes"
     home.mkdir()
     monkeypatch.setenv("HERMES_HOME", str(home))
-    # Some modules cache get_hermes_home; clear if needed.
-    import hermes_constants
-    if hasattr(hermes_constants, "_HERMES_HOME_CACHE"):
-        hermes_constants._HERMES_HOME_CACHE = None  # type: ignore[attr-defined]
+    # Some modules cache get_lliam_home; clear if needed.
+    import lliam_constants
+    if hasattr(lliam_constants, "_LLIAM_HOME_CACHE"):
+        lliam_constants._LLIAM_HOME_CACHE = None  # type: ignore[attr-defined]
     return home
 
 
@@ -163,7 +163,7 @@ def test_safe_extract_member_rejects_absolute_path(tmp_path):
             bw._safe_extract_member(zf, "../../../etc/cron.d/evil", dest)
 
 
-def test_install_bws_rejects_malicious_member(hermes_home, monkeypatch):
+def test_install_bws_rejects_malicious_member(lliam_home, monkeypatch):
     # Build an archive whose only matching member escapes the temp dir.
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
@@ -186,7 +186,7 @@ def test_install_bws_rejects_malicious_member(hermes_home, monkeypatch):
         bw.install_bws()
 
 
-def test_install_bws_happy_path(hermes_home, monkeypatch):
+def test_install_bws_happy_path(lliam_home, monkeypatch):
     fake_binary = b"#!/bin/sh\necho 'bws fake 2.0.0'\n"
     zip_bytes = _make_fake_zip(fake_binary)
     asset_name = bw._platform_asset_name()
@@ -212,7 +212,7 @@ def test_install_bws_happy_path(hermes_home, monkeypatch):
     assert path.stat().st_mode & stat.S_IXUSR
 
 
-def test_install_bws_checksum_mismatch(hermes_home, monkeypatch):
+def test_install_bws_checksum_mismatch(lliam_home, monkeypatch):
     zip_bytes = _make_fake_zip(b"contents")
     asset_name = bw._platform_asset_name()
     wrong_checksum = "0" * 64
@@ -230,7 +230,7 @@ def test_install_bws_checksum_mismatch(hermes_home, monkeypatch):
         bw.install_bws()
 
 
-def test_install_bws_missing_checksum_entry(hermes_home, monkeypatch):
+def test_install_bws_missing_checksum_entry(lliam_home, monkeypatch):
     zip_bytes = _make_fake_zip(b"x")
 
     def fake_download(url, dest):
@@ -616,7 +616,7 @@ def test_env_loader_skips_when_disabled(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(home))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-    from hermes_cli.env_loader import _apply_external_secret_sources
+    from lliam_cli.env_loader import _apply_external_secret_sources
     # Should be a no-op (returns None).
     assert _apply_external_secret_sources(home) is None
 
@@ -654,7 +654,7 @@ def test_env_loader_calls_bsm_when_enabled(tmp_path, monkeypatch):
         fake_apply,
     )
 
-    from hermes_cli.env_loader import _apply_external_secret_sources
+    from lliam_cli.env_loader import _apply_external_secret_sources
     _apply_external_secret_sources(home)
 
     assert called["n"] == 1

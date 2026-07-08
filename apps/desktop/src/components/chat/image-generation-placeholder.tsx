@@ -281,7 +281,7 @@ export const DiffusionCanvas: FC = () => {
     const observer = new MutationObserver(sync)
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['class', 'style', 'data-hermes-mode']
+      attributeFilter: ['class', 'style', 'data-lliam-mode']
     })
 
     return () => {

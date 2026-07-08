@@ -22,21 +22,21 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 @pytest.fixture
 def cron_env(tmp_path, monkeypatch):
     """Isolated cron environment with temp HERMES_HOME."""
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    (hermes_home / "cron").mkdir()
-    (hermes_home / "cron" / "output").mkdir()
-    (hermes_home / "scripts").mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
+    (lliam_home / "cron").mkdir()
+    (lliam_home / "cron" / "output").mkdir()
+    (lliam_home / "scripts").mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(lliam_home))
 
     # Clear cached module-level paths
     import cron.jobs as jobs_mod
-    monkeypatch.setattr(jobs_mod, "HERMES_DIR", hermes_home)
-    monkeypatch.setattr(jobs_mod, "CRON_DIR", hermes_home / "cron")
-    monkeypatch.setattr(jobs_mod, "JOBS_FILE", hermes_home / "cron" / "jobs.json")
-    monkeypatch.setattr(jobs_mod, "OUTPUT_DIR", hermes_home / "cron" / "output")
+    monkeypatch.setattr(jobs_mod, "HERMES_DIR", lliam_home)
+    monkeypatch.setattr(jobs_mod, "CRON_DIR", lliam_home / "cron")
+    monkeypatch.setattr(jobs_mod, "JOBS_FILE", lliam_home / "cron" / "jobs.json")
+    monkeypatch.setattr(jobs_mod, "OUTPUT_DIR", lliam_home / "cron" / "output")
 
-    return hermes_home
+    return lliam_home
 
 
 class TestJobScriptField:
@@ -133,13 +133,13 @@ class TestRunJobScript:
         assert "error info" in output
 
     def test_script_subprocess_env_sanitized(self, cron_env, monkeypatch):
-        """Cron scripts must not inherit Hermes provider env (SECURITY.md §2.3)."""
-        from tools.environments.local import _HERMES_PROVIDER_ENV_BLOCKLIST
+        """Cron scripts must not inherit Lliam-GOV provider env (SECURITY.md §2.3)."""
+        from tools.environments.local import _LLIAM_PROVIDER_ENV_BLOCKLIST
         from cron.scheduler import _run_job_script
 
         # sorted() so the probed var is deterministic across runs
         # (frozenset iteration order varies with PYTHONHASHSEED).
-        blocked_var = sorted(_HERMES_PROVIDER_ENV_BLOCKLIST)[0]
+        blocked_var = sorted(_LLIAM_PROVIDER_ENV_BLOCKLIST)[0]
         monkeypatch.setenv(blocked_var, "must_not_leak")
 
         script = cron_env / "scripts" / "env_probe.py"

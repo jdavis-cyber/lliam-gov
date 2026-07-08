@@ -1,4 +1,9 @@
 import './styles.css'
+// Migrate legacy `hermes*` localStorage keys onto their `lliam-gov*` names
+// BEFORE any store module reads a key. This import MUST stay first among the
+// side-effect imports: ES imports are hoisted, so the migration only precedes
+// translucency's import-time key read if it is itself the earliest import.
+import './lib/run-storage-migration'
 // Side-effect: applies the persisted window translucency on load.
 import './store/translucency'
 

@@ -12,7 +12,7 @@ def _dockerfile_text() -> str:
     return DOCKERFILE.read_text()
 
 
-def test_dockerfile_makes_opt_hermes_readonly_for_hermes_user() -> None:
+def test_dockerfile_makes_opt_lliam_readonly_for_lliam_user() -> None:
     text = _dockerfile_text()
 
     # --chmod on the source COPY bakes read-only perms at copy time instead
@@ -40,7 +40,7 @@ def test_dockerfile_disables_runtime_install_mutations() -> None:
     assert "HERMES_TUI_DIR=/opt/hermes/ui-tui" in text
 
 
-def test_dockerfile_does_not_chown_install_trees_to_hermes() -> None:
+def test_dockerfile_does_not_chown_install_trees_to_lliam() -> None:
     text = _dockerfile_text()
     forbidden_patterns = (
         r"chown\s+-R\s+hermes:hermes\s+/opt/hermes/\.venv",
@@ -100,7 +100,7 @@ def test_dockerfile_redirects_lazy_installs_to_durable_target() -> None:
     assert "ENV HERMES_DISABLE_LAZY_INSTALLS=1" in text
 
     # stage2-hook must seed + chown the target dir so first-use installs
-    # succeed as the unprivileged hermes runtime user.
+    # succeed as the unprivileged lliam-gov runtime user.
     stage2 = (REPO_ROOT / "docker" / "stage2-hook.sh").read_text()
     assert '"$HERMES_HOME/lazy-packages"' in stage2, (
         "stage2-hook.sh must create the lazy-packages dir on the data volume"

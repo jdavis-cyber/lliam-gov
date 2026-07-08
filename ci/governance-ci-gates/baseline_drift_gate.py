@@ -7,7 +7,7 @@ logged, not blocking. No-op (exit 0) when the effective profile is not strict, s
 non-gov branches are unaffected (capability-preserving).
 
 Effective config resolution (most-faithful first):
-  1. hermes_cli.config.load_config() with HERMES_CONFIG=overlay — the real merged
+  1. lliam_cli.config.load_config() with HERMES_CONFIG=overlay — the real merged
      + posture-coerced config (DEFAULT + home + overlay + posture_resolver).
   2. Fallback: parse the overlay YAML directly (every critical key is set
      explicitly in cli-config.gov.yaml, so this is sufficient when the package
@@ -45,14 +45,16 @@ def _get(d, dotted: str):
 
 def _load_effective(overlay_path: str) -> tuple[dict, str]:
     """Return (config, source). Try the real loader, else parse the overlay."""
-    os.environ["HERMES_CONFIG"] = overlay_path
+    # Set the new canonical selector; load_config reads LLIAM_CONFIG first
+    # (falls back to legacy HERMES_CONFIG). Rename R.8a.
+    os.environ["LLIAM_CONFIG"] = overlay_path
     try:
-        from hermes_cli.config import load_config  # type: ignore
+        from lliam_cli.config import load_config
         return load_config(), "effective (load_config: DEFAULT+home+overlay+posture_resolver)"
     except Exception:
         try:
             with open(overlay_path, encoding="utf-8") as f:
-                return (yaml.safe_load(f) or {}), "overlay-yaml (fallback; hermes_cli not importable)"
+                return (yaml.safe_load(f) or {}), "overlay-yaml (fallback; lliam_cli not importable)"
         except Exception as e:  # pragma: no cover
             print(f"::error::cannot read overlay {overlay_path}: {e}")
             sys.exit(2)
@@ -78,7 +80,12 @@ def _matches(val, entry: dict) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--overlay", default=os.environ.get("HERMES_CONFIG", "cli-config.gov.yaml"))
+    # LLIAM_CONFIG first, legacy HERMES_CONFIG fallback (rename R.8a). Inline
+    # two-name lookup — this gate defers the lliam_cli import on purpose.
+    ap.add_argument(
+        "--overlay",
+        default=(os.environ.get("LLIAM_CONFIG") or os.environ.get("HERMES_CONFIG") or "cli-config.gov.yaml"),
+    )
     ap.add_argument("--baseline", default="docs/governance/baseline-critical-keys.yaml")
     ap.add_argument("--phase", default="P0",
                     help="only enforce keys whose activated_in starts with this (default P0)")

@@ -1,5 +1,5 @@
 """
-Session-scoped context variables for the Hermes gateway.
+Session-scoped context variables for the Lliam-GOV gateway.
 
 Replaces the previous ``os.environ``-based session state
 (``HERMES_SESSION_PLATFORM``, ``HERMES_SESSION_CHAT_ID``, etc.) with
@@ -117,7 +117,9 @@ def set_current_session_id(session_id: str) -> None:
     """
     import os
 
-    os.environ["HERMES_SESSION_ID"] = session_id
+    # Rename R.8a: write the new LLIAM_ name; get_session_env's os.environ
+    # fallback reads LLIAM_ first (then legacy HERMES_) so both paths agree.
+    os.environ["LLIAM_SESSION_ID"] = session_id
     _SESSION_ID.set(session_id)
 
 
@@ -231,7 +233,13 @@ def get_session_env(name: str, default: str = "") -> str:
         value = var.get()
         if value is not _UNSET:
             return value
-    # Fall back to os.environ for CLI, cron, and test compatibility
+    # Fall back to os.environ for CLI, cron, and test compatibility.
+    # Rename R.8a: callers still pass the legacy ``HERMES_SESSION_*`` name, but
+    # producers now write the ``LLIAM_SESSION_*`` name — so check the LLIAM_
+    # variant first, then the legacy name, then the default.
+    if name.startswith("HERMES_"):
+        lliam_name = "LLIAM_" + name[len("HERMES_"):]
+        return os.getenv(lliam_name) or os.getenv(name, default)
     return os.getenv(name, default)
 
 

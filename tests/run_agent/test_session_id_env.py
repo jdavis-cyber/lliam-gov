@@ -1,4 +1,9 @@
-"""Test that HERMES_SESSION_ID is exposed as an env var and ContextVar."""
+"""Test that the session id is exposed as an env var and ContextVar.
+
+Rename R.8a: the producer (AIAgent.__init__) now writes the new
+``LLIAM_SESSION_ID`` name; the legacy-named ``get_session_env`` lookup still
+resolves via the ContextVar / fallback.
+"""
 
 import os
 import sys
@@ -12,14 +17,16 @@ from run_agent import AIAgent
 
 @pytest.fixture(autouse=True)
 def _cleanup_env():
-    """Remove HERMES_SESSION_ID before/after each test."""
+    """Remove the session-id env var (both names) before/after each test."""
+    os.environ.pop("LLIAM_SESSION_ID", None)
     os.environ.pop("HERMES_SESSION_ID", None)
     yield
+    os.environ.pop("LLIAM_SESSION_ID", None)
     os.environ.pop("HERMES_SESSION_ID", None)
 
 
 def test_session_id_env_set_on_init():
-    """AIAgent.__init__ sets HERMES_SESSION_ID in the environment."""
+    """AIAgent.__init__ sets LLIAM_SESSION_ID in the environment."""
     agent = AIAgent(
         api_key="test-key",
         base_url="https://openrouter.ai/api/v1",
@@ -27,12 +34,12 @@ def test_session_id_env_set_on_init():
         skip_context_files=True,
         skip_memory=True,
     )
-    assert os.environ.get("HERMES_SESSION_ID") == agent.session_id
+    assert os.environ.get("LLIAM_SESSION_ID") == agent.session_id
     assert len(agent.session_id) > 0
 
 
 def test_session_id_env_uses_provided_id():
-    """When session_id is passed explicitly, HERMES_SESSION_ID reflects it."""
+    """When session_id is passed explicitly, LLIAM_SESSION_ID reflects it."""
     custom_id = "20260511_120000_abc12345"
     agent = AIAgent(
         api_key="test-key",
@@ -42,7 +49,7 @@ def test_session_id_env_uses_provided_id():
         skip_context_files=True,
         skip_memory=True,
     )
-    assert os.environ["HERMES_SESSION_ID"] == custom_id
+    assert os.environ["LLIAM_SESSION_ID"] == custom_id
     assert agent.session_id == custom_id
 
 

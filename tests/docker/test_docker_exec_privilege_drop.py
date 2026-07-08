@@ -1,8 +1,8 @@
 """Regression tests for the docker-exec privilege-drop shim.
 
-The shim (docker/hermes-exec-shim.sh, installed at /opt/hermes/bin/hermes)
+The shim (docker/lliam-exec-shim.sh, installed at /opt/hermes/bin/hermes)
 exists to prevent the auth.json ownership-mismatch bug where
-`docker exec <c> hermes login` would write /opt/data/auth.json as
+`docker exec <c> lliam-gov login` would write /opt/data/auth.json as
 root:root mode 0600, leaving the supervised gateway (UID 10000) unable
 to read its own credentials and returning "Provider authentication
 failed: Hermes is not logged into Nous Portal" on every message.
@@ -54,7 +54,7 @@ def _wait_for_cont_init(container: str) -> None:
 
     The reliable "cont-init is done" signal is
     ``$HERMES_HOME/logs/container-boot.log``: it is written by
-    ``02-reconcile-profiles`` (hermes_cli.container_boot), which s6 runs
+    ``02-reconcile-profiles`` (lliam_cli.container_boot), which s6 runs
     *strictly after* ``01-hermes-setup`` in lexicographic order. The
     reconciler always logs at least one ``profile=default`` line even for a
     bare ``sleep infinity`` container, so once that marker appears every
@@ -103,7 +103,7 @@ def sleep_container(built_image: str, container_name: str) -> Iterator[str]:
         )
 
 
-def test_shim_drops_root_to_hermes_uid(sleep_container: str) -> None:
+def test_shim_drops_root_to_lliam_uid(sleep_container: str) -> None:
     """docker exec defaults to root; the shim should drop to uid 10000.
 
     We invoke `hermes` with a Python-style `-c` shim equivalent — there's no
@@ -275,7 +275,7 @@ def test_e2e_login_then_supervised_gateway_can_read_auth(
 ) -> None:
     """End-to-end regression for the original bug.
 
-    Pre-shim: ``docker exec <c> hermes login`` (root) wrote
+    Pre-shim: ``docker exec <c> lliam-gov login`` (root) wrote
     /opt/data/auth.json as root:root 0600. The supervised gateway (UID
     10000) couldn't read it, _load_auth_store swallowed PermissionError
     as a parse failure, and resolve_nous_runtime_credentials raised
@@ -287,7 +287,7 @@ def test_e2e_login_then_supervised_gateway_can_read_auth(
     of `_save_auth_store`. If the shim works, every file the
     `docker exec` path produces is hermes-readable.
 
-    Specifically: pretend the operator ran `hermes login` (writes
+    Specifically: pretend the operator ran `lliam-gov login` (writes
     auth.json) and verify (a) the file exists and (b) it's readable by
     the hermes UID. We use `hermes auth list` since that touches the
     auth store on the read side and would fail with the same

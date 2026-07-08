@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+from lliam_cli.env_compat import getenv_compat
 import time
 import urllib.error
 import urllib.parse
@@ -38,7 +39,7 @@ def get(
     if params:
         sep = "&" if "?" in url else "?"
         url = f"{url}{sep}{urllib.parse.urlencode(params)}"
-    h = {"User-Agent": user_agent or os.environ.get("HERMES_OSINT_UA", DEFAULT_UA)}
+    h = {"User-Agent": user_agent or getenv_compat("OSINT_UA", DEFAULT_UA)}
     if headers:
         h.update(headers)
 

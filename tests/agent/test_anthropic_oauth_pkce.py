@@ -57,7 +57,7 @@ def _patch_oauth_flow(
     # run headless, so force the GUI path to True — the URL capture relies on
     # webbrowser.open() being invoked.
     monkeypatch.setattr(
-        "hermes_cli.auth._can_open_graphical_browser", lambda: True
+        "lliam_cli.auth._can_open_graphical_browser", lambda: True
     )
     monkeypatch.setattr("builtins.input", lambda *_a, **_kw: callback_code)
 
@@ -120,9 +120,9 @@ def test_authorization_url_state_is_not_pkce_verifier(monkeypatch, tmp_path):
 
     monkeypatch.setattr(builtins, "input", fake_input)
 
-    from agent.anthropic_adapter import run_hermes_oauth_login_pure
+    from agent.anthropic_adapter import run_lliam_oauth_login_pure
 
-    result = run_hermes_oauth_login_pure()
+    result = run_lliam_oauth_login_pure()
     assert result is not None, "OAuth flow should succeed with matching state"
 
     url = captured_url["url"]
@@ -176,9 +176,9 @@ def test_login_token_exchange_uses_platform_claude_host(monkeypatch, tmp_path):
 
     monkeypatch.setattr(builtins, "input", fake_input)
 
-    from agent.anthropic_adapter import run_hermes_oauth_login_pure
+    from agent.anthropic_adapter import run_lliam_oauth_login_pure
 
-    result = run_hermes_oauth_login_pure()
+    result = run_lliam_oauth_login_pure()
 
     assert result is not None, "login should succeed against the live host"
     assert captured_token["url"] == "https://platform.claude.com/v1/oauth/token", (
@@ -242,9 +242,9 @@ def test_login_token_exchange_falls_back_to_console_host(monkeypatch, tmp_path):
 
     monkeypatch.setattr(builtins, "input", fake_input)
 
-    from agent.anthropic_adapter import run_hermes_oauth_login_pure
+    from agent.anthropic_adapter import run_lliam_oauth_login_pure
 
-    result = run_hermes_oauth_login_pure()
+    result = run_lliam_oauth_login_pure()
 
     assert result is not None, "login should succeed via the console fallback"
     assert attempts == [
@@ -271,9 +271,9 @@ def test_callback_state_mismatch_aborts(monkeypatch, tmp_path, caplog):
         capture_token_request=captured_token,
     )
 
-    from agent.anthropic_adapter import run_hermes_oauth_login_pure
+    from agent.anthropic_adapter import run_lliam_oauth_login_pure
 
-    result = run_hermes_oauth_login_pure()
+    result = run_lliam_oauth_login_pure()
 
     assert result is None, "mismatched state must abort the flow"
     assert "url" not in captured_token, (

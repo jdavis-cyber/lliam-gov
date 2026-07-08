@@ -25,7 +25,7 @@ Context dict passed to ``agent:start`` / ``agent:end`` handlers:
   thread_id    -- Telegram forum-topic id / thread root id (string; empty
                   when not in a thread / topic)
   chat_type    -- "dm" | "group" | "forum" (empty if unknown)
-  session_id   -- Hermes session id
+  session_id   -- Lliam-GOV session id
   message      -- inbound message text (truncated to 500 chars)
 
 ``agent:end`` adds:
@@ -43,10 +43,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 import yaml
 
-from hermes_cli.config import get_hermes_home
+from lliam_cli.config import get_lliam_home
 
 
-HOOKS_DIR = get_hermes_home() / "hooks"
+HOOKS_DIR = get_lliam_home() / "hooks"
 
 
 class HookRegistry:

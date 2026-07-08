@@ -2,18 +2,18 @@
 
 Status: design proposal (not yet implemented)
 Author: drafted for Teknium
-Supersedes: PR #31781 (prompt_toolkit `hermes profile wizard`)
+Supersedes: PR #31781 (prompt_toolkit `lliam-gov profile wizard`)
 
 ## Why this, not the CLI wizard
 
-PR #31781 added a keyboard-driven `hermes profile wizard` in the terminal.
+PR #31781 added a keyboard-driven `lliam-gov profile wizard` in the terminal.
 The decision is to **not** build the profile-creation experience in the CLI.
 The dashboard already owns mature, separate pages for every element a profile
 needs, and a profile is just a HERMES_HOME directory — so the dashboard is the
 right home for a full-featured builder, and it can reuse everything that
 already exists.
 
-A profile = a full `~/.hermes/profiles/<name>/` directory with its own:
+A profile = a full `~/.lliam/profiles/<name>/` directory with its own:
 - `config.yaml` — holds `model`/`provider`, `mcp_servers`, enabled skills
 - `skills/` — physical SKILL.md files (built-in seed + optional + hub installs)
 - `.env` — secrets
@@ -49,7 +49,7 @@ of hub install would write into the dashboard's *own* active profile, not the
 new one.
 
 The correct mechanism is the existing subprocess path: `_spawn_hermes_action`
-runs `python -m hermes_cli.main <subcommand>`, and `_apply_profile_override()`
+runs `python -m lliam_cli.main <subcommand>`, and `_apply_profile_override()`
 re-reads `sys.argv` at import in the fresh child. Prepend `-p <profile>`:
 
 ```python
@@ -71,7 +71,7 @@ create flow is:
 2. write model (synchronous, HERMES_HOME override)
 3. write selected MCP servers (synchronous, HERMES_HOME override)
 4. seed/enable selected built-in + optional skills (synchronous)
-5. spawn `hermes -p <profile> skills install <id>` per hub skill (async, returns PIDs)
+5. spawn `lliam-gov -p <profile> skills install <id>` per hub skill (async, returns PIDs)
 
 Steps 1–4 commit before the response; step 5 returns a list of action PIDs the
 UI polls (same pattern as today's SkillsPage hub install). The builder's

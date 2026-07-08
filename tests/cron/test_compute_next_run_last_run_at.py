@@ -28,7 +28,7 @@ class TestCronComputeNextRunUsesLastRunAt:
 
         # But now it's April 10 at 22:00 (e.g., gateway restarted)
         now = datetime(2026, 4, 10, 22, 0, 0, tzinfo=morocco)
-        monkeypatch.setattr("cron.jobs._hermes_now", lambda: now)
+        monkeypatch.setattr("cron.jobs._lliam_now", lambda: now)
 
         schedule = {"kind": "cron", "expr": "0 */6 * * *"}  # every 6 hours
 
@@ -51,7 +51,7 @@ class TestCronComputeNextRunUsesLastRunAt:
         morocco = ZoneInfo("Africa/Casablanca")
 
         now = datetime(2026, 4, 10, 22, 0, 0, tzinfo=morocco)
-        monkeypatch.setattr("cron.jobs._hermes_now", lambda: now)
+        monkeypatch.setattr("cron.jobs._lliam_now", lambda: now)
 
         schedule = {"kind": "cron", "expr": "0 */6 * * *"}
 
@@ -72,7 +72,7 @@ class TestCronComputeNextRunUsesLastRunAt:
 
         last_run = datetime(2026, 4, 6, 14, 10, 0, tzinfo=morocco)
         now = datetime(2026, 4, 10, 22, 0, 0, tzinfo=morocco)
-        monkeypatch.setattr("cron.jobs._hermes_now", lambda: now)
+        monkeypatch.setattr("cron.jobs._lliam_now", lambda: now)
 
         cron_schedule = {"kind": "cron", "expr": "0 14 * * 1"}
         interval_schedule = {"kind": "interval", "minutes": 7 * 24 * 60}

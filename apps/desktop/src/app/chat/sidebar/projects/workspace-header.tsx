@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { SanitizedInput } from '@/components/ui/sanitized-input'
-import type { HermesGitBranch } from '@/global'
+import type { LliamGitBranch } from '@/global'
 import { useI18n } from '@/i18n'
 import { gitRef } from '@/lib/sanitize'
 import { cn } from '@/lib/utils'
@@ -54,7 +54,7 @@ interface BranchActionCopy {
   branchSwitchHome: string
 }
 
-const branchActionLabel = (branch: HermesGitBranch, copy: BranchActionCopy) => {
+const branchActionLabel = (branch: LliamGitBranch, copy: BranchActionCopy) => {
   if (branch.checkedOut) {
     return copy.branchOpenExisting
   }
@@ -150,7 +150,7 @@ export function StartWorkButton({ repoPath, onStarted }: { repoPath: string; onS
   const [name, setName] = useState('')
   const [pending, setPending] = useState(false)
   const [convertMode, setConvertMode] = useState(false)
-  const [branches, setBranches] = useState<HermesGitBranch[]>([])
+  const [branches, setBranches] = useState<LliamGitBranch[]>([])
   const [branchesLoading, setBranchesLoading] = useState(false)
 
   const loadBranches = useCallback(async () => {
@@ -195,7 +195,7 @@ export function StartWorkButton({ repoPath, onStarted }: { repoPath: string; onS
     }
   }
 
-  const convert = async (branch: HermesGitBranch) => {
+  const convert = async (branch: LliamGitBranch) => {
     if (pending || !repoPath || !branch) {
       return
     }

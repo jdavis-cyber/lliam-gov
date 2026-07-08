@@ -1,6 +1,6 @@
-Homebrew packaging notes for Hermes Agent.
+Homebrew packaging notes for Lliam-GOV.
 
-Use `packaging/homebrew/hermes-agent.rb` as a tap or `homebrew-core` starting point.
+Use `packaging/homebrew/lliam-gov-agent.rb` as a tap or `homebrew-core` starting point.
 
 Key choices:
 - Stable builds should target the semver-named sdist asset attached to each GitHub release, not the CalVer tag tarball.

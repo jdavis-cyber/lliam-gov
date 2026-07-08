@@ -10,13 +10,14 @@ Routes messages to the appropriate destination based on:
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
 
-from hermes_cli.config import get_hermes_home
+from lliam_cli.config import get_lliam_home
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +196,7 @@ class DeliveryRouter:
         """
         self.config = config
         self.adapters = adapters or {}
-        self.output_dir = get_hermes_home() / "cron" / "output"
+        self.output_dir = get_lliam_home() / "cron" / "output"
     
     async def deliver(
         self,
@@ -288,7 +289,7 @@ class DeliveryRouter:
     def _save_full_output(self, content: str, job_id: str) -> Path:
         """Save full cron output to disk and return the file path."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_dir = get_hermes_home() / "cron" / "output"
+        out_dir = get_lliam_home() / "cron" / "output"
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"{job_id}_{timestamp}.txt"
         path.write_text(content)
@@ -301,7 +302,7 @@ class DeliveryRouter:
         otherwise the ``gateway.filter_silence_narration`` config flag wins
         (default True).
         """
-        env = os.getenv("HERMES_FILTER_SILENCE_NARRATION")
+        env = getenv_compat("FILTER_SILENCE_NARRATION")
         if env is not None:
             return env.strip().lower() in ("1", "true", "yes", "on")
         return bool(getattr(self.config, "filter_silence_narration", True))

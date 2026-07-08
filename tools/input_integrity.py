@@ -1,6 +1,6 @@
 """tools/input_integrity.py — Lliam-GOV input-integrity & path-safety gate.
 
-ADDITIVE OVERLAY MODULE — no existing Hermes/Lliam module, file, CLI command,
+ADDITIVE OVERLAY MODULE — no existing Lliam-GOV/Lliam module, file, CLI command,
 tool name, or scanner identifier is renamed, moved, or refactored. (PATH-FREEZE.)
 
 Realizes (the P0.5 hardening — "treat untrusted content as hostile"):
@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -51,8 +52,8 @@ _SCHEMA_REJECT_LOGGED: set = set()
 
 def _is_strict() -> bool:
     try:
-        from hermes_cli import config as _cfg
-        from hermes_cli import posture_resolver as _pr
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
         return _pr.is_strict(_cfg.load_config())
     except Exception:
         return False
@@ -60,7 +61,7 @@ def _is_strict() -> bool:
 
 def _security_cfg() -> Dict[str, Any]:
     try:
-        from hermes_cli import config as _cfg
+        from lliam_cli import config as _cfg
         return (_cfg.load_config().get("security") or {})
     except Exception:
         return {}
@@ -68,13 +69,13 @@ def _security_cfg() -> Dict[str, Any]:
 
 def _candidate_policy_paths() -> List[Path]:
     paths: List[Path] = []
-    env = os.environ.get("HERMES_INPUT_POLICY")
+    env = getenv_compat("INPUT_POLICY")
     if env and env.strip():
         paths.append(Path(env).expanduser())
-    home = os.environ.get("HERMES_HOME")
+    home = getenv_compat("HOME")
     if home:
         paths.append(Path(home).expanduser() / "policy" / _POLICY_FILENAME)
-    overlay = os.environ.get("HERMES_CONFIG")
+    overlay = getenv_compat("CONFIG")
     if overlay:
         paths.append(Path(overlay).expanduser().parent / "policy" / _POLICY_FILENAME)
     paths.append(Path(__file__).resolve().parent.parent / "policy" / _POLICY_FILENAME)

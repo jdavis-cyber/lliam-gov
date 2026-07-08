@@ -12,7 +12,7 @@ import {
   type MessagingEnvVarInfo,
   type MessagingPlatformInfo,
   updateMessagingPlatform
-} from '@/hermes'
+} from '@/lliam'
 import { type Translations, useI18n } from '@/i18n'
 import { openExternalLink } from '@/lib/external-link'
 import { AlertTriangle, ExternalLink, Save, Trash2 } from '@/lib/icons'
@@ -553,7 +553,7 @@ const PLATFORM_INTRO: Record<string, string> = {
   wecom_callback:
     'Set up a WeCom self-built app, expose its callback URL, and provide the corp ID, secret, agent ID, and AES key.',
   weixin:
-    "Run `hermes gateway setup`, select Weixin, then scan and confirm the QR code with a personal WeChat account. LLIAM-GOV connects through Tencent's iLink Bot API and saves the credentials.",
+    "Run `lliam-gov gateway setup`, select Weixin, then scan and confirm the QR code with a personal WeChat account. LLIAM-GOV connects through Tencent's iLink Bot API and saves the credentials.",
   qqbot: 'Register an app on the QQ Open Platform (q.qq.com) and copy the App ID and Client Secret.',
   api_server:
     'Expose LLIAM-GOV as an OpenAI-compatible API. Set an auth key, then point Open WebUI / LobeChat / etc. at the host:port.',

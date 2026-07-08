@@ -36,7 +36,7 @@ Public API
 - :func:`resolve_bundle_command_key` — map a user-typed command to its slug
 - :func:`build_bundle_invocation_message` — produce the full user message
 - :func:`reload_bundles` — re-scan disk and return a diff
-- :func:`list_bundles` — return rich info for display (``hermes bundles``)
+- :func:`list_bundles` — return rich info for display (``lliam-gov bundles``)
 - :func:`save_bundle` / :func:`delete_bundle` — file-level operations
 """
 
@@ -44,13 +44,14 @@ from __future__ import annotations
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-from hermes_constants import get_hermes_home
+from lliam_constants import get_lliam_home
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +70,10 @@ def _bundles_dir() -> Path:
     Honors ``HERMES_BUNDLES_DIR`` for tests; falls back to
     ``<HERMES_HOME>/skill-bundles``.
     """
-    override = os.environ.get("HERMES_BUNDLES_DIR")
+    override = getenv_compat("BUNDLES_DIR")
     if override:
         return Path(override).expanduser()
-    return get_hermes_home() / "skill-bundles"
+    return get_lliam_home() / "skill-bundles"
 
 
 def _slugify(name: str) -> str:
@@ -341,7 +342,7 @@ def build_bundle_invocation_message(
 
 
 # ---------------------------------------------------------------------------
-# File-level CRUD helpers — used by `hermes bundles` CLI subcommand.
+# File-level CRUD helpers — used by `lliam-gov bundles` CLI subcommand.
 # ---------------------------------------------------------------------------
 
 

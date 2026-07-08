@@ -10,7 +10,7 @@ Configuration
 Secret (lives in $HERMES_HOME/.env or the environment):
   MEM0_API_KEY       — Mem0 Platform API key (required for platform mode)
 
-Behavioral settings (live in $HERMES_HOME/mem0.json, set via `hermes memory
+Behavioral settings (live in $HERMES_HOME/mem0.json, set via `lliam-gov memory
 setup`):
   mode               — Backend mode: "platform" (default) or "oss"
   user_id            — Canonical user identifier. When set, it is applied
@@ -75,7 +75,7 @@ def _load_config() -> dict:
     individual keys.  This avoids a silent failure when the JSON file exists
     but is missing fields like ``api_key`` that the user set in ``.env``.
     """
-    from hermes_constants import get_hermes_home
+    from lliam_constants import get_lliam_home
 
     config = {
         "mode": os.environ.get("MEM0_MODE", "platform"),
@@ -90,7 +90,7 @@ def _load_config() -> dict:
     if env_user_id:
         config["user_id"] = env_user_id
 
-    config_path = get_hermes_home() / "mem0.json"
+    config_path = get_lliam_home() / "mem0.json"
     if config_path.exists():
         try:
             file_cfg = json.loads(config_path.read_text(encoding="utf-8"))
@@ -219,11 +219,11 @@ class Mem0MemoryProvider(MemoryProvider):
             return bool(cfg.get("oss", {}).get("vector_store"))
         return bool(cfg.get("api_key"))
 
-    def save_config(self, values, hermes_home):
+    def save_config(self, values, lliam_home):
         """Write config to $HERMES_HOME/mem0.json."""
         import json
         from pathlib import Path
-        config_path = Path(hermes_home) / "mem0.json"
+        config_path = Path(lliam_home) / "mem0.json"
         existing = {}
         if config_path.exists():
             try:
@@ -245,9 +245,9 @@ class Mem0MemoryProvider(MemoryProvider):
             {"key": "rerank", "description": "Enable reranking for recall", "default": "true", "choices": ["true", "false"]},
         ]
 
-    def post_setup(self, hermes_home: str, config: dict) -> None:
+    def post_setup(self, lliam_home: str, config: dict) -> None:
         from ._setup import post_setup
-        post_setup(hermes_home, config)
+        post_setup(lliam_home, config)
 
     def _create_backend(self):
         try:

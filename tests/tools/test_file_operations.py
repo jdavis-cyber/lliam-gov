@@ -76,19 +76,19 @@ class TestIsWriteDenied:
     )
     def test_oauth_mcp_tokens_and_pairing_denied(self, path):
         """PKCE creds, mcp-tokens, and pairing entries must be write-denied."""
-        from hermes_constants import get_hermes_home
-        hermes_home = get_hermes_home()
-        full_path = str(hermes_home / path)
+        from lliam_constants import get_lliam_home
+        lliam_home = get_lliam_home()
+        full_path = str(lliam_home / path)
         assert _is_write_denied(full_path) is True
 
     @pytest.mark.parametrize(
         "path",
         ["auth.json", "config.yaml", "webhook_subscriptions.json"],
     )
-    def test_hermes_control_files_requested_writable(self, path):
-        from hermes_constants import get_hermes_home
+    def test_lliam_control_files_requested_writable(self, path):
+        from lliam_constants import get_lliam_home
 
-        assert _is_write_denied(str(get_hermes_home() / path)) is False
+        assert _is_write_denied(str(get_lliam_home() / path)) is False
 
     @pytest.mark.parametrize(
         "path",
@@ -98,9 +98,9 @@ class TestIsWriteDenied:
     )
     def test_oauth_traversal_denied(self, path):
         """Path traversal attempts to protected OAuth files must be blocked."""
-        from hermes_constants import get_hermes_home
-        hermes_home = get_hermes_home()
-        full_path = str(hermes_home / path)
+        from lliam_constants import get_lliam_home
+        lliam_home = get_lliam_home()
+        full_path = str(lliam_home / path)
         assert _is_write_denied(full_path) is True
 
     @pytest.mark.parametrize(

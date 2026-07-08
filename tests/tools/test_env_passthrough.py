@@ -163,10 +163,10 @@ class TestTerminalIntegration:
     """Verify that the passthrough is checked in terminal's env sanitizers."""
 
     def test_blocklisted_var_blocked_by_default(self):
-        from tools.environments.local import _sanitize_subprocess_env, _HERMES_PROVIDER_ENV_BLOCKLIST
+        from tools.environments.local import _sanitize_subprocess_env, _LLIAM_PROVIDER_ENV_BLOCKLIST
 
         # Pick a var we know is in the blocklist
-        blocked_var = next(iter(_HERMES_PROVIDER_ENV_BLOCKLIST))
+        blocked_var = next(iter(_LLIAM_PROVIDER_ENV_BLOCKLIST))
         env = {blocked_var: "secret_value", "PATH": "/usr/bin"}
         result = _sanitize_subprocess_env(env)
         assert blocked_var not in result
@@ -174,15 +174,15 @@ class TestTerminalIntegration:
 
     def test_passthrough_cannot_override_provider_blocklist(self):
         """GHSA-rhgp-j443-p4rf: register_env_passthrough must NOT accept
-        Hermes provider credentials — that was the bypass where a skill
+        Lliam-GOV provider credentials — that was the bypass where a skill
         could declare ANTHROPIC_TOKEN / OPENAI_API_KEY as passthrough and
         defeat the execute_code sandbox scrubbing."""
         from tools.environments.local import (
             _sanitize_subprocess_env,
-            _HERMES_PROVIDER_ENV_BLOCKLIST,
+            _LLIAM_PROVIDER_ENV_BLOCKLIST,
         )
 
-        blocked_var = next(iter(_HERMES_PROVIDER_ENV_BLOCKLIST))
+        blocked_var = next(iter(_LLIAM_PROVIDER_ENV_BLOCKLIST))
         # Attempt to register — must be silently refused (logged warning).
         register_env_passthrough([blocked_var])
 
@@ -200,10 +200,10 @@ class TestTerminalIntegration:
         even after a skill attempts to register it via passthrough."""
         from tools.environments.local import (
             _make_run_env,
-            _HERMES_PROVIDER_ENV_BLOCKLIST,
+            _LLIAM_PROVIDER_ENV_BLOCKLIST,
         )
 
-        blocked_var = next(iter(_HERMES_PROVIDER_ENV_BLOCKLIST))
+        blocked_var = next(iter(_LLIAM_PROVIDER_ENV_BLOCKLIST))
         os.environ[blocked_var] = "secret_value"
         try:
             # Without passthrough — blocked
@@ -217,9 +217,9 @@ class TestTerminalIntegration:
         finally:
             os.environ.pop(blocked_var, None)
 
-    def test_non_hermes_api_key_still_registerable(self):
+    def test_non_lliam_api_key_still_registerable(self):
         """Third-party API keys (TENOR_API_KEY, NOTION_TOKEN, etc.) are NOT
-        Hermes provider credentials and must still pass through — skills
+        Lliam-GOV provider credentials and must still pass through — skills
         that legitimately wrap third-party APIs must keep working."""
         # TENOR_API_KEY is a real example — used by the gif-search skill
         register_env_passthrough(["TENOR_API_KEY"])
@@ -232,7 +232,7 @@ class TestTerminalIntegration:
     def test_provider_blocklist_import_failure_fails_closed(self, monkeypatch):
         """If the dynamic provider blocklist can't be imported, provider
         credentials must be treated as protected and refused passthrough —
-        otherwise a skill could tunnel a Hermes credential into the
+        otherwise a skill could tunnel a Lliam-GOV credential into the
         execute_code child (regression for #37950 / GHSA-rhgp-j443-p4rf).
 
         Verifies the full path: _is_hermes_provider_credential returns True,
@@ -255,9 +255,9 @@ class TestTerminalIntegration:
         monkeypatch.setattr(builtins, "__import__", fail_local_import)
 
         # Every name is now treated as a protected provider credential.
-        assert _ep_mod._is_hermes_provider_credential("OPENAI_API_KEY")
-        assert _ep_mod._is_hermes_provider_credential("ANTHROPIC_API_KEY")
-        assert _ep_mod._is_hermes_provider_credential("GH_TOKEN")
+        assert _ep_mod._is_lliam_provider_credential("OPENAI_API_KEY")
+        assert _ep_mod._is_lliam_provider_credential("ANTHROPIC_API_KEY")
+        assert _ep_mod._is_lliam_provider_credential("GH_TOKEN")
 
         # Registration is refused while the blocklist is unavailable.
         register_env_passthrough(["OPENAI_API_KEY", "ANTHROPIC_API_KEY"])

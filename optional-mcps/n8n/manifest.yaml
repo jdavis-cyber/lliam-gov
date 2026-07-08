@@ -5,17 +5,17 @@
 manifest_version: 1
 
 name: n8n
-description: Manage and inspect n8n workflows from Hermes (stdio bridge, no public port).
+description: Manage and inspect n8n workflows from Lliam-GOV (stdio bridge, no public port).
 source: https://github.com/CyberSamuraiX/hermes-n8n-mcp
 
 # How to launch the server once installed. The keys here map 1:1 to the
 # `mcp_servers.<name>` block written into ~/.hermes/config.yaml by the
-# existing `_save_mcp_server()` helper in hermes_cli/mcp_config.py.
+# existing `_save_mcp_server()` helper in lliam_cli/mcp_config.py.
 transport:
   type: stdio
   # For git-installed servers, ${INSTALL_DIR} is substituted at install time
   # with the path the catalog cloned the repo into. The catalog never
-  # auto-updates: the user re-runs `hermes mcp install official/n8n` to
+  # auto-updates: the user re-runs `lliam-gov mcp install official/n8n` to
   # refresh.
   command: "${INSTALL_DIR}/.venv/bin/python"
   args:
@@ -74,4 +74,4 @@ post_install: |
   Workflow activate/deactivate calls are real mutations against your live n8n.
   Treat them carefully.
 
-  Start a new Hermes session to load the n8n tools.
+  Start a new Lliam-GOV session to load the n8n tools.

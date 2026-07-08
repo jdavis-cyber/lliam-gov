@@ -67,7 +67,7 @@ import secrets
 import time
 from typing import Any, Optional
 
-from hermes_cli.dashboard_auth import (
+from lliam_cli.dashboard_auth import (
     DashboardAuthProvider,
     InvalidCredentialsError,
     LoginStart,
@@ -339,7 +339,7 @@ def _load_config_basic_auth_section() -> dict:
     not being a dict — every shape falls through to ``{}``.
     """
     try:
-        from hermes_cli.config import cfg_get, load_config
+        from lliam_cli.config import cfg_get, load_config
 
         cfg = load_config()
     except Exception as exc:  # noqa: BLE001 — broad catch is intentional
@@ -447,8 +447,10 @@ def register(ctx) -> None:
     #   * env password set        → hash it (overrides any config hash)
     #   * else config password_hash set → use it
     #   * else config plaintext password → hash it in-memory
-    plaintext_from_env = os.environ.get(
-        "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD", ""
+    # rename R.8a: LLIAM_ first, legacy HERMES_ fallback (inline two-name).
+    plaintext_from_env = (
+        os.environ.get("LLIAM_DASHBOARD_BASIC_AUTH_PASSWORD")
+        or os.environ.get("HERMES_DASHBOARD_BASIC_AUTH_PASSWORD", "")
     ).strip()
     if plaintext_from_env:
         password_hash = hash_password(plaintext_from_env)

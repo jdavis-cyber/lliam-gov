@@ -334,7 +334,7 @@ class TestExecuteCodeModeIntegration(unittest.TestCase):
                 f"project-mode python should be under VIRTUAL_ENV={ve} or sys.executable={sys.executable}, got {output}",
             )
 
-    def test_project_mode_can_still_import_hermes_tools(self):
+    def test_project_mode_can_still_import_lliam_tools(self):
         """Regression: hermes_tools still importable from non-tmpdir CWD.
 
         This is the PYTHONPATH fix — without it, switching to session CWD
@@ -351,7 +351,7 @@ class TestExecuteCodeModeIntegration(unittest.TestCase):
             self.assertEqual(result["status"], "success")
             self.assertIn("mock", result["output"])
 
-    def test_strict_mode_can_still_import_hermes_tools(self):
+    def test_strict_mode_can_still_import_lliam_tools(self):
         """Regression: strict mode's tmpdir CWD still works for imports."""
         code = (
             "from hermes_tools import terminal\n"

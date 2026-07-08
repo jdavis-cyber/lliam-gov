@@ -13,7 +13,7 @@ from __future__ import annotations
 from tests.docker.conftest import docker_exec_sh, start_container
 
 
-def test_puid_pgid_remaps_hermes_user(
+def test_puid_pgid_remaps_lliam_user(
     built_image: str, container_name: str,
 ) -> None:
     """PUID=1000 PGID=1000 must remap the hermes user to UID 1000."""
@@ -38,7 +38,7 @@ def test_puid_pgid_remaps_hermes_user(
     )
 
 
-def test_hermes_uid_gid_take_precedence_over_aliases(
+def test_lliam_uid_gid_take_precedence_over_aliases(
     built_image: str, container_name: str,
 ) -> None:
     """HERMES_UID/HERMES_GID must win over PUID/PGID when both are set."""

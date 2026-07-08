@@ -18,7 +18,7 @@ from tests.docker.conftest import (
 )
 
 
-def test_install_tree_not_writable_by_hermes(
+def test_install_tree_not_writable_by_lliam(
     built_image: str, container_name: str,
 ) -> None:
     """The hermes user must not be able to modify /opt/hermes.
@@ -53,7 +53,7 @@ def test_install_tree_not_writable_by_hermes(
     )
 
 
-def test_hermes_disable_lazy_installs_and_dont_write_bytecode(
+def test_lliam_disable_lazy_installs_and_dont_write_bytecode(
     built_image: str, container_name: str,
 ) -> None:
     """The container must set PYTHONDONTWRITEBYTECODE and

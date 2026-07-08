@@ -100,7 +100,7 @@ def test_verify_on_stop_auto_messaging_platform_is_case_insensitive(clear_verify
     assert verify_on_stop_enabled({"agent": {"verify_on_stop": "auto"}}) is False
 
 
-def test_verify_on_stop_auto_uses_hermes_platform_override(clear_verify_env):
+def test_verify_on_stop_auto_uses_lliam_platform_override(clear_verify_env):
     # HERMES_PLATFORM mirrors the sibling platform resolution and also flags a
     # messaging surface under the "auto" sentinel.
     clear_verify_env.setenv("HERMES_PLATFORM", "discord")
@@ -146,7 +146,7 @@ def test_verify_on_stop_default_path_through_load_config(tmp_path, clear_verify_
     # exercise.
     clear_verify_env.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
 
-    from hermes_cli.config import load_config
+    from lliam_cli.config import load_config
 
     merged = load_config()
     assert merged["agent"]["verify_on_stop"] is False

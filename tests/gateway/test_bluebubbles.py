@@ -137,7 +137,7 @@ class TestBlueBubblesHelpers:
         adapter = _make_adapter(monkeypatch, server_url="localhost:1234")
         assert adapter.server_url == "http://localhost:1234"
 
-    def test_default_mention_patterns_match_hermes_variants(self, monkeypatch):
+    def test_default_mention_patterns_match_lliam_variants(self, monkeypatch):
         adapter = _make_adapter(monkeypatch, require_mention=True)
 
         assert adapter.require_mention is True

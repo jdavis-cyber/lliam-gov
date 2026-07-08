@@ -70,7 +70,7 @@ moa:
 
 
 def test_moa_runtime_provider_uses_virtual_endpoint():
-    from hermes_cli.runtime_provider import resolve_runtime_provider
+    from lliam_cli.runtime_provider import resolve_runtime_provider
 
     runtime = resolve_runtime_provider(requested="moa", target_model="review")
 
@@ -161,7 +161,7 @@ def test_moa_slots_routed_through_resolve_runtime_provider(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "hermes_cli.runtime_provider.resolve_runtime_provider", fake_resolve
+        "lliam_cli.runtime_provider.resolve_runtime_provider", fake_resolve
     )
 
     rt = moa_loop._slot_runtime({"provider": "minimax", "model": "MiniMax-M2"})
@@ -190,7 +190,7 @@ def test_moa_codex_slot_preserves_provider_identity(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "hermes_cli.runtime_provider.resolve_runtime_provider", fake_resolve
+        "lliam_cli.runtime_provider.resolve_runtime_provider", fake_resolve
     )
 
     rt = moa_loop._slot_runtime({"provider": "openai-codex", "model": "gpt-5.5"})
@@ -207,7 +207,7 @@ def test_moa_slot_runtime_falls_back_on_resolution_error(monkeypatch):
         raise RuntimeError("unknown provider")
 
     monkeypatch.setattr(
-        "hermes_cli.runtime_provider.resolve_runtime_provider", boom
+        "lliam_cli.runtime_provider.resolve_runtime_provider", boom
     )
 
     rt = moa_loop._slot_runtime({"provider": "mystery", "model": "x"})

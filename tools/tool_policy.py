@@ -1,6 +1,6 @@
 """tools/tool_policy.py — Lliam-GOV skill/tool enablement gate (least functionality).
 
-ADDITIVE OVERLAY MODULE — no existing Hermes/Lliam module, file, CLI command,
+ADDITIVE OVERLAY MODULE — no existing Lliam-GOV/Lliam module, file, CLI command,
 tool name, skill path, or scanner identifier is renamed, moved, or refactored by
 anything in here. (PATH-FREEZE.)
 
@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
@@ -95,8 +96,8 @@ def _as_set(values: Any) -> Set[str]:
 def _is_strict() -> bool:
     """True when the effective gov config posture is strict (no-op otherwise)."""
     try:
-        from hermes_cli import config as _cfg
-        from hermes_cli import posture_resolver as _pr
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
         return _pr.is_strict(_cfg.load_config())
     except Exception:
         return False
@@ -104,13 +105,13 @@ def _is_strict() -> bool:
 
 def _candidate_policy_paths() -> List[Path]:
     paths: List[Path] = []
-    env = os.environ.get("HERMES_SKILL_POLICY")
+    env = getenv_compat("SKILL_POLICY")
     if env and env.strip():
         paths.append(Path(env).expanduser())
-    home = os.environ.get("HERMES_HOME")
+    home = getenv_compat("HOME")
     if home:
         paths.append(Path(home).expanduser() / "policy" / _POLICY_FILENAME)
-    overlay = os.environ.get("HERMES_CONFIG")
+    overlay = getenv_compat("CONFIG")
     if overlay:
         paths.append(Path(overlay).expanduser().parent / "policy" / _POLICY_FILENAME)
     # Repo-relative fallback (clone layout: <repo>/policy/skills-allowlist.yaml)
@@ -154,7 +155,7 @@ def load_skill_policy() -> Dict[str, Any]:
 def _effective_config_disabled() -> Set[str]:
     """skills.disabled from the OVERLAY-aware effective config (load_config)."""
     try:
-        from hermes_cli import config as _cfg
+        from lliam_cli import config as _cfg
         cfg = _cfg.load_config()
         return _as_set((cfg.get("skills") or {}).get("disabled"))
     except Exception:
@@ -230,19 +231,21 @@ def _tag_denied_installed_names() -> Set[str]:
     if cached is not None:
         return cached
     denied: Set[str] = set()
+    iter_skills = None
     try:
-        from agent.skill_utils import iter_skill_index_files as _iter_skills
+        from agent.skill_utils import iter_skill_index_files
+        iter_skills = iter_skill_index_files
     except Exception:
-        _iter_skills = None
+        pass
     for d in dirs:
         try:
             # Match the loader's nested-aware traversal (category/name/SKILL.md),
-            # not just top-level */SKILL.md. Hermes discovery walks skills
+            # not just top-level */SKILL.md. Lliam-GOV discovery walks skills
             # recursively via iter_skill_index_files, so a re-vendored offensive
             # skill placed under a supported nested category is still registered
             # — the deny-tag backstop must cover the same paths or it is bypassed
             # under strict posture. (LG-SC-01/02)
-            index = _iter_skills(d, "SKILL.md") if _iter_skills else d.glob("*/SKILL.md")
+            index = iter_skills(d, "SKILL.md") if iter_skills else d.glob("*/SKILL.md")
             for md in index:
                 meta = _skill_meta(md.parent)
                 if not meta:
@@ -414,7 +417,7 @@ def tool_denied(tool_name: str) -> bool:
     if not _is_strict():
         return False
     try:
-        from hermes_cli import config as _cfg
+        from lliam_cli import config as _cfg
         sec = (_cfg.load_config().get("security") or {})
         return (tool_name or "").strip() in _as_set(sec.get("tool_denylist"))
     except Exception:

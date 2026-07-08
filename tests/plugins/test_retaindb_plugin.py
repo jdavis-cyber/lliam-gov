@@ -20,9 +20,9 @@ import pytest
 @pytest.fixture(autouse=True)
 def _isolate_env(tmp_path, monkeypatch):
     """Ensure HERMES_HOME and RETAINDB vars are isolated."""
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+    lliam_home = tmp_path / ".hermes"
+    lliam_home.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(lliam_home))
     monkeypatch.delenv("RETAINDB_API_KEY", raising=False)
     monkeypatch.delenv("RETAINDB_BASE_URL", raising=False)
     monkeypatch.delenv("RETAINDB_PROJECT", raising=False)
@@ -537,11 +537,11 @@ class TestPrefetch:
 
     def _make_initialized_provider(self, tmp_path, monkeypatch):
         monkeypatch.setenv("RETAINDB_API_KEY", "rdb-test-key")
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir(exist_ok=True)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir(exist_ok=True)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         p = RetainDBMemoryProvider()
-        p.initialize("test-session", hermes_home=str(hermes_home))
+        p.initialize("test-session", hermes_home=str(lliam_home))
         return p
 
     def test_queue_prefetch_skips_without_client(self):
@@ -637,11 +637,11 @@ class TestSyncTurn:
 
     def test_sync_turn_enqueues(self, tmp_path, monkeypatch):
         monkeypatch.setenv("RETAINDB_API_KEY", "rdb-test-key")
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir(exist_ok=True)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir(exist_ok=True)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         p = RetainDBMemoryProvider()
-        p.initialize("test-session", hermes_home=str(hermes_home))
+        p.initialize("test-session", hermes_home=str(lliam_home))
         with patch.object(p._queue, "enqueue") as mock_enqueue:
             p.sync_turn("user msg", "assistant msg")
             mock_enqueue.assert_called_once()
@@ -656,11 +656,11 @@ class TestSyncTurn:
 
     def test_sync_turn_skips_empty_user_content(self, tmp_path, monkeypatch):
         monkeypatch.setenv("RETAINDB_API_KEY", "rdb-test-key")
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir(exist_ok=True)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir(exist_ok=True)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         p = RetainDBMemoryProvider()
-        p.initialize("test-session", hermes_home=str(hermes_home))
+        p.initialize("test-session", hermes_home=str(lliam_home))
         with patch.object(p._queue, "enqueue") as mock_enqueue:
             p.sync_turn("", "assistant msg")
             mock_enqueue.assert_not_called()
@@ -676,11 +676,11 @@ class TestOnMemoryWrite:
 
     def test_mirrors_add_action(self, tmp_path, monkeypatch):
         monkeypatch.setenv("RETAINDB_API_KEY", "rdb-test-key")
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir(exist_ok=True)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir(exist_ok=True)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         p = RetainDBMemoryProvider()
-        p.initialize("test-session", hermes_home=str(hermes_home))
+        p.initialize("test-session", hermes_home=str(lliam_home))
         with patch.object(p._client, "add_memory", return_value={"id": "mem-1"}) as mock_add:
             p.on_memory_write("add", "user", "User prefers dark mode")
             mock_add.assert_called_once()
@@ -689,11 +689,11 @@ class TestOnMemoryWrite:
 
     def test_skips_non_add_action(self, tmp_path, monkeypatch):
         monkeypatch.setenv("RETAINDB_API_KEY", "rdb-test-key")
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir(exist_ok=True)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir(exist_ok=True)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         p = RetainDBMemoryProvider()
-        p.initialize("test-session", hermes_home=str(hermes_home))
+        p.initialize("test-session", hermes_home=str(lliam_home))
         with patch.object(p._client, "add_memory") as mock_add:
             p.on_memory_write("remove", "user", "something")
             mock_add.assert_not_called()
@@ -701,11 +701,11 @@ class TestOnMemoryWrite:
 
     def test_skips_empty_content(self, tmp_path, monkeypatch):
         monkeypatch.setenv("RETAINDB_API_KEY", "rdb-test-key")
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir(exist_ok=True)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir(exist_ok=True)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         p = RetainDBMemoryProvider()
-        p.initialize("test-session", hermes_home=str(hermes_home))
+        p.initialize("test-session", hermes_home=str(lliam_home))
         with patch.object(p._client, "add_memory") as mock_add:
             p.on_memory_write("add", "user", "")
             mock_add.assert_not_called()
@@ -713,11 +713,11 @@ class TestOnMemoryWrite:
 
     def test_memory_target_maps_to_type(self, tmp_path, monkeypatch):
         monkeypatch.setenv("RETAINDB_API_KEY", "rdb-test-key")
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir(exist_ok=True)
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        lliam_home = tmp_path / ".hermes"
+        lliam_home.mkdir(exist_ok=True)
+        monkeypatch.setenv("HERMES_HOME", str(lliam_home))
         p = RetainDBMemoryProvider()
-        p.initialize("test-session", hermes_home=str(hermes_home))
+        p.initialize("test-session", hermes_home=str(lliam_home))
         with patch.object(p._client, "add_memory", return_value={"id": "mem-1"}) as mock_add:
             p.on_memory_write("add", "memory", "Some env fact")
             assert mock_add.call_args[1]["memory_type"] == "factual"

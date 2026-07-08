@@ -3,7 +3,7 @@
 Reasoning models (Nemotron 3 Ultra, OpenAI o1/o3, Anthropic Opus 4.x
 thinking, DeepSeek R1, Qwen QwQ, xAI Grok reasoning) routinely exceed
 the 180s / 90s chat-model stale-timeout defaults during their
-thinking phase.  Hermes's default cloud-stream stale detector
+thinking phase.  Lliam-GOV's default cloud-stream stale detector
 (``HERMES_STREAM_STALE_TIMEOUT`` = 180s) and non-stream detector
 (``HERMES_API_CALL_STALE_TIMEOUT`` = 90s) both fire before the
 upstream proxy's idle timeout on a healthy reasoning stream.  Result:
@@ -163,7 +163,7 @@ def test_reasoning_floor_applies_to_nemotron_3_ultra(monkeypatch, tmp_path):
 
     # Clear any cached config from prior tests in this session.
     import importlib
-    from hermes_cli import config as cfg_mod, timeouts as to_mod
+    from lliam_cli import config as cfg_mod, timeouts as to_mod
     importlib.reload(cfg_mod)
     importlib.reload(to_mod)
 
@@ -191,7 +191,7 @@ def test_reasoning_floor_applies_to_opus_4_thinking(monkeypatch, tmp_path):
     _write_config(tmp_path, "")
 
     import importlib
-    from hermes_cli import config as cfg_mod, timeouts as to_mod
+    from lliam_cli import config as cfg_mod, timeouts as to_mod
     importlib.reload(cfg_mod)
     importlib.reload(to_mod)
 
@@ -226,7 +226,7 @@ providers:
     monkeypatch.delenv("HERMES_API_CALL_STALE_TIMEOUT", raising=False)
 
     import importlib
-    from hermes_cli import config as cfg_mod, timeouts as to_mod
+    from lliam_cli import config as cfg_mod, timeouts as to_mod
     importlib.reload(cfg_mod)
     importlib.reload(to_mod)
 
@@ -252,7 +252,7 @@ def test_reasoning_floor_loses_to_env_var_when_no_floor_match(monkeypatch, tmp_p
     _write_config(tmp_path, "")
 
     import importlib
-    from hermes_cli import config as cfg_mod, timeouts as to_mod
+    from lliam_cli import config as cfg_mod, timeouts as to_mod
     importlib.reload(cfg_mod)
     importlib.reload(to_mod)
 
@@ -275,7 +275,7 @@ def test_non_reasoning_model_keeps_default(monkeypatch, tmp_path):
     _write_config(tmp_path, "")
 
     import importlib
-    from hermes_cli import config as cfg_mod, timeouts as to_mod
+    from lliam_cli import config as cfg_mod, timeouts as to_mod
     importlib.reload(cfg_mod)
     importlib.reload(to_mod)
 

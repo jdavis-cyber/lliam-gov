@@ -1,5 +1,5 @@
-import type { InputEvent, Key } from '@hermes/ink'
-import * as Ink from '@hermes/ink'
+import type { InputEvent, Key } from '@lliam-gov/ink'
+import * as Ink from '@lliam-gov/ink'
 import { type MutableRefObject, useEffect, useMemo, useRef, useState } from 'react'
 
 import { setInputSelection } from '../app/inputSelectionStore.js'
@@ -14,6 +14,7 @@ import {
   type ParsedVoiceRecordKey
 } from '../lib/platform.js'
 import { isTermuxTuiMode } from '../lib/termux.js'
+import { renv } from '../lib/rebrandEnv.js'
 
 type InkExt = typeof Ink & {
   stringWidth: (s: string) => number
@@ -382,7 +383,7 @@ export function supportsFastEchoTerminal(env: NodeJS.ProcessEnv = process.env): 
   // stale paints at soft-wrap boundaries on tall/narrow viewports. Keep this
   // off by default in Termux mode; allow explicit opt-in for local debugging.
   if (isTermuxTuiMode(env)) {
-    const override = String(env.HERMES_TUI_TERMUX_FAST_ECHO ?? '')
+    const override = String(renv('TUI_TERMUX_FAST_ECHO', env) ?? '')
       .trim()
       .toLowerCase()
 

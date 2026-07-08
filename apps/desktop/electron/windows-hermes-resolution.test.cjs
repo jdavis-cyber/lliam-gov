@@ -1,12 +1,12 @@
 'use strict'
 
-// Regression guards for Windows `hermes` resolution in main.cjs.
+// Regression guards for Windows `lliam-gov` resolution in main.cjs.
 //
 // main.cjs has no module.exports, so these follow the repo's source-assertion
 // test pattern (see windows-child-process.test.cjs). They pin the two Windows
 // resolution bugs that caused desktop reinstall loops:
 //   1. findOnPath() tried the empty extension FIRST, so an extensionless
-//      Git-Bash `hermes` shim shadowed the real hermes.cmd/hermes.exe; the
+//      Git-Bash `lliam-gov` shim shadowed the real hermes.cmd/hermes.exe; the
 //      shim then failed the --version probe and the desktop fell through to a
 //      spurious bootstrap/repair.
 //   2. handOffWindowsBootstrapRecovery() chose --update vs the destructive
@@ -61,7 +61,7 @@ test('Windows bootstrap recovery chooses --update when any real-install signal i
   // The old too-narrow check (only venv\Scripts\hermes.exe) must not return.
   assert.doesNotMatch(
     source,
-    /updaterArgs = fileExists\(venvHermes\) \?/,
+    /updaterArgs = fileExists\(venvLliam\) \?/,
     'recovery regressed to gating only on the hermes.exe shim, which forces destructive --repair'
   )
 })

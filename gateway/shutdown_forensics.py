@@ -168,9 +168,9 @@ def snapshot_shutdown_context(received_signal: Any = None) -> Dict[str, Any]:
     # _PLANNED_STOP_MARKER_FILENAME); we use string literals here so the
     # signal-handler path stays import-light.
     try:
-        hermes_home_str = os.environ.get("HERMES_HOME")
-        if hermes_home_str:
-            takeover_path = Path(hermes_home_str) / ".gateway-takeover.json"
+        lliam_home_str = os.environ.get("HERMES_HOME")
+        if lliam_home_str:
+            takeover_path = Path(lliam_home_str) / ".gateway-takeover.json"
             if takeover_path.exists():
                 try:
                     raw = takeover_path.read_text(encoding="utf-8")
@@ -181,7 +181,7 @@ def snapshot_shutdown_context(received_signal: Any = None) -> Dict[str, Any]:
                     )
                 except OSError:
                     pass
-            planned_stop_path = Path(hermes_home_str) / ".gateway-planned-stop.json"
+            planned_stop_path = Path(lliam_home_str) / ".gateway-planned-stop.json"
             if planned_stop_path.exists():
                 try:
                     raw = planned_stop_path.read_text(encoding="utf-8")
@@ -323,7 +323,7 @@ def check_systemd_timing_alignment(drain_timeout: float) -> Optional[Dict[str, A
     """At startup, sanity-check that systemd's TimeoutStopSec >= drain_timeout.
 
     When the gateway is run under a stale systemd unit file (e.g. the user
-    upgraded hermes-agent but never re-ran ``hermes setup`` to regenerate
+    upgraded hermes-agent but never re-ran ``lliam-gov setup`` to regenerate
     the unit), ``TimeoutStopSec`` can be smaller than the configured
     ``restart_drain_timeout``.  Result: SIGTERM arrives, the drain starts,
     and systemd SIGKILLs the cgroup mid-drain — looks like a phantom kill
@@ -362,7 +362,7 @@ def check_systemd_timing_alignment(drain_timeout: float) -> Optional[Dict[str, A
 
     # Query systemctl for TimeoutStopUSec.  Use --user OR system depending
     # on which manager actually owns the unit.  Try user first since
-    # that's the common case for hermes.
+    # that's the common case for lliam-gov.
     timeout_us: Optional[int] = None
     for flag in (["--user"], []):
         try:
@@ -394,7 +394,7 @@ def check_systemd_timing_alignment(drain_timeout: float) -> Optional[Dict[str, A
     timeout_stop_sec = timeout_us / 1_000_000.0
     # systemd needs headroom for: post-interrupt kill, adapter disconnect,
     # SessionDB close, file unlinks, etc.  30s matches the unit-template
-    # constant in hermes_cli/gateway.py.
+    # constant in lliam_cli/gateway.py.
     headroom = 30.0
     expected = drain_timeout + headroom
     return {

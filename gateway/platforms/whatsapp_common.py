@@ -54,7 +54,7 @@ class WhatsAppBehaviorMixin:
     MAX_MESSAGE_LENGTH: int = 4096
     supports_code_blocks = True  # WhatsApp renders fenced code blocks (monospace)
 
-    DEFAULT_REPLY_PREFIX: str = "⚕ *Hermes Agent*\n────────────\n"
+    DEFAULT_REPLY_PREFIX: str = "⚕ *Lliam-GOV*\n────────────\n"
 
     @property
     def enforces_own_access_policy(self) -> bool:
@@ -423,12 +423,12 @@ def resolve_whatsapp_bridge_dir() -> Path:
     from pathlib import Path as _Path
 
     # Default location in install tree (may be read-only)
-    from hermes_constants import get_hermes_home
+    from lliam_constants import get_lliam_home
     install_bridge = _Path(__file__).resolve().parents[2] / "scripts" / "whatsapp-bridge"
 
     # Try HERMES_HOME location first
-    hermes_home = get_hermes_home()
-    hermes_home_bridge = hermes_home / "scripts" / "whatsapp-bridge"
+    lliam_home = get_lliam_home()
+    lliam_home_bridge = lliam_home / "scripts" / "whatsapp-bridge"
 
     # Check if install dir is writable
     try:
@@ -443,17 +443,17 @@ def resolve_whatsapp_bridge_dir() -> Path:
         return install_bridge
 
     # Install dir is read-only, mirror to HERMES_HOME if needed
-    if hermes_home_bridge.exists():
-        return hermes_home_bridge
+    if lliam_home_bridge.exists():
+        return lliam_home_bridge
 
     # Mirror the bridge source to HERMES_HOME
     try:
-        hermes_home_bridge.parent.mkdir(parents=True, exist_ok=True)
+        lliam_home_bridge.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(
             install_bridge,
-            hermes_home_bridge,
+            lliam_home_bridge,
             dirs_exist_ok=False,
         )
-        return hermes_home_bridge
+        return lliam_home_bridge
     except Exception:
         return install_bridge

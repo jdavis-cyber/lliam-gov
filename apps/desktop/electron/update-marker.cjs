@@ -29,8 +29,8 @@ const path = require('path')
 // recycled the pid onto an unrelated process), so the gate self-heals.
 const UPDATE_MARKER_MAX_AGE_MS = 20 * 60 * 1000
 
-function markerPath(hermesHome) {
-  return path.join(hermesHome, '.hermes-update-in-progress')
+function markerPath(lliamHome) {
+  return path.join(lliamHome, '.hermes-update-in-progress')
 }
 
 // True only if a host process with this pid is currently alive. Signal 0 does
@@ -59,8 +59,8 @@ function isPidAlive(pid, kill = process.kill.bind(process)) {
  * Pure-ish: file I/O against the given path, plus an injectable pid probe and
  * clock for tests.
  */
-function readLiveUpdateMarker(hermesHome, { kill, now = Date.now, maxAgeMs = UPDATE_MARKER_MAX_AGE_MS } = {}) {
-  const file = markerPath(hermesHome)
+function readLiveUpdateMarker(lliamHome, { kill, now = Date.now, maxAgeMs = UPDATE_MARKER_MAX_AGE_MS } = {}) {
+  const file = markerPath(lliamHome)
   let raw
   try {
     raw = fs.readFileSync(file, 'utf8')

@@ -284,7 +284,7 @@ class TestCallbackSubprocess:
         """v1 schema-bug regression gate.
 
         Shell hook returns the Claude-Code-style payload and the bridge
-        must translate it to the canonical Hermes block shape so that
+        must translate it to the canonical Lliam-GOV block shape so that
         get_pre_tool_call_block_message() surfaces the block.
         """
         script = _write_script(
@@ -305,7 +305,7 @@ class TestCallbackSubprocess:
         """Registering via register_from_config makes
         get_pre_tool_call_block_message surface the block — the real
         end-to-end control flow used by run_agent._invoke_tool."""
-        from hermes_cli import plugins
+        from lliam_cli import plugins
 
         script = _write_script(
             tmp_path, "block.sh",
@@ -511,7 +511,7 @@ class TestParseHooksBlock:
 
 class TestIdempotentRegistration:
     def test_double_call_registers_once(self, tmp_path, monkeypatch):
-        from hermes_cli import plugins
+        from lliam_cli import plugins
 
         script = _write_script(tmp_path, "h.sh",
                                "#!/usr/bin/env bash\nprintf '{}\\n'\n")
@@ -535,7 +535,7 @@ class TestIdempotentRegistration:
     ):
         """Same script used for different matchers under one event must
         register both callbacks — dedupe keys on (event, matcher, command)."""
-        from hermes_cli import plugins
+        from lliam_cli import plugins
 
         script = _write_script(tmp_path, "h.sh",
                                "#!/usr/bin/env bash\nprintf '{}\\n'\n")
@@ -644,7 +644,7 @@ class TestAllowlistConcurrency:
         self, tmp_path, monkeypatch, caplog,
     ):
         """Persistence failures must log the path, errno, and
-        re-prompt consequence so "hermes keeps asking" is debuggable."""
+        re-prompt consequence so "lliam-gov keeps asking" is debuggable."""
         import logging
         monkeypatch.setenv("HERMES_HOME", str(tmp_path / "home"))
         monkeypatch.setattr(
@@ -684,7 +684,7 @@ class TestAllowlistConcurrency:
         shlex token, which picked the interpreter (``python3``, ``bash``,
         ``/usr/bin/env``) instead of the actual script for any
         interpreter-prefixed command.  That broke
-        ``hermes hooks doctor``'s executability check and silently
+        ``lliam-gov hooks doctor``'s executability check and silently
         disabled mtime drift detection for such hooks."""
         cases = [
             # bare path

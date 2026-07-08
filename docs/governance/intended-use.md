@@ -8,7 +8,7 @@
 | Control | LG-GV-02 (document mission scope, intended use, prohibited/unacceptable uses) |
 | Status | 0.1 DRAFT — Pending approval |
 
-This statement defines what Lliam-GOV (a governance-hardened fork of Hermes Agent,
+This statement defines what Lliam-GOV (a governance-hardened fork of Lliam-GOV,
 Nous Research, MIT) **is authorized to do**, and what it must **never** do, in a
 U.S. federal/defense environment that processes Controlled Unclassified
 Information (CUI). It is the human-readable companion to the enforced controls in

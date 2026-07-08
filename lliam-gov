@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+"""
+lliam-gov CLI launcher.
+
+This wrapper should behave like the installed `lliam-gov` command, including
+subcommands such as `gateway`, `cron`, and `doctor`.
+"""
+
+if __name__ == "__main__":
+    from lliam_cli.main import main
+    main()

@@ -1,10 +1,10 @@
 """
-`hermes computer-use doctor` — thin client for cua-driver's `health_report` MCP tool.
+`lliam-gov computer-use doctor` — thin client for cua-driver's `health_report` MCP tool.
 
 cua-driver owns the health model (#1908 / be761fac on `main`). This module
 just drives the stdio JSON-RPC handshake, calls `health_report`, and
 renders the structured response. When the driver gets new checks, they
-flow through here without code changes on the Hermes side — the only
+flow through here without code changes on the Lliam-GOV side — the only
 contract is the stable `schema_version="1"` payload shape.
 
 Exit code conventions:
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+from lliam_cli.env_compat import getenv_compat
 import shutil
 import subprocess
 import sys
@@ -38,7 +39,7 @@ _OVERALL_GLYPH = {
 
 
 def _cua_child_env() -> Dict[str, str]:
-    """cua-driver child env with the Hermes telemetry policy applied.
+    """cua-driver child env with the Lliam-GOV telemetry policy applied.
 
     Delegates to ``cua_backend.cua_driver_child_env`` (telemetry disabled by
     default unless the user opts in). Falls back to the current environment
@@ -240,15 +241,15 @@ def run_doctor(
             pass
     if driver_cmd is None:
         try:
-            from hermes_cli.tools_config import _cua_driver_cmd
+            from lliam_cli.tools_config import _cua_driver_cmd
             driver_cmd = _cua_driver_cmd()
         except Exception:
-            driver_cmd = os.environ.get("HERMES_CUA_DRIVER_CMD") or "cua-driver"
+            driver_cmd = getenv_compat("CUA_DRIVER_CMD") or "cua-driver"
 
     binary = shutil.which(driver_cmd)
     if not binary:
         print(f"cua-driver: not installed (looked for {driver_cmd!r}).")
-        print("  Run: hermes computer-use install")
+        print("  Run: lliam-gov computer-use install")
         return 2
 
     try:

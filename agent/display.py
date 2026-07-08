@@ -6,6 +6,7 @@ Used by AIAgent._execute_tool_calls for CLI feedback.
 
 import logging
 import os
+from lliam_cli.env_compat import getenv_compat
 import re
 import sys
 import threading
@@ -47,7 +48,7 @@ def _diff_ansi() -> dict[str, str]:
     plus = "\033[38;2;255;255;255;48;2;20;90;20m"
 
     try:
-        from hermes_cli.skin_engine import get_active_skin
+        from lliam_cli.skin_engine import get_active_skin
         skin = get_active_skin()
 
         def _hex_fg(key: str, fallback_rgb: tuple[int, int, int]) -> str:
@@ -122,7 +123,7 @@ def get_tool_preview_max_len() -> int:
 def _get_skin():
     """Get the active skin config, or None if not available."""
     try:
-        from hermes_cli.skin_engine import get_active_skin
+        from lliam_cli.skin_engine import get_active_skin
         return get_active_skin()
     except Exception:
         return None
@@ -707,7 +708,7 @@ def _emit_inline_diff(diff_text: str, print_fn) -> bool:
 
 
 def _render_inline_unified_diff(diff: str) -> list[str]:
-    """Render unified diff lines in Hermes' inline transcript style."""
+    """Render unified diff lines in Lliam-GOV' inline transcript style."""
     rendered: list[str] = []
     from_file = None
     to_file = None
@@ -986,7 +987,7 @@ class KawaiiSpinner:
         wings = skin.get_spinner_wings() if skin else []
 
         while self.running:
-            if os.getenv("HERMES_SPINNER_PAUSE"):
+            if getenv_compat("SPINNER_PAUSE"):
                 time.sleep(0.1)
                 continue
             frame = self.spinner_frames[self.frame_idx % len(self.spinner_frames)]

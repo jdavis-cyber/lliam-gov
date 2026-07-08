@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live test harness for Hermes Agent's Tool Search feature.
+"""Live test harness for Lliam-GOV's Tool Search feature.
 
 Spins up a real AIAgent against a real model, registers ~20 fake "MCP" tools
 with realistic shapes (github-like, slack-like, calendar-like, search-like),
@@ -32,7 +32,7 @@ import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-# Force-isolate the test environment BEFORE any hermes imports.
+# Force-isolate the test environment BEFORE any lliam-gov imports.
 ORIGINAL_HOME = os.environ.get("HERMES_HOME")
 ORIGINAL_AUTH = Path.home() / ".hermes" / "auth.json"
 
@@ -255,25 +255,25 @@ def setup_isolated_home(enabled: bool) -> Path:
     the agent can authenticate against OpenRouter inside the isolated home.
     """
     home_dir = Path(tempfile.mkdtemp(prefix="hermes_ts_live_"))
-    hermes_home = home_dir / ".hermes"
-    hermes_home.mkdir(parents=True)
+    lliam_home = home_dir / ".hermes"
+    lliam_home.mkdir(parents=True)
 
     if ORIGINAL_AUTH.exists():
-        shutil.copy(ORIGINAL_AUTH, hermes_home / "auth.json")
+        shutil.copy(ORIGINAL_AUTH, lliam_home / "auth.json")
 
     # Copy .env so OPENROUTER_API_KEY (or others) are visible to the agent
     # running inside the isolated home.
     real_env_file = Path.home() / ".hermes" / ".env"
     if real_env_file.exists():
-        shutil.copy(real_env_file, hermes_home / ".env")
+        shutil.copy(real_env_file, lliam_home / ".env")
         # Also load the real user env into this process so the provider
         # resolver can authenticate. We go through the canonical loader
         # (python-dotenv under the hood) rather than parsing the file by
         # hand — it never materializes the secret in a local variable in
         # this module, which both avoids a hand-rolled parser bug and keeps
         # static analysis from tainting the transcript records with the key.
-        from hermes_cli.env_loader import load_hermes_dotenv
-        load_hermes_dotenv(hermes_home=str(Path.home() / ".hermes"))
+        from lliam_cli.env_loader import load_lliam_dotenv
+        load_lliam_dotenv(lliam_home=str(Path.home() / ".hermes"))
 
     cfg = {
         "model": {
@@ -290,8 +290,8 @@ def setup_isolated_home(enabled: bool) -> Path:
         },
         "logging": {"level": "WARNING"},
     }
-    (hermes_home / "config.yaml").write_text(_yaml_dump(cfg), encoding="utf-8")
-    return hermes_home
+    (lliam_home / "config.yaml").write_text(_yaml_dump(cfg), encoding="utf-8")
+    return lliam_home
 
 
 def _yaml_dump(obj: Any) -> str:
@@ -344,7 +344,7 @@ def reset_module_state():
     """Drop cached modules so the new HERMES_HOME takes effect."""
     keys = [k for k in sys.modules.keys()
             if k.startswith(("tools.", "model_tools", "toolsets",
-                             "hermes_cli", "agent.", "run_agent"))]
+                             "lliam_cli", "agent.", "run_agent"))]
     for k in keys:
         del sys.modules[k]
 

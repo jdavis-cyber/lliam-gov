@@ -2,8 +2,8 @@
  * backend-probes.cjs
  *
  * Cheap "does this candidate backend actually work" checks used by
- * resolveHermesBackend (main.cjs). The resolver walks a ladder of
- * candidates -- bootstrap marker, `hermes` on PATH, system Python with
+ * resolveLliamBackend (main.cjs). The resolver walks a ladder of
+ * candidates -- bootstrap marker, `lliam-gov` on PATH, system Python with
  * hermes_cli installed -- and historically returned the first candidate
  * whose binary existed on disk. That assumption breaks when a user has
  * a pre-installed Python 3.11-3.13 (so findSystemPython() returns a
@@ -23,7 +23,7 @@
  *   - 5s timeout (a hung interpreter beats forever, but we still give
  *     slow disks / cold caches room to breathe)
  *   - stdio ignored (we only care about exit code; stdout/stderr are
- *     not surfaced to the user, just to recentHermesLog for forensics
+ *     not surfaced to the user, just to recentLliamLog for forensics
  *     via the caller's catch block if it chooses)
  *   - any throw -> false (never propagate -- resolver wants a boolean)
  *
@@ -37,21 +37,21 @@ const { execFileSync } = require('node:child_process')
 const PROBE_TIMEOUT_MS = 5000
 
 /**
- * Return the Python snippet used to verify Hermes can import far enough to
+ * Return the Python snippet used to verify Lliam-GOV can import far enough to
  * launch the CLI. Kept exported for tests so dependency regressions are
  * caught without needing a real broken venv fixture.
  *
  * @returns {string}
  */
-function hermesRuntimeImportProbe() {
+function lliamRuntimeImportProbe() {
   return 'import yaml; import hermes_cli.config'
 }
 
 /**
- * Return true iff the Hermes runtime import probe exits 0.
+ * Return true iff the Lliam-GOV runtime import probe exits 0.
  *
  * Used to gate the "fallback to system Python with hermes_cli installed"
- * rung of resolveHermesBackend. Without this, a system Python 3.11-3.13
+ * rung of resolveLliamBackend. Without this, a system Python 3.11-3.13
  * registered in PEP 514 makes findSystemPython() succeed regardless of
  * whether hermes_cli has actually been pip-installed into its
  * site-packages -- and the resolver returns a backend that immediately
@@ -66,10 +66,10 @@ function hermesRuntimeImportProbe() {
  * @param {object} [opts.env] - Additional environment for the probe.
  * @returns {boolean}
  */
-function canImportHermesCli(pythonPath, opts = {}) {
+function canImportLliamCli(pythonPath, opts = {}) {
   if (!pythonPath) return false
   try {
-    execFileSync(pythonPath, ['-c', hermesRuntimeImportProbe()], {
+    execFileSync(pythonPath, ['-c', lliamRuntimeImportProbe()], {
       env: { ...process.env, ...(opts.env || {}) },
       stdio: 'ignore',
       timeout: PROBE_TIMEOUT_MS,
@@ -82,30 +82,30 @@ function canImportHermesCli(pythonPath, opts = {}) {
 }
 
 /**
- * Return true iff `<hermesCommand> --version` exits 0.
+ * Return true iff `<lliamCommand> --version` exits 0.
  *
- * Used to gate the "existing `hermes` on PATH" rung. Without this, a
+ * Used to gate the "existing `lliam-gov` on PATH" rung. Without this, a
  * stale hermes.cmd shim left behind by an uninstalled pip install (or
- * a half-built venv whose `hermes` entry-point points at a deleted
+ * a half-built venv whose `lliam-gov` entry-point points at a deleted
  * Python) survives findOnPath() and gets selected as the backend.
  *
  * We intentionally avoid invoking the command with the dashboard args
  * here -- `--version` is the cheapest "is this binary alive" smoke
  * test that every hermes_cli entry-point has supported since 0.1.
  *
- * @param {string} hermesCommand - Resolved absolute path to a hermes
+ * @param {string} lliamCommand - Resolved absolute path to a hermes
  *   executable (or an interpreter+script wrapper).
  * @param {object} [opts]
  * @param {boolean} [opts.shell] - Whether to run through a shell. For
  *   .cmd/.bat shims on Windows execFileSync needs shell:true to find
  *   the cmd interpreter; mirrors the same flag isCommandScript() drives
- *   in resolveHermesBackend.
+ *   in resolveLliamBackend.
  * @returns {boolean}
  */
-function verifyHermesCli(hermesCommand, opts = {}) {
-  if (!hermesCommand) return false
+function verifyLliamCli(lliamCommand, opts = {}) {
+  if (!lliamCommand) return false
   try {
-    execFileSync(hermesCommand, ['--version'], {
+    execFileSync(lliamCommand, ['--version'], {
       stdio: 'ignore',
       timeout: PROBE_TIMEOUT_MS,
       shell: Boolean(opts.shell),
@@ -118,8 +118,8 @@ function verifyHermesCli(hermesCommand, opts = {}) {
 }
 
 module.exports = {
-  canImportHermesCli,
-  hermesRuntimeImportProbe,
-  verifyHermesCli,
+  canImportLliamCli,
+  lliamRuntimeImportProbe,
+  verifyLliamCli,
   PROBE_TIMEOUT_MS
 }

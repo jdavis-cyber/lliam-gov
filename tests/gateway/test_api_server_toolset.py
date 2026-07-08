@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 from toolsets import resolve_toolset, get_toolset, validate_toolset
 
 
-class TestHermesApiServerToolset:
+class TestLliamApiServerToolset:
     """Tests for the hermes-api-server toolset definition."""
 
     def test_toolset_exists(self):
@@ -59,7 +59,7 @@ class TestHermesApiServerToolset:
 
 class TestApiServerPlatformConfig:
     def test_platforms_dict_includes_api_server(self):
-        from hermes_cli.tools_config import PLATFORMS
+        from lliam_cli.tools_config import PLATFORMS
         assert "api_server" in PLATFORMS
         assert PLATFORMS["api_server"]["default_toolset"] == "hermes-api-server"
 

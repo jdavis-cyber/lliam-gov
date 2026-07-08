@@ -30,16 +30,16 @@ class TestWriteDenyExactPaths:
         assert _is_write_denied(path) is True
 
 
-    def test_hermes_env(self):
+    def test_lliam_env(self):
         # ``.env`` under the active HERMES_HOME (profile-aware, not just
         # ``~/.hermes``) must be write-denied. The hermetic test conftest
-        # points HERMES_HOME at a tempdir — resolve via get_hermes_home()
+        # points HERMES_HOME at a tempdir — resolve via get_lliam_home()
         # to match the denylist.
-        from hermes_constants import get_hermes_home
-        path = str(get_hermes_home() / ".env")
+        from lliam_constants import get_lliam_home
+        path = str(get_lliam_home() / ".env")
         assert _is_write_denied(path) is True
 
-    def test_hermes_root_env_when_running_under_profile(self, tmp_path, monkeypatch):
+    def test_lliam_root_env_when_running_under_profile(self, tmp_path, monkeypatch):
         """Top-level ``<root>/.env`` stays write-denied even when running under
         a profile (#15981).
 
@@ -58,9 +58,9 @@ class TestWriteDenyExactPaths:
         monkeypatch.setenv("HERMES_HOME", str(profile_home))
 
         # Sanity check: HERMES_HOME does point to the profile dir, not the root.
-        from hermes_constants import get_hermes_home, get_default_hermes_root
-        assert get_hermes_home() == profile_home
-        assert get_default_hermes_root() == root
+        from lliam_constants import get_lliam_home, get_default_lliam_root
+        assert get_lliam_home() == profile_home
+        assert get_default_lliam_root() == root
 
         assert _is_write_denied(str(global_env)) is True
 
@@ -120,9 +120,9 @@ class TestWriteAllowed:
     def test_project_file(self):
         assert _is_write_denied("/home/user/project/main.py") is False
 
-    def test_hermes_control_files_requested_writable(self):
-        from hermes_constants import get_hermes_home
+    def test_lliam_control_files_requested_writable(self):
+        from lliam_constants import get_lliam_home
 
-        home = get_hermes_home()
+        home = get_lliam_home()
         for name in ["auth.json", "config.yaml", "webhook_subscriptions.json"]:
             assert _is_write_denied(str(home / name)) is False, f"{name} should be writable"
