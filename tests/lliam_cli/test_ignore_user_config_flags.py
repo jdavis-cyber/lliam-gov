@@ -230,7 +230,7 @@ class TestArgparseFlagsRegistered:
         assert args.ignore_rules is True
 
     def test_main_py_registers_both_flags(self):
-        """E2E: the real hermes parser accepts both flags."""
+        """E2E: the real lliam-gov parser accepts both flags."""
         from lliam_cli._parser import build_top_level_parser
 
         parser, _subparsers, chat_parser = build_top_level_parser()

@@ -124,7 +124,7 @@ class TestNonInteractiveSetup:
         assert "Configuration reset to defaults." in out
 
     def test_chat_first_run_headless_skips_setup_prompt(self, capsys):
-        """Bare `hermes` should not prompt for input when no provider exists and stdin is headless."""
+        """Bare `lliam-gov` should not prompt for input when no provider exists and stdin is headless."""
         from lliam_cli.main import cmd_chat
 
         args = _make_chat_args()

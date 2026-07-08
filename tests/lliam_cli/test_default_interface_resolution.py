@@ -1,8 +1,8 @@
 """Tests for the configurable default interface (cli vs tui).
 
-`hermes` launches the classic prompt_toolkit REPL by default, but users can
+`lliam-gov` launches the classic prompt_toolkit REPL by default, but users can
 flip ``display.interface: tui`` in config.yaml to make the modern Ink TUI the
-default for bare ``hermes`` / ``lliam-gov chat``. Explicit flags always win:
+default for bare ``lliam-gov`` / ``lliam-gov chat``. Explicit flags always win:
 
     --cli                forces the classic REPL (highest precedence)
     --tui / HERMES_TUI=1 forces the TUI

@@ -36,7 +36,7 @@ class TestModuleSurface:
         )
 
     def test_expected_lliam_specific_tools_listed(self):
-        """The Hermes-specific tools should be present so users on the
+        """The Lliam-specific tools should be present so users on the
         codex runtime keep access to them."""
         from agent.transports.lliam_tools_mcp_server import EXPOSED_TOOLS
         for required in (

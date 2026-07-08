@@ -203,7 +203,7 @@ class TestBuildAnthropicClient:
 
     def test_disables_sdk_retries_for_api_key(self):
         """#26293: the SDK's default max_retries=2 ignores Retry-After and
-        double-retries inside hermes's outer loop. We delegate retry entirely
+        double-retries inside lliam-gov's outer loop. We delegate retry entirely
         to the outer loop, so the client must be built with max_retries=0."""
         with patch("agent.anthropic_adapter._anthropic_sdk") as mock_sdk:
             build_anthropic_client("sk-ant-api03-something")

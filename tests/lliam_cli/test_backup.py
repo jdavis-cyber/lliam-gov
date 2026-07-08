@@ -2165,7 +2165,7 @@ class TestPreMigrationBackup:
         out = create_pre_migration_backup(lliam_home=lliam_home)
         assert out is not None
         assert out.exists()
-        # Shares the backups/ directory with pre-update backups so `hermes
+        # Shares the backups/ directory with pre-update backups so `lliam-gov
         # import` and the update-backup listing both pick them up.
         assert out.parent == lliam_home / "backups"
         assert out.name.startswith("pre-migration-")

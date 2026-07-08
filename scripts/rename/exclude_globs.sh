@@ -14,10 +14,14 @@
 #           (c) historical evidence/audit logs — frozen, editing them is tampering;
 #           (d) these planning docs — they quote the OLD name on purpose (history);
 #               renaming their hermes mentions would corrupt the record.
+#           (e) the rename keep-register / verify-report — meta-docs that MUST
+#               quote the old name to document the surviving keeps.
 HERMES_EXCLUDES=(
   -g '!**/node_modules/**' -g '!**/.git/**' -g '!**/dist/**' -g '!**/build/**'
   -g '!**/*.egg-info/**' -g '!graphify-out/**' -g '!evidence/**'
   -g '!**/*.lock' -g '!**/package-lock.json'
   -g '!NOTICE' -g '!ATTRIBUTION*' -g '!LICENSE*' -g '!docs/upstream/**'
   -g '!docs/governance/plans/**'   # these plans quote the old name on purpose
+  -g '!docs/governance/verification/*keep-register.md'   # keep-registers document the kept old-name tokens
+  -g '!docs/governance/verification/R-rename-report.md'  # R.V report cites the keeps
 )

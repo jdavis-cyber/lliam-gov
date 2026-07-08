@@ -25,7 +25,7 @@ import argparse
 
 
 def _build_parser():
-    """Minimal replica of the slice of the hermes parser that exhibits
+    """Minimal replica of the slice of the lliam-gov parser that exhibits
     the bug: top-level subparsers (dest="command") and ``mcp add`` with
     its ``--command`` flag.
     """

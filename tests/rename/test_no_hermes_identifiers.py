@@ -35,7 +35,9 @@ from pathlib import Path
 # EXCLUDES: (a) upstream attribution — D4, license obligation;
 #           (b) generated output — regenerated, never hand-renamed;
 #           (c) historical evidence/audit logs — frozen, editing them is tampering;
-#           (d) planning docs — they quote the OLD name on purpose (history).
+#           (d) planning docs — they quote the OLD name on purpose (history);
+#           (e) the rename keep-register / verify-report — meta-docs that MUST
+#               quote the old name to document the surviving keeps.
 # ---------------------------------------------------------------------------
 EXCLUDES = [
     "-g", "!**/node_modules/**", "-g", "!**/.git/**", "-g", "!**/dist/**",
@@ -43,6 +45,8 @@ EXCLUDES = [
     "-g", "!evidence/**", "-g", "!**/*.lock", "-g", "!**/package-lock.json",
     "-g", "!NOTICE", "-g", "!ATTRIBUTION*", "-g", "!LICENSE*", "-g", "!docs/upstream/**",
     "-g", "!docs/governance/plans/**",   # planning docs quote the old name on purpose (history)
+    "-g", "!docs/governance/verification/*keep-register.md",   # keep-registers document the kept old-name tokens
+    "-g", "!docs/governance/verification/R-rename-report.md",  # R.V report cites the keeps
 ]
 
 # ---------------------------------------------------------------------------
@@ -598,6 +602,67 @@ KEEP_PATTERNS += [
      r"C:\\\\hermes|/home/x/\.hermes|hermesHome: home",
      "apps/**/*.test.* fixture data — opaque model ids / tmp prefixes / branch names / ANSI "
      "sample text a test asserts or uses as input, not the product display name"),
+]
+
+# ---------------------------------------------------------------------------
+# R.8e-3c FINAL residual keeps — the last-tail offenders adjudicated 2026-07-08.
+# Every entry here is opaque test-fixture DATA a test asserts/uses, prose that
+# describes a KEPT runtime identity (container command, .hermes mirror marker,
+# log namespace), an external/registered value, or an upstream reference — NOT
+# the product display name. Cross-referenced in
+# docs/governance/verification/R8e-keep-register.md.
+# ---------------------------------------------------------------------------
+KEEP_PATTERNS += [
+    # SKILL.md/blueprint frontmatter `hermes:` metadata-key fixture (schema key)
+    (r'hermes:\\n"', "SKILL.md frontmatter `hermes:` metadata-key fixture — schema key a test constructs"),
+    # Honcho external-service host/peer default identifier fixtures (opaque)
+    (r'resolve_active_host", lambda: "hermes"|peer="hermes"',
+     "Honcho external-service host/peer default identifier fixture a test sets/asserts — opaque data"),
+    # NeMo relay scope handle fixture (opaque)
+    (r"hermes-session-parent-session", "NeMo-relay scope handle fixture value — opaque data"),
+    # Container command/argv identity (docker OS install identity; docker/** is a whole-tree keep)
+    (r"running hermes containers|re-execs .?hermes|explicit .?hermes.? argv0",
+     "test narration describing the KEPT container command/argv `hermes` (docker OS install identity)"),
+    # Toolset-name corruption fixture: `hermes-cli` rewritten to `hermes` (#38798)
+    (r"`hermes` is deliberately absent",
+     "toolset-name `hermes` in the #38798 corruption-detection test (hermes-cli->hermes) — opaque asserted data"),
+    # Generated skill-doc example `owner` field fixture
+    (r'"owner":\s*"hermes"', "generated skill-catalog example `owner` field fixture value — opaque data"),
+    # pytest tmp-dir path segments + SUDO_USER fixture (opaque)
+    (r'"home"\s*/\s*"hermes"|"opt"\s*/\s*"hermes"|"adapters"\s*/\s*"hermes"',
+     "pytest tmp-dir path-segment fixture (home/opt/adapters) — opaque data"),
+    (r'SUDO_USER", "hermes"', "SUDO_USER env fixture value — opaque OS-account data"),
+    # OpenClaw->Hermes migration posture reference (openclaw migration is a whole-tree keep)
+    (r"migrate-hermes", "OpenClaw->Hermes migration posture reference — the kept openclaw-migration identity"),
+    # Log-routing channel namespace (same stable namespace as getLogger('hermes.<x>'))
+    (r'logger="hermes\.[a-z_.]+"', "log-channel namespace passed to caplog — stable log-routing namespace"),
+    # OpenViking memory-provider peer_id fixture (opaque external-service datum)
+    (r'"peer_id":\s*"hermes"', "OpenViking memory-provider peer_id fixture value — opaque external-service datum"),
+    # Nous-Hermes model-name detection substring narration (upstream model detection)
+    (r'"hermes".{0,4}anywhere', "Nous-Hermes model-name detection substring narration — upstream model detection"),
+    # package.json `name` fixture the gui-command test writes (opaque)
+    (r'\{"name":"hermes"\}', "package.json `name` fixture the gui-command test writes — opaque data"),
+    # DingTalk registration `source` wire tag (external)
+    (r'"source":\s*"hermes"', "DingTalk registration `source` wire tag value — external wire contract"),
+    # Wake-word / mention fixture input (opaque)
+    (r"Hermes what's the weather", "wake-word/mention fixture input a test dispatches — opaque data"),
+    # docker exec `-u hermes` OS-account asserted value (docker OS identity)
+    (r'idx_u \+ 1\] == "hermes"', "asserts `docker exec -u hermes` container OS user — kept OS-account identity"),
+    # Kept `/hermes` Slack slash-command name asserted (external contract)
+    (r'slashes\[0\]\[0\] == "hermes"', "asserts the kept `/hermes` Slack slash-command name — external contract"),
+    # Profile-alias collision + legacy .bat wrapper body fixtures (opaque / legacy)
+    (r'check_alias_collision\("hermes"\)', "profile-alias collision test input `hermes` (reserved legacy command name)"),
+    (r"hermes -p \w", "legacy profile-wrapper .bat body fixture (`hermes -p <profile>`) — pre-rename wrapper body"),
+    # Search-tool query-argument fixture value (opaque search term)
+    (r'"q":\s*"hermes"|"query":\s*"hermes"', "search-tool query-argument fixture value a test passes/asserts — opaque data"),
+    # Sandbox-mirror classifier narration referencing the KEPT `.hermes`/HERMES_HOME mirror marker
+    (r"Hermes-state mirroring|anything-not-hermes",
+     "sandbox-mirror classifier test narration referencing the KEPT `.hermes`/HERMES_HOME mirror marker "
+     "(agent/file_safety.py matches `home/.hermes`)"),
+    # Historical (now-removed) OpenRouter overlay class name in a regression-test docstring
+    (r"HermesOverlay", "historical removed OpenRouter overlay class name in a regression-test docstring — proper-noun symbol ref"),
+    # References the kept `hermes_pkce` OAuth credential contract
+    (r"Hermes-PKCE", "references the kept `hermes_pkce` OAuth PKCE credential contract — a PKCE-only credential setup"),
 ]
 
 _COMPILED = [(re.compile(rx, re.IGNORECASE), why) for rx, why in KEEP_PATTERNS]
