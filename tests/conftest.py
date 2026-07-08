@@ -359,6 +359,20 @@ def _hermetic_environment(tmp_path, monkeypatch):
     (fake_lliam_home / "memories").mkdir()
     (fake_lliam_home / "skills").mkdir()
     monkeypatch.setenv("HERMES_HOME", str(fake_lliam_home))
+    # 3b. Delete any ambient LLIAM_HOME so the per-test HERMES_HOME above (and
+    #     each test's own monkeypatch.setenv("HERMES_HOME", ...)) actually
+    #     governs. Post-rename (D5) LLIAM_HOME is the PRIMARY home env and wins
+    #     over HERMES_HOME in getenv_compat(). If an operator exports LLIAM_HOME
+    #     as a suite-wide throwaway home (the documented safety practice for
+    #     gateway-spawning tests), that single shared value overrides every
+    #     test's HERMES_HOME isolation — so one test writing `active_profile`
+    #     poisons all later tests, cascading into hundreds of failures. We do
+    #     NOT setenv it to the per-test dir, because many tests set HERMES_HOME
+    #     themselves and expect that to be the effective home; a per-test
+    #     LLIAM_HOME would clobber those. Deleting it lets HERMES_HOME win while
+    #     keeping the home resolved to a tempdir (never the operator's ~/.lliam,
+    #     since HERMES_HOME is always set here).
+    monkeypatch.delenv("LLIAM_HOME", raising=False)
 
     # 4. Deterministic locale / timezone / hashseed. CI runs in UTC with
     #    C.UTF-8 locale; local dev often doesn't. Pin everything.
