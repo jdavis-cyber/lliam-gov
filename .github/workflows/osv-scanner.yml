@@ -29,8 +29,11 @@ on:
   workflow_dispatch:
 
 permissions:
+  # Required by the reusable workflow's permission contract, even when SARIF
+  # upload is disabled below.
   actions: read
   contents: read
+  security-events: write
 
 jobs:
   scan:
