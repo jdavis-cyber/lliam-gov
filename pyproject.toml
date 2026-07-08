@@ -69,7 +69,7 @@ dependencies = [
   # try/except-ImportError fallbacks silently degrade: Hindsight's
   # ``_meets_minimum_version`` disables update_mode='append' (#40503),
   # tools/lazy_deps.py treats every version constraint as satisfied, and
-  # hermes_cli/main.py drops to naive requirement parsing. Pure-Python
+  # lliam_cli/main.py drops to naive requirement parsing. Pure-Python
   # py3-none-any wheel, no compiled extensions — safe to ship everywhere.
   # Pinned to the version already resolved in uv.lock (no resolution churn).
   "packaging==26.0",
@@ -131,7 +131,7 @@ dependencies = [
   # processes), pinning ``agent.log`` at the 5 MiB threshold and spamming
   # stderr on every emit (see #44873). ``concurrent-log-handler`` wraps the
   # rename in a cross-process file lock (via ``portalocker``: pywin32 on
-  # Windows) so only one process rotates at a time. ``hermes_logging.py``
+  # Windows) so only one process rotates at a time. ``lliam_logging.py``
   # aliases it ONLY on Windows — POSIX renames an open file fine, so stdlib
   # already works there and managed-mode perms depend on its exact lifecycle.
   # Hence the ``sys_platform == 'win32'`` marker: the dep (and its portalocker
@@ -316,7 +316,7 @@ locales = ["locales/*.yaml"]
 # case as locales: data-files ships it in the wheel, `graft optional-mcps` in
 # MANIFEST.in ships it in the sdist. Without this, `lliam-gov mcp catalog` and the
 # dashboard catalog screen come up empty on packaged installs even though the
-# manifests exist in the repo (hermes_cli/mcp_catalog.py:_catalog_root resolves
+# manifests exist in the repo (lliam_cli/mcp_catalog.py:_catalog_root resolves
 # the packaged dir; list_catalog() returns [] when it's missing).
 #
 # data-files flattens every glob match into its single target dir, so each
@@ -334,7 +334,7 @@ plugins = [
   "*/dashboard/manifest.json",
   "*/dashboard/dist/*",
   "*/dashboard/dist/**/*",
-  # Plugin discovery (hermes_cli/plugins.py) reads a plugin.yaml/plugin.yml
+  # Plugin discovery (lliam_cli/plugins.py) reads a plugin.yaml/plugin.yml
   # manifest from each bundled plugin directory to register it. Wheels only
   # carry files declared here, so without this glob the wheel ships every
   # plugin's Python code but none of its manifests — the scan finds zero

@@ -108,6 +108,24 @@ WHOLE_TREE_KEEPS = [
     # rename, governs whether the migration target identity ever changes.
     "optional-skills/migration/openclaw-migration/scripts/openclaw_to_hermes.py",
     "tests/skills/test_openclaw_migration.py",
+    # Tauri bootstrap-installer (Rust src-tauri): a self-consistent, test-asserted
+    # internal identity the base rebrand deliberately left unchanged — CLI-resolution
+    # (resolve_hermes_desktop_exe), straggler-kill, Tauri IPC command names (JS<->Rust
+    # wire contract), and the hermes_bootstrap_lib crate. Whether that binary is
+    # `hermes` or `lliam-gov` is a flagged D-level follow-up, not a mechanical rename.
+    "apps/bootstrap-installer",
+    # ⚑ FLAGGED DESKTOP FINDING (R.5/R.9): the electron main process still references
+    # the PRE-RENAME backend Python package throughout its integration — `import
+    # hermes_cli`, `path.join(root, 'hermes_cli', 'main.py'/'__init__.py')`,
+    # `-m hermes_cli.uninstall`, and hermes_cli/hermes_constants/hermes_logging in
+    # comments. The backend package is `lliam_cli` now, so these are functional and
+    # likely BROKEN (the desktop app may not resolve/spawn the renamed backend). This
+    # was NOT updated during Phase R (R.5 handled electron IDENTITY — appId/IPC/protocol
+    # — not backend-package references). Migrating these to lliam_cli is a functional
+    # desktop task that MUST be verified with `npm run test:ui` + a real backend spawn,
+    # NOT a blind text rename in a guard-cleanup. Kept here (documented, NOT masked) so
+    # the finding is explicit; see R8e-keep-register.md §G and the R.V desktop proof.
+    "apps/desktop/electron",
 ]
 
 
@@ -144,7 +162,10 @@ KEEP_PATTERNS: list[tuple[str, str]] = [
     (r"HERMES\.md", "legacy project-context filename (_LLIAM_MD_NAMES contract)"),
 
     # --- Env vars: whole HERMES_* namespace is a preserved back-compat contract ---
-    (r"HERMES_[A-Z0-9_]*", "HERMES_* env var / namespace prefix — preserved backward-compat env API"),
+    # (?-i:...) forces UPPERCASE-only: env vars are always ALL-CAPS. Without it the
+    # global re.IGNORECASE made this match lowercase hermes_<word> too, silently
+    # masking 500+ stale hermes_cli / hermes_constants / hermes_logging module refs.
+    (r"(?-i:HERMES_[A-Z0-9_]*)", "HERMES_* env var / namespace prefix (UPPERCASE-only; incl. bare `HERMES_`/`HERMES_*` in prose) — preserved backward-compat env API"),
 
     # --- Contract literals: live keys / kwargs / wire fields ---
     (r"hermes_home", "live kwargs-dispatch key / var / detection substring for HERMES_HOME"),
@@ -663,6 +684,92 @@ KEEP_PATTERNS += [
     (r"HermesOverlay", "historical removed OpenRouter overlay class name in a regression-test docstring — proper-noun symbol ref"),
     # References the kept `hermes_pkce` OAuth credential contract
     (r"Hermes-PKCE", "references the kept `hermes_pkce` OAuth PKCE credential contract — a PKCE-only credential setup"),
+]
+
+# ---------------------------------------------------------------------------
+# R.8e-3d — case-sensitive-fix residual keeps (2026-07-08). Making the HERMES_*
+# env keep UPPERCASE-only surfaced ~660 lowercase hermes_<word> lines it had been
+# masking. The stale renamed-module refs (hermes_cli/constants/logging/state/time/
+# bootstrap) were RENAMED to lliam_*; everything below is a documented keep, scoped
+# to specific token families (NOT a hermes_\w+ catch-all — that was the original
+# masking bug). See docs/governance/verification/R8e-keep-register.md §G.
+# ---------------------------------------------------------------------------
+KEEP_PATTERNS += [
+    # Platform approval-button action_id / callback wire contracts (Slack/Feishu/Teams
+    # echo these values back to the app; renaming breaks live approval buttons).
+    (r"hermes_(action|approve|approve_once|approve_always|approve_session|deny|"
+     r"confirm_once|confirm_always|confirm_cancel|update_prompt_action)\b",
+     "platform approval-button action_id / callback wire contract — Slack/Feishu/Teams echo it back"),
+    # i18n message KEY (the localized VALUE already reads Lliam-GOV; the key is a code
+    # identifier — renaming means renaming every locale file + call site in lockstep).
+    (r"hermes_cmd_not_found|hermes_cmd\b", "i18n message-key name (value already reads lliam-gov)"),
+    # Profile-manifest version-requirement schema field.
+    (r"hermes_requires\b", "profile-manifest version-requirement schema field — renaming breaks existing manifests"),
+    # Honcho / memory external host-key + peer fixture values (address a specific bank).
+    (r"hermes_coder|hermes_dreamer|hermes_user_memory\b|hermes_heimdall",
+     "Honcho/memory external host-key or peer fixture value — addresses a specific external memory bank"),
+    # pip entry-point group + packaging path / label fixtures.
+    (r"hermes_agent[_.]|hermes_agent\b",
+     "hermes_agent.plugins entry-point group + packaging path / label fixture — live packaging contract / opaque data"),
+    # code-execution generated-stub module (parent generates hermes_tools.py, child
+    # imports it — functional both-sides contract) + tools MCP server ref.
+    (r"hermes_tools\b|hermes_tools_mcp_server",
+     "code-execution generated-stub module name (parent writes hermes_tools.py, child imports it) — functional both-sides contract"),
+    # log-routing component namespace + dashboard-plugin fixture ids.
+    (r"hermes_plugins\b|hermes_plugin\b|hermes_dashboard_plugin\w*",
+     "log-routing component namespace + dashboard-plugin test-fixture id"),
+    # registered bot handle (@hermes_bot) + pairing / opaque bot-username fixtures.
+    (r"hermes_[a-z0-9]*bot\w*|hermes_pair\w*|hermes_abcdef\w*",
+     "registered bot handle (@hermes_bot) + pairing / opaque bot-username test fixtures"),
+    # concurrent-instance / old-binary / legacy-unit detection (must keep matching legacy name).
+    (r"hermes_instances\b|_detect_concurrent_hermes|hermes_exe\b|hermes_is_installed|hermes_units\b",
+     "concurrent-instance / old-binary / legacy-unit DETECTION identifiers — must keep matching the legacy name"),
+    # opaque test-fixture identifiers / internal temp-dir / probe names (not the display name).
+    (r"hermes_(bg|now|voice|conversation|meet_sink|meet_src|meet|ec|dv|hard|host|"
+     r"4\w*|8340\w*|fts5?_probe|fts_health\w*|hydrated|injection_test|approval_test|"
+     r"e2e\w*|empty__|file_state_test\w*|exec_|subprocess_env|task_id|node_dirs|argv|"
+     r"command\w*|memory_builtin\w*|hook_|dist_\w+)\b",
+     "opaque test-fixture identifier / internal temp-dir / probe name — not the product display name"),
+    # Internal identifiers / fixtures that are non-display and non-contract but live
+    # (completion helpers, oauth-login helper, config-module + dotenv fixtures, profiles,
+    # user-cron import namespace). Documented, NOT masked; a dedicated test-gated rename
+    # pass may finish these — they carry zero audit-facing product-name risk.
+    (r"hermes_completion\b|hermes_oauth_login_pure|run_hermes_oauth_login|hermes_config_mod|"
+     r"hermes_dotenv\w*|hermes_profiles\b|hermes_user_cron\b|hermes_command_path",
+     "internal identifier / test fixture (completion, oauth-login helper, config-module + dotenv "
+     "fixtures, profiles, user-cron import namespace) — non-display, documented; dedicated rename pass may finish"),
+]
+
+KEEP_PATTERNS += [
+    # Generated runtime-id prefix: f"hermes_<...>" — Honcho host key (hermes_<profile>),
+    # external browser/matrix/dingtalk/singularity session·txn·user·instance ids, and the
+    # Telegram bot username (hermes_<slug>_bot). External/opaque runtime identifiers a
+    # rename would repoint or break.
+    (r"hermes_\{|hermes_<[a-z]|hermes_partner\b",
+     "generated runtime-id prefix f\"hermes_<...>\" or doc placeholder hermes_<slug>/hermes_<profile> "
+     "(Honcho host key / external session·txn·user·instance id / bot username) — external/opaque"),
+    # Literal `hermes_` prefix a test asserts on, or an IRC nick/retry sequence — the
+    # generated-identifier prefix itself (startswith/removeprefix/len assertions).
+    (r'startswith\("hermes_"|removeprefix\("hermes_"|"hermes_" in|len\("hermes_"\)|'
+     r'NICK hermes_|hermes_, hermes_1|mod\.startswith\("hermes_',
+     "assertion on the generated `hermes_<...>` identifier prefix / IRC nick retry — opaque prefix contract"),
+    # Opaque temp-file / dir / socket / cache prefixes + get_lliam_home() mock dirs + fixtures.
+    (r"hermes_conversation|hermes_profile_import_|hermes_rpc|hermes_shrink_|hermes_prompt_|"
+     r"hermes_bg|hermes_terminal|hermes_sandbox_|hermes_voice|hermes_test_\w+|hermes_h.llo|"
+     r"agent-browser-hermes_|hermes_scaffolding|hermes_tz\b",
+     "opaque temp-file/dir/socket/cache prefix + get_lliam_home() mock dir + test fixture — not the display name"),
+    # User-provider/plugin import namespaces, internal sentinels, and deferred internal
+    # identifiers (documented, not masked; a dedicated rename pass may finish these).
+    (r"_hermes_user_provider|_is_hermes_provider|__hermes_user_skipped__|_hermes_run_generation|"
+     r"_build_hermes_tools|hermes_tools_mcp|find_hermes_node_executable",
+     "user-provider import namespace / internal sentinel / deferred internal identifier — import contract or non-display internal name"),
+    # Legacy module entry-point path baked into pre-rename launchd/systemd plists,
+    # Windows scheduled tasks, running-process argv, and the electron backend
+    # spawn/detection. Current invocations already use `lliam_cli.main`; these
+    # `hermes_cli.main` refs are legacy-DETECTION markers (recognize/upgrade old
+    # installs). Whether the desktop/gateway invocation should migrate to
+    # `lliam_cli.main` is a functional R.5/R.9 decision, NOT a guard-cleanup rename.
+    (r"hermes_cli\.main", "legacy module entry-point path (pre-rename plists / scheduled tasks / process argv / electron spawn+detect) — legacy-DETECTION marker"),
 ]
 
 _COMPILED = [(re.compile(rx, re.IGNORECASE), why) for rx, why in KEEP_PATTERNS]

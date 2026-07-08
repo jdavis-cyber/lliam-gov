@@ -51,7 +51,7 @@ iex (irm https://hermes-agent.nousresearch.com/install.ps1)
 
 ### 依赖引导（`dep_ensure`）
 
-在首次启动时（以及检测到缺少工具时按需触发），Lliam-GOV 会运行一个小型 Python 引导程序——`hermes_cli/dep_ensure.py`——检查并懒加载安装所需的非 Python 依赖。在 Windows 上，相关依赖如下：
+在首次启动时（以及检测到缺少工具时按需触发），Lliam-GOV 会运行一个小型 Python 引导程序——`lliam_cli/dep_ensure.py`——检查并懒加载安装所需的非 Python 依赖。在 Windows 上，相关依赖如下：
 
 | 依赖            | Lliam-GOV 需要它的原因                                                                             |
 | --------------- | ----------------------------------------------------------------------------------------------- |

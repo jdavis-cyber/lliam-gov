@@ -25,10 +25,10 @@
 #
 # HOW IT LOADS  (ADDITIVE — no existing module renamed; PATH-FREEZE honored)
 #   Selected at runtime via the EXISTING env var HERMES_CONFIG (already in the
-#   allowlist at hermes_cli/config.py:198). The additive selector
-#   hermes_cli/config._gov_overlay_path() resolves it and deep-merges this file
+#   allowlist at lliam_cli/config.py:198). The additive selector
+#   lliam_cli/config._gov_overlay_path() resolves it and deep-merges this file
 #   OVER the home config.yaml (highest precedence below the managed layer), then
-#   hermes_cli/posture_resolver.resolve() coerces the fail-open guards to
+#   lliam_cli/posture_resolver.resolve() coerces the fail-open guards to
 #   fail-closed. Writes still target the home config.yaml — the agent never
 #   clobbers this version-controlled overlay.
 #       export HERMES_CONFIG=<path>/cli-config.gov.yaml
@@ -46,7 +46,7 @@
 # [ACTIVE @ P0.1]  0. MASTER POSTURE SWITCH  +  FAIL-OPEN -> FAIL-CLOSED COHERENCE
 #    Controls: LG-CH-02 (strict-posture switch), LG-CH-01 (documented baseline),
 #              LG-CH-09 (startup posture findings become blocking)
-#    Consumed by: hermes_cli/posture_resolver.py (additive module)
+#    Consumed by: lliam_cli/posture_resolver.py (additive module)
 # -----------------------------------------------------------------------------
 # `security.posture: strict` is the single coherent switch. The resolver forces
 # the keys below to their fail-closed values after every config merge, so the
@@ -209,7 +209,7 @@ terminal:
 # =============================================================================
 # [ACTIVE @ P0.4]  LEAST-PRIVILEGE TOOLSET PROFILE  (LG-AZ-03 / LG-AZ-11)
 # -----------------------------------------------------------------------------
-# agent.disabled_toolsets (config.py:1091; read in hermes_cli/tools_config.py
+# agent.disabled_toolsets (config.py:1091; read in lliam_cli/tools_config.py
 # _get_platform_tools L1653, applied LAST so it overrides everything) removes
 # these toolsets from the resolved enabled set for EVERY platform. computer_use
 # (desktop/OS automation) and browser (interactive web automation) are OFF in the

@@ -553,7 +553,7 @@ install_uv() {
 
     # Lliam-GOV owns its own uv at $HERMES_HOME/bin/uv.  Always install there —
     # no PATH probing, no conda guards, no multi-location resolution chains.
-    # The runtime update path (hermes_cli/managed_uv.py) looks in the same
+    # The runtime update path (lliam_cli/managed_uv.py) looks in the same
     # place, so install.sh and `lliam-gov update` stay in sync.
     local _managed_uv="$HERMES_HOME/bin/uv"
 
@@ -1786,7 +1786,7 @@ copy_config_templates() {
     fi
 
     # Create SOUL.md if it doesn't exist (global persona file).
-    # This MUST match DEFAULT_SOUL_MD in hermes_cli/default_soul.py — the
+    # This MUST match DEFAULT_SOUL_MD in lliam_cli/default_soul.py — the
     # runtime (_ensure_default_soul_md) treats the old comment-only scaffold as
     # "never customized" and upgrades it to this text on next run, so any drift
     # here is self-healing, but keep them in sync to avoid a churn on first run.

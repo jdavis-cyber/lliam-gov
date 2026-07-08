@@ -51,7 +51,7 @@ Use the desktop installer when you want a familiar Windows install experience or
 
 ### Dependency bootstrap (`dep_ensure`)
 
-On first launch (and on demand when a missing tool is detected), Lliam-GOV runs a small Python bootstrapper — `hermes_cli/dep_ensure.py` — that checks for and lazily installs the non-Python dependencies it needs. On Windows, the relevant ones are:
+On first launch (and on demand when a missing tool is detected), Lliam-GOV runs a small Python bootstrapper — `lliam_cli/dep_ensure.py` — that checks for and lazily installs the non-Python dependencies it needs. On Windows, the relevant ones are:
 
 | Dependency | Why Lliam-GOV needs it |
 |---|---|

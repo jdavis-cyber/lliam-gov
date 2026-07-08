@@ -290,7 +290,7 @@ function validateBundle() {
   }
 
   // Negative assertion: the OLD fat-installer factory payload must NOT be
-  // present anymore. If a stray ship of hermes_cli sneaks back in we want
+  // present anymore. If a stray ship of lliam_cli sneaks back in we want
   // to fail loudly rather than re-introduce the 400MB delta we just removed.
   const staleFactoryMarker = path.join(APP.resourcesPath, 'hermes-agent', 'hermes_cli', 'main.py')
   if (exists(staleFactoryMarker)) {

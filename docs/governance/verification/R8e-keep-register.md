@@ -156,3 +156,76 @@ This is the same class of defect the resume prompt flagged for P2: **a test
 spawning a networked gateway + browser OAuth against the operator home is a
 least-privilege / egress failure the P2 controls should catch.** Logged here as a
 governance finding for the P2 workstream.
+
+## G. Guard case-sensitivity fix (R.8e-3d, 2026-07-08) — completeness-guarantee correction
+
+**Defect:** the `HERMES_*` env-var keep pattern (`HERMES_[A-Z0-9_]*`) was compiled
+with the guard's global `re.IGNORECASE`, so it also matched **lowercase**
+`hermes_<word>` — silently allowing ~660 lowercase leftovers (`hermes_cli`,
+`hermes_constants`, `hermes_logging`, generated-id prefixes, fixtures) to pass the
+guard **by accident, not by adjudication**. "Guard green" therefore did not fully
+guarantee completeness for lowercase textual refs. (The app itself was never
+broken — the full suite passed throughout, so all executable code paths were
+correctly renamed; this was an audit-trail gap.) Surfaced while reviewing PR #92.
+
+**Fix:** the env pattern is now `(?-i:HERMES_[A-Z0-9_]*)` — UPPERCASE-only
+(env vars are always ALL-CAPS), so it no longer masks lowercase `hermes_`. That
+surfaced the ~660 masked lines, each then adjudicated:
+
+- **Renamed** (safe, mostly comments/docstrings/strings; one real runtime fix — a
+  `from hermes_cli.commands import …` subprocess string that would have thrown
+  `ModuleNotFoundError`): all stale renamed-module textual refs
+  `hermes_(cli|constants|logging|state|time|bootstrap)` → `lliam_*` (123 lines,
+  54 files), applied only on offender lines so kept literals (`hermes_state.db`,
+  `hermes_bootstrap_lib`) were never touched.
+- **Kept + documented** (new scoped KEEP_PATTERNS blocks + the
+  `apps/bootstrap-installer` whole-tree keep) — every survivor is now an explicit,
+  scoped, documented family (NOT a `hermes_\w+` catch-all, which was the original
+  bug):
+  - Platform approval-button `action_id`/callback wire contracts (`hermes_action`,
+    `hermes_approve*`, `hermes_deny`, `hermes_confirm_*`) — Slack/Feishu/Teams echo
+    them back; renaming breaks live buttons.
+  - i18n message keys (`hermes_cmd_not_found`) — localized VALUE already reads Lliam-GOV.
+  - Profile-manifest schema field (`hermes_requires`); pip `hermes_agent.plugins`
+    entry-point group; Honcho host keys (`hermes_<profile>`, `hermes_coder`).
+  - Generated runtime-id prefixes `f"hermes_<uuid/id>"` (browser/matrix/dingtalk/
+    singularity session·txn·user·instance ids, Telegram `hermes_<slug>_bot` username).
+  - code-execution generated-stub module (`hermes_tools.py`, parent-writes/child-imports
+    functional contract); user-provider import namespaces (`_hermes_user_provider`,
+    `_hermes_user_cron`); concurrent-instance / old-binary detection identifiers.
+  - Opaque temp-file/dir/socket/cache prefixes and test-fixture identifiers.
+  - `apps/bootstrap-installer` (Rust src-tauri) — self-consistent Tauri IPC + CLI
+    resolution identity the base rebrand deliberately left unchanged (D-level follow-up).
+
+**Deferred (documented, not masked):** a handful of live internal identifiers that
+are non-display and non-contract (`hermes_completion`, `run_hermes_oauth_login_pure`,
+`_hermes_run_generation`, `find_hermes_node_executable`) are kept with an explicit
+"dedicated test-gated rename pass may finish these" rationale — they carry zero
+audit-facing product-name risk.
+
+**Legacy entry-point keep:** `hermes_cli.main` (the module path baked into pre-rename
+launchd/systemd plists, Windows scheduled tasks, running-process argv, and the electron
+backend spawn/detection) is kept as a legacy-DETECTION marker — current invocations
+already use `lliam_cli.main`. (My first bulk pass over-reached and renamed some of these
+legacy-detection refs; that was reverted — the `.main` refs are legacy-detection keeps,
+and one `.replace("hermes_cli.main", "lliam_cli.main")` test fixture the over-rename had
+turned into a no-op was restored.)
+
+### ⚑ FLAGGED DESKTOP FINDING (for R.5 / R.9)
+
+Making the guard case-sensitive surfaced that the **electron desktop app never had its
+backend Python-package references renamed** for `hermes_cli` → `lliam_cli`.
+`apps/desktop/electron/main.cjs` and `desktop-uninstall.cjs` still contain
+`import hermes_cli`, `path.join(root, 'hermes_cli', 'main.py'/'__init__.py')`,
+`-m hermes_cli.uninstall`, and `hermes_cli`/`hermes_constants`/`hermes_logging` in
+comments. The backend package is `lliam_cli` now, so these are **functional and likely
+broken** — the desktop app may not resolve/spawn the renamed backend. Phase R's R.5
+updated electron *identity* (appId/IPC/protocol) but not these backend-package refs.
+
+**This is NOT fixed here** — migrating it is a functional desktop task that must be
+verified with `npm run test:ui` + a real backend spawn, not a blind text rename inside a
+guard-cleanup. The two files are `WHOLE_TREE_KEEPS` entries in the guard (documented, not
+masked) so the finding is explicit and the guard can be green; R.9 (or the R.V desktop
+proof) owns the fix.
+
+Guard GREEN (case-sensitive); full suite == floor; ruff clean; 0 collection errors.

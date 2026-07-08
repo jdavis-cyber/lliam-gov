@@ -23,7 +23,7 @@ npm run dev
 
 Open the **Vite URL** printed in the terminal (usually `http://localhost:5173`). That is the live-reload UI.
 
-`lliam-gov dashboard` on port 9119 serves the **built** bundle from `hermes_cli/web_dist/`, not the Vite dev server — changes in `web/src/` will not appear there until you run `npm run build` and restart the dashboard (or use `web --no-open` + Vite as above).
+`lliam-gov dashboard` on port 9119 serves the **built** bundle from `lliam_cli/web_dist/`, not the Vite dev server — changes in `web/src/` will not appear there until you run `npm run build` and restart the dashboard (or use `web --no-open` + Vite as above).
 
 The Vite dev server proxies `/api` requests to `http://127.0.0.1:9119` (the FastAPI backend).
 
@@ -33,7 +33,7 @@ The Vite dev server proxies `/api` requests to `http://127.0.0.1:9119` (the Fast
 npm run build
 ```
 
-This outputs to `../hermes_cli/web_dist/`, which the FastAPI server serves as a static SPA. The built assets are included in the Python package via `pyproject.toml` package-data.
+This outputs to `../lliam_cli/web_dist/`, which the FastAPI server serves as a static SPA. The built assets are included in the Python package via `pyproject.toml` package-data.
 
 ## Structure
 
