@@ -240,7 +240,9 @@ audit:
   ledger_enabled: true               # [additive] LG-AU-01: governance ledger ON in the gov profile (shipped default: no ledger)
   ledger_path: "$HERMES_HOME/logs/agent-audit.log"   # [additive] LG-AU-01/07: outside workspace, write-denied
   hash_algo: sha256                  # [additive] LG-AU-01: chain algorithm pinned
-  redact_before_persist: true        # [additive] LG-AU-05: force-path redaction over params/outputs before append
+  # LG-AU-05 redaction-on-write is UNCONDITIONAL in agent/governance_audit.py —
+  # deliberately no config knob (a runtime-disableable redaction boundary is
+  # not a boundary; post-review hardening removed the earlier key).
   fail_closed: true                  # [additive] LG-AU-09: audit-write failure blocks gated actions
   fail_closed_scope: [mutating, privileged, egress, high_impact]   # [additive] LG-AU-09 gated risk classes
   time_granularity_ms: true          # [additive] LG-AU-06: UTC sub-second stamps + monotonic seq in-chain
