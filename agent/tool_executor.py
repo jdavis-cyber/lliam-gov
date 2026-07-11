@@ -439,6 +439,37 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
                         middleware_trace=list(middleware_trace),
                     )
 
+        # LG-AU-02/09 (additive): pre-dispatch governance audit record for
+        # calls that will execute; fail-closed block on audit-write failure
+        # for the high-risk scope, surfaced as a guardrail-style block.
+        if block_result is None:
+            try:
+                from agent.governance_audit_hooks import predispatch_gate
+                _gov_decision = predispatch_gate(
+                    agent,
+                    function_name=function_name,
+                    function_args=function_args,
+                    tool_call_id=getattr(tool_call, "id", "") or "",
+                    effective_task_id=effective_task_id,
+                )
+            except Exception:
+                _gov_decision = None
+            if _gov_decision is not None:
+                block_result = agent._guardrail_block_result(_gov_decision)
+                blocked_by_guardrail = True
+                _emit_terminal_post_tool_call(
+                    agent,
+                    function_name=function_name,
+                    function_args=function_args,
+                    result=block_result,
+                    effective_task_id=effective_task_id,
+                    tool_call_id=getattr(tool_call, "id", "") or "",
+                    status="blocked",
+                    error_type="guardrail_block",
+                    error_message=getattr(_gov_decision, "message", None) or "Blocked by governance audit gate",
+                    middleware_trace=list(middleware_trace),
+                )
+
         # ── Checkpoint preflight (only for tools that will execute) ──
         if block_result is None:
             # Checkpoint for file-mutating tools
@@ -947,6 +978,26 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                 _guardrail_block_decision = guardrail_decision
 
         _execution_blocked = _block_msg is not None or _guardrail_block_decision is not None
+
+        # LG-AU-02/09 (additive): every about-to-execute call is recorded at
+        # this chokepoint before dispatch; a high-risk call whose audit
+        # record cannot be written comes back as a blocking decision
+        # (fail-closed) and flows through the existing guardrail-block path.
+        if not _execution_blocked:
+            try:
+                from agent.governance_audit_hooks import predispatch_gate
+                _gov_decision = predispatch_gate(
+                    agent,
+                    function_name=function_name,
+                    function_args=function_args,
+                    tool_call_id=getattr(tool_call, "id", "") or "",
+                    effective_task_id=effective_task_id,
+                )
+            except Exception:
+                _gov_decision = None
+            if _gov_decision is not None:
+                _guardrail_block_decision = _gov_decision
+                _execution_blocked = True
 
         if _execution_blocked:
             # Tool blocked by plugin or guardrail policy — skip counters,

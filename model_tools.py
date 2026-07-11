@@ -881,6 +881,31 @@ def _emit_post_tool_call_hook(
     result *after* the gate (parsing the result is only worth it when a
     listener will actually consume it).
     """
+    # LG-AU-02 (additive): the governance audit ledger records every
+    # terminal tool outcome at this universal funnel — independent of, and
+    # before, the plugin observer gate below (which no-ops without
+    # listeners). Post-facto record: never gates, never raises.
+    try:
+        from agent.governance_audit_hooks import record_outcome
+        _gov_status, _gov_etype, _gov_emsg = status, error_type, error_message
+        if _gov_status is None:
+            _gov_status, _gov_etype, _gov_emsg = _tool_result_observer_fields(result)
+        record_outcome(
+            function_name=function_name,
+            function_args=function_args,
+            status=_gov_status,
+            error_type=_gov_etype,
+            error_message=_gov_emsg,
+            task_id=task_id or "",
+            session_id=session_id or "",
+            tool_call_id=tool_call_id or "",
+            turn_id=turn_id or "",
+            api_request_id=api_request_id or "",
+            duration_ms=duration_ms,
+        )
+    except Exception as _gov_err:
+        logger.debug("governance outcome record error: %s", _gov_err)
+
     try:
         from lliam_cli.plugins import has_hook, invoke_hook
         if not has_hook("post_tool_call"):
