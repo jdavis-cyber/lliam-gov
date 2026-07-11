@@ -223,6 +223,49 @@ agent:
 
 
 # =============================================================================
+# [ACTIVE @ P1.1]  APPEND-ONLY HASH-CHAINED AUDIT LEDGER  (LG-AU-01..07, AU-09)
+# -----------------------------------------------------------------------------
+# Consumed by the NEW additive module agent/governance_audit.py (the emitter
+# core). The ledger is JSONL at $HERMES_HOME/logs/agent-audit.log — OUTSIDE the
+# workspace and on the agent/file_safety.py write-denylist (LG-AU-07), so the
+# agent's own write tools cannot reach its own record. Each record carries
+# prev_hash + record_hash (sha256 over canonical bytes; genesis = 64 zeros).
+# Redaction-on-write (LG-AU-05) reuses the Phase-0 force-path redaction; masked
+# values retain a stable content_hash for correlation. fail_closed gates the
+# HIGH-RISK scope only (LG-AU-09): if the record cannot be written the action
+# must not run; low-risk events degrade to a logged warning (bounded trade).
+# Chokepoint wiring = P1.2 (AI-517); verify_chain + startup/CI = P1.3 (AI-518).
+# =============================================================================
+audit:
+  ledger_enabled: true               # [additive] LG-AU-01: governance ledger ON in the gov profile (shipped default: no ledger)
+  ledger_path: "$HERMES_HOME/logs/agent-audit.log"   # [additive] LG-AU-01/07: outside workspace, write-denied
+  hash_algo: sha256                  # [additive] LG-AU-01: chain algorithm pinned
+  redact_before_persist: true        # [additive] LG-AU-05: force-path redaction over params/outputs before append
+  fail_closed: true                  # [additive] LG-AU-09: audit-write failure blocks gated actions
+  fail_closed_scope: [mutating, privileged, egress, high_impact]   # [additive] LG-AU-09 gated risk classes
+  time_granularity_ms: true          # [additive] LG-AU-06: UTC sub-second stamps + monotonic seq in-chain
+  protect_path: true                 # [additive] LG-AU-07: ledger dir on the file_safety write-denylist
+  write_denied: true                 # [additive] LG-AU-07: denial of a write into the audit path is itself auditable
+  events:                            # [additive] LG-AU-03: auditable event set (L2 floor; catalog in the AU spec §2)
+    - tool.dispatch
+    - tool.result
+    - approval.decision
+    - provider.call
+    - mcp.call
+    - policy.violation
+    - config.load
+    - skill.load
+    - mcp.load
+    - secret.access
+    - memory.write
+    - session.start
+    - session.stop
+    - agent.lifecycle
+    - killswitch.activate
+    - security.error
+
+
+# =============================================================================
 # SCAFFOLD — sections below are authored in their dedicated later Phase-0..2
 # steps (kept as comments so this file maps key-for-key to the GOV template and
 # stays capability-preserving until each control is built + verified).
@@ -240,7 +283,9 @@ agent:
 # [DONE P0.5  PI-01/02/03/05/07/08, MC-01, AZ-05] schema_validation:reject ; input_trust ; memory_poisoning_defense ; tools/input_integrity.py
 # [DONE P0.6  SS-01/07]     require_hashed_install + supply_chain (pyproject ==pins / uv.lock 1798 hashes) ; allow_lazy_installs:false refuses runtime installs
 # [DONE P0.7  CH-06/CH-03/SD-01/GV-02/CH-08] ci/governance-ci-gates/ (godmode/drift/path-freeze/deps) + .github/workflows/governance-gates.yml + intended-use.md + deviation-register
-# [P1   AU-01..10]          audit: { ledger_enabled, hash-chained ledger, fail_closed, ... }
+# [DONE P1.1 AU-01..07,09]  audit: { ledger_enabled, ledger_path, hash_algo, redact_before_persist, fail_closed(+scope), events } ; agent/governance_audit.py ; logs/ on write-denylist
+# [P1.2 AU-02/10]           audit: { chokepoint_required: true, on_unrecorded: block, unify_acp: true, unify_dashboard_auth: true }
+# [P1.3 AU-08]              audit: { verify_on_startup: true, verify_fail_action: block, anchor_interval: 1000, retention_days: 365, rotation: seal-then-rotate }
 # [P1   IA-*]               dashboard auth + MFA ; gateway.multiplex_profiles ; secrets source
 # [P2   MP-01..]            security.provider_allowlist_enforce / allowed_providers
 # [P2   NE-01..06 / DP-10]  security.egress.{mode,proxy,allowed_domains} ; website_policy fail_closed

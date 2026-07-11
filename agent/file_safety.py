@@ -131,6 +131,17 @@ def is_write_denied(path: str) -> bool:
                 return True
         except Exception:
             pass
+        try:
+            # LG-AU-07: the governance audit ledger (and the other home logs)
+            # must be unreachable by the agent's own write tools — the subject
+            # of the audit cannot rewrite its own record. Additive deny; no
+            # legitimate agent workflow writes into the home logs directory
+            # (system loggers write directly, not through file tools).
+            logs_real = os.path.realpath(os.path.join(base_real, "logs"))
+            if resolved == logs_real or resolved.startswith(logs_real + os.sep):
+                return True
+        except Exception:
+            pass
 
     safe_roots = get_safe_write_roots()
     if safe_roots:
