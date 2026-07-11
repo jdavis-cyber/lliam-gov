@@ -66,6 +66,15 @@ security:
   deny_on_no_approver: true   # [additive] high-risk actions fail closed when no approver is reachable
   posture_findings_blocking: true  # [additive] LG-CH-09 — startup posture findings BLOCK (also stamped by posture_resolver; pinned explicitly so the flat artifact + drift gate are self-contained)
 
+  # [ACTIVE @ P1.4 — LG-IA]  MANAGED CREDENTIALS  (kept in THIS security block —
+  # a second top-level `security:` key elsewhere would silently override it)
+  no_default_credentials: true   # [additive @ P1.4] LG-IA-05: startup check refuses known default/placeholder credential values (fail-closed on strict)
+  accounts:                      # [additive @ P1.4] LG-IA-01: managed-account inventory of record; reconciled at startup vs the secrets-CLI enumeration (live reconcile = remediation pass)
+    - profile: default
+      provider: bedrock-govcloud
+      owner: jdavis
+      status: authorized
+
   # [ACTIVE @ P0.3]  SKILL ENABLEMENT POLICY MIRROR  (LG-SC-01/02/03/06, LG-AZ-02)
   # Consumed by the NEW tools/tool_policy.py gate. The detailed, reviewable policy
   # is policy/skills-allowlist.yaml; these keys mirror it for one-artifact audit.
@@ -273,6 +282,43 @@ audit:
     - agent.lifecycle
     - killswitch.activate
     - security.error
+
+
+# =============================================================================
+# [ACTIVE @ P1.4]  AGENT IDENTITY + MANAGED CREDENTIALS  (LG-IA-01..05, IA-10)
+# -----------------------------------------------------------------------------
+# LG-IA-02 agent NPE identity is computed by the NEW additive module
+# agent/agent_identity.py (instance_id = sha256(code+config+toolset+model)) and
+# stamped into every audit record's `actor` (agent/governance_audit_hooks.py).
+# The binding inputs + algorithm + review-by are recorded in
+# docs/governance/agent_identity.yaml. LG-IA-03 per-profile credential isolation
+# is the EXISTING agent/secret_scope.py, activated fail-closed by
+# gateway.multiplex_profiles below. LG-IA-01/04/05 land as the managed-account
+# inventory + secret-source config-of-record + the no-default-credential startup
+# check; heavier runtime enforcement (live secrets-CLI reconcile, Bitwarden
+# migration, full delegation-context module + max_spawn_depth enforcement) is
+# flagged for the cross-phase remediation pass (see P1.4 report).
+# =============================================================================
+identity:
+  bind_instance: true                # [additive @ P1.4] LG-IA-02: derive + stamp the NPE instance_id into audit actor
+  record: docs/governance/agent_identity.yaml   # [additive @ P1.4] the identity binding record (evidence)
+
+gateway:
+  multiplex_profiles: true           # [additive @ P1.4] LG-IA-03: set_multiplex_active(True) at gateway startup → get_secret() FAILS CLOSED on unscoped reads (no process-global credential union)
+
+secrets:
+  bitwarden:
+    enabled: false                   # [additive @ P1.4] LG-IA-04 config-of-record: managed secret source. false until a project/collection id is provisioned; POA&M tracks per-provider migration off plaintext .env (which stays write-denied by file_safety)
+  # (no_default_credentials lives under `security:` — the check reads
+  #  security.no_default_credentials; a duplicate here would be unread.)
+
+delegation:
+  max_spawn_depth: 3                 # [additive @ P1.4] LG-IA-10 config-of-record: bound the operator→Lliam→sub-agent delegation chain; runtime enforcement in delegate_tool is remediation-pass scope
+# NOTE: LG-IA-01 managed-account inventory (security.accounts) and the
+# LG-IA-05 no-default-credential switch (security.no_default_credentials) live
+# in the EXISTING `security:` block at the top of this file — a SECOND top-level
+# `security:` key here would silently override (YAML last-key-wins) and drop the
+# whole P0 posture. See the [ACTIVE @ P1.4 — LG-IA] additions there.
 
 
 # =============================================================================

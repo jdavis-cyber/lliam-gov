@@ -18411,6 +18411,16 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     # with verify_fail_action=block this raises AuditChainVerificationError
     # (fail-closed — refuse to rely on a tampered ledger), which propagates
     # rather than being swallowed like the advisory posture warnings above.
+    # LG-IA-02 (additive): record the agent NPE instance identity for this
+    # process (no-op when the ledger is disabled). Emitted before the chain
+    # verify so the identity binding is on record for the session.
+    try:
+        from lliam_cli.security_audit_startup import emit_agent_identity_at_startup
+
+        emit_agent_identity_at_startup(config=_audit_cfg)
+    except Exception as _ident_exc:
+        logger.debug("Agent identity emit failed (non-fatal): %s", _ident_exc)
+
     from lliam_cli.security_audit_startup import (
         verify_audit_chain_at_startup,
         AuditChainVerificationError,

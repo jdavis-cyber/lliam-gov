@@ -120,8 +120,26 @@ _GLOBAL_ENV_PREFIXES = (
 )
 
 
+# Credential-bearing names that MATCH a global prefix but are per-profile
+# SECRETS, not deployment settings — the SSH connection identity that
+# authenticates the terminal command-execution backend to a specific worker
+# (per profile `.env`). They must NOT be globally readable: under multiplexing
+# that would let one profile's turn resolve another profile's SSH host/user/key.
+# Carved out of the `TERMINAL_` global prefix so they fall through to per-profile
+# scoping (LG-IA-03 allowlist minimization — the crosswalk requires the audit,
+# not just the flag flip). NB: tools/terminal_tool.py still reads these via
+# os.getenv directly, bypassing get_secret — migrating those call sites to
+# get_secret is tracked as LG-IA-03-R1 for the remediation pass.
+_GLOBAL_ENV_CREDENTIAL_EXCLUSIONS = frozenset({
+    "TERMINAL_SSH_KEY", "TERMINAL_SSH_HOST", "TERMINAL_SSH_USER",
+    "TERMINAL_SSH_PORT", "TERMINAL_SSH_PASSWORD", "TERMINAL_SSH_PASSPHRASE",
+})
+
+
 def _is_global_env(name: str) -> bool:
     """Return True for genuinely process-global (non-profile-secret) env vars."""
+    if name in _GLOBAL_ENV_CREDENTIAL_EXCLUSIONS:
+        return False  # per-profile SSH credential — never a global
     if name in _GLOBAL_ENV_EXACT:
         return True
     return any(name.startswith(p) for p in _GLOBAL_ENV_PREFIXES)

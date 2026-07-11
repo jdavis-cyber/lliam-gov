@@ -186,6 +186,53 @@ def _container_no_volume_mount(lliam_home: Optional[Path]) -> Optional[str]:
     )
 
 
+# Known default / placeholder credential values that must never authenticate a
+# CUI system (LG-IA-05 no-default-credentials). Compared case-insensitively.
+_DEFAULT_CREDENTIAL_VALUES = frozenset({
+    "", "changeme", "change-me", "password", "passw0rd", "admin", "default",
+    "secret", "test", "testkey", "test-key", "example", "placeholder",
+    "your-api-key", "your_api_key", "xxx", "todo", "none", "null",
+})
+
+# Credential-bearing env var name substrings (checked against os.environ).
+# Broadened to cover the in-scope AWS/bedrock provider (ACCESS_KEY / AWS_) and
+# common bare forms (KEY / PASSWD / CREDENTIAL / APIKEY) — P1.4-review gap.
+_CREDENTIAL_NAME_HINTS = (
+    "API_KEY", "APIKEY", "API_SERVER_KEY", "_TOKEN", "_SECRET",
+    "_PASSWORD", "PASSWD", "ACCESS_KEY", "SECRET_KEY", "CREDENTIAL",
+    "DASHBOARD_DRAIN", "PRIVATE_KEY", "_KEY",
+)
+
+
+def _default_credentials_in_use(config: Optional[dict]) -> list[str]:
+    """Warn when a credential is set to a known default/placeholder (LG-IA-05).
+
+    Only fires under the no-default-credentials switch. Reads env-var names that
+    look credential-bearing and flags any whose value is a known default. Values
+    themselves are NEVER emitted — only the offending variable name.
+    """
+    cfg = config or {}
+    sec = cfg.get("security") or {}
+    if not (isinstance(sec, dict) and sec.get("no_default_credentials")):
+        return []
+    findings: list[str] = []
+    try:
+        for name, value in os.environ.items():
+            if not any(h in name.upper() for h in _CREDENTIAL_NAME_HINTS):
+                continue
+            if value is None:
+                continue
+            if value.strip().casefold() in _DEFAULT_CREDENTIAL_VALUES:
+                findings.append(
+                    f"Credential env var {name} is set to a known default/"
+                    "placeholder value. Rotate it to a strong, unique secret "
+                    "(LG-IA-05 no-default-credentials)."
+                )
+    except Exception:
+        pass
+    return findings
+
+
 def _network_listener_without_auth(config: Optional[dict]) -> list[str]:
     """Warn about network-accessible gateway listeners with no auth.
 
@@ -252,7 +299,72 @@ def run_security_audit(
         findings.extend(_network_listener_without_auth(config))
     except Exception:
         pass
+    try:
+        findings.extend(_default_credentials_in_use(config))
+    except Exception:
+        pass
     return findings
+
+
+def emit_agent_identity_at_startup(*, config: Optional[dict] = None) -> Optional[dict]:
+    """Compute and record the agent NPE identity at startup (LG-IA-02).
+
+    No-op (returns None) when the audit ledger is disabled — identity is only
+    meaningful as an audit binding. Emits a ``config.load`` record carrying the
+    instance identity so the running binding is attributable, and returns the
+    identity dict (also for tests). Never raises.
+
+    The startup identity is computed from the EFFECTIVE MERGED config and the
+    config-resolved (pruned) toolset, so its ``code_hash`` / ``config_hash`` /
+    ``toolset_hash`` MATCH the session's operational ``tool.dispatch`` actors
+    (P1.4-review fix — the earlier version passed a raw config + no toolset,
+    yielding a phantom that matched no real record). The serving model is
+    resolved per-turn, so at startup ``model`` is marked ``resolved:
+    per-turn`` rather than faking a value — an assessor correlates startup to
+    operational records on the code/config/toolset triple.
+    """
+    try:
+        from agent import governance_audit as ga
+        if not ga.ledger_enabled():
+            return None
+        from agent.agent_identity import compute_instance_identity
+
+        # Resolve the effective merged config + the pruned toolset it defines,
+        # so the startup binding equals the operational one on code/config/tool.
+        merged = config
+        try:
+            if not (isinstance(config, dict) and config.get("agent")):
+                from lliam_cli import config as _cfg
+                merged = _cfg.load_config()
+        except Exception:
+            merged = config
+        disabled = None
+        try:
+            disabled = ((merged or {}).get("agent") or {}).get("disabled_toolsets")
+        except Exception:
+            disabled = None
+
+        identity = compute_instance_identity(
+            config=merged, disabled_toolsets=disabled,
+        )
+        # Model binds per-turn; mark it honestly instead of sha256("None|None").
+        if not identity["model"].get("model") and not identity["model"].get("provider"):
+            identity = dict(identity)
+            identity["model"] = {"provider": None, "model": None,
+                                 "resolved": "per-turn"}
+        led = ga.get_ledger()
+        if led is not None:
+            led.emit(
+                "config.load",
+                action="agent.identity_bind",
+                actor=identity,
+                outcome={"status": "success", "class": "identity_bind"},
+                source_module="lliam_cli/security_audit_startup.py:emit_agent_identity_at_startup",
+            )
+        return identity
+    except Exception as e:
+        logger.debug("agent identity emit skipped: %s", e)
+        return None
 
 
 def log_startup_security_warnings(

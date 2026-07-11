@@ -124,3 +124,90 @@ def test_idempotent_per_process(monkeypatch, tmp_path):
     assert first is not None
     # Second call (no force) is a no-op — already ran this process.
     assert sas.verify_audit_chain_at_startup(config=_STRICT_CFG) is None
+
+
+# ---- LG-IA-05 no-default-credentials + LG-IA-02 identity emit --------------
+
+def test_default_credential_is_flagged(monkeypatch):
+    monkeypatch.setenv("PROVIDER_API_KEY", "changeme")
+    findings = sas.run_security_audit(
+        config={"security": {"no_default_credentials": True}}
+    )
+    assert any("default" in f.lower() and "PROVIDER_API_KEY" in f for f in findings)
+
+
+def test_strong_credential_not_flagged(monkeypatch):
+    monkeypatch.setenv("PROVIDER_API_KEY", "s0m3-str0ng-uniq-value-9f2c4b8a")
+    findings = sas.run_security_audit(
+        config={"security": {"no_default_credentials": True}}
+    )
+    assert not any("PROVIDER_API_KEY" in f for f in findings)
+
+
+def test_default_credential_check_off_by_default(monkeypatch):
+    monkeypatch.setenv("PROVIDER_API_KEY", "changeme")
+    # Switch absent → no LG-IA-05 finding (capability-preserving default).
+    findings = sas.run_security_audit(config={})
+    assert not any("PROVIDER_API_KEY" in f for f in findings)
+
+
+def test_default_credential_value_never_emitted(monkeypatch):
+    monkeypatch.setenv("MY_SECRET", "changeme")
+    findings = sas.run_security_audit(
+        config={"security": {"no_default_credentials": True}}
+    )
+    joined = " ".join(findings)
+    assert "MY_SECRET" in joined and "changeme" not in joined
+
+
+def test_emit_agent_identity_noop_when_disabled(monkeypatch):
+    import agent.governance_audit as ga
+    monkeypatch.setattr(ga, "ledger_enabled", lambda cfg=None: False)
+    assert sas.emit_agent_identity_at_startup(config=_STRICT_CFG) is None
+
+
+def test_emit_agent_identity_records_config_load(monkeypatch, tmp_path):
+    import agent.governance_audit as ga
+    led = _enable_ledger(monkeypatch, tmp_path)
+    ident = sas.emit_agent_identity_at_startup(config={"security": {"posture": "strict"}})
+    assert ident is not None and ident["instance_id"].startswith("sha256:")
+    recs = list(ga.iter_records(led.path))
+    assert any(r["event"] == "config.load"
+               and r["action"] == "agent.identity_bind" for r in recs)
+
+
+def test_startup_identity_matches_operational_actor_triple(monkeypatch, tmp_path):
+    """P1.4-review fix: the startup identity_bind must share code/config/
+    toolset with the session's operational tool.dispatch actors (they differ
+    only by the per-turn model), so an assessor can correlate them. The old
+    version emitted a phantom (raw config, full toolset, model=sha256(None|None))
+    that matched nothing."""
+    import agent.governance_audit_hooks as gah
+    from types import SimpleNamespace
+
+    _enable_ledger(monkeypatch, tmp_path)
+    merged = {"security": {"posture": "strict"},
+              "agent": {"disabled_toolsets": ["computer_use", "browser"]}}
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda: merged)
+
+    startup = sas.emit_agent_identity_at_startup(config={"raw": "no-agent-key"})
+    # Operational actor: same config + pruned toolset, real per-turn model.
+    agent = SimpleNamespace(provider="bedrock-govcloud", model="claude-x",
+                            enabled_toolsets=None,
+                            disabled_toolsets=["computer_use", "browser"])
+    import agent.agent_identity as ai
+    operational = ai.compute_instance_identity(agent, config=merged)
+
+    assert startup["code_hash"] == operational["code_hash"]
+    assert startup["config_hash"] == operational["config_hash"]
+    assert startup["toolset_hash"] == operational["toolset_hash"]
+    # Model differs (startup is per-turn-unbound), and is marked honestly.
+    assert startup["model"].get("resolved") == "per-turn"
+
+
+def test_default_credential_check_covers_aws_access_key(monkeypatch):
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "changeme")
+    findings = sas.run_security_audit(
+        config={"security": {"no_default_credentials": True}}
+    )
+    assert any("AWS_ACCESS_KEY_ID" in f for f in findings)

@@ -152,21 +152,26 @@ def _enabled_ledger():
 
 
 def _actor_for_agent(agent) -> dict:
-    """NPE actor stub + model/provider binding (LG-QT-03 traceability).
+    """NPE actor with the real instance identity (LG-IA-02 / LG-QT-03).
 
-    The real instance identity (code+config+model hash) lands with P1.4 /
-    ``agent_identity.py``; provider+model are stamped now so every dispatch
-    is already traceable to the serving model.
+    The identity binds code + resolved config/posture + resolved toolset +
+    serving model into one ``instance_id`` (agent/agent_identity.py). Falls
+    back to a provider/model-only stub if identity derivation is unavailable,
+    so audit emission never breaks on identity.
     """
-    actor: dict[str, Any] = {"type": "npe", "instance_id": None}
     try:
-        provider = getattr(agent, "provider", None)
-        model = getattr(agent, "model", None)
-        if provider or model:
-            actor["model"] = {"provider": provider, "model": model}
+        from agent.agent_identity import compute_instance_identity
+        return compute_instance_identity(agent)
     except Exception:
-        pass
-    return actor
+        actor: dict[str, Any] = {"type": "npe", "instance_id": None}
+        try:
+            provider = getattr(agent, "provider", None)
+            model = getattr(agent, "model", None)
+            if provider or model:
+                actor["model"] = {"provider": provider, "model": model}
+        except Exception:
+            pass
+        return actor
 
 
 def _trace_for(
