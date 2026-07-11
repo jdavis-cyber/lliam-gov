@@ -93,6 +93,20 @@ jobs:
       - name: Run the audit-chain gate against the resolved ledger (no-op if absent)
         run: python "${GOV_CI_DIR}/audit_chain_gate.py"
 
+  # GATE — Separation-of-Duties (LG-GV-04/05, P1.6): fail-closed on any SoD
+  # conflict in governance.role_bindings vs docs/governance/roles.yaml.
+  separation-of-duties:
+    name: Separation-of-Duties gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with: { python-version: "3.13" }
+      - name: Install PyYAML
+        run: python -m pip install --quiet pyyaml
+      - name: Assert no separation-of-duties conflicts
+        run: python "${GOV_CI_DIR}/sod_check.py"
+
   # GATE 8 — path-freeze guardrail (LG-SD-01) — PR only (needs base/head)
   path-freeze:
     name: Path-freeze guardrail

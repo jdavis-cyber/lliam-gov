@@ -83,6 +83,7 @@ security:
   require_operator_auth: true    # [additive @ P1.5] LG-IA-06: no shared/anonymous operator sessions on a networked control plane (config-of-record; dashboard_auth enforces token/oauth)
   require_mfa: true              # [additive @ P1.5] LG-IA-07 config-of-record: dashboard/ACP login via an MFA-enforcing IdP (dashboard.oauth.client_id → IdP). Runtime IdP wiring is a deployment step; the startup posture check asserts MFA-capable auth for any network bind.
   require_tls: true              # [additive @ P1.5] LG-IA-08: provider/MCP endpoints over VERIFIED TLS (ssl_guard). A disabled trust-store verification REFUSES to start under strict.
+  require_authenticated_approver: true   # [additive @ P1.6] LG-GV-05: an anonymous/non-interactive high-risk approval fails closed (couples to deny_on_no_approver); every approval/denial/override must carry an authenticated dashboard_auth principal. Runtime wiring of the principal into the approval.decision record is remediation-pass scope (the P1.2 subject seam + taxonomy already support it).
   cert_pinning:                  # [additive @ P1.5] LG-IA-08 config-of-record: per-high-side-endpoint SPKI pins checked in the egress wrapper (ssl_guard verifies the trust store but does not pin). Pin list provisioned per deployment; enforcement is remediation-pass scope.
     enabled: false
   device_auth:                   # [additive @ P1.5] LG-IA-09: computer_use/browser are already policy-disabled in the CUI baseline (agent.disabled_toolsets + security.tool_denylist, P0.4); enrolled-host allowlist for any re-enable is config-of-record.
@@ -327,6 +328,28 @@ secrets:
 
 delegation:
   max_spawn_depth: 3                 # [additive @ P1.4] LG-IA-10 config-of-record: bound the operator→Lliam→sub-agent delegation chain; runtime enforcement in delegate_tool is remediation-pass scope
+
+# =============================================================================
+# [ACTIVE @ P1.6]  ROLES / RACI / SEPARATION-OF-DUTIES  (LG-GV-04/05)
+# -----------------------------------------------------------------------------
+# governance.role_bindings maps the named roles in docs/governance/roles.yaml to
+# authenticated dashboard_auth principals. The SoD gate (ci/governance-ci-gates/
+# sod_check.py) enforces the separation_of_duties rules in roles.yaml against
+# these bindings and fails closed on any conflict. The acting ENGINEER is the
+# Lliam-GOV NPE agent (its LG-IA-02 instance identity), distinct from the human
+# APPROVER, so Approver ≠ Engineer holds by construction.
+# security.require_authenticated_approver makes an anonymous/non-interactive
+# high-risk approval fail closed (LG-GV-05, couples to deny_on_no_approver).
+# =============================================================================
+governance:
+  role_bindings:
+    caio: jdavis@agency.mil                 # [additive @ P1.6] LG-GV-05
+    isso: jdavis@agency.mil                 #   ISSO co-held by the operator in eval (tracked)
+    ai_risk_owner: jdavis@agency.mil
+    approver: jdavis@agency.mil             #   human HITL approver (dashboard_auth principal)
+    engineer: "npe:lliam-gov"               #   the acting party is the NPE agent — Approver ≠ Engineer ✓
+    auditor: auditor@independent.mil        #   independent of approver/engineer/risk (SoD)
+    killswitch_owner: jdavis@agency.mil
 # NOTE: LG-IA-01 managed-account inventory (security.accounts) and the
 # LG-IA-05 no-default-credential switch (security.no_default_credentials) live
 # in the EXISTING `security:` block at the top of this file — a SECOND top-level
