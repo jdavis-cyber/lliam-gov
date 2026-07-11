@@ -54,6 +54,10 @@ _STRICT_COERCIONS: Tuple[Tuple[str, Any, str], ...] = (
      "no runtime PyPI installs (air-gap / supply-chain integrity)"),
     ("security.deny_on_no_approver", True,
      "high-risk actions fail CLOSED when no human approver is reachable"),
+    ("security.api_server_key_required", True,
+     "LG-IA-11: a network-accessible API server with no API_SERVER_KEY refuses to start (RCE gate) — cannot be downgraded to advisory while strict"),
+    ("security.require_tls", True,
+     "LG-IA-08: provider/MCP endpoints over verified TLS — a disabled trust-store verification refuses to start while strict"),
 )
 
 # Where the LG-CH-09 'findings are blocking' signal is stamped, so the startup

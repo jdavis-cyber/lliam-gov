@@ -248,25 +248,175 @@ def _network_listener_without_auth(config: Optional[dict]) -> list[str]:
 
     cfg = config or {}
 
-    # API server.
+    # API server. IMPORTANT: at runtime the API server is configured from ENV
+    # (API_SERVER_ENABLED / API_SERVER_KEY / API_SERVER_HOST — see
+    # gateway/config.py:1534-1554), NOT from the load_config() dict, which does
+    # not carry a `platforms` block. Reading only cfg["platforms"] made this
+    # check inert in production (the config dict's api block is None). Detect the
+    # server from EITHER source: the (rare) config platforms block OR — the real
+    # trigger — the environment the gateway itself reads.
     try:
         plats = (cfg.get("platforms") or {})
         api = plats.get("api_server") if isinstance(plats, dict) else None
-        if isinstance(api, dict) and api.get("enabled"):
-            extra = api.get("extra") or {}
+        extra = (api.get("extra") or {}) if isinstance(api, dict) else {}
+
+        # Mirror the gateway's own enablement predicate EXACTLY
+        # (gateway/config.py:1539 — ``api_server_enabled or api_server_key``,
+        # with enabled ∈ {true,1,yes}). A broader predicate (e.g. treating a
+        # stray API_SERVER_HOST as enablement) would spuriously refuse startup
+        # for a server the gateway never actually starts.
+        env_enabled = os.environ.get("API_SERVER_ENABLED", "").strip().lower() in {
+            "true", "1", "yes"
+        }
+        cfg_enabled = bool(isinstance(api, dict) and api.get("enabled"))
+        # A set API_SERVER_KEY alone also activates the server (config.py:1539).
+        key = str(extra.get("key") or os.environ.get("API_SERVER_KEY", "")).strip()
+        enabled = env_enabled or cfg_enabled or bool(key)
+        if enabled:
             host = extra.get("host") or os.environ.get("API_SERVER_HOST", "127.0.0.1")
-            key = extra.get("key") or os.environ.get("API_SERVER_KEY", "")
-            if is_network_accessible(str(host)) and not str(key).strip():
-                findings.append(
-                    f"OpenAI-compatible API server is network-accessible ({host}) "
-                    "with NO API_SERVER_KEY. It dispatches terminal-capable agent "
-                    "work — an unauthenticated network endpoint is remote code "
-                    "execution. Set a strong API_SERVER_KEY."
-                )
+            if is_network_accessible(str(host)):
+                # Parity with the adapter's own trust boundary
+                # (APIServerAdapter.connect refuses a network bind unless the
+                # key clears the entropy floor) — a weak-but-nonempty key like
+                # "x" must not slip this gate either.
+                try:
+                    from lliam_cli.auth import has_usable_secret
+                    strong = has_usable_secret(key, min_length=16)
+                except Exception:
+                    strong = bool(key)
+                if not strong:
+                    detail = ("with NO API_SERVER_KEY" if not key
+                              else "with a WEAK API_SERVER_KEY (<16 chars)")
+                    findings.append(
+                        f"OpenAI-compatible API server is network-accessible ({host}) "
+                        f"{detail}. It dispatches terminal-capable agent work — an "
+                        "unauthenticated network endpoint is remote code execution. "
+                        "Set a strong (≥16-char, high-entropy) API_SERVER_KEY."
+                    )
     except Exception:
         pass
 
     return findings
+
+
+def _tls_verification_disabled() -> list[str]:
+    """Warn when TLS trust-store verification is disabled (LG-IA-08)."""
+    from lliam_cli.env_compat import getenv_compat
+
+    findings: list[str] = []
+    for var in ("SKIP_SSL_GUARD", "SKIP_SSL_VERIFY", "INSECURE_SKIP_VERIFY"):
+        val = (getenv_compat(var, "") or "").strip().lower()
+        if val in {"1", "true", "yes", "on"}:
+            findings.append(
+                f"TLS trust-store verification is DISABLED via {var}. Provider "
+                "and MCP endpoints would be reachable over unverified TLS "
+                "(MITM / CUI spillage). Unset it (LG-IA-08 require verified TLS)."
+            )
+    return findings
+
+
+class ControlPlaneAuthError(RuntimeError):
+    """A network-accessible control plane is unauthenticated under strict posture.
+
+    Raised only when the effective posture is strict, the relevant require-*
+    switch is on, AND a network-accessible endpoint (API server / dashboard)
+    has no authenticator. An unauthenticated network endpoint that dispatches
+    terminal-capable agent work is remote code execution — a CUI deployment
+    must refuse to start rather than expose it (LG-IA-11 / LG-IA-06).
+    """
+
+
+# Sentinel so the control-plane gate runs once per process.
+_CONTROL_PLANE_CHECKED = False
+
+
+def enforce_control_plane_auth_at_startup(
+    *, config: Optional[dict] = None, force: bool = False
+) -> Optional[list[str]]:
+    """Fail-closed gate for control-plane authentication (LG-IA-11/06/08).
+
+    Resolves the EFFECTIVE MERGED config (not a raw passed shape — same fix
+    class as the P1.3 startup gate) for both the require-* switches and the
+    strict-posture decision. Findings:
+
+      * API server network-accessible with no ``API_SERVER_KEY`` (LG-IA-11 RCE
+        gate) — blocking under strict + ``security.api_server_key_required``.
+      * TLS verification disabled (LG-IA-08) — blocking under strict +
+        ``security.require_tls``.
+
+    On a blocking finding: logs ``critical``, appends a ``security.error``
+    alert to the ledger, and raises :class:`ControlPlaneAuthError`. Advisory
+    (non-strict, or switch off): returns the findings without raising.
+    Returns None when there is nothing to report. Idempotent per process.
+    """
+    global _CONTROL_PLANE_CHECKED
+    if _CONTROL_PLANE_CHECKED and not force:
+        return None
+
+    # Prefer a passed config that actually carries control-plane state
+    # (security / platforms); otherwise resolve the merged config so the
+    # overlay's require-* switches and the api_server block are present. (The
+    # audit-specific _effective_config keys on an 'audit' block, which the
+    # gateway's control-plane config need not have — using it here would drop
+    # the passed platforms block, the P1.3/P1.4 review lesson applied.)
+    if isinstance(config, dict) and (config.get("security") or config.get("platforms")):
+        eff = config
+    else:
+        try:
+            from lliam_cli import config as _cfg
+            eff = _cfg.load_config()
+        except Exception:
+            eff = config or {}
+    sec = eff.get("security") if isinstance(eff, dict) else {}
+    sec = sec if isinstance(sec, dict) else {}
+
+    blocking: list[str] = []
+    advisory: list[str] = []
+
+    # LG-IA-11 — API-server key (the RCE gate).
+    api_findings = _network_listener_without_auth(eff)
+    if api_findings:
+        (blocking if sec.get("api_server_key_required") else advisory).extend(api_findings)
+    # LG-IA-08 — verified TLS.
+    tls_findings = _tls_verification_disabled()
+    if tls_findings:
+        (blocking if sec.get("require_tls") else advisory).extend(tls_findings)
+
+    if not blocking and not advisory:
+        _CONTROL_PLANE_CHECKED = True
+        return None
+
+    _CONTROL_PLANE_CHECKED = True
+    for f in advisory:
+        logger.warning("[control-plane] %s", f)
+    # Log blocking findings even when we won't raise (switch on but non-strict),
+    # so a keyless network endpoint is never operator-invisible.
+    strict = _effective_is_strict(config)
+    if blocking and not strict:
+        for f in blocking:
+            logger.warning("[control-plane] (advisory — not strict) %s", f)
+
+    if blocking and strict:
+        for f in blocking:
+            logger.critical("[control-plane] BLOCKING: %s", f)
+        try:
+            from agent import governance_audit as ga
+            led = ga.get_ledger()
+            if led is not None:
+                led.emit(
+                    "security.error",
+                    action="control_plane.unauthenticated",
+                    decision="halt",
+                    severity="critical",
+                    outcome={"status": "blocked", "class": "control_plane_unauth",
+                             "error": "; ".join(blocking)[:1000]},
+                    source_module="lliam_cli/security_audit_startup.py:enforce_control_plane_auth_at_startup",
+                )
+        except Exception:
+            pass
+        raise ControlPlaneAuthError("; ".join(blocking))
+
+    return blocking + advisory
 
 
 def run_security_audit(
@@ -301,6 +451,10 @@ def run_security_audit(
         pass
     try:
         findings.extend(_default_credentials_in_use(config))
+    except Exception:
+        pass
+    try:
+        findings.extend(_tls_verification_disabled())
     except Exception:
         pass
     return findings

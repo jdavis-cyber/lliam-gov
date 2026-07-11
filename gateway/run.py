@@ -18421,6 +18421,27 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     except Exception as _ident_exc:
         logger.debug("Agent identity emit failed (non-fatal): %s", _ident_exc)
 
+    # LG-IA-11/06/08 (additive): fail-closed control-plane auth gate. Refuses to
+    # start a network-accessible API server with no API_SERVER_KEY (RCE gate) or
+    # with TLS verification disabled, under strict posture. Pass the merged
+    # config so the overlay require-* switches + strict posture are visible.
+    from lliam_cli.security_audit_startup import (
+        enforce_control_plane_auth_at_startup,
+        ControlPlaneAuthError,
+    )
+    try:
+        try:
+            from lliam_cli.config import load_config as _load_merged_cp
+
+            _cp_cfg = _load_merged_cp()
+        except Exception:
+            _cp_cfg = _audit_cfg
+        enforce_control_plane_auth_at_startup(config=_cp_cfg)
+    except ControlPlaneAuthError:
+        raise
+    except Exception as _cp_exc:
+        logger.debug("Control-plane auth check failed (non-fatal): %s", _cp_exc)
+
     from lliam_cli.security_audit_startup import (
         verify_audit_chain_at_startup,
         AuditChainVerificationError,

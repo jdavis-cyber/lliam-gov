@@ -75,6 +75,19 @@ security:
       owner: jdavis
       status: authorized
 
+  # [ACTIVE @ P1.5 — LG-IA]  OPERATOR + ENDPOINT AUTHENTICATION
+  # Consumed by the NEW fail-closed enforce_control_plane_auth_at_startup gate
+  # (lliam_cli/security_audit_startup.py), wired at gateway startup. Kept in THIS
+  # security block (a second top-level security: would drop the P0 posture).
+  api_server_key_required: true  # [additive @ P1.5] LG-IA-11: a network-accessible API server with no API_SERVER_KEY REFUSES to start (RCE gate). Loopback-only binds are unaffected.
+  require_operator_auth: true    # [additive @ P1.5] LG-IA-06: no shared/anonymous operator sessions on a networked control plane (config-of-record; dashboard_auth enforces token/oauth)
+  require_mfa: true              # [additive @ P1.5] LG-IA-07 config-of-record: dashboard/ACP login via an MFA-enforcing IdP (dashboard.oauth.client_id → IdP). Runtime IdP wiring is a deployment step; the startup posture check asserts MFA-capable auth for any network bind.
+  require_tls: true              # [additive @ P1.5] LG-IA-08: provider/MCP endpoints over VERIFIED TLS (ssl_guard). A disabled trust-store verification REFUSES to start under strict.
+  cert_pinning:                  # [additive @ P1.5] LG-IA-08 config-of-record: per-high-side-endpoint SPKI pins checked in the egress wrapper (ssl_guard verifies the trust store but does not pin). Pin list provisioned per deployment; enforcement is remediation-pass scope.
+    enabled: false
+  device_auth:                   # [additive @ P1.5] LG-IA-09: computer_use/browser are already policy-disabled in the CUI baseline (agent.disabled_toolsets + security.tool_denylist, P0.4); enrolled-host allowlist for any re-enable is config-of-record.
+    computer_use_enrolled_hosts: []
+
   # [ACTIVE @ P0.3]  SKILL ENABLEMENT POLICY MIRROR  (LG-SC-01/02/03/06, LG-AZ-02)
   # Consumed by the NEW tools/tool_policy.py gate. The detailed, reviewable policy
   # is policy/skills-allowlist.yaml; these keys mirror it for one-artifact audit.
@@ -341,7 +354,9 @@ delegation:
 # [DONE P0.7  CH-06/CH-03/SD-01/GV-02/CH-08] ci/governance-ci-gates/ (godmode/drift/path-freeze/deps) + .github/workflows/governance-gates.yml + intended-use.md + deviation-register
 # [DONE P1.1 AU-01..07,09]  audit: { ledger_enabled, ledger_path, hash_algo, redact_before_persist, fail_closed(+scope), events } ; agent/governance_audit.py ; logs/ on write-denylist
 # [DONE P1.2 AU-02/10,MC-03,QT-03] audit: { chokepoint_required, on_unrecorded, unify_dashboard_auth, unify_acp } ; agent/governance_audit_hooks.py wired at both dispatch paths + model_tools outcome funnel + dashboard_auth bridge
-# [P1.3 AU-08]              audit: { verify_on_startup: true, verify_fail_action: block, anchor_interval: 1000, retention_days: 365, rotation: seal-then-rotate }
+# [DONE P1.3 AU-08]         audit: { verify_on_startup, verify_fail_action } ; verify_chain() + startup gate + CI/cron audit_chain_gate
+# [DONE P1.4 IA-01..05,10]  identity/gateway.multiplex_profiles/secrets/security.{no_default_credentials,accounts}/delegation ; agent/agent_identity.py
+# [DONE P1.5 IA-06..09,11]  security.{api_server_key_required,require_operator_auth,require_mfa,require_tls,cert_pinning,device_auth} ; enforce_control_plane_auth_at_startup fail-closed gate
 # [P1   IA-*]               dashboard auth + MFA ; gateway.multiplex_profiles ; secrets source
 # [P2   MP-01..]            security.provider_allowlist_enforce / allowed_providers
 # [P2   NE-01..06 / DP-10]  security.egress.{mode,proxy,allowed_domains} ; website_policy fail_closed
