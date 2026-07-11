@@ -253,6 +253,9 @@ audit:
   on_unrecorded: block               # [additive @ P1.2] LG-AU-09 at the gate: unrecordable high-risk dispatch is blocked
   unify_dashboard_auth: true         # [additive @ P1.2] LG-AU-10: audit_log() events forwarded into the chained ledger
   unify_acp: true                    # [additive @ P1.2] LG-AU-10/MC-03: operator-subject contextvar + trace stamped into records; full ACP principal plumb lands with P1.5 operator authn (AI-520)
+  # ---- [ACTIVE @ P1.3] chain-integrity verification (LG-AU-08) ----
+  verify_on_startup: true            # [additive @ P1.3] LG-AU-08: verify_chain() at process start (gateway startup seam)
+  verify_fail_action: block          # [additive @ P1.3] LG-AU-08: a chain break under strict posture refuses high-risk start (fail-closed); advisory profiles alert-only
   events:                            # [additive] LG-AU-03: auditable event set (L2 floor; catalog in the AU spec §2)
     - tool.dispatch
     - tool.result

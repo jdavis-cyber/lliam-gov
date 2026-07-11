@@ -782,3 +782,198 @@ def iter_records(path: Optional[Path] = None) -> Iterator[dict]:
             line = line.strip()
             if line:
                 yield json.loads(line)
+
+
+# --------------------------------------------------------------------------
+# Chain-integrity verification (LG-AU-08, P1.3)
+# --------------------------------------------------------------------------
+
+_PARSE_ERROR = object()  # sentinel: an unparseable ledger line (a break)
+
+
+def _iter_records_guarded(path: Path):
+    """Yield ``(index, record)`` pairs; a bad line yields ``_PARSE_ERROR``.
+
+    Unlike :func:`iter_records` (which raises ``JSONDecodeError`` on a
+    corrupt line — appropriate for callers that want to fail hard),
+    verification must treat a corrupt line as a detectable break, not an
+    exception the caller might swallow as benign.
+    """
+    if not path.exists():
+        return
+    with open(path, "r", encoding="utf-8") as f:
+        for index, line in enumerate(f):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                yield index, json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                yield index, _PARSE_ERROR
+                return
+
+
+class ChainVerificationResult:
+    """Outcome of :func:`verify_chain`.
+
+    ``ok`` is True only when every checked record's ``record_hash`` matches
+    a recompute of its canonical bytes AND its ``prev_hash`` links to the
+    prior record AND ``seq`` is contiguous. ``break_seq`` / ``reason`` name
+    the FIRST failure so an operator/CI can point at the exact record.
+    """
+
+    __slots__ = ("ok", "checked", "total", "break_seq", "break_index", "reason", "ledger_path")
+
+    def __init__(
+        self,
+        *,
+        ok: bool,
+        checked: int,
+        total: int,
+        break_seq: Optional[int] = None,
+        break_index: Optional[int] = None,
+        reason: Optional[str] = None,
+        ledger_path: Optional[str] = None,
+    ) -> None:
+        self.ok = ok
+        self.checked = checked
+        self.total = total
+        self.break_seq = break_seq
+        self.break_index = break_index
+        self.reason = reason
+        self.ledger_path = ledger_path
+
+    def as_dict(self) -> dict:
+        return {
+            "ok": self.ok,
+            "checked": self.checked,
+            "total": self.total,
+            "break_seq": self.break_seq,
+            "break_index": self.break_index,
+            "reason": self.reason,
+            "ledger_path": self.ledger_path,
+        }
+
+    def __repr__(self) -> str:  # pragma: no cover - diagnostic only
+        if self.ok:
+            return f"<ChainVerification PASS checked={self.checked}>"
+        return (
+            f"<ChainVerification FAIL at seq={self.break_seq} "
+            f"index={self.break_index}: {self.reason}>"
+        )
+
+
+def verify_chain(
+    path: Optional[Path] = None,
+    *,
+    start_after_seq: int = 0,
+    start_prev_hash: str = GENESIS_PREV_HASH,
+) -> ChainVerificationResult:
+    """Walk the ledger and validate every ``prev_hash`` + ``record_hash`` link.
+
+    Returns a :class:`ChainVerificationResult`; the FIRST break stops the
+    walk and is reported (an operator only needs the earliest tamper point,
+    and later hashes are meaningless once the chain is broken). A missing or
+    empty ledger verifies as PASS with ``total=0`` — there is nothing to
+    tamper with.
+
+    Segment verification (``start_after_seq`` / ``start_prev_hash``) lets a
+    caller verify only the records after a known-good anchor, so startup
+    cost stays O(segment) once external anchoring exists (spec §4.3); the
+    default verifies the whole chain. When ``start_after_seq > 0`` the
+    anchor record's on-disk ``record_hash`` must match the caller-supplied
+    ``start_prev_hash`` (the trusted anchor value) AND recompute to its own
+    seal — otherwise the anchor itself is reported as the break, so the
+    trusted anchor is never taken on faith.
+
+    An unparseable ledger line is a FAIL (a corrupt line is a tamper
+    signal, not a benign error) — this method never raises on ledger
+    content, so callers cannot mistake corruption for "nothing to verify".
+
+    Accepted residual (deferred to external anchoring, spec §4.2): a
+    consistent PREFIX left by suffix-truncation or a whole-file deletion
+    verifies as PASS — an internal hash chain has no high-water mark of its
+    own. ``checked``/``total`` are returned so a caller holding an external
+    record count can detect shrinkage; the standing detective control for
+    full-file rewrite/truncation is external anchoring + this count.
+    """
+    p = Path(path) if path is not None else resolve_ledger_path()
+    checked = 0
+    total = 0
+    expected_prev = start_prev_hash
+    expected_seq = start_after_seq + 1
+    started = start_after_seq == 0
+    for index, record in _iter_records_guarded(p):
+        if record is _PARSE_ERROR:
+            return ChainVerificationResult(
+                ok=False, checked=checked, total=total + 1, break_index=index,
+                reason="unparseable ledger line (corruption or partial write)",
+                ledger_path=str(p),
+            )
+        total += 1
+        seq = record.get("seq")
+        # Fast-forward to the segment start when verifying after an anchor.
+        if not started:
+            if seq == start_after_seq:
+                sealed = record.get("record_hash")
+                if _sha256_hex(canonical_bytes(record)) != sealed:
+                    return ChainVerificationResult(
+                        ok=False, checked=checked, total=total,
+                        break_seq=seq, break_index=index,
+                        reason="anchor record seal mismatch (anchor itself edited)",
+                        ledger_path=str(p),
+                    )
+                if start_prev_hash != GENESIS_PREV_HASH and sealed != start_prev_hash:
+                    return ChainVerificationResult(
+                        ok=False, checked=checked, total=total,
+                        break_seq=seq, break_index=index,
+                        reason=(
+                            "anchor record_hash does not match the trusted "
+                            "start_prev_hash (forged/wrong anchor)"
+                        ),
+                        ledger_path=str(p),
+                    )
+                started = True
+                expected_prev = str(sealed)
+                expected_seq = start_after_seq + 1
+            continue
+        if not isinstance(seq, int) or seq != expected_seq:
+            return ChainVerificationResult(
+                ok=False, checked=checked, total=total,
+                break_seq=seq if isinstance(seq, int) else None,
+                break_index=index,
+                reason=f"non-contiguous seq: expected {expected_seq}, got {seq!r}",
+                ledger_path=str(p),
+            )
+        prev = record.get("prev_hash")
+        if prev != expected_prev:
+            return ChainVerificationResult(
+                ok=False, checked=checked, total=total, break_seq=seq,
+                break_index=index,
+                reason=(
+                    f"prev_hash mismatch: expected {expected_prev}, "
+                    f"got {prev!r} (deletion/reorder/insert)"
+                ),
+                ledger_path=str(p),
+            )
+        sealed = record.get("record_hash")
+        recomputed = _sha256_hex(canonical_bytes(record))
+        if sealed != recomputed:
+            return ChainVerificationResult(
+                ok=False, checked=checked, total=total, break_seq=seq,
+                break_index=index,
+                reason="record_hash mismatch: record content was edited in place",
+                ledger_path=str(p),
+            )
+        checked += 1
+        expected_prev = str(sealed)
+        expected_seq = seq + 1
+    if not started and start_after_seq != 0:
+        return ChainVerificationResult(
+            ok=False, checked=checked, total=total,
+            reason=f"anchor seq {start_after_seq} not found in ledger",
+            ledger_path=str(p),
+        )
+    return ChainVerificationResult(
+        ok=True, checked=checked, total=total, ledger_path=str(p),
+    )

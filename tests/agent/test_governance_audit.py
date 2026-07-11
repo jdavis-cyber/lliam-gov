@@ -421,6 +421,101 @@ def test_configured_ledger_path_outside_home_logs_is_refused(tmp_path, monkeypat
     assert inside.name == "x.log"
 
 
+def test_verify_chain_passes_on_good_ledger(tmp_path):
+    led = _ledger(tmp_path)
+    for n in range(5):
+        led.emit("tool.result", action=f"op-{n}", source_module="tests")
+    result = ga.verify_chain(led.path)
+    assert result.ok
+    assert result.checked == 5
+    assert result.total == 5
+    assert result.break_seq is None
+
+
+def test_verify_chain_empty_and_missing_are_pass(tmp_path):
+    missing = ga.verify_chain(tmp_path / "nope.log")
+    assert missing.ok and missing.total == 0
+    (tmp_path / "empty.log").write_text("", encoding="utf-8")
+    empty = ga.verify_chain(tmp_path / "empty.log")
+    assert empty.ok and empty.total == 0
+
+
+def test_verify_chain_detects_inplace_edit(tmp_path):
+    led = _ledger(tmp_path)
+    for n in range(3):
+        led.emit("tool.result", action=f"op-{n}", source_module="tests")
+    lines = led.path.read_text(encoding="utf-8").splitlines()
+    rec = json.loads(lines[1])
+    rec["action"] = "op-FORGED"
+    lines[1] = json.dumps(rec, sort_keys=True, separators=(",", ":"))
+    led.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    result = ga.verify_chain(led.path)
+    assert not result.ok
+    assert result.break_seq == 2
+    assert "record_hash mismatch" in result.reason
+
+
+def test_verify_chain_detects_deletion(tmp_path):
+    led = _ledger(tmp_path)
+    for n in range(4):
+        led.emit("tool.result", action=f"op-{n}", source_module="tests")
+    lines = led.path.read_text(encoding="utf-8").splitlines()
+    del lines[1]  # drop record seq=2 → seq 3's prev_hash now dangles
+    led.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    result = ga.verify_chain(led.path)
+    assert not result.ok
+    # First anomaly is the seq gap (…1, 3…).
+    assert result.break_seq == 3
+    assert "seq" in result.reason
+
+
+def test_verify_chain_detects_reorder(tmp_path):
+    led = _ledger(tmp_path)
+    for n in range(3):
+        led.emit("tool.result", action=f"op-{n}", source_module="tests")
+    lines = led.path.read_text(encoding="utf-8").splitlines()
+    lines[0], lines[1] = lines[1], lines[0]
+    led.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    result = ga.verify_chain(led.path)
+    assert not result.ok
+
+
+def test_verify_chain_segment_after_anchor(tmp_path):
+    led = _ledger(tmp_path)
+    recs = [led.emit("tool.result", action=f"op-{n}", source_module="tests")
+            for n in range(5)]
+    # Verify only the segment after seq 3 — cheaper, same guarantee forward.
+    result = ga.verify_chain(led.path, start_after_seq=3,
+                             start_prev_hash=recs[2]["record_hash"])
+    assert result.ok
+    assert result.checked == 2  # seqs 4 and 5
+
+
+def test_verify_chain_segment_rejects_forged_anchor(tmp_path):
+    """Segment mode must not take the on-disk anchor on faith: a
+    start_prev_hash that doesn't match the anchor's sealed hash is a break
+    (P1.3 review — start_prev_hash was previously ignored)."""
+    led = _ledger(tmp_path)
+    recs = [led.emit("tool.result", action=f"op-{n}", source_module="tests")
+            for n in range(5)]
+    result = ga.verify_chain(led.path, start_after_seq=3,
+                             start_prev_hash="deadbeef" * 8)
+    assert not result.ok
+    assert "anchor" in result.reason
+
+
+def test_verify_chain_treats_garbage_line_as_break(tmp_path):
+    """An unparseable line is a tamper signal, not a benign error — the
+    verifier must return FAIL, never raise (P1.3 review, fail-open gap)."""
+    led = _ledger(tmp_path)
+    led.emit("tool.result", action="op", source_module="tests")
+    with open(led.path, "a", encoding="utf-8") as f:
+        f.write("{ this is not valid json at all\n")
+    result = ga.verify_chain(led.path)  # must NOT raise
+    assert not result.ok
+    assert "unparseable" in result.reason
+
+
 def test_ledger_path_is_write_denied(tmp_path, monkeypatch):
     """LG-AU-07: the agent's own file tools cannot reach the ledger."""
     import agent.file_safety as fs

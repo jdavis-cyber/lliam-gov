@@ -282,3 +282,166 @@ def log_startup_security_warnings(
         for i, f in enumerate(findings, 1):
             logger.warning("  [security %d/%d] %s", i, len(findings), f)
     return findings
+
+
+# ---------------------------------------------------------------------------
+# Audit-chain integrity verification at startup (LG-AU-08, P1.3)
+# ---------------------------------------------------------------------------
+
+# Sentinel so the chain verification runs once per process.
+_CHAIN_VERIFIED = False
+
+
+class AuditChainVerificationError(RuntimeError):
+    """Startup audit-chain verification FAILED under a blocking posture.
+
+    Raised only when the governance ledger is enabled, ``verify_chain``
+    reports a break, AND the effective posture requires blocking
+    (``audit.verify_fail_action: block`` on strict posture). A broken chain
+    means the tamper-evidence record can no longer be trusted, so a CUI
+    deployment must refuse to rely on it rather than proceed silently.
+    """
+
+
+def verify_audit_chain_at_startup(
+    *, config: Optional[dict] = None, force: bool = False
+) -> Optional[dict]:
+    """Verify the governance audit chain once at startup (LG-AU-08).
+
+    No-op (returns None) when the ledger is disabled — the shipped/low-side
+    profile has no ledger. On a good chain, logs at debug and returns the
+    PASS result dict. On a break:
+
+      * always logs ``logger.critical`` and appends a ``security.error``
+        alert to the ledger (the break itself is auditable);
+      * if ``audit.verify_fail_action`` is ``block`` (the gov-overlay
+        default) and the posture is strict, raises
+        :class:`AuditChainVerificationError` so the caller can refuse a
+        high-risk start (spec §4.3);
+      * otherwise (advisory posture) returns the FAIL result dict without
+        raising.
+
+    The posture and audit settings are resolved from the EFFECTIVE merged
+    config (``load_config()``), NOT from the raw config a caller happens to
+    pass: ``security.posture: strict`` is injected by the gov overlay and
+    only exists post-merge, so trusting a raw-shaped ``config`` here would
+    silently make the fail-closed block inert (the exact defect the P1.3
+    review caught). The ``config`` argument is honored only when it already
+    carries a strict posture / audit block (tests, explicit callers).
+
+    Idempotent per process unless ``force=True`` (tests): the sentinel is
+    latched only after a verification actually completes, so a transient
+    read error does not permanently disable the control.
+    """
+    global _CHAIN_VERIFIED
+    if _CHAIN_VERIFIED and not force:
+        return None
+    try:
+        from agent import governance_audit as ga
+    except Exception as e:  # pragma: no cover - import guard
+        logger.debug("audit-chain verify skipped (import failed): %s", e)
+        return None
+    if not ga.ledger_enabled():
+        return None
+
+    eff_cfg = _effective_config(config)
+    audit_cfg = {}
+    try:
+        audit_cfg = dict(eff_cfg.get("audit") or {})
+    except Exception:
+        audit_cfg = {}
+    if not audit_cfg.get("verify_on_startup", True):
+        return None
+
+    # verify_chain never raises on a tampered/garbage ledger — it returns a
+    # FAIL result (an unparseable line is itself a break, not a "non-fatal"
+    # shrug). A genuinely absent/vanished file is the only benign error.
+    try:
+        result = ga.verify_chain()
+    except Exception as e:
+        logger.warning("audit-chain verify errored (treated as unverified): %s", e)
+        return None
+    _CHAIN_VERIFIED = True  # a verification actually completed
+
+    if result.ok:
+        logger.debug(
+            "audit-chain verify PASS (%d records, %s)",
+            result.checked, result.ledger_path,
+        )
+        return result.as_dict()
+
+    logger.critical(
+        "AUDIT-CHAIN VERIFY FAILED at seq=%s: %s (ledger=%s) — the "
+        "tamper-evidence record cannot be trusted",
+        result.break_seq, result.reason, result.ledger_path,
+    )
+    # The break is itself a security event. Best-effort append (the ledger
+    # may be the compromised artifact; the alert is corroborating).
+    try:
+        led = ga.get_ledger()
+        if led is not None:
+            led.emit(
+                "security.error",
+                action="ledger.chain_verify_failed",
+                decision="halt",
+                severity="critical",
+                outcome={
+                    "status": "failure",
+                    "class": "chain_verify_failed",
+                    "error": result.reason,
+                },
+                resource={"type": "ledger", "path": result.ledger_path,
+                          "break_seq": result.break_seq},
+                source_module="lliam_cli/security_audit_startup.py:verify_audit_chain_at_startup",
+            )
+    except Exception:
+        pass
+
+    fail_action = str(audit_cfg.get("verify_fail_action", "block")).lower()
+    if fail_action == "block" and _effective_is_strict(config):
+        raise AuditChainVerificationError(
+            f"audit-chain verification failed at seq={result.break_seq}: "
+            f"{result.reason}"
+        )
+    return result.as_dict()
+
+
+def _effective_config(config: Optional[dict]) -> dict:
+    """Return the config to read audit settings from.
+
+    Prefer a passed config that already carries an ``audit`` block (tests /
+    explicit callers); otherwise resolve the real merged config via
+    ``load_config()`` so overlay-injected keys are present. Falls back to
+    whatever was passed on a load failure.
+    """
+    if isinstance(config, dict) and "audit" in config:
+        return config
+    try:
+        from lliam_cli import config as _cfg
+        return _cfg.load_config()
+    except Exception:
+        return config or {}
+
+
+def _effective_is_strict(config: Optional[dict]) -> bool:
+    """True when the EFFECTIVE posture is strict.
+
+    Checks the passed config first (a test/caller that already supplied a
+    strict posture), then falls back to the merged ``load_config()`` — so a
+    caller that passes a raw, overlay-less config (e.g. the gateway's
+    ``read_raw_config()``) cannot silently defeat the fail-closed block.
+    """
+    try:
+        from lliam_cli import posture_resolver as _pr
+    except Exception:
+        return False
+    try:
+        if config is not None and _pr.is_strict(config):
+            return True
+    except Exception:
+        pass
+    try:
+        from lliam_cli import config as _cfg
+        return bool(_pr.is_strict(_cfg.load_config()))
+    except Exception:
+        return False

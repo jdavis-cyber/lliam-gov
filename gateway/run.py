@@ -18406,6 +18406,33 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     except Exception as _audit_exc:
         logger.debug("Startup security audit failed (non-fatal): %s", _audit_exc)
 
+    # LG-AU-08 (additive): verify the governance audit chain at startup.
+    # No-op when the ledger is disabled; on a break under strict posture
+    # with verify_fail_action=block this raises AuditChainVerificationError
+    # (fail-closed — refuse to rely on a tampered ledger), which propagates
+    # rather than being swallowed like the advisory posture warnings above.
+    from lliam_cli.security_audit_startup import (
+        verify_audit_chain_at_startup,
+        AuditChainVerificationError,
+    )
+    try:
+        # Pass the MERGED config so the strict-posture / audit block injected
+        # by the gov overlay is visible to the fail-closed decision — the raw
+        # _audit_cfg above lacks the overlay keys. The hook also independently
+        # re-resolves posture, but supplying the merged config is the primary
+        # fix (P1.3 review).
+        try:
+            from lliam_cli.config import load_config as _load_merged_config
+
+            _merged_cfg = _load_merged_config()
+        except Exception:
+            _merged_cfg = _audit_cfg
+        verify_audit_chain_at_startup(config=_merged_cfg)
+    except AuditChainVerificationError:
+        raise
+    except Exception as _verify_exc:
+        logger.debug("Audit-chain startup verify failed (non-fatal): %s", _verify_exc)
+
     # Optional stderr handler — level driven by -v/-q flags on the CLI.
     # verbosity=None (-q/--quiet): no stderr output
     # verbosity=0    (default):    WARNING and above
