@@ -5,7 +5,7 @@
 
 ## Verdict
 
-**PASS.** All R.V gate items verified green or documented as accepted residuals. `gov-R-good` may be tagged at `main` (524df8af or the commit carrying this report). PATH-FREEZE is re-imposed from that tag forward — P1–P6 are additive only.
+**PASS.** All R.V gate items verified green or documented as accepted residuals. `gov-R-good` MUST be tagged at the `main` commit that carries this report and the residual R.9 fix (`upload_to_pypi.yml`) — i.e., the merge commit of the close-out PR, **not** `524df8af` (which predates both). PATH-FREEZE is re-imposed from that tag forward — P1–P6 are additive only.
 
 ## Gate evidence
 
