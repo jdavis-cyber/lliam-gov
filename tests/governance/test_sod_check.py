@@ -143,9 +143,38 @@ def test_shipped_roles_declare_the_security_critical_rules():
         assert indep in auditor["not_also"]
 
 
+def test_shipped_deviations_are_complete_and_owned():
+    """Time-ROBUST structural guard on the shipped deviations.
+
+    The clean-gate tests below are date-DEPENDENT because a deviation expires at
+    its review_by. This guard is not: it asserts every shipped sod_deviations
+    entry carries a conflict pair, a bound principal, a nonempty owner, a
+    nonempty justification, and a well-formed review_by. Diagnostic: if a
+    clean-gate test fails while THIS one still passes, the cause is almost
+    certainly an EXPIRED deviation (review_by has passed) — re-review it and
+    renew the date in roles.yaml. That is the control working, not a code
+    regression.
+    """
+    roles = yaml.safe_load((_REPO / "docs/governance/roles.yaml").read_text())
+    devs = roles.get("sod_deviations") or []
+    assert devs, "expected tracked single-operator deviations in roles.yaml"
+    for d in devs:
+        assert len(d.get("conflict") or []) == 2, d
+        assert str(d.get("principal") or "").strip(), d
+        assert str(d.get("owner") or "").strip(), d
+        assert str(d.get("justification") or "").strip(), d
+        assert sod_check._parse_review_by(d.get("review_by")) is not None, d
+
+
 def test_shipped_roles_and_bindings_are_clean():
     """The committed roles.yaml + role_bindings must have zero BLOCKING
-    conflicts (accepted deviations are allowed and tracked)."""
+    conflicts (accepted deviations are allowed and tracked).
+
+    NOTE (date-dependent): deviations expire at their review_by, so this and
+    test_gate_exit_code_clean go RED once the shipped deviations expire. That is
+    intended expiry enforcement — see test_shipped_deviations_are_complete_and_owned
+    for the diagnostic. Renew the review_by in roles.yaml as a deliberate,
+    reviewed governance action (never a rubber-stamp bump)."""
     roles = yaml.safe_load((_REPO / "docs/governance/roles.yaml").read_text())
     overlay = yaml.safe_load((_REPO / "cli-config.gov.yaml").read_text())
     bindings = (overlay.get("governance") or {}).get("role_bindings") or {}
