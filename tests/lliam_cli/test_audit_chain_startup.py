@@ -126,6 +126,81 @@ def test_idempotent_per_process(monkeypatch, tmp_path):
     assert sas.verify_audit_chain_at_startup(config=_STRICT_CFG) is None
 
 
+def test_strict_block_fails_closed_on_permission_error(monkeypatch, tmp_path):
+    """LG-AU-08 fail-closed: an unexpected PermissionError while verifying the
+    chain means integrity CANNOT be confirmed. Under strict posture with
+    verify_fail_action=block that must RAISE, not log-and-proceed (P1.4 review:
+    the bare ``except Exception`` swallowed OSError and allowed startup)."""
+    _enable_ledger(monkeypatch, tmp_path)
+
+    def _boom(*a, **k):
+        raise PermissionError("audit log not readable")
+
+    monkeypatch.setattr(ga, "verify_chain", _boom)
+    with pytest.raises(sas.AuditChainVerificationError):
+        sas.verify_audit_chain_at_startup(config=_STRICT_CFG, force=True)
+
+
+def test_strict_block_fails_closed_on_oserror(monkeypatch, tmp_path):
+    """A generic OSError (I/O error) during verify is equally unconfirmable →
+    fail closed under strict/block."""
+    _enable_ledger(monkeypatch, tmp_path)
+
+    def _boom(*a, **k):
+        raise OSError("input/output error")
+
+    monkeypatch.setattr(ga, "verify_chain", _boom)
+    with pytest.raises(sas.AuditChainVerificationError):
+        sas.verify_audit_chain_at_startup(config=_STRICT_CFG, force=True)
+
+
+def test_advisory_posture_verify_error_does_not_raise(monkeypatch, tmp_path):
+    """Advisory posture: an unconfirmable verify is reported (returns None,
+    logged) but never blocks."""
+    _enable_ledger(monkeypatch, tmp_path)
+
+    def _boom(*a, **k):
+        raise PermissionError("locked")
+
+    monkeypatch.setattr(ga, "verify_chain", _boom)
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda: {})  # non-strict
+    cfg = {"audit": {"verify_fail_action": "block"}}  # no strict posture
+    assert sas.verify_audit_chain_at_startup(config=cfg, force=True) is None
+
+
+def test_missing_ledger_file_is_benign_under_strict(monkeypatch, tmp_path):
+    """A genuinely absent/vanished ledger file (FileNotFoundError) is benign —
+    there is no chain to verify — so it is skipped, not fail-closed. (Only an
+    unexpected PermissionError/OSError is an integrity-unconfirmable failure.)"""
+    _enable_ledger(monkeypatch, tmp_path)
+
+    def _missing(*a, **k):
+        raise FileNotFoundError("ledger vanished")
+
+    monkeypatch.setattr(ga, "verify_chain", _missing)
+    assert sas.verify_audit_chain_at_startup(config=_STRICT_CFG, force=True) is None
+
+
+def test_verify_error_does_not_latch_sentinel(monkeypatch, tmp_path):
+    """Sentinel hygiene: an unconfirmable (errored) verify under advisory
+    posture must NOT latch _CHAIN_VERIFIED, so a later call retries rather than
+    being permanently disabled by one transient error."""
+    _enable_ledger(monkeypatch, tmp_path)
+    calls = {"n": 0}
+
+    def _boom(*a, **k):
+        calls["n"] += 1
+        raise PermissionError("transient")
+
+    monkeypatch.setattr(ga, "verify_chain", _boom)
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda: {})  # non-strict
+    cfg = {"audit": {"verify_fail_action": "block"}}
+    sas.verify_audit_chain_at_startup(config=cfg)  # no force
+    assert sas._CHAIN_VERIFIED is False
+    sas.verify_audit_chain_at_startup(config=cfg)  # no force → must run again
+    assert calls["n"] == 2
+
+
 # ---- LG-IA-05 no-default-credentials + LG-IA-02 identity emit --------------
 
 def test_default_credential_is_flagged(monkeypatch):

@@ -116,12 +116,26 @@ def test_strict_coerces_fail_closed_switches(monkeypatch):
     assert cfg["security"]["require_tls"] is True
 
 
-def test_tls_verification_disabled_blocks_under_strict(monkeypatch):
+def test_ca_bundle_preflight_skip_is_not_reported_as_tls_disabled(monkeypatch):
+    """LG-IA-08 correction: SKIP_SSL_GUARD only skips the CA-bundle *preflight*
+    (agent/ssl_guard.py:verify_ca_bundle) — it never sets verify=False, so
+    providers/MCP still verify TLS at request time. The other historical
+    aliases (SKIP_SSL_VERIFY / INSECURE_SKIP_VERIFY) have NO runtime consumer at
+    all. None of them may be reported as 'TLS verification disabled'."""
+    monkeypatch.setenv("LLIAM_SKIP_SSL_GUARD", "1")
+    monkeypatch.setenv("HERMES_SKIP_SSL_VERIFY", "true")
+    monkeypatch.setenv("LLIAM_INSECURE_SKIP_VERIFY", "yes")
+    assert sas._tls_verification_disabled() == []
+
+
+def test_ca_bundle_preflight_skip_does_not_block_under_strict(monkeypatch):
+    """The false TLS-disabled claim previously BLOCKED startup under
+    strict+require_tls. Skipping the CA preflight is legitimate (a custom
+    corporate CA bundle) and must not refuse a strict start."""
     monkeypatch.setenv("LLIAM_SKIP_SSL_GUARD", "1")
     cfg = {"security": {"posture": "strict", "require_tls": True}}
     monkeypatch.setattr("lliam_cli.config.load_config", lambda: cfg)
-    with pytest.raises(sas.ControlPlaneAuthError, match="TLS"):
-        sas.enforce_control_plane_auth_at_startup(config=cfg)
+    assert sas.enforce_control_plane_auth_at_startup(config=cfg, force=True) is None
 
 
 def test_no_findings_returns_none(monkeypatch):

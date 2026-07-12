@@ -18218,6 +18218,27 @@ def _start_cron_ticker(stop_event: threading.Event, adapters=None, loop=None, in
     InProcessCronScheduler().start(stop_event, adapters=adapters, loop=loop, interval=interval)
 
 
+def _run_startup_security_audit(lliam_home) -> list[str]:
+    """Run the warn-on-load startup posture audit against the EFFECTIVE merged
+    config.
+
+    Uses ``load_config()`` (not ``read_raw_config()``): overlay-injected
+    switches like ``security.no_default_credentials`` exist only post-merge, so
+    handing the audit a raw home-config shape made the LG-IA-05
+    default-credential check silently inert (P1 review finding). The audit
+    itself is fail-safe and never raises.
+    """
+    from lliam_cli.security_audit_startup import log_startup_security_warnings
+
+    try:
+        from lliam_cli.config import load_config
+
+        _audit_cfg = load_config()
+    except Exception:
+        _audit_cfg = None
+    return log_startup_security_warnings(lliam_home=lliam_home, config=_audit_cfg)
+
+
 async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = False, verbosity: Optional[int] = 0) -> bool:
     """
     Start the gateway and run until interrupted.
@@ -18393,16 +18414,7 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     # so operators get the "you're exposed" signal the June 2026 MCP-config
     # persistence campaign victims never had.
     try:
-        from lliam_cli.security_audit_startup import log_startup_security_warnings
-
-        _audit_cfg = None
-        try:
-            from lliam_cli.config import read_raw_config
-
-            _audit_cfg = read_raw_config()
-        except Exception:
-            _audit_cfg = None
-        log_startup_security_warnings(lliam_home=_lliam_home, config=_audit_cfg)
+        _run_startup_security_audit(_lliam_home)
     except Exception as _audit_exc:
         logger.debug("Startup security audit failed (non-fatal): %s", _audit_exc)
 

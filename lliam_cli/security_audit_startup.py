@@ -300,19 +300,24 @@ def _network_listener_without_auth(config: Optional[dict]) -> list[str]:
 
 
 def _tls_verification_disabled() -> list[str]:
-    """Warn when TLS trust-store verification is disabled (LG-IA-08)."""
-    from lliam_cli.env_compat import getenv_compat
+    """Report a genuine runtime TLS trust-store bypass (LG-IA-08).
 
-    findings: list[str] = []
-    for var in ("SKIP_SSL_GUARD", "SKIP_SSL_VERIFY", "INSECURE_SKIP_VERIFY"):
-        val = (getenv_compat(var, "") or "").strip().lower()
-        if val in {"1", "true", "yes", "on"}:
-            findings.append(
-                f"TLS trust-store verification is DISABLED via {var}. Provider "
-                "and MCP endpoints would be reachable over unverified TLS "
-                "(MITM / CUI spillage). Unset it (LG-IA-08 require verified TLS)."
-            )
-    return findings
+    Historically this flagged ``SKIP_SSL_GUARD`` / ``SKIP_SSL_VERIFY`` /
+    ``INSECURE_SKIP_VERIFY``. That was a control overclaim: ``SKIP_SSL_GUARD``
+    only skips the *CA-bundle preflight* in ``agent/ssl_guard.py`` (a broken
+    bundle then fails loudly at request time — it never yields silent
+    unverified TLS), and the other two names have no runtime consumer at all.
+    None of them disables certificate verification.
+
+    No environment variable in this runtime disables certificate verification:
+    provider and MCP calls go through httpx/OpenAI, which verify against the
+    trust store on every request regardless of these vars. Claiming otherwise
+    both misleads operators and — under strict + require_tls — would wrongly
+    refuse a legitimate start (e.g. an operator skipping the preflight for a
+    custom corporate CA bundle). If a real runtime verification bypass is ever
+    introduced, detect it here.
+    """
+    return []
 
 
 class ControlPlaneAuthError(RuntimeError):
@@ -624,6 +629,29 @@ def verify_audit_chain_at_startup(
     # shrug). A genuinely absent/vanished file is the only benign error.
     try:
         result = ga.verify_chain()
+    except FileNotFoundError as e:
+        # A genuinely absent/vanished ledger file is benign: there is no chain
+        # to verify. Skip without latching (never blocks).
+        logger.warning("audit-chain verify skipped (ledger file absent): %s", e)
+        return None
+    except (PermissionError, OSError) as e:
+        # An unexpected filesystem error means integrity CANNOT be confirmed.
+        # Under a blocking posture that is a fail-closed condition, not a shrug:
+        # refuse to proceed as if the tamper-evidence record were trustworthy
+        # (the P1.4 review finding — the old bare ``except`` swallowed this and
+        # allowed startup). Do NOT latch the sentinel: a transient error must
+        # not permanently disable the control.
+        fail_action = str(audit_cfg.get("verify_fail_action", "block")).lower()
+        if fail_action == "block" and _effective_is_strict(config):
+            logger.critical(
+                "audit-chain verify could not complete (%s) — failing closed "
+                "under strict posture", e,
+            )
+            raise AuditChainVerificationError(
+                f"audit-chain verification could not complete: {e}"
+            ) from e
+        logger.warning("audit-chain verify errored (treated as unverified): %s", e)
+        return None
     except Exception as e:
         logger.warning("audit-chain verify errored (treated as unverified): %s", e)
         return None
