@@ -318,12 +318,10 @@ def test_self_sealed_unterminated_tail_requires_chain_continuity(
     self-sealing cannot legitimize a forked hash or sequence gap."""
     led = _ledger(tmp_path)
     first = led.emit("tool.result", action="op-0", source_module="tests")
-    candidate = {
-        "schema": ga.SCHEMA_VERSION,
-        "seq": 2,
-        "prev_hash": first["record_hash"],
-        "event": "tool.result",
-    }
+    candidate = led.build_record(
+        "tool.result", action="op-fork", source_module="tests",
+        seq=2, prev_hash=first["record_hash"],
+    )
     if broken_link == "prev_hash":
         candidate["prev_hash"] = "f" * 64
     else:
