@@ -1827,23 +1827,44 @@ def is_persistent_env(task_id: str) -> bool:
 
 def cleanup_all_environments():
     """Clean up ALL active environments. Use with caution."""
-    task_ids = list(_active_environments.keys())
+    # Include reserved in-flight keys, which are ownership-indexed before the
+    # slow backend constructor runs but are not active/published yet.
+    with _env_lock:
+        active_keys = set(_active_environments)
+        task_ids = set(active_keys)
+        task_ids.update(_environment_owners_by_key)
+        for owned_keys in _environment_keys_by_owner.values():
+            task_ids.update(owned_keys)
+    with _creation_locks_lock:
+        inflight_keys = {
+            key for key, task_lock in _creation_locks.items()
+            if task_lock.locked()
+        }
+    countable_keys = active_keys | inflight_keys
     cleaned = 0
     
     for task_id in task_ids:
         try:
             cleanup_vm(task_id)
-            cleaned += 1
+            if task_id in countable_keys:
+                cleaned += 1
         except Exception as e:
             logger.error("Error cleaning %s: %s", task_id, e, exc_info=True)
 
-    # Explicit-key cleanup above normally removes every ownership edge. Clear
-    # any orphaned index entries left without a live environment as well.
+    # Prune only coordination state no longer referenced after every explicit
+    # teardown has waited for its creator. Never clear generations/tombstones
+    # ahead of an in-flight publication check.
     with _env_lock:
-        _environment_keys_by_owner.clear()
-        _environment_owners_by_key.clear()
-        _environment_teardown_generation.clear()
-        _environment_teardown_pending.clear()
+        referenced_keys = (
+            set(_active_environments)
+            | set(_environment_owners_by_key)
+            | set(_environment_teardown_pending)
+        )
+        for owned_keys in _environment_keys_by_owner.values():
+            referenced_keys.update(owned_keys)
+        for environment_key in list(_environment_teardown_generation):
+            if environment_key not in referenced_keys:
+                _environment_teardown_generation.pop(environment_key, None)
     
     # Also clean any orphaned directories
     scratch_dir = _get_scratch_dir()

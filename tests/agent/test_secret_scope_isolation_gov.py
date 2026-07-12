@@ -546,8 +546,9 @@ def test_cleanup_task_resources_reaches_unscoped_owned_ssh_cleanup(monkeypatch):
 
 
 @pytest.mark.parametrize("creation_path", ["terminal", "file", "code"])
+@pytest.mark.parametrize("cleanup_mode", ["owner", "global"])
 def test_cleanup_cancels_inflight_ssh_environment_publication(
-    monkeypatch, creation_path,
+    monkeypatch, creation_path, cleanup_mode,
 ):
     import tools.code_execution_tool as code_execution_tool
     import tools.file_tools as file_tools
@@ -566,6 +567,7 @@ def test_cleanup_cancels_inflight_ssh_environment_publication(
     release_create = threading.Event()
     env = FakeEnvironment()
     worker_errors = []
+    cleanup_results = []
     monkeypatch.setenv("TERMINAL_ENV", "ssh")
     monkeypatch.setattr(terminal_tool, "_active_environments", {})
     monkeypatch.setattr(terminal_tool, "_last_activity", {})
@@ -611,7 +613,13 @@ def test_cleanup_cancels_inflight_ssh_environment_publication(
     creator.start()
     assert create_started.wait(timeout=5)
 
-    cleaner = threading.Thread(target=terminal_tool.cleanup_vm, args=(raw_owner,))
+    def cleanup_worker():
+        if cleanup_mode == "owner":
+            cleanup_results.append(terminal_tool.cleanup_vm(raw_owner))
+        else:
+            cleanup_results.append(terminal_tool.cleanup_all_environments())
+
+    cleaner = threading.Thread(target=cleanup_worker)
     cleaner.start()
     deadline = time.monotonic() + 5
     while not terminal_tool._environment_teardown_pending:
@@ -630,6 +638,8 @@ def test_cleanup_cancels_inflight_ssh_environment_publication(
     assert terminal_tool._environment_keys_by_owner == {}
     assert terminal_tool._environment_owners_by_key == {}
     assert terminal_tool._environment_teardown_pending == set()
+    if cleanup_mode == "global":
+        assert cleanup_results == [1]
     if creation_path in {"file", "code"}:
         assert worker_errors
 
