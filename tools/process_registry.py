@@ -1640,11 +1640,22 @@ class ProcessRegistry:
             return any(not s.exited for s in self._running.values())
 
     def kill_all(self, task_id: str = None) -> int:
-        """Kill all running processes, optionally filtered by task_id. Returns count killed."""
+        """Kill running processes owned by a task or its raw session key.
+
+        Environment-backed processes may use a derived lifecycle ``task_id``
+        (for example the opaque SSH identity key), while their ``session_key``
+        retains the raw agent session id used by close/reset callers. Matching
+        either preserves legacy task-id teardown and makes raw-session teardown
+        ownership-safe.
+        """
         with self._lock:
             targets = [
                 s for s in self._running.values()
-                if (task_id is None or s.task_id == task_id) and not s.exited
+                if (
+                    task_id is None
+                    or s.task_id == task_id
+                    or (bool(task_id) and s.session_key == task_id)
+                ) and not s.exited
             ]
 
         killed = 0
@@ -2112,6 +2123,14 @@ def _redact_process_result(result: dict) -> dict:
 
 def _handle_process(args, **kw):
     task_id = kw.get("task_id")
+    try:
+        from tools.terminal_tool import _resolve_environment_cache_key
+        task_id = _resolve_environment_cache_key(task_id)
+    except Exception:
+        # Poll/log/kill address a concrete process id and do not need a task
+        # lookup. For list, retaining the caller's original task id preserves
+        # legacy behavior when no terminal profile scope is available.
+        pass
     action = args.get("action", "")
     # Coerce to string — some models send session_id as an integer
     session_id = str(args.get("session_id", "")) if args.get("session_id") is not None else ""

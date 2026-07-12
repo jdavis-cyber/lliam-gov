@@ -881,6 +881,32 @@ def _emit_post_tool_call_hook(
     result *after* the gate (parsing the result is only worth it when a
     listener will actually consume it).
     """
+    # LG-AU-02 (additive): the governance audit ledger records every
+    # terminal tool outcome at this universal funnel — independent of, and
+    # before, the plugin observer gate below (which no-ops without
+    # listeners). Post-facto record: never gates, never raises.
+    try:
+        from agent.governance_audit_hooks import record_outcome
+        _gov_status, _gov_etype, _gov_emsg = status, error_type, error_message
+        if _gov_status is None:
+            _gov_status, _gov_etype, _gov_emsg = _tool_result_observer_fields(result)
+        record_outcome(
+            function_name=function_name,
+            function_args=function_args,
+            status=_gov_status,
+            error_type=_gov_etype,
+            error_message=_gov_emsg,
+            task_id=task_id or "",
+            session_id=session_id or "",
+            tool_call_id=tool_call_id or "",
+            turn_id=turn_id or "",
+            api_request_id=api_request_id or "",
+            duration_ms=duration_ms,
+            middleware_trace=list(middleware_trace or []),
+        )
+    except Exception as _gov_err:
+        logger.debug("governance outcome record error: %s", _gov_err)
+
     try:
         from lliam_cli.plugins import has_hook, invoke_hook
         if not has_hook("post_tool_call"):
@@ -922,6 +948,7 @@ def handle_function_call(
     tool_request_middleware_trace: Optional[List[Dict[str, Any]]] = None,
     enabled_toolsets: Optional[List[str]] = None,
     disabled_toolsets: Optional[List[str]] = None,
+    skip_governance_predispatch: bool = False,
 ) -> str:
     """
     Main function call dispatcher that routes calls to the tool registry.
@@ -987,16 +1014,42 @@ def handle_function_call(
         except Exception:
             current_defs = []
         if function_name == _ts_mod.TOOL_SEARCH_NAME:
-            return _ts_mod.dispatch_tool_search(function_args or {},
-                                                current_tool_defs=current_defs)
+            _ts_result = _ts_mod.dispatch_tool_search(function_args or {},
+                                                      current_tool_defs=current_defs)
+            _emit_post_tool_call_hook(
+                function_name=function_name, function_args=function_args,
+                result=_ts_result, task_id=task_id, session_id=session_id,
+                tool_call_id=tool_call_id, turn_id=turn_id,
+                api_request_id=api_request_id,
+                middleware_trace=list(_tool_middleware_trace),
+            )
+            return _ts_result
         if function_name == _ts_mod.TOOL_DESCRIBE_NAME:
-            return _ts_mod.dispatch_tool_describe(function_args or {},
-                                                  current_tool_defs=current_defs)
+            _ts_result = _ts_mod.dispatch_tool_describe(function_args or {},
+                                                        current_tool_defs=current_defs)
+            _emit_post_tool_call_hook(
+                function_name=function_name, function_args=function_args,
+                result=_ts_result, task_id=task_id, session_id=session_id,
+                tool_call_id=tool_call_id, turn_id=turn_id,
+                api_request_id=api_request_id,
+                middleware_trace=list(_tool_middleware_trace),
+            )
+            return _ts_result
         if function_name == _ts_mod.TOOL_CALL_NAME:
             underlying_name, underlying_args, err = _ts_mod.resolve_underlying_call(function_args or {})
             if err or not underlying_name:
-                return json.dumps({"error": err or "tool_call could not be resolved"},
-                                  ensure_ascii=False)
+                _err_msg = err or "tool_call could not be resolved"
+                _err_result = json.dumps({"error": _err_msg}, ensure_ascii=False)
+                _emit_post_tool_call_hook(
+                    function_name=_ts_mod.TOOL_CALL_NAME, function_args=function_args,
+                    result=_err_result, task_id=task_id, session_id=session_id,
+                    tool_call_id=tool_call_id, turn_id=turn_id,
+                    api_request_id=api_request_id,
+                    status="error", error_type="tool_call_unresolved",
+                    error_message=_err_msg,
+                    middleware_trace=list(_tool_middleware_trace),
+                )
+                return _err_result
             # Defense in depth: the underlying tool MUST be in the session's
             # scoped deferrable catalog. resolve_underlying_call() only checks
             # that the name is deferrable in the global registry; this gate
@@ -1005,12 +1058,21 @@ def handle_function_call(
             # the bridge even if the catalog scoping above regressed.
             _scoped_deferrable = _ts_mod.scoped_deferrable_names(current_defs)
             if underlying_name not in _scoped_deferrable:
-                return json.dumps({
-                    "error": (
-                        f"'{underlying_name}' is not available in this session. "
-                        "Use tool_search to find tools you can call."
-                    ),
-                }, ensure_ascii=False)
+                _scope_msg = (
+                    f"'{underlying_name}' is not available in this session. "
+                    "Use tool_search to find tools you can call."
+                )
+                _scope_result = json.dumps({"error": _scope_msg}, ensure_ascii=False)
+                _emit_post_tool_call_hook(
+                    function_name=underlying_name, function_args=underlying_args,
+                    result=_scope_result, task_id=task_id, session_id=session_id,
+                    tool_call_id=tool_call_id, turn_id=turn_id,
+                    api_request_id=api_request_id,
+                    status="blocked", error_type="tool_scope_block",
+                    error_message=_scope_msg,
+                    middleware_trace=list(_tool_middleware_trace),
+                )
+                return _scope_result
             # Recurse with the underlying tool. All hooks fire against the
             # real tool name. The bridge is invisible to hooks by design.
             return handle_function_call(
@@ -1026,6 +1088,11 @@ def handle_function_call(
                 tool_request_middleware_trace=list(_tool_middleware_trace),
                 enabled_toolsets=enabled_toolsets,
                 disabled_toolsets=disabled_toolsets,
+                # Propagate so the executor path (which already gated the
+                # bridge call) does not double-emit a dispatch record for the
+                # unwrapped underlying tool, while a direct caller still gates
+                # exactly once on the real tool.
+                skip_governance_predispatch=skip_governance_predispatch,
             )
 
     _tool_original_args = dict(function_args)
@@ -1105,11 +1172,70 @@ def handle_function_call(
 
             edit_block_message = maybe_require_edit_approval(function_name, function_args)
             if edit_block_message is not None:
+                _emit_post_tool_call_hook(
+                    function_name=function_name, function_args=function_args,
+                    result=edit_block_message, task_id=task_id,
+                    session_id=session_id, tool_call_id=tool_call_id,
+                    turn_id=turn_id, api_request_id=api_request_id,
+                    status="blocked", error_type="edit_approval_block",
+                    error_message="edit approval required or denied",
+                    middleware_trace=list(_tool_middleware_trace),
+                )
                 return edit_block_message
         except Exception as _edit_approval_err:
             logger.debug("ACP edit approval guard error: %s", _edit_approval_err)
             if function_name in {"write_file", "patch"}:
-                return json.dumps({"error": "Edit approval denied: approval guard failed"}, ensure_ascii=False)
+                _guard_result = json.dumps(
+                    {"error": "Edit approval denied: approval guard failed"},
+                    ensure_ascii=False,
+                )
+                _emit_post_tool_call_hook(
+                    function_name=function_name, function_args=function_args,
+                    result=_guard_result, task_id=task_id, session_id=session_id,
+                    tool_call_id=tool_call_id, turn_id=turn_id,
+                    api_request_id=api_request_id,
+                    status="blocked", error_type="edit_approval_block",
+                    error_message="edit approval guard failed",
+                    middleware_trace=list(_tool_middleware_trace),
+                )
+                return _guard_result
+
+        # LG-AU-02/09 (additive): governance pre-dispatch gate for callers that
+        # reach this public dispatcher DIRECTLY (nested code execution, the
+        # OpenAI-compatible API server) and therefore bypass the executor's
+        # agent-aware predispatch_gate. The executor path already gated and
+        # passes skip_governance_predispatch=True to avoid a double record. A
+        # high-risk call whose audit record cannot be written is refused
+        # (fail-closed) before dispatch.
+        if not skip_governance_predispatch:
+            try:
+                from agent.governance_audit_hooks import predispatch_gate
+                _gov_decision = predispatch_gate(
+                    None,
+                    function_name=function_name,
+                    function_args=function_args,
+                    tool_call_id=tool_call_id or "",
+                    effective_task_id=task_id or "",
+                    middleware_trace=list(_tool_middleware_trace),
+                )
+            except Exception:
+                _gov_decision = None
+            if _gov_decision is not None:
+                _gov_msg = (
+                    getattr(_gov_decision, "message", None)
+                    or "Blocked by governance audit gate"
+                )
+                _gov_result = json.dumps({"error": _gov_msg}, ensure_ascii=False)
+                _emit_post_tool_call_hook(
+                    function_name=function_name, function_args=function_args,
+                    result=_gov_result, task_id=task_id, session_id=session_id,
+                    tool_call_id=tool_call_id, turn_id=turn_id,
+                    api_request_id=api_request_id,
+                    status="blocked", error_type="guardrail_block",
+                    error_message=_gov_msg,
+                    middleware_trace=list(_tool_middleware_trace),
+                )
+                return _gov_result
 
         # Notify the read-loop tracker when a non-read/search tool runs,
         # so the *consecutive* counter resets (reads after other work are fine).
@@ -1233,7 +1359,21 @@ def handle_function_call(
     except Exception as e:
         error_msg = f"Error executing {function_name}: {str(e)}"
         logger.exception(error_msg)
-        return json.dumps({"error": _sanitize_tool_error(error_msg)}, ensure_ascii=False)
+        _sanitized = _sanitize_tool_error(error_msg)
+        result = json.dumps({"error": _sanitized}, ensure_ascii=False)
+        # A registry/dispatch exception is still a terminal outcome — it must
+        # not vanish from the audit trail (the record_outcome funnel is the
+        # single terminal-outcome chokepoint). Never let this emission raise.
+        _emit_post_tool_call_hook(
+            function_name=function_name, function_args=function_args,
+            result=result, task_id=task_id, session_id=session_id,
+            tool_call_id=tool_call_id, turn_id=turn_id,
+            api_request_id=api_request_id,
+            status="error", error_type="dispatch_exception",
+            error_message=_sanitized,
+            middleware_trace=list(_tool_middleware_trace),
+        )
+        return result
 
 
 # =============================================================================

@@ -1,0 +1,105 @@
+# roles.yaml — Named accountable roles + RACI + Separation-of-Duties (LG-GV-04/05).
+#
+# Purpose: the machine-readable governance-accountability layer. Names each
+# accountable role and its single owner, and declares the SoD constraints the
+# CI/startup SoD check enforces against the `governance.role_bindings` in
+# cli-config.gov.yaml. Human-readable RACI: docs/governance/roles-raci.md.
+#
+# Review-by: 2026-10-11 (or at any org-change to role ownership).
+
+schema: lg-gv/1
+owner: Lliam-GOV Program
+classification: CUI//SP-PRIV   # template — mark per instance
+
+# ---------------------------------------------------------------------------
+# Named accountable roles (LG-GV-04). Each has a single accountable owner,
+# bound to an authenticated principal via governance.role_bindings (LG-GV-05).
+# ---------------------------------------------------------------------------
+roles:
+  caio:
+    title: Chief AI Officer
+    accountable_for: [ai_policy, risk_acceptance, go_no_go_authorization]
+    sod_class: authorizing
+  isso:
+    title: Information System Security Officer
+    accountable_for: [security_posture, control_implementation, ato_evidence]
+    sod_class: security
+  ai_risk_owner:
+    title: AI Risk Owner
+    accountable_for: [risk_register, residual_risk, harm_anticipation]
+    sod_class: risk
+  approver:
+    title: HITL Approver
+    accountable_for: [high_risk_action_approval, override_decisions]
+    sod_class: approval        # MUST NOT equal engineer (SoD)
+  engineer:
+    title: Engineer / Operator (the acting party)
+    accountable_for: [implementation, tool_execution, config_change]
+    sod_class: implementation  # the acting party; in Lliam-GOV this is the NPE agent
+  auditor:
+    title: Independent Auditor
+    accountable_for: [audit_review, chain_verification, sod_review]
+    sod_class: audit           # MUST be independent of approval/implementation/risk
+  killswitch_owner:
+    title: Kill-Switch / Containment Owner
+    accountable_for: [interrupt, containment, incident_response]
+    sod_class: incident
+
+# ---------------------------------------------------------------------------
+# Separation-of-Duties constraints (LG-GV-05). Checked by the SoD gate against
+# the resolved role_bindings. Each rule: the principal bound to role A must not
+# also be bound to any role in `not_also`.
+# ---------------------------------------------------------------------------
+# `waivable: false` rules are HARD — the security-critical separations that can
+# NEVER be satisfied by a tracked deviation. `waivable: true` rules are real SoD
+# separations that MAY be co-held in a constrained deployment ONLY via an
+# explicit, owner-signed, expiring entry in `sod_deviations` below (never
+# silently). A conflict with no matching deviation fails the gate closed.
+separation_of_duties:
+  - role: approver
+    not_also: [engineer]
+    waivable: false
+    rationale: "No one both approves and implements a high-risk action (AC-5)."
+  - role: auditor
+    not_also: [approver, engineer, ai_risk_owner, caio, isso]
+    waivable: false
+    rationale: "The auditor must be independent of every party it reviews."
+  - role: caio
+    not_also: [ai_risk_owner]
+    waivable: true
+    rationale: "The authority that ACCEPTS risk must not also OWN/characterize it (self-acceptance)."
+  - role: approver
+    not_also: [isso]
+    waivable: true
+    rationale: "ISSO owns control implementation — an implementing function the approver must not also hold."
+
+# Roles that MUST be bound to a named principal (no anonymous ownership).
+required_bindings: [approver, auditor, killswitch_owner, caio, isso]
+
+# Explicitly accepted, tracked SoD deviations (LG-CH-08 pattern). Each waives ONE
+# waivable rule for ONE principal, with a justification, an accountable owner,
+# and an expiry. A conflict on a waivable rule with a MATCHING unexpired entry is
+# reported as an ACCEPTED DEVIATION (not a blocking conflict); without one it
+# fails the gate. Non-waivable rules can never be listed here.
+sod_deviations:
+  - conflict: [caio, ai_risk_owner]
+    principal: jdavis@agency.mil
+    justification: "Single-operator demo/eval (personally-owned MacBook, no CUI in scope). CAIO and AI Risk Owner co-held; production assigns distinct principals."
+    owner: jdavis@agency.mil
+    review_by: 2026-10-11
+  - conflict: [approver, isso]
+    principal: jdavis@agency.mil
+    justification: "Single-operator demo/eval. ISSO control-implementation co-held with the human approver; the SECURITY-critical Approver≠Engineer pair is genuinely separated (engineer = NPE agent). Production assigns distinct principals."
+    owner: jdavis@agency.mil
+    review_by: 2026-10-11
+
+# ---------------------------------------------------------------------------
+# Eval-deployment note (single-operator boundary). In the demo/eval deployment
+# (one human operator) the acting ENGINEER is the Lliam-GOV NPE agent itself
+# (its instance identity, LG-IA-02) — distinct from the human APPROVER — so
+# Approver ≠ Engineer holds naturally. Auditor independence in a single-operator
+# eval is satisfied by binding the auditor role to a distinct principal; where a
+# second human is unavailable, the exception is a tracked deviation, NOT a
+# silent conflict. Target-state (multi-operator) bindings assign distinct
+# principals throughout.
+# ---------------------------------------------------------------------------

@@ -131,6 +131,24 @@ def is_write_denied(path: str) -> bool:
                 return True
         except Exception:
             pass
+        try:
+            # LG-AU-07: the governance audit ledger (and the other home logs)
+            # must be unreachable by the agent's own write tools — the subject
+            # of the audit cannot rewrite its own record. Additive deny; no
+            # legitimate agent workflow writes into the home logs directory
+            # (system loggers write directly, not through file tools).
+            # Compared case-insensitively: on the default macOS APFS (case-
+            # insensitive, case-preserving) "<home>/Logs/…" opens the same
+            # inode as "<home>/logs/…" but realpath preserves the caller's
+            # casing, so a case-sensitive prefix check is bypassable. Over-
+            # denying a genuinely distinct "Logs" dir on case-sensitive
+            # filesystems is an acceptable trade for this path.
+            logs_real = os.path.realpath(os.path.join(base_real, "logs")).casefold()
+            resolved_cf = resolved.casefold()
+            if resolved_cf == logs_real or resolved_cf.startswith(logs_real + os.sep):
+                return True
+        except Exception:
+            pass
 
     safe_roots = get_safe_write_roots()
     if safe_roots:

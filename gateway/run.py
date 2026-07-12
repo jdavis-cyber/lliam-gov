@@ -18218,6 +18218,27 @@ def _start_cron_ticker(stop_event: threading.Event, adapters=None, loop=None, in
     InProcessCronScheduler().start(stop_event, adapters=adapters, loop=loop, interval=interval)
 
 
+def _run_startup_security_audit(lliam_home) -> list[str]:
+    """Run the warn-on-load startup posture audit against the EFFECTIVE merged
+    config.
+
+    Uses ``load_config()`` (not ``read_raw_config()``): overlay-injected
+    switches like ``security.no_default_credentials`` exist only post-merge, so
+    handing the audit a raw home-config shape made the LG-IA-05
+    default-credential check silently inert (P1 review finding). The audit
+    itself is fail-safe and never raises.
+    """
+    from lliam_cli.security_audit_startup import log_startup_security_warnings
+
+    try:
+        from lliam_cli.config import load_config
+
+        _audit_cfg = load_config()
+    except Exception:
+        _audit_cfg = None
+    return log_startup_security_warnings(lliam_home=lliam_home, config=_audit_cfg)
+
+
 async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = False, verbosity: Optional[int] = 0) -> bool:
     """
     Start the gateway and run until interrupted.
@@ -18393,18 +18414,79 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     # so operators get the "you're exposed" signal the June 2026 MCP-config
     # persistence campaign victims never had.
     try:
-        from lliam_cli.security_audit_startup import log_startup_security_warnings
-
-        _audit_cfg = None
-        try:
-            from lliam_cli.config import read_raw_config
-
-            _audit_cfg = read_raw_config()
-        except Exception:
-            _audit_cfg = None
-        log_startup_security_warnings(lliam_home=_lliam_home, config=_audit_cfg)
+        _run_startup_security_audit(_lliam_home)
     except Exception as _audit_exc:
         logger.debug("Startup security audit failed (non-fatal): %s", _audit_exc)
+
+    # Raw home config for the LG-IA-02 identity emit below and as the
+    # last-resort fallback for the control-plane / audit-chain gates (each
+    # independently re-loads the MERGED config; _audit_cfg deliberately lacks
+    # the overlay keys). Bound here in start_gateway's own scope — the startup
+    # audit itself now loads the merged config internally via the helper above.
+    try:
+        from lliam_cli.config import read_raw_config
+
+        _audit_cfg = read_raw_config()
+    except Exception:
+        _audit_cfg = None
+
+    # LG-AU-08 (additive): verify the governance audit chain at startup.
+    # No-op when the ledger is disabled; on a break under strict posture
+    # with verify_fail_action=block this raises AuditChainVerificationError
+    # (fail-closed — refuse to rely on a tampered ledger), which propagates
+    # rather than being swallowed like the advisory posture warnings above.
+    # LG-IA-02 (additive): record the agent NPE instance identity for this
+    # process (no-op when the ledger is disabled). Emitted before the chain
+    # verify so the identity binding is on record for the session.
+    try:
+        from lliam_cli.security_audit_startup import emit_agent_identity_at_startup
+
+        emit_agent_identity_at_startup(config=_audit_cfg)
+    except Exception as _ident_exc:
+        logger.debug("Agent identity emit failed (non-fatal): %s", _ident_exc)
+
+    # LG-IA-11/06/08 (additive): fail-closed control-plane auth gate. Refuses to
+    # start a network-accessible API server with no API_SERVER_KEY (RCE gate) or
+    # with TLS verification disabled, under strict posture. Pass the merged
+    # config so the overlay require-* switches + strict posture are visible.
+    from lliam_cli.security_audit_startup import (
+        enforce_control_plane_auth_at_startup,
+        ControlPlaneAuthError,
+    )
+    try:
+        try:
+            from lliam_cli.config import load_config as _load_merged_cp
+
+            _cp_cfg = _load_merged_cp()
+        except Exception:
+            _cp_cfg = _audit_cfg
+        enforce_control_plane_auth_at_startup(config=_cp_cfg)
+    except ControlPlaneAuthError:
+        raise
+    except Exception as _cp_exc:
+        logger.debug("Control-plane auth check failed (non-fatal): %s", _cp_exc)
+
+    from lliam_cli.security_audit_startup import (
+        verify_audit_chain_at_startup,
+        AuditChainVerificationError,
+    )
+    try:
+        # Pass the MERGED config so the strict-posture / audit block injected
+        # by the gov overlay is visible to the fail-closed decision — the raw
+        # _audit_cfg above lacks the overlay keys. The hook also independently
+        # re-resolves posture, but supplying the merged config is the primary
+        # fix (P1.3 review).
+        try:
+            from lliam_cli.config import load_config as _load_merged_config
+
+            _merged_cfg = _load_merged_config()
+        except Exception:
+            _merged_cfg = _audit_cfg
+        verify_audit_chain_at_startup(config=_merged_cfg)
+    except AuditChainVerificationError:
+        raise
+    except Exception as _verify_exc:
+        logger.debug("Audit-chain startup verify failed (non-fatal): %s", _verify_exc)
 
     # Optional stderr handler — level driven by -v/-q flags on the CLI.
     # verbosity=None (-q/--quiet): no stderr output

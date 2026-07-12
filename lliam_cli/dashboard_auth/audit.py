@@ -87,3 +87,15 @@ def audit_log(event: AuditEvent, **fields: Any) -> None:
                 f.write(line)
     except Exception as e:
         _log.warning("dashboard-auth audit log write failed: %s", e)
+
+    # LG-AU-10 (additive bridge): cross-reference this auth event into the
+    # hash-chained governance ledger so an operator login and the tool
+    # dispatches it authorized share one accountability record. Lazy import
+    # preserves this module's minimal early-startup dependency surface, and
+    # the guard preserves its contract: auth NEVER fails because a ledger
+    # (or the import) broke. The auth log write above is unchanged.
+    try:
+        from agent.governance_audit_hooks import forward_auth_event
+        forward_auth_event(event.value, safe_fields)
+    except Exception:
+        pass

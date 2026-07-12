@@ -1,6 +1,8 @@
 """SSH remote execution environment with ControlMaster connection persistence."""
 
 import hashlib
+import hmac
+import json
 import logging
 import os
 import shlex
@@ -19,6 +21,11 @@ from tools.environments.file_sync import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Control paths are intentionally comparable only within this process. A
+# process-random HMAC key prevents the short socket id from becoming an offline
+# oracle for low-entropy host/user/key-path combinations written under /tmp.
+_CONTROL_PATH_HMAC_KEY = os.urandom(32)
 
 
 def _ensure_ssh_available() -> None:
@@ -52,16 +59,28 @@ class SSHEnvironment(BaseEnvironment):
 
         self.control_dir = Path(tempfile.gettempdir()) / "hermes-ssh"
         self.control_dir.mkdir(parents=True, exist_ok=True)
-        # Keep the socket filename short and deterministic so the full path
-        # stays under the 104-byte sun_path limit that macOS enforces on
-        # Unix domain sockets. A raw ``user@host:port`` — especially with an
-        # IPv6 host — plus the 16-byte random suffix SSH appends in
-        # ControlMaster mode easily exceeds the limit under macOS's
-        # deeply-nested $TMPDIR (e.g. /var/folders/xx/yy/T/). Hashing the
-        # triple keeps the path stable across reconnects so ControlMaster
-        # reuse still works.
-        _socket_id = hashlib.sha256(
-            f"{user}@{host}:{port}".encode()
+        # Keep the socket filename short and process-locally deterministic so
+        # the full path stays under the 104-byte sun_path limit that macOS
+        # enforces on Unix domain sockets. A raw ``user@host:port`` — especially
+        # with an IPv6 host — plus the 16-byte random suffix SSH appends in
+        # ControlMaster mode easily exceeds the limit under macOS's deeply
+        # nested $TMPDIR (e.g. /var/folders/xx/yy/T/). Hashing the
+        # authentication identity keeps the path stable across reconnects in
+        # this process while preventing a different key from attaching to the
+        # first key's authenticated master connection.
+        _auth_identity = json.dumps(
+            {
+                "host": host,
+                "key_path": key_path,
+                "port": port,
+                "user": user,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        _socket_id = hmac.new(
+            _CONTROL_PATH_HMAC_KEY, _auth_identity, hashlib.sha256,
         ).hexdigest()[:16]
         self.control_socket = self.control_dir / f"{_socket_id}.sock"
         _ensure_ssh_available()

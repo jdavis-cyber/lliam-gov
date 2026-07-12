@@ -31,6 +31,8 @@ Usage:
     result = terminal_tool("python server.py", background=True)
 """
 
+import hashlib
+import hmac
 import importlib.util
 import json
 import logging
@@ -961,7 +963,13 @@ Do NOT use vim/nano/interactive tools without pty=true — they hang without a p
 _active_environments: Dict[str, Any] = {}
 _last_activity: Dict[str, float] = {}
 _env_lock = threading.Lock()
-_creation_locks: Dict[str, threading.Lock] = {}  # Per-task locks for sandbox creation
+# Durable in-process ownership for derived/non-default environment keys.
+# Guarded by _env_lock alongside the environment registry.
+_environment_keys_by_owner: Dict[str, set[str]] = {}
+_environment_owners_by_key: Dict[str, set[str]] = {}
+_environment_teardown_generation: Dict[str, int] = {}
+_environment_teardown_pending: set[str] = set()
+_creation_locks: Dict[str, threading.Lock] = {}  # Per-environment locks for creation
 _creation_locks_lock = threading.Lock()  # Protects _creation_locks dict itself
 _cleanup_thread = None
 _cleanup_running = False
@@ -971,6 +979,89 @@ _cleanup_running = False
 # calls for parallel subagents won't re-trigger the sweep.
 _docker_orphan_reaper_ran = False
 _docker_orphan_reaper_lock = threading.Lock()
+
+
+def _register_environment_owner_locked(
+    raw_task_id: Optional[str], environment_key: str,
+) -> None:
+    """Record ownership of a derived/non-default key while holding _env_lock."""
+    if environment_key == "default":
+        return
+    owner = raw_task_id or "default"
+    _environment_keys_by_owner.setdefault(owner, set()).add(environment_key)
+    _environment_owners_by_key.setdefault(environment_key, set()).add(owner)
+
+
+def _purge_environment_ownership_locked(environment_key: str) -> None:
+    """Remove every ownership edge for *environment_key* under _env_lock."""
+    owners = _environment_owners_by_key.pop(environment_key, set())
+    for owner in owners:
+        keys = _environment_keys_by_owner.get(owner)
+        if keys is None:
+            continue
+        keys.discard(environment_key)
+        if not keys:
+            _environment_keys_by_owner.pop(owner, None)
+
+
+def _reserve_environment_creation_locked(
+    raw_task_id: Optional[str], environment_key: str,
+) -> Optional[int]:
+    """Reserve publication and return its teardown generation under _env_lock."""
+    if environment_key in _environment_teardown_pending:
+        return None
+    _register_environment_owner_locked(raw_task_id, environment_key)
+    return _environment_teardown_generation.get(environment_key, 0)
+
+
+def _unregister_environment_owner_locked(
+    raw_task_id: Optional[str], environment_key: str,
+) -> None:
+    owner = raw_task_id or "default"
+    keys = _environment_keys_by_owner.get(owner)
+    if keys is not None:
+        keys.discard(environment_key)
+        if not keys:
+            _environment_keys_by_owner.pop(owner, None)
+    owners = _environment_owners_by_key.get(environment_key)
+    if owners is not None:
+        owners.discard(owner)
+        if not owners:
+            _environment_owners_by_key.pop(environment_key, None)
+
+
+def _environment_creation_is_current_locked(
+    environment_key: str, generation: int,
+) -> bool:
+    return (
+        environment_key not in _environment_teardown_pending
+        and _environment_teardown_generation.get(environment_key, 0) == generation
+    )
+
+
+def _mark_environment_teardown_locked(environment_key: str) -> None:
+    _environment_teardown_generation[environment_key] = (
+        _environment_teardown_generation.get(environment_key, 0) + 1
+    )
+    _environment_teardown_pending.add(environment_key)
+
+
+def _discard_unpublished_environment(env: Any) -> None:
+    """Destroy a backend that lost a create-vs-cleanup publication race."""
+    try:
+        if hasattr(env, "cleanup"):
+            import inspect
+            sig = inspect.signature(env.cleanup)
+            if "force_remove" in sig.parameters:
+                env.cleanup(force_remove=True)
+            else:
+                env.cleanup()
+        elif hasattr(env, "stop"):
+            env.stop()
+        elif hasattr(env, "terminate"):
+            env.terminate()
+    except Exception as exc:
+        logger.warning("Failed to discard unpublished environment: %s", exc)
 
 
 def _maybe_reap_docker_orphans(container_config: Dict[str, Any]) -> None:
@@ -1084,8 +1175,20 @@ def register_task_env_overrides(task_id: str, overrides: Dict[str, Any]):
         # so a CWD-only override (which collapses to "default") still finds and
         # updates the originating session's env.
         container_id = _resolve_container_task_id(task_id)
+        try:
+            config = _get_env_config()
+            environment_key = _resolve_environment_cache_key(task_id, config)
+            raw_fallback_allowed = config.get("env_type") != "ssh"
+        except Exception:
+            environment_key = container_id
+            raw_fallback_allowed = os.getenv("TERMINAL_ENV", "local") != "ssh"
         with _env_lock:
-            env = _active_environments.get(task_id) or _active_environments.get(container_id)
+            env = _active_environments.get(environment_key)
+            if env is None and raw_fallback_allowed:
+                env = (
+                    _active_environments.get(task_id)
+                    or _active_environments.get(container_id)
+                )
         if env is not None and getattr(env, "cwd", None) is not None:
             env.cwd = new_cwd
 
@@ -1134,6 +1237,41 @@ def _resolve_container_task_id(task_id: Optional[str]) -> str:
     return "default"
 
 
+_SSH_CACHE_KEY_MARKER = "::ssh:"
+# Cache/lifecycle keys can be logged and persisted in process checkpoints. A
+# process-random HMAC key keeps SSH identity equality useful within this
+# process without exposing an offline hash oracle for host/user/key material.
+_SSH_CACHE_HMAC_KEY = os.urandom(32)
+
+
+def _resolve_environment_cache_key(
+    task_id: Optional[str], config: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Return the lifecycle/cache key for the resolved terminal environment.
+
+    Container and local backends retain the historical shared task key. SSH
+    environments additionally bind that key to an opaque digest of every
+    connection-defining value, preventing one multiplexed profile from reusing
+    another profile's live SSH session without placing credentials in cache
+    keys or logs.
+    """
+    base_key = _resolve_container_task_id(task_id)
+    config = config if config is not None else _get_env_config()
+    if config.get("env_type") != "ssh":
+        return base_key
+    identity = {
+        "host": config.get("ssh_host", ""),
+        "user": config.get("ssh_user", ""),
+        "port": config.get("ssh_port", 22),
+        "key": config.get("ssh_key", ""),
+    }
+    canonical = json.dumps(
+        identity, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode("utf-8")
+    digest = hmac.new(_SSH_CACHE_HMAC_KEY, canonical, hashlib.sha256).hexdigest()
+    return f"{base_key}{_SSH_CACHE_KEY_MARKER}{digest}"
+
+
 def resolve_task_overrides(task_id: Optional[str]) -> Dict[str, Any]:
     """Return the env overrides for *task_id*, raw key first then collapsed.
 
@@ -1156,13 +1294,25 @@ def resolve_task_overrides(task_id: Optional[str]) -> Dict[str, Any]:
 
 # Configuration from environment variables
 
+def _resolve_terminal_setting(name: str, default: Optional[str] = None) -> Optional[str]:
+    """Resolve terminal settings without bypassing profile secret scoping.
+
+    ``get_secret`` already distinguishes profile-scoped SSH identity fields
+    from genuinely-global ``TERMINAL_*`` deployment settings. Import lazily to
+    keep terminal-tool discovery independent of the agent module graph.
+    """
+    from agent.secret_scope import get_secret
+
+    return get_secret(name, default)
+
+
 def _parse_env_var(name: str, default: str, converter: Any = int, type_label: str = "integer"):
     """Parse an environment variable with *converter*, raising a clear error on bad values.
 
     Without this wrapper, a single malformed env var (e.g. TERMINAL_TIMEOUT=5m)
     causes an unhandled ValueError that kills every terminal command.
     """
-    raw = os.getenv(name, default)
+    raw = _resolve_terminal_setting(name, default)
     try:
         return converter(raw)
     except (ValueError, json.JSONDecodeError):
@@ -1299,10 +1449,10 @@ def _get_env_config() -> Dict[str, Any]:
         "timeout": _parse_env_var("TERMINAL_TIMEOUT", "180"),
         "lifetime_seconds": _parse_env_var("TERMINAL_LIFETIME_SECONDS", "300"),
         # SSH-specific config
-        "ssh_host": os.getenv("TERMINAL_SSH_HOST", ""),
-        "ssh_user": os.getenv("TERMINAL_SSH_USER", ""),
+        "ssh_host": _resolve_terminal_setting("TERMINAL_SSH_HOST", ""),
+        "ssh_user": _resolve_terminal_setting("TERMINAL_SSH_USER", ""),
         "ssh_port": _parse_env_var("TERMINAL_SSH_PORT", "22"),
-        "ssh_key": os.getenv("TERMINAL_SSH_KEY", ""),
+        "ssh_key": _resolve_terminal_setting("TERMINAL_SSH_KEY", ""),
         # Persistent shell: SSH defaults to the config-level persistent_shell
         # setting (true by default for non-local backends); local is always opt-in.
         # Per-backend env vars override if explicitly set.
@@ -1507,9 +1657,9 @@ def _cleanup_inactive_envs(lifetime_seconds: int = 300):
     # background processes (their _last_activity gets refreshed to keep them alive).
     try:
         from tools.process_registry import process_registry
-        for task_id in list(_last_activity.keys()):
-            if process_registry.has_active_processes(task_id):
-                _last_activity[task_id] = current_time  # Keep sandbox alive
+        for environment_key in list(_last_activity.keys()):
+            if process_registry.has_active_processes(environment_key):
+                _last_activity[environment_key] = current_time  # Keep sandbox alive
     except ImportError:
         pass
 
@@ -1518,18 +1668,21 @@ def _cleanup_inactive_envs(lifetime_seconds: int = 300):
     # Docker teardown can block for 10-15s, which would stall every concurrent
     # terminal/file tool call waiting on _env_lock.
     envs_to_stop = []  # list of (task_id, env) pairs
+    stale_keys = []
 
     with _env_lock:
         for task_id, last_time in list(_last_activity.items()):
             if current_time - last_time > lifetime_seconds:
                 env = _active_environments.pop(task_id, None)
                 _last_activity.pop(task_id, None)
+                _purge_environment_ownership_locked(task_id)
+                stale_keys.append(task_id)
                 if env is not None:
                     envs_to_stop.append((task_id, env))
 
         # Also purge per-task creation locks for cleaned-up tasks
         with _creation_locks_lock:
-            for task_id, _ in envs_to_stop:
+            for task_id in stale_keys:
                 _creation_locks.pop(task_id, None)
 
     # Phase 2: stop the actual sandboxes OUTSIDE the lock so other tool calls
@@ -1598,11 +1751,40 @@ def _stop_cleanup_thread():
             pass
 
 
-def get_active_env(task_id: str):
+def get_active_env(task_id: str, config: Optional[Dict[str, Any]] = None):
     """Return the active BaseEnvironment for *task_id*, or None."""
-    lookup = _resolve_container_task_id(task_id)
+    from agent.secret_scope import current_secret_scope
+
+    if config is not None or current_secret_scope() is not None:
+        resolved_config = config if config is not None else _get_env_config()
+        lookup = _resolve_environment_cache_key(task_id, resolved_config)
+        with _env_lock:
+            env = _active_environments.get(lookup)
+            if env is not None or resolved_config.get("env_type") == "ssh":
+                return env
+            return _active_environments.get(task_id)
+
+    raw_owner = task_id or "default"
     with _env_lock:
-        return _active_environments.get(lookup) or _active_environments.get(task_id)
+        owned_envs = [
+            _active_environments[key]
+            for key in _environment_keys_by_owner.get(raw_owner, set())
+            if key in _active_environments
+        ]
+        if len(owned_envs) == 1:
+            return owned_envs[0]
+        # Explicit environment-key callers never need config resolution.
+        explicit_env = _active_environments.get(raw_owner)
+        if explicit_env is not None:
+            return explicit_env
+
+    resolved_config = _get_env_config()
+    lookup = _resolve_environment_cache_key(task_id, resolved_config)
+    with _env_lock:
+        env = _active_environments.get(lookup)
+        if env is not None or resolved_config.get("env_type") == "ssh":
+            return env
+        return _active_environments.get(task_id)
 
 
 def is_persistent_env(task_id: str) -> bool:
@@ -1616,6 +1798,25 @@ def is_persistent_env(task_id: str) -> bool:
     (``_cleanup_inactive_envs``) handles persistent envs once they exceed
     ``terminal.lifetime_seconds``.
     """
+    from agent.secret_scope import current_secret_scope
+
+    if current_secret_scope() is not None:
+        env = get_active_env(task_id)
+        return bool(env is not None and getattr(env, "_persistent", False))
+
+    raw_owner = task_id or "default"
+    with _env_lock:
+        owned_envs = [
+            _active_environments[key]
+            for key in _environment_keys_by_owner.get(raw_owner, set())
+            if key in _active_environments
+        ]
+    if owned_envs:
+        # Raw cleanup releases every derived key owned by the session. It is
+        # safe to skip cleanup only when every live owned environment is
+        # persistent; one non-persistent backend requires the cleanup branch.
+        return all(bool(getattr(env, "_persistent", False)) for env in owned_envs)
+
     env = get_active_env(task_id)
     if env is None:
         return False
@@ -1626,15 +1827,44 @@ def is_persistent_env(task_id: str) -> bool:
 
 def cleanup_all_environments():
     """Clean up ALL active environments. Use with caution."""
-    task_ids = list(_active_environments.keys())
+    # Include reserved in-flight keys, which are ownership-indexed before the
+    # slow backend constructor runs but are not active/published yet.
+    with _env_lock:
+        active_keys = set(_active_environments)
+        task_ids = set(active_keys)
+        task_ids.update(_environment_owners_by_key)
+        for owned_keys in _environment_keys_by_owner.values():
+            task_ids.update(owned_keys)
+    with _creation_locks_lock:
+        inflight_keys = {
+            key for key, task_lock in _creation_locks.items()
+            if task_lock.locked()
+        }
+    countable_keys = active_keys | inflight_keys
     cleaned = 0
     
     for task_id in task_ids:
         try:
             cleanup_vm(task_id)
-            cleaned += 1
+            if task_id in countable_keys:
+                cleaned += 1
         except Exception as e:
             logger.error("Error cleaning %s: %s", task_id, e, exc_info=True)
+
+    # Prune only coordination state no longer referenced after every explicit
+    # teardown has waited for its creator. Never clear generations/tombstones
+    # ahead of an in-flight publication check.
+    with _env_lock:
+        referenced_keys = (
+            set(_active_environments)
+            | set(_environment_owners_by_key)
+            | set(_environment_teardown_pending)
+        )
+        for owned_keys in _environment_keys_by_owner.values():
+            referenced_keys.update(owned_keys)
+        for environment_key in list(_environment_teardown_generation):
+            if environment_key not in referenced_keys:
+                _environment_teardown_generation.pop(environment_key, None)
     
     # Also clean any orphaned directories
     scratch_dir = _get_scratch_dir()
@@ -1654,6 +1884,12 @@ def cleanup_all_environments():
 def cleanup_vm(task_id: str, *, force_remove: bool = False):
     """Manually clean up a specific environment by task_id.
 
+    A raw session/task id releases that owner's derived environments and only
+    tears down keys with no remaining owners. Passing an explicit active
+    environment key bypasses ownership retention for idle/global teardown.
+    This index-first resolution lets agent/TUI close run after SSH secret scope
+    has already been cleared without recomputing a secret-derived HMAC.
+
     *force_remove* (default False) is forwarded to backends that accept it
     — currently only ``DockerEnvironment``. The default of False matches
     session-lifecycle semantics: this function is called from
@@ -1672,51 +1908,118 @@ def cleanup_vm(task_id: str, *, force_remove: bool = False):
     via this function), so persist-mode idle envs are similarly no-op'd —
     only the orphan reaper at next startup reclaims them.
     """
-    # Remove from tracking dicts while holding the lock, but defer the
-    # actual (potentially slow) env.cleanup() call to outside the lock
-    # so other tool calls aren't blocked.
-    env = None
+    # Resolve raw-session ownership from the durable index before consulting
+    # secret-scoped configuration. Explicit environment keys bypass refcounts
+    # (idle/global teardown) and purge every ownership edge.
+    raw_owner = task_id or "default"
+    explicit_key = False
+    ownership_found = False
+    envs_to_stop = []
     with _env_lock:
-        env = _active_environments.pop(task_id, None)
-        _last_activity.pop(task_id, None)
-
-    # Clean up per-task creation lock
-    with _creation_locks_lock:
-        _creation_locks.pop(task_id, None)
-
-    # Invalidate stale file_ops cache entry
-    try:
-        from tools.file_tools import clear_file_ops_cache
-        clear_file_ops_cache(task_id)
-    except ImportError:
-        pass
-
-    if env is None:
-        return
-
-    try:
-        if hasattr(env, 'cleanup'):
-            # Pass force_remove only if the env's cleanup() accepts it
-            # (DockerEnvironment after issue #20561; other backends don't).
-            import inspect
-            sig = inspect.signature(env.cleanup)
-            if "force_remove" in sig.parameters:
-                env.cleanup(force_remove=force_remove)
-            else:
-                env.cleanup()
-        elif hasattr(env, 'stop'):
-            env.stop()
-        elif hasattr(env, 'terminate'):
-            env.terminate()
-
-        logger.info("Manually cleaned up environment for task: %s", task_id)
-
-    except Exception as e:
-        error_str = str(e)
-        if "404" in error_str or "not found" in error_str.lower():
-            logger.info("Environment for task %s already cleaned up", task_id)
+        explicit_key = (
+            raw_owner in _active_environments
+            or raw_owner in _environment_owners_by_key
+        )
+        if explicit_key:
+            environment_keys = [raw_owner]
+            _purge_environment_ownership_locked(raw_owner)
+        elif raw_owner in _environment_keys_by_owner:
+            ownership_found = True
+            owned_keys = list(_environment_keys_by_owner.pop(raw_owner))
+            environment_keys = []
+            for environment_key in owned_keys:
+                owners = _environment_owners_by_key.get(environment_key)
+                if owners is None:
+                    continue
+                owners.discard(raw_owner)
+                if owners:
+                    continue
+                _environment_owners_by_key.pop(environment_key, None)
+                environment_keys.append(environment_key)
         else:
-            logger.warning("Error cleaning up environment for task %s: %s", task_id, e)
+            environment_keys = []
+
+        if explicit_key or ownership_found:
+            for environment_key in environment_keys:
+                _mark_environment_teardown_locked(environment_key)
+                env = _active_environments.pop(environment_key, None)
+                _last_activity.pop(environment_key, None)
+                if env is not None:
+                    envs_to_stop.append((environment_key, env))
+
+    if not explicit_key and not ownership_found and not environment_keys:
+        try:
+            environment_keys = [_resolve_environment_cache_key(raw_owner)]
+        except Exception:
+            # SSH identity resolution fails closed without an active secret
+            # scope. Never reinterpret an unscoped SSH teardown as "default".
+            if os.getenv("TERMINAL_ENV", "local") == "ssh":
+                return
+            environment_keys = [_resolve_container_task_id(raw_owner)]
+
+    if not explicit_key and not ownership_found:
+        with _env_lock:
+            for environment_key in environment_keys:
+                _mark_environment_teardown_locked(environment_key)
+                env = _active_environments.pop(environment_key, None)
+                _last_activity.pop(environment_key, None)
+                if env is not None:
+                    envs_to_stop.append((environment_key, env))
+
+    creation_locks = []
+    with _creation_locks_lock:
+        for environment_key in environment_keys:
+            task_lock = _creation_locks.get(environment_key)
+            if task_lock is not None:
+                creation_locks.append((environment_key, task_lock, task_lock.locked()))
+
+    # Wait for any slow creator without holding either registry lock. Its
+    # generation check will reject publication after the tombstone above.
+    for _environment_key, task_lock, _was_locked in creation_locks:
+        task_lock.acquire()
+
+    try:
+        try:
+            from tools.file_tools import clear_file_ops_cache
+            for environment_key in environment_keys:
+                clear_file_ops_cache(environment_key)
+        except ImportError:
+            pass
+
+        for environment_key, env in envs_to_stop:
+            try:
+                if hasattr(env, 'cleanup'):
+                    # Pass force_remove only if the env's cleanup() accepts it
+                    # (DockerEnvironment after issue #20561; others don't).
+                    import inspect
+                    sig = inspect.signature(env.cleanup)
+                    if "force_remove" in sig.parameters:
+                        env.cleanup(force_remove=force_remove)
+                    else:
+                        env.cleanup()
+                elif hasattr(env, 'stop'):
+                    env.stop()
+                elif hasattr(env, 'terminate'):
+                    env.terminate()
+
+                logger.info("Manually cleaned up environment for task: %s", environment_key)
+
+            except Exception as e:
+                error_str = str(e)
+                if "404" in error_str or "not found" in error_str.lower():
+                    logger.info("Environment for task %s already cleaned up", environment_key)
+                else:
+                    logger.warning("Error cleaning up environment for task %s: %s", environment_key, e)
+    finally:
+        with _env_lock:
+            for environment_key in environment_keys:
+                _environment_teardown_pending.discard(environment_key)
+        with _creation_locks_lock:
+            for environment_key, task_lock, was_locked in creation_locks:
+                if not was_locked and _creation_locks.get(environment_key) is task_lock:
+                    _creation_locks.pop(environment_key, None)
+        for _environment_key, task_lock, _was_locked in reversed(creation_locks):
+            task_lock.release()
 
 
 def _atexit_cleanup():
@@ -2032,6 +2335,7 @@ def terminal_tool(
         # every delegate_task child share one container; only task_ids with
         # a registered env override (RL benchmarks) get isolated sandboxes.
         effective_task_id = _resolve_container_task_id(task_id)
+        environment_key = _resolve_environment_cache_key(task_id, config)
 
         # Check per-task overrides (set by environments like TerminalBench2Env)
         # before falling back to global env var config. ``resolve_task_overrides``
@@ -2103,21 +2407,21 @@ def terminal_tool(
         _start_cleanup_thread()
 
         # Get or create environment.
-        # Use a per-task creation lock so concurrent tool calls for the same
-        # task_id wait for the first one to finish creating the sandbox,
-        # instead of each creating their own (wasting Modal resources).
+        # Use a per-environment creation lock so concurrent calls for the same
+        # container or SSH identity wait for one creation, while different SSH
+        # profiles never serialize on or reuse each other's live connection.
         with _env_lock:
-            # Prefer the collapsed container id, but fall back to an env cached
-            # under the raw task_id. Per-session surfaces (ACP/gateway/dashboard)
-            # with a CWD-only override collapse to "default" for container
-            # sharing, yet an env may already be cached under the originating
-            # task_id; honor it instead of spawning a duplicate.
-            _existing_key = (
-                effective_task_id if effective_task_id in _active_environments
-                else (task_id if task_id and task_id in _active_environments else None)
-            )
+            # Non-SSH per-session surfaces may retain a legacy raw-task cache
+            # entry. SSH deliberately has no raw-task fallback: only the
+            # connection-identity digest is eligible for reuse.
+            _existing_key = environment_key if environment_key in _active_environments else None
+            if _existing_key is None and env_type != "ssh":
+                _existing_key = (
+                    task_id if task_id and task_id in _active_environments else None
+                )
             if _existing_key is not None:
                 _last_activity[_existing_key] = time.time()
+                _register_environment_owner_locked(task_id, _existing_key)
                 env = _active_environments[_existing_key]
                 needs_creation = False
             else:
@@ -2126,23 +2430,36 @@ def terminal_tool(
         if needs_creation:
             # Per-task lock: only one thread creates the sandbox, others wait
             with _creation_locks_lock:
-                if effective_task_id not in _creation_locks:
-                    _creation_locks[effective_task_id] = threading.Lock()
-                task_lock = _creation_locks[effective_task_id]
+                if environment_key not in _creation_locks:
+                    _creation_locks[environment_key] = threading.Lock()
+                task_lock = _creation_locks[environment_key]
 
             with task_lock:
                 # Double-check after acquiring the per-task lock
                 with _env_lock:
-                    _existing_key = (
-                        effective_task_id if effective_task_id in _active_environments
-                        else (task_id if task_id and task_id in _active_environments else None)
-                    )
+                    _existing_key = environment_key if environment_key in _active_environments else None
+                    if _existing_key is None and env_type != "ssh":
+                        _existing_key = (
+                            task_id if task_id and task_id in _active_environments else None
+                        )
                     if _existing_key is not None:
                         _last_activity[_existing_key] = time.time()
+                        _register_environment_owner_locked(task_id, _existing_key)
                         env = _active_environments[_existing_key]
                         needs_creation = False
 
                 if needs_creation:
+                    with _env_lock:
+                        creation_generation = _reserve_environment_creation_locked(
+                            task_id, environment_key,
+                        )
+                    if creation_generation is None:
+                        return json.dumps({
+                            "output": "",
+                            "exit_code": -1,
+                            "error": "Environment teardown is in progress; retry the command.",
+                            "status": "error",
+                        }, ensure_ascii=False)
                     if env_type == "singularity":
                         _check_disk_usage_warning()
                     logger.info("Creating new %s environment for task %s...", env_type, effective_task_id[:8])
@@ -2189,21 +2506,41 @@ def terminal_tool(
                             ssh_config=ssh_config,
                             container_config=container_config,
                             local_config=local_config,
-                            task_id=effective_task_id,
+                            task_id=environment_key,
                             host_cwd=config.get("host_cwd"),
                         )
                     except ImportError as e:
+                        with _env_lock:
+                            _unregister_environment_owner_locked(task_id, environment_key)
                         return json.dumps({
                             "output": "",
                             "exit_code": -1,
                             "error": f"Terminal tool disabled: environment creation failed ({e})",
                             "status": "disabled"
                         }, ensure_ascii=False)
+                    except Exception:
+                        with _env_lock:
+                            _unregister_environment_owner_locked(task_id, environment_key)
+                        raise
 
                     with _env_lock:
-                        _active_environments[effective_task_id] = new_env
-                        _last_activity[effective_task_id] = time.time()
-                        env = new_env
+                        publish = _environment_creation_is_current_locked(
+                            environment_key, creation_generation,
+                        )
+                        if publish:
+                            _active_environments[environment_key] = new_env
+                            _last_activity[environment_key] = time.time()
+                            env = new_env
+                        else:
+                            _unregister_environment_owner_locked(task_id, environment_key)
+                    if not publish:
+                        _discard_unpublished_environment(new_env)
+                        return json.dumps({
+                            "output": "",
+                            "exit_code": -1,
+                            "error": "Environment creation was cancelled by teardown.",
+                            "status": "error",
+                        }, ensure_ascii=False)
                     logger.info("%s environment ready for task %s", env_type, effective_task_id[:8])
 
         # Hard-block: gateway lifecycle commands (systemctl/launchctl/hermes
@@ -2323,7 +2660,7 @@ def terminal_tool(
                     proc_session = process_registry.spawn_local(
                         command=command,
                         cwd=effective_cwd,
-                        task_id=effective_task_id,
+                        task_id=environment_key,
                         session_key=session_key,
                         env_vars=env.env if hasattr(env, 'env') else None,
                         use_pty=effective_pty,
@@ -2333,7 +2670,7 @@ def terminal_tool(
                         env=env,
                         command=command,
                         cwd=effective_cwd,
-                        task_id=effective_task_id,
+                        task_id=environment_key,
                         session_key=session_key,
                     )
 

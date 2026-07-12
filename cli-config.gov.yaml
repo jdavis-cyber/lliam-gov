@@ -66,6 +66,29 @@ security:
   deny_on_no_approver: true   # [additive] high-risk actions fail closed when no approver is reachable
   posture_findings_blocking: true  # [additive] LG-CH-09 — startup posture findings BLOCK (also stamped by posture_resolver; pinned explicitly so the flat artifact + drift gate are self-contained)
 
+  # [ACTIVE @ P1.4 — LG-IA]  MANAGED CREDENTIALS  (kept in THIS security block —
+  # a second top-level `security:` key elsewhere would silently override it)
+  no_default_credentials: true   # [additive @ P1.4] LG-IA-05: startup check refuses known default/placeholder credential values (fail-closed on strict)
+  accounts:                      # [additive @ P1.4] LG-IA-01: managed-account inventory of record; reconciled at startup vs the secrets-CLI enumeration (live reconcile = remediation pass)
+    - profile: default
+      provider: bedrock-govcloud
+      owner: jdavis
+      status: authorized
+
+  # [ACTIVE @ P1.5 — LG-IA]  OPERATOR + ENDPOINT AUTHENTICATION
+  # Consumed by the NEW fail-closed enforce_control_plane_auth_at_startup gate
+  # (lliam_cli/security_audit_startup.py), wired at gateway startup. Kept in THIS
+  # security block (a second top-level security: would drop the P0 posture).
+  api_server_key_required: true  # [additive @ P1.5] LG-IA-11: a network-accessible API server with no API_SERVER_KEY REFUSES to start (RCE gate). Loopback-only binds are unaffected.
+  require_operator_auth: true    # [additive @ P1.5] LG-IA-06: no shared/anonymous operator sessions on a networked control plane (config-of-record; dashboard_auth enforces token/oauth)
+  require_mfa: true              # [additive @ P1.5] LG-IA-07 config-of-record: dashboard/ACP login via an MFA-enforcing IdP (dashboard.oauth.client_id → IdP). Runtime IdP wiring is a deployment step; the startup posture check asserts MFA-capable auth for any network bind.
+  require_tls: true              # [additive @ P1.5] LG-IA-08: provider/MCP endpoints over VERIFIED TLS (ssl_guard). A disabled trust-store verification REFUSES to start under strict.
+  require_authenticated_approver: true   # [additive @ P1.6] LG-GV-05: an anonymous/non-interactive high-risk approval fails closed (couples to deny_on_no_approver); every approval/denial/override must carry an authenticated dashboard_auth principal. Runtime wiring of the principal into the approval.decision record is remediation-pass scope (the P1.2 subject seam + taxonomy already support it).
+  cert_pinning:                  # [additive @ P1.5] LG-IA-08 config-of-record: per-high-side-endpoint SPKI pins checked in the egress wrapper (ssl_guard verifies the trust store but does not pin). Pin list provisioned per deployment; enforcement is remediation-pass scope.
+    enabled: false
+  device_auth:                   # [additive @ P1.5] LG-IA-09: computer_use/browser are already policy-disabled in the CUI baseline (agent.disabled_toolsets + security.tool_denylist, P0.4); enrolled-host allowlist for any re-enable is config-of-record.
+    computer_use_enrolled_hosts: []
+
   # [ACTIVE @ P0.3]  SKILL ENABLEMENT POLICY MIRROR  (LG-SC-01/02/03/06, LG-AZ-02)
   # Consumed by the NEW tools/tool_policy.py gate. The detailed, reviewable policy
   # is policy/skills-allowlist.yaml; these keys mirror it for one-artifact audit.
@@ -223,6 +246,118 @@ agent:
 
 
 # =============================================================================
+# [ACTIVE @ P1.1]  APPEND-ONLY HASH-CHAINED AUDIT LEDGER  (LG-AU-01..07, AU-09)
+# -----------------------------------------------------------------------------
+# Consumed by the NEW additive module agent/governance_audit.py (the emitter
+# core). The ledger is JSONL at $HERMES_HOME/logs/agent-audit.log — OUTSIDE the
+# workspace and on the agent/file_safety.py write-denylist (LG-AU-07), so the
+# agent's own write tools cannot reach its own record. Each record carries
+# prev_hash + record_hash (sha256 over canonical bytes; genesis = 64 zeros).
+# Redaction-on-write (LG-AU-05) reuses the Phase-0 force-path redaction; masked
+# values retain a stable content_hash for correlation. fail_closed gates the
+# HIGH-RISK scope only (LG-AU-09): if the record cannot be written the action
+# must not run; low-risk events degrade to a logged warning (bounded trade).
+# Chokepoint wiring = P1.2 (AI-517); verify_chain + startup/CI = P1.3 (AI-518).
+# =============================================================================
+audit:
+  ledger_enabled: true               # [additive] LG-AU-01: governance ledger ON in the gov profile (shipped default: no ledger)
+  ledger_path: "$HERMES_HOME/logs/agent-audit.log"   # [additive] LG-AU-01/07: outside workspace, write-denied
+  hash_algo: sha256                  # [additive] LG-AU-01: chain algorithm pinned
+  # LG-AU-05 redaction-on-write is UNCONDITIONAL in agent/governance_audit.py —
+  # deliberately no config knob (a runtime-disableable redaction boundary is
+  # not a boundary; post-review hardening removed the earlier key).
+  fail_closed: true                  # [additive] LG-AU-09: audit-write failure blocks gated actions
+  fail_closed_scope: [mutating, privileged, egress, high_impact]   # [additive] LG-AU-09 gated risk classes
+  time_granularity_ms: true          # [additive] LG-AU-06: UTC sub-second stamps + monotonic seq in-chain
+  protect_path: true                 # [additive] LG-AU-07: ledger dir on the file_safety write-denylist
+  write_denied: true                 # [additive] LG-AU-07: denial of a write into the audit path is itself auditable
+  # ---- [ACTIVE @ P1.2] dispatch chokepoint + unified accountability ----
+  chokepoint_required: true          # [additive @ P1.2] LG-AU-02: both dispatch paths emit tool.dispatch pre-execution
+  on_unrecorded: block               # [additive @ P1.2] LG-AU-09 at the gate: unrecordable high-risk dispatch is blocked
+  unify_dashboard_auth: true         # [additive @ P1.2] LG-AU-10: audit_log() events forwarded into the chained ledger
+  unify_acp: true                    # [additive @ P1.2] LG-AU-10/MC-03: operator-subject contextvar + trace stamped into records; full ACP principal plumb lands with P1.5 operator authn (AI-520)
+  # ---- [ACTIVE @ P1.3] chain-integrity verification (LG-AU-08) ----
+  verify_on_startup: true            # [additive @ P1.3] LG-AU-08: verify_chain() at process start (gateway startup seam)
+  verify_fail_action: block          # [additive @ P1.3] LG-AU-08: a chain break under strict posture refuses high-risk start (fail-closed); advisory profiles alert-only
+  events:                            # [additive] LG-AU-03: auditable event set (L2 floor; catalog in the AU spec §2)
+    - tool.dispatch
+    - tool.result
+    - approval.decision
+    - provider.call
+    - mcp.call
+    - policy.violation
+    - config.load
+    - skill.load
+    - mcp.load
+    - secret.access
+    - memory.write
+    - session.start
+    - session.stop
+    - agent.lifecycle
+    - killswitch.activate
+    - security.error
+
+
+# =============================================================================
+# [ACTIVE @ P1.4]  AGENT IDENTITY + MANAGED CREDENTIALS  (LG-IA-01..05, IA-10)
+# -----------------------------------------------------------------------------
+# LG-IA-02 agent NPE identity is computed by the NEW additive module
+# agent/agent_identity.py (instance_id = sha256(code+config+toolset+model)) and
+# stamped into every audit record's `actor` (agent/governance_audit_hooks.py).
+# The binding inputs + algorithm + review-by are recorded in
+# docs/governance/agent_identity.yaml. LG-IA-03 per-profile credential isolation
+# is the EXISTING agent/secret_scope.py, activated fail-closed by
+# gateway.multiplex_profiles below. LG-IA-01/04/05 land as the managed-account
+# inventory + secret-source config-of-record + the no-default-credential startup
+# check; heavier runtime enforcement (live secrets-CLI reconcile, Bitwarden
+# migration, full delegation-context module + max_spawn_depth enforcement) is
+# flagged for the cross-phase remediation pass (see P1.4 report).
+# =============================================================================
+identity:
+  bind_instance: true                # [additive @ P1.4] LG-IA-02: derive + stamp the NPE instance_id into audit actor
+  record: docs/governance/agent_identity.yaml   # [additive @ P1.4] the identity binding record (evidence)
+
+gateway:
+  multiplex_profiles: true           # [additive @ P1.4] LG-IA-03: set_multiplex_active(True) at gateway startup → get_secret() FAILS CLOSED on unscoped reads (no process-global credential union)
+
+secrets:
+  bitwarden:
+    enabled: false                   # [additive @ P1.4] LG-IA-04 config-of-record: managed secret source. false until a project/collection id is provisioned; POA&M tracks per-provider migration off plaintext .env (which stays write-denied by file_safety)
+  # (no_default_credentials lives under `security:` — the check reads
+  #  security.no_default_credentials; a duplicate here would be unread.)
+
+delegation:
+  max_spawn_depth: 3                 # [additive @ P1.4] LG-IA-10 config-of-record: bound the operator→Lliam→sub-agent delegation chain; runtime enforcement in delegate_tool is remediation-pass scope
+
+# =============================================================================
+# [ACTIVE @ P1.6]  ROLES / RACI / SEPARATION-OF-DUTIES  (LG-GV-04/05)
+# -----------------------------------------------------------------------------
+# governance.role_bindings maps the named roles in docs/governance/roles.yaml to
+# authenticated dashboard_auth principals. The SoD gate (ci/governance-ci-gates/
+# sod_check.py) enforces the separation_of_duties rules in roles.yaml against
+# these bindings and fails closed on any conflict. The acting ENGINEER is the
+# Lliam-GOV NPE agent (its LG-IA-02 instance identity), distinct from the human
+# APPROVER, so Approver ≠ Engineer holds by construction.
+# security.require_authenticated_approver makes an anonymous/non-interactive
+# high-risk approval fail closed (LG-GV-05, couples to deny_on_no_approver).
+# =============================================================================
+governance:
+  role_bindings:
+    caio: jdavis@agency.mil                 # [additive @ P1.6] LG-GV-05
+    isso: jdavis@agency.mil                 #   ISSO co-held by the operator in eval (tracked)
+    ai_risk_owner: jdavis@agency.mil
+    approver: jdavis@agency.mil             #   human HITL approver (dashboard_auth principal)
+    engineer: "npe:lliam-gov"               #   the acting party is the NPE agent — Approver ≠ Engineer ✓
+    auditor: auditor@independent.mil        #   independent of approver/engineer/risk (SoD)
+    killswitch_owner: jdavis@agency.mil
+# NOTE: LG-IA-01 managed-account inventory (security.accounts) and the
+# LG-IA-05 no-default-credential switch (security.no_default_credentials) live
+# in the EXISTING `security:` block at the top of this file — a SECOND top-level
+# `security:` key here would silently override (YAML last-key-wins) and drop the
+# whole P0 posture. See the [ACTIVE @ P1.4 — LG-IA] additions there.
+
+
+# =============================================================================
 # SCAFFOLD — sections below are authored in their dedicated later Phase-0..2
 # steps (kept as comments so this file maps key-for-key to the GOV template and
 # stays capability-preserving until each control is built + verified).
@@ -240,7 +375,11 @@ agent:
 # [DONE P0.5  PI-01/02/03/05/07/08, MC-01, AZ-05] schema_validation:reject ; input_trust ; memory_poisoning_defense ; tools/input_integrity.py
 # [DONE P0.6  SS-01/07]     require_hashed_install + supply_chain (pyproject ==pins / uv.lock 1798 hashes) ; allow_lazy_installs:false refuses runtime installs
 # [DONE P0.7  CH-06/CH-03/SD-01/GV-02/CH-08] ci/governance-ci-gates/ (godmode/drift/path-freeze/deps) + .github/workflows/governance-gates.yml + intended-use.md + deviation-register
-# [P1   AU-01..10]          audit: { ledger_enabled, hash-chained ledger, fail_closed, ... }
+# [DONE P1.1 AU-01..07,09]  audit: { ledger_enabled, ledger_path, hash_algo, fail_closed(+scope), events } ; redaction-on-write is UNCONDITIONAL (no knob) ; agent/governance_audit.py ; logs/ on write-denylist
+# [DONE P1.2 AU-02/10,MC-03,QT-03] audit: { chokepoint_required, on_unrecorded, unify_dashboard_auth, unify_acp } ; agent/governance_audit_hooks.py wired at both dispatch paths + model_tools outcome funnel + dashboard_auth bridge
+# [DONE P1.3 AU-08]         audit: { verify_on_startup, verify_fail_action } ; verify_chain() + startup gate + CI/cron audit_chain_gate
+# [DONE P1.4 IA-01..05,10]  identity/gateway.multiplex_profiles/secrets/security.{no_default_credentials,accounts}/delegation ; agent/agent_identity.py
+# [DONE P1.5 IA-06..09,11]  security.{api_server_key_required,require_operator_auth,require_mfa,require_tls,cert_pinning,device_auth} ; enforce_control_plane_auth_at_startup fail-closed gate
 # [P1   IA-*]               dashboard auth + MFA ; gateway.multiplex_profiles ; secrets source
 # [P2   MP-01..]            security.provider_allowlist_enforce / allowed_providers
 # [P2   NE-01..06 / DP-10]  security.egress.{mode,proxy,allowed_domains} ; website_policy fail_closed
