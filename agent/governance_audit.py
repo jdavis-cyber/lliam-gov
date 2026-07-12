@@ -258,12 +258,16 @@ def _standard_record_error(record: Any) -> Optional[str]:
     for field in ("event_id", "correlation_id", "ts", "action", "source_module"):
         if not isinstance(record[field], str) or not record[field]:
             return f"invalid {field}: expected non-empty string"
-    if record["event"] not in AUDITABLE_EVENTS:
-        return f"unknown auditable event: {record['event']!r}"
-    if record["severity"] not in SEVERITIES:
-        return f"unknown severity: {record['severity']!r}"
-    if record["decision"] not in _DECISIONS:
-        return f"unknown decision: {record['decision']!r}"
+    for field, taxonomy in (
+        ("event", AUDITABLE_EVENTS),
+        ("severity", SEVERITIES),
+        ("decision", _DECISIONS),
+    ):
+        value = record[field]
+        if not isinstance(value, str):
+            return f"invalid {field}: expected string"
+        if value not in taxonomy:
+            return f"unknown {field}: {value!r}"
     for field in ("actor", "subject", "outcome"):
         if not isinstance(record[field], dict):
             return f"invalid {field}: expected object"

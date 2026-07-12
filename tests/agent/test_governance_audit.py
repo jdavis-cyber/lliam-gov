@@ -767,6 +767,32 @@ def test_verify_chain_rejects_self_sealed_incomplete_record(tmp_path):
     assert "action" in result.reason
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("event", ["tool.result"]),
+        ("severity", {"level": "info"}),
+        ("decision", ["n/a"]),
+    ],
+)
+def test_verify_chain_rejects_unhashable_taxonomy_values(
+    tmp_path, field, value
+):
+    led = _ledger(tmp_path)
+    record = led.emit("tool.result", action="op", source_module="tests")
+    record[field] = value
+    record["record_hash"] = _independent_hash(record)
+    led.path.write_text(
+        json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+
+    result = ga.verify_chain(led.path)
+
+    assert not result.ok
+    assert field in result.reason
+
+
 def test_ledger_path_is_write_denied(tmp_path, monkeypatch):
     """LG-AU-07: the agent's own file tools cannot reach the ledger."""
     import agent.file_safety as fs
