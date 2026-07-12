@@ -17,6 +17,7 @@ PATH-FREEZE: NEW additive script; reads the two governance files only.
 from __future__ import annotations
 
 import argparse
+import datetime
 import sys
 from pathlib import Path
 
@@ -38,6 +39,49 @@ def _emit(msg: str, *, error: bool = False) -> None:
 def _norm(p):
     """Normalize a principal for comparison (case-insensitive, trimmed)."""
     return str(p).strip().casefold() if p else None
+
+
+def _parse_review_by(value):
+    """Coerce a ``review_by`` value to a ``date``, or None if unparseable.
+
+    PyYAML parses an unquoted ISO date (``review_by: 2026-10-11``) as a
+    ``datetime.date``; a quoted one stays a ``str``. Accept both. A datetime is
+    reduced to its date.
+    """
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, datetime.date):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.date.fromisoformat(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _deviation_defect(d: dict, *, today: datetime.date) -> str | None:
+    """Return None if *d* is a complete, unexpired waiver, else a short reason.
+
+    A tracked ``sod_deviations`` entry only waives a conflict when it carries a
+    non-empty ``owner``, a non-empty ``justification``, and a valid, non-expired
+    ``review_by`` date. Missing, malformed, or expired metadata means the
+    conflict is NOT waived and stays blocking (LG-GV-05 — no silent, unowned, or
+    stale deviation).
+    """
+    if not _norm(d.get("owner")):
+        return "missing owner"
+    if not _norm(d.get("justification")):
+        return "missing justification"
+    raw = d.get("review_by")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return "missing review_by date"
+    review = _parse_review_by(raw)
+    if review is None:
+        return f"malformed review_by ({raw!r})"
+    if review < today:
+        return f"expired review_by ({review.isoformat()})"
+    return None
 
 
 def check_sod(roles: dict, bindings: dict) -> list[str]:
@@ -80,14 +124,26 @@ def classify_sod(roles: dict, bindings: dict) -> tuple[list[str], list[str]]:
     required = roles.get("required_bindings") or []
     deviations = roles.get("sod_deviations") or []
 
-    # Index accepted deviations by the unordered role-pair + normalized principal.
+    # Index deviations by the unordered role-pair + normalized principal. A
+    # deviation only WAIVES a conflict when it is complete AND unexpired; an
+    # invalid one (missing owner/justification/review_by, or an expired/malformed
+    # date) is recorded separately so the conflict stays blocking with a reason.
+    today = datetime.date.today()
     dev_index = set()
+    dev_invalid: dict = {}
     for d in deviations:
         if not isinstance(d, dict):
             continue
         pair = d.get("conflict") or []
-        if len(pair) == 2 and _norm(d.get("principal")):
-            dev_index.add((frozenset(_norm(x) for x in pair), _norm(d.get("principal"))))
+        principal = _norm(d.get("principal"))
+        if len(pair) != 2 or not principal:
+            continue
+        key = (frozenset(_norm(x) for x in pair), principal)
+        defect = _deviation_defect(d, today=today)
+        if defect is None:
+            dev_index.add(key)
+        elif key not in dev_index:
+            dev_invalid[key] = defect
 
     # Required roles must be bound to a non-empty principal.
     for role in required:
@@ -111,8 +167,14 @@ def classify_sod(roles: dict, bindings: dict) -> tuple[list[str], list[str]]:
                 f"principal '{bindings.get(role)}' holds both '{role}' and "
                 f"'{other}' — {rule.get('rationale', '')}".strip()
             )
-            if waivable and (frozenset({role_n for role_n in (_norm(role), _norm(other))}), who) in dev_index:
+            key = (frozenset({_norm(role), _norm(other)}), who)
+            if waivable and key in dev_index:
                 accepted.append(f"ACCEPTED DEVIATION: {msg}")
+            elif waivable and key in dev_invalid:
+                blocking.append(
+                    f"SoD conflict (waivable; sod_deviations entry INVALID — "
+                    f"{dev_invalid[key]}): {msg}"
+                )
             elif waivable:
                 blocking.append(
                     f"SoD conflict (waivable, but NO tracked sod_deviations entry): {msg}"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import sys
 from pathlib import Path
 
@@ -11,6 +12,14 @@ _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO / "ci" / "governance-ci-gates"))
 
 import sod_check  # noqa: E402
+
+
+def _future_iso() -> str:
+    return (datetime.date.today() + datetime.timedelta(days=365)).isoformat()
+
+
+def _past_iso() -> str:
+    return (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
 
 
 _ROLES = {
@@ -25,9 +34,23 @@ _ROLES = {
     "required_bindings": ["approver", "auditor", "killswitch_owner"],
     "sod_deviations": [
         {"conflict": ["caio", "ai_risk_owner"], "principal": "jdavis@x",
-         "justification": "eval", "owner": "jdavis@x", "review_by": "2026-10-11"},
+         "justification": "eval", "owner": "jdavis@x", "review_by": _future_iso()},
     ],
 }
+
+# A binding set that triggers ONLY the waivable caio/ai_risk_owner conflict.
+_CAIO_CONFLICT_BINDINGS = {
+    "approver": "app@x", "engineer": "eng@y", "auditor": "a@y",
+    "killswitch_owner": "k@z", "caio": "jdavis@x", "ai_risk_owner": "jdavis@x",
+}
+
+
+def _roles_with_deviation(**overrides):
+    dev = {"conflict": ["caio", "ai_risk_owner"], "principal": "jdavis@x",
+           "justification": "eval", "owner": "jdavis@x",
+           "review_by": _future_iso()}
+    dev.update(overrides)
+    return {**_ROLES, "sod_deviations": [dev]}
 
 
 def test_clean_bindings_have_no_conflicts():
@@ -136,3 +159,66 @@ def test_gate_exit_code_clean():
         "--roles", str(_REPO / "docs/governance/roles.yaml"),
         "--overlay", str(_REPO / "cli-config.gov.yaml"),
     ]) == 0
+
+
+# ---- deviation validity: a waiver must be complete AND unexpired (LG-GV-05) --
+
+def test_valid_unexpired_deviation_with_all_metadata_accepted():
+    roles = _roles_with_deviation()  # future review_by + owner + justification
+    blocking, accepted = sod_check.classify_sod(roles, _CAIO_CONFLICT_BINDINGS)
+    assert any("caio" in a and "ai_risk_owner" in a for a in accepted)
+    assert not any("caio" in c and "ai_risk_owner" in c for c in blocking)
+
+
+def test_expired_deviation_blocks():
+    roles = _roles_with_deviation(review_by=_past_iso())
+    blocking, accepted = sod_check.classify_sod(roles, _CAIO_CONFLICT_BINDINGS)
+    assert not any("caio" in a for a in accepted)
+    assert any("caio" in c and "ai_risk_owner" in c and "expired" in c.lower()
+               for c in blocking)
+
+
+def test_deviation_missing_owner_blocks():
+    roles = _roles_with_deviation(owner="")
+    blocking, accepted = sod_check.classify_sod(roles, _CAIO_CONFLICT_BINDINGS)
+    assert not any("caio" in a for a in accepted)
+    assert any("caio" in c and "ai_risk_owner" in c for c in blocking)
+
+
+def test_deviation_missing_justification_blocks():
+    roles = _roles_with_deviation(justification="")
+    blocking, accepted = sod_check.classify_sod(roles, _CAIO_CONFLICT_BINDINGS)
+    assert not any("caio" in a for a in accepted)
+    assert any("caio" in c and "ai_risk_owner" in c for c in blocking)
+
+
+def test_deviation_missing_review_by_blocks():
+    dev = {"conflict": ["caio", "ai_risk_owner"], "principal": "jdavis@x",
+           "justification": "eval", "owner": "jdavis@x"}  # no review_by
+    roles = {**_ROLES, "sod_deviations": [dev]}
+    blocking, accepted = sod_check.classify_sod(roles, _CAIO_CONFLICT_BINDINGS)
+    assert not any("caio" in a for a in accepted)
+    assert any("caio" in c and "ai_risk_owner" in c for c in blocking)
+
+
+def test_deviation_malformed_review_by_blocks():
+    roles = _roles_with_deviation(review_by="not-a-date")
+    blocking, accepted = sod_check.classify_sod(roles, _CAIO_CONFLICT_BINDINGS)
+    assert not any("caio" in a for a in accepted)
+    assert any("caio" in c and "ai_risk_owner" in c for c in blocking)
+
+
+def test_deviation_review_by_as_yaml_date_object_accepted():
+    """PyYAML parses an unquoted ISO date (review_by: 2026-10-11) as a
+    datetime.date, not a str — the checker must accept a date object too."""
+    future = datetime.date.today() + datetime.timedelta(days=365)
+    roles = _roles_with_deviation(review_by=future)
+    _, accepted = sod_check.classify_sod(roles, _CAIO_CONFLICT_BINDINGS)
+    assert any("caio" in a and "ai_risk_owner" in a for a in accepted)
+
+
+def test_deviation_expired_date_object_blocks():
+    past = datetime.date.today() - datetime.timedelta(days=1)
+    roles = _roles_with_deviation(review_by=past)
+    _, accepted = sod_check.classify_sod(roles, _CAIO_CONFLICT_BINDINGS)
+    assert not any("caio" in a for a in accepted)

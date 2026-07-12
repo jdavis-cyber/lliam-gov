@@ -375,7 +375,7 @@ governance:
 # [DONE P0.5  PI-01/02/03/05/07/08, MC-01, AZ-05] schema_validation:reject ; input_trust ; memory_poisoning_defense ; tools/input_integrity.py
 # [DONE P0.6  SS-01/07]     require_hashed_install + supply_chain (pyproject ==pins / uv.lock 1798 hashes) ; allow_lazy_installs:false refuses runtime installs
 # [DONE P0.7  CH-06/CH-03/SD-01/GV-02/CH-08] ci/governance-ci-gates/ (godmode/drift/path-freeze/deps) + .github/workflows/governance-gates.yml + intended-use.md + deviation-register
-# [DONE P1.1 AU-01..07,09]  audit: { ledger_enabled, ledger_path, hash_algo, redact_before_persist, fail_closed(+scope), events } ; agent/governance_audit.py ; logs/ on write-denylist
+# [DONE P1.1 AU-01..07,09]  audit: { ledger_enabled, ledger_path, hash_algo, fail_closed(+scope), events } ; redaction-on-write is UNCONDITIONAL (no knob) ; agent/governance_audit.py ; logs/ on write-denylist
 # [DONE P1.2 AU-02/10,MC-03,QT-03] audit: { chokepoint_required, on_unrecorded, unify_dashboard_auth, unify_acp } ; agent/governance_audit_hooks.py wired at both dispatch paths + model_tools outcome funnel + dashboard_auth bridge
 # [DONE P1.3 AU-08]         audit: { verify_on_startup, verify_fail_action } ; verify_chain() + startup gate + CI/cron audit_chain_gate
 # [DONE P1.4 IA-01..05,10]  identity/gateway.multiplex_profiles/secrets/security.{no_default_credentials,accounts}/delegation ; agent/agent_identity.py

@@ -30,8 +30,16 @@ if [[ -z "${HERMES_HOME:-}" || -z "${HERMES_CONFIG:-}" ]]; then
 fi
 
 PY="${LLIAM_PYTHON:-python3}"
-out="$("$PY" "${REPO_ROOT}/ci/governance-ci-gates/audit_chain_gate.py" --require-strict 2>&1)"
-rc=$?
+# Capture output AND exit status WITHOUT tripping `set -e`. A command in an
+# `if` condition is exempt from `set -e`, so a nonzero verifier no longer kills
+# the script at the assignment — before it can print the captured output and
+# page. That early-exit was the bug: a break/error (exactly when we must alert)
+# exited silently (LG-AU-08 — a break/error MUST print and alert).
+if out="$("$PY" "${REPO_ROOT}/ci/governance-ci-gates/audit_chain_gate.py" --require-strict 2>&1)"; then
+  rc=0
+else
+  rc=$?
+fi
 echo "$out"
 
 if [[ $rc -ne 0 ]]; then
