@@ -429,8 +429,26 @@ class GovernanceLedger:
         fragment = chunk[idx + 1:] if idx != -1 else chunk
         try:
             rec = json.loads(fragment.decode("utf-8"))
-            sealed = str(rec["record_hash"])
-            valid_seal = _sha256_hex(canonical_bytes(rec)) == sealed
+            seq = rec["seq"]
+            sealed = rec["record_hash"]
+            prev_hash = rec["prev_hash"]
+            valid_shape = (
+                isinstance(rec, dict)
+                and rec.get("schema") == SCHEMA_VERSION
+                and isinstance(seq, int)
+                and not isinstance(seq, bool)
+                and seq > 0
+                and isinstance(sealed, str)
+                and len(sealed) == 64
+                and all(c in "0123456789abcdef" for c in sealed)
+                and isinstance(prev_hash, str)
+                and len(prev_hash) == 64
+                and all(c in "0123456789abcdef" for c in prev_hash)
+            )
+            valid_seal = (
+                valid_shape
+                and _sha256_hex(canonical_bytes(rec)) == sealed
+            )
         except Exception:
             valid_seal = False
         if valid_seal:

@@ -219,6 +219,48 @@ def test_valid_unterminated_tail_survives_append_and_is_recorded(tmp_path):
     _assert_chain_valid(records)
 
 
+@pytest.mark.parametrize("invalid_field", ["missing_seq", "schema", "prev_hash"])
+def test_self_sealed_non_record_tail_is_truncated(tmp_path, invalid_field):
+    """A self-hashed JSON object is not evidence unless its sequence,
+    schema, and prior-hash linkage have usable ledger-record shape."""
+    led = _ledger(tmp_path)
+    first = led.emit("tool.result", action="op-0", source_module="tests")
+    fragment = {
+        "schema": ga.SCHEMA_VERSION,
+        "seq": 2,
+        "prev_hash": first["record_hash"],
+        "event": "tool.result",
+    }
+    if invalid_field == "missing_seq":
+        del fragment["seq"]
+    elif invalid_field == "schema":
+        fragment["schema"] = "not-lg-au"
+    else:
+        fragment["prev_hash"] = "not-a-sha256"
+    fragment["record_hash"] = _independent_hash(fragment)
+    with open(led.path, "ab") as f:
+        f.write(json.dumps(
+            fragment, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8"))
+
+    rec = led.emit(
+        "tool.dispatch",
+        action="file.write",
+        risk_scope={"mutating"},
+        source_module="tests",
+    )
+
+    assert rec is not None
+    records = list(iter_records(led.path))
+    assert [r["action"] for r in records] == [
+        "op-0", "ledger.torn_write_repair", "file.write",
+    ]
+    assert records[1]["outcome"]["error"].startswith(
+        "invalid unterminated trailing fragment truncated"
+    )
+    _assert_chain_valid(records)
+
+
 def test_redaction_on_write_masks_secret_and_keeps_content_hash(tmp_path):
     led = _ledger(tmp_path)
     secret = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
