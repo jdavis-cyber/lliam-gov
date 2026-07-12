@@ -18418,6 +18418,18 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     except Exception as _audit_exc:
         logger.debug("Startup security audit failed (non-fatal): %s", _audit_exc)
 
+    # Raw home config for the LG-IA-02 identity emit below and as the
+    # last-resort fallback for the control-plane / audit-chain gates (each
+    # independently re-loads the MERGED config; _audit_cfg deliberately lacks
+    # the overlay keys). Bound here in start_gateway's own scope — the startup
+    # audit itself now loads the merged config internally via the helper above.
+    try:
+        from lliam_cli.config import read_raw_config
+
+        _audit_cfg = read_raw_config()
+    except Exception:
+        _audit_cfg = None
+
     # LG-AU-08 (additive): verify the governance audit chain at startup.
     # No-op when the ledger is disabled; on a break under strict posture
     # with verify_fail_action=block this raises AuditChainVerificationError

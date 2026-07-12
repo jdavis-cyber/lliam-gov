@@ -31,3 +31,22 @@ def test_startup_audit_uses_merged_config_so_default_cred_check_fires(monkeypatc
     assert any(
         "PROVIDER_API_KEY" in f and "default" in f.lower() for f in findings
     ), findings
+
+
+def test_start_gateway_binds_audit_cfg_in_scope():
+    """Regression: extracting _run_startup_security_audit must not orphan the
+    _audit_cfg references still used downstream in start_gateway (the LG-IA-02
+    identity emit and the control-plane / audit-chain gate fallbacks).
+
+    A name assigned in a function body is a local (co_varnames); a name only
+    ever loaded is resolved as a global/builtin (co_names). If _audit_cfg is
+    only assigned inside the helper, start_gateway's reads become unbound and
+    raise NameError — swallowed by the surrounding non-fatal handlers, which
+    silently kills the identity emit on every startup. _audit_cfg MUST be a
+    local of start_gateway.
+    """
+    import gateway.run as gr
+
+    code = gr.start_gateway.__code__
+    assert "_audit_cfg" in code.co_varnames
+    assert "_audit_cfg" not in code.co_names
