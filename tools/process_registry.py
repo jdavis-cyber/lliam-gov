@@ -2112,6 +2112,14 @@ def _redact_process_result(result: dict) -> dict:
 
 def _handle_process(args, **kw):
     task_id = kw.get("task_id")
+    try:
+        from tools.terminal_tool import _resolve_environment_cache_key
+        task_id = _resolve_environment_cache_key(task_id)
+    except Exception:
+        # Poll/log/kill address a concrete process id and do not need a task
+        # lookup. For list, retaining the caller's original task id preserves
+        # legacy behavior when no terminal profile scope is available.
+        pass
     action = args.get("action", "")
     # Coerce to string — some models send session_id as an integer
     session_id = str(args.get("session_id", "")) if args.get("session_id") is not None else ""

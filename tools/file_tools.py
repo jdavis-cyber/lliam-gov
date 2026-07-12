@@ -193,13 +193,18 @@ def _live_cwd_if_owned(env, task_id: str) -> str | None:
 def _get_live_tracking_cwd(task_id: str = "default") -> str | None:
     """Return the task's live terminal cwd for bookkeeping when available."""
     try:
-        from tools.terminal_tool import _resolve_container_task_id
-        container_key = _resolve_container_task_id(task_id)
+        from tools.terminal_tool import _get_env_config, _resolve_environment_cache_key
+        config = _get_env_config()
+        container_key = _resolve_environment_cache_key(task_id, config)
+        raw_fallback_allowed = config.get("env_type") != "ssh"
     except Exception:
         container_key = task_id
+        raw_fallback_allowed = os.getenv("TERMINAL_ENV", "local") != "ssh"
 
     with _file_ops_lock:
-        cached = _file_ops_cache.get(container_key) or _file_ops_cache.get(task_id)
+        cached = _file_ops_cache.get(container_key)
+        if cached is None and raw_fallback_allowed:
+            cached = _file_ops_cache.get(task_id)
     if cached is not None:
         env = getattr(cached, "env", None)
         live_cwd = _live_cwd_if_owned(env, task_id)
@@ -216,7 +221,9 @@ def _get_live_tracking_cwd(task_id: str = "default") -> str | None:
         from tools.terminal_tool import _active_environments, _env_lock
 
         with _env_lock:
-            env = _active_environments.get(container_key) or _active_environments.get(task_id)
+            env = _active_environments.get(container_key)
+            if env is None and raw_fallback_allowed:
+                env = _active_environments.get(task_id)
         live_cwd = _live_cwd_if_owned(env, task_id)
         if live_cwd:
             _remember_last_known_cwd(container_key, live_cwd)
@@ -477,16 +484,19 @@ def _get_container_mirror_prefix_for_task(task_id: str = "default") -> str | Non
             _active_environments,
             _env_lock,
             _get_env_config,
-            _resolve_container_task_id,
+            _resolve_environment_cache_key,
         )
 
-        container_key = _resolve_container_task_id(task_id)
+        config = _get_env_config()
+        container_key = _resolve_environment_cache_key(task_id, config)
     except Exception:
         return None
 
     try:
         with _env_lock:
-            env = _active_environments.get(container_key) or _active_environments.get(task_id)
+            env = _active_environments.get(container_key)
+            if env is None and config.get("env_type") != "ssh":
+                env = _active_environments.get(task_id)
 
         if env is not None:
             if env.__class__.__name__ == "DockerEnvironment" and bool(
@@ -495,7 +505,6 @@ def _get_container_mirror_prefix_for_task(task_id: str = "default") -> str | Non
                 return "/root/.hermes"
             return None
 
-        config = _get_env_config()
     except Exception:
         return None
 
@@ -608,12 +617,18 @@ def _last_known_cwd_for(task_id: str = "default") -> str | None:
     up the resolved key first and fall back to the raw task id.
     """
     try:
-        from tools.terminal_tool import _resolve_container_task_id
-        container_key = _resolve_container_task_id(task_id)
+        from tools.terminal_tool import _get_env_config, _resolve_environment_cache_key
+        config = _get_env_config()
+        container_key = _resolve_environment_cache_key(task_id, config)
+        raw_fallback_allowed = config.get("env_type") != "ssh"
     except Exception:
         container_key = task_id
+        raw_fallback_allowed = os.getenv("TERMINAL_ENV", "local") != "ssh"
     with _file_ops_lock:
-        return _last_known_cwd.get(container_key) or _last_known_cwd.get(task_id)
+        cwd = _last_known_cwd.get(container_key)
+        if cwd is None and raw_fallback_allowed:
+            cwd = _last_known_cwd.get(task_id)
+        return cwd
 
 # Track files read per task to detect re-read loops and deduplicate reads.
 # Per task_id we store:
@@ -831,12 +846,13 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
         _get_env_config, _last_activity, _start_cleanup_thread,
         _creation_locks,
         _creation_locks_lock,
-        _resolve_container_task_id,
+        _resolve_environment_cache_key,
     )
     import time
 
     raw_task_id = task_id or "default"
-    task_id = _resolve_container_task_id(raw_task_id)
+    config = _get_env_config()
+    task_id = _resolve_environment_cache_key(raw_task_id, config)
 
     # Fast path: check cache -- but also verify the underlying environment
     # is still alive (it may have been killed by the cleanup thread).
@@ -877,7 +893,6 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
         if terminal_env is None:
             from tools.terminal_tool import resolve_task_overrides
 
-            config = _get_env_config()
             env_type = config["env_type"]
             overrides = resolve_task_overrides(raw_task_id)
 

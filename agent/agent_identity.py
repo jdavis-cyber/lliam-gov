@@ -21,6 +21,11 @@ Config record: ``docs/governance/agent_identity.yaml`` documents the binding
 inputs, the algorithm, and the review-by date (the assessor evidence for
 LG-IA-02).
 
+Freshness: only the process-stable governance ``code_hash`` is memoized at
+this layer. Config is re-canonicalized for every call, and tool definitions
+are re-hashed from model_tools' current resolved result (or rebuilt directly
+when ``use_cache=False``).
+
 Privacy: ``config_hash`` is computed over the canonical config with
 PATTERN-MATCHING secrets redacted via the Phase-0 force-path (40+ vendor key
 prefixes, auth headers, JWTs, connstrings). Only the one-way digest is ever
@@ -70,10 +75,6 @@ _CODE_SURFACE = (
 _lock = threading.Lock()
 # code_hash is process-stable (source can't change mid-run); memoized once.
 _code_hash_memo: Optional[str] = None
-# toolset_hash is EXPENSIVE (~100ms — get_tool_definitions); memoized on a cheap
-# key of (registry generation, enabled scope, disabled scope) so a tool/skill or
-# MCP change invalidates it but the hot path does not recompute per dispatch.
-_toolset_memo: dict[tuple, str] = {}
 
 
 def _repo_root() -> Path:
@@ -125,23 +126,6 @@ def _config_hash(config: Optional[dict]) -> str:
         return "unknown:config"
 
 
-def _scope_key(scope: Any) -> Any:
-    if scope is None:
-        return None
-    try:
-        return tuple(sorted(scope))
-    except Exception:
-        return str(scope)
-
-
-def _registry_generation() -> int:
-    try:
-        from tools.registry import registry as _registry
-        return int(getattr(_registry, "_generation", 0))
-    except Exception:
-        return 0
-
-
 def _tool_manifest_default(value: Any) -> Any:
     """Return a stable JSON representation for uncommon schema values.
 
@@ -182,20 +166,15 @@ def _canonical_tool_manifest(definitions: Any) -> bytes:
 def _toolset_hash(agent: Any = None, *, enabled: Any = None, disabled: Any = None) -> str:
     """sha256 over the canonical resolved tool-definition manifest for a scope.
 
-    Memoized on (registry generation, enabled scope, disabled scope) — the
-    call is ~100ms (``get_tool_definitions``), so the per-dispatch hot path
-    must not recompute it, but a tool/skill/MCP change bumps the registry
-    generation and invalidates the memo (so a swapped skill DOES flip the
-    hash — the staleness the P1.4 review flagged).
+    ``model_tools.get_tool_definitions`` owns the bounded, fingerprinted cache
+    for expensive registry resolution. Identity deliberately adds no outer
+    memo: every call canonicalizes the currently resolved definitions, so a
+    dynamic same-name schema change cannot be hidden behind a generation-only
+    identity cache key.
     """
     if enabled is None and disabled is None and agent is not None:
         enabled = getattr(agent, "enabled_toolsets", None)
         disabled = getattr(agent, "disabled_toolsets", None)
-    memo_key = (_registry_generation(), _scope_key(enabled), _scope_key(disabled))
-    with _lock:
-        cached = _toolset_memo.get(memo_key)
-    if cached is not None:
-        return cached
     try:
         import model_tools
 
@@ -208,10 +187,7 @@ def _toolset_hash(agent: Any = None, *, enabled: Any = None, disabled: Any = Non
     except Exception as e:
         _log.debug("toolset manifest unavailable: %s", e)
         return "unknown:toolset"
-    digest = hashlib.sha256(manifest).hexdigest()
-    with _lock:
-        _toolset_memo[memo_key] = digest
-    return digest
+    return hashlib.sha256(manifest).hexdigest()
 
 
 def _model_manifest(agent: Any = None, *, provider: Optional[str] = None,
@@ -249,11 +225,15 @@ def compute_instance_identity(
           "model": {"provider": …, "model": …, "model_hash": "sha256:…"},
         }
 
-    Freshness: ``code_hash`` is process-stable (memoized once), ``toolset_hash``
-    is memoized on the tool-registry generation (a swapped skill/MCP flips it),
-    and ``config_hash`` is recomputed every call — so a mid-process config or
-    toolset change is reflected in a NEW ``instance_id`` (the P1.4-review cache-
-    staleness fix). ``use_cache`` gates only the expensive toolset memo.
+    Freshness: ``code_hash`` is process-stable (memoized once), ``config_hash``
+    is recomputed every call, and ``toolset_hash`` always hashes the definitions
+    returned for the current scope. With ``use_cache=True``, model_tools may use
+    its bounded registry/config-fingerprinted definition cache. With
+    ``use_cache=False``, identity calls model_tools' uncached definition builder,
+    bypassing that outer cache; registry availability probes may still honor
+    their own short TTL. This is the freshest feasible in-process resolution
+    path. No identity-layer toolset memo exists, so a changed resolved manifest
+    always produces a new id.
     """
     if agent is not None:
         provider = provider if provider is not None else getattr(agent, "provider", None)
@@ -268,7 +248,8 @@ def compute_instance_identity(
     if use_cache:
         tools = _toolset_hash(enabled=enabled_toolsets, disabled=disabled_toolsets)
     else:
-        # Bypass the memo for a fully-fresh compute (tests / differentiation).
+        # Bypass model_tools' definition cache for the freshest in-process
+        # registry/config resolution (tests / explicit differentiation).
         tools = _toolset_hash_uncached(enabled_toolsets, disabled_toolsets)
     model_manifest = _model_manifest(agent, provider=provider, model=model)
     instance = _hash_bytes(
@@ -290,7 +271,7 @@ def _toolset_hash_uncached(enabled: Any, disabled: Any) -> str:
     try:
         import model_tools
 
-        defs = model_tools.get_tool_definitions(
+        defs = model_tools._compute_tool_definitions(
             enabled_toolsets=enabled, disabled_toolsets=disabled, quiet_mode=True,
         ) or []
         manifest = _canonical_tool_manifest(defs)
@@ -300,8 +281,7 @@ def _toolset_hash_uncached(enabled: Any, disabled: Any) -> str:
 
 
 def reset_identity_cache() -> None:
-    """Clear the per-process identity memos (tests / post-config-reload)."""
+    """Clear the process-stable code hash memo (tests / source reload)."""
     global _code_hash_memo
     with _lock:
-        _toolset_memo.clear()
         _code_hash_memo = None

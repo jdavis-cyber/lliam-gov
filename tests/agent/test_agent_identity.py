@@ -117,32 +117,76 @@ def _tool_definition(description: str, parameter_type: str = "string"):
     }
 
 
-def test_uncached_toolset_hash_covers_full_definition(monkeypatch):
+def test_uncached_toolset_hash_covers_description_change(monkeypatch):
     import model_tools
 
     definition = _tool_definition("old behavior")
-    monkeypatch.setattr(model_tools, "get_tool_definitions", lambda **_: [definition])
+    monkeypatch.setattr(model_tools, "_compute_tool_definitions", lambda *_a, **_k: [definition])
     before = ai._toolset_hash_uncached(None, None)
 
-    definition = _tool_definition("new behavior", parameter_type="integer")
-    monkeypatch.setattr(model_tools, "get_tool_definitions", lambda **_: [definition])
+    definition = _tool_definition("new behavior")
+    monkeypatch.setattr(model_tools, "_compute_tool_definitions", lambda *_a, **_k: [definition])
     after = ai._toolset_hash_uncached(None, None)
 
     assert before != after
 
 
-def test_cached_toolset_hash_covers_full_definition_after_registry_change(monkeypatch):
+def test_cached_toolset_hash_covers_schema_change_without_registry_change(monkeypatch):
     import model_tools
 
-    generation = 1
     definition = _tool_definition("old behavior")
-    monkeypatch.setattr(ai, "_registry_generation", lambda: generation)
     monkeypatch.setattr(model_tools, "get_tool_definitions", lambda **_: [definition])
     before = ai._toolset_hash()
 
-    generation = 2
-    definition = _tool_definition("new behavior", parameter_type="integer")
+    definition = _tool_definition("old behavior", parameter_type="integer")
     monkeypatch.setattr(model_tools, "get_tool_definitions", lambda **_: [definition])
     after = ai._toolset_hash()
 
     assert before != after
+
+
+def test_toolset_hash_is_independent_of_definition_and_dict_order(monkeypatch):
+    import model_tools
+
+    first = _tool_definition("first")
+    second = _tool_definition("second", parameter_type="integer")
+    monkeypatch.setattr(model_tools, "get_tool_definitions", lambda **_: [first, second])
+    before = ai._toolset_hash()
+
+    reordered_first = {
+        "function": {
+            "parameters": {
+                "properties": {"value": {"type": "string"}},
+                "type": "object",
+            },
+            "description": "first",
+            "name": "same_exported_name",
+        },
+        "type": "function",
+    }
+    monkeypatch.setattr(
+        model_tools, "get_tool_definitions", lambda **_: [second, reordered_first]
+    )
+    after = ai._toolset_hash()
+
+    assert before == after
+
+
+def test_compute_identity_use_cache_false_bypasses_definition_cache(monkeypatch):
+    import model_tools
+
+    cached = _tool_definition("cached behavior")
+    fresh = _tool_definition("fresh behavior")
+    calls = []
+    monkeypatch.setattr(model_tools, "get_tool_definitions", lambda **_: [cached])
+    monkeypatch.setattr(
+        model_tools,
+        "_compute_tool_definitions",
+        lambda *_args, **_kwargs: calls.append("fresh") or [fresh],
+    )
+
+    cached_identity = ai.compute_instance_identity(config={}, use_cache=True)
+    fresh_identity = ai.compute_instance_identity(config={}, use_cache=False)
+
+    assert calls == ["fresh"]
+    assert cached_identity["toolset_hash"] != fresh_identity["toolset_hash"]

@@ -8,6 +8,8 @@ than leaking whichever value is in os.environ.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 import agent.secret_scope as ss
@@ -115,3 +117,129 @@ def test_terminal_env_config_fails_closed_for_unscoped_ssh(monkeypatch):
     monkeypatch.setenv("TERMINAL_SSH_HOST", "must-not-leak.example")
     with pytest.raises(ss.UnscopedSecretError):
         terminal_tool._get_env_config()
+
+
+def test_terminal_ssh_environment_cache_isolated_by_profile_identity(monkeypatch):
+    """A→B→A must create two SSH envs and route each command correctly."""
+    created = []
+
+    class FakeSSHEnvironment:
+        cwd = "~"
+
+        def __init__(self, ssh_config):
+            self.ssh_config = dict(ssh_config)
+            self.cleaned = False
+
+        def execute(self, command, **kwargs):
+            return {
+                "output": self.ssh_config["host"],
+                "returncode": 0,
+            }
+
+        def cleanup(self):
+            self.cleaned = True
+
+    def fake_create_environment(**kwargs):
+        env = FakeSSHEnvironment(kwargs["ssh_config"])
+        created.append(env)
+        return env
+
+    monkeypatch.setenv("TERMINAL_ENV", "ssh")
+    monkeypatch.setattr(terminal_tool, "_active_environments", {})
+    monkeypatch.setattr(terminal_tool, "_last_activity", {})
+    monkeypatch.setattr(terminal_tool, "_creation_locks", {})
+    monkeypatch.setattr(terminal_tool, "_create_environment", fake_create_environment)
+    monkeypatch.setattr(terminal_tool, "_start_cleanup_thread", lambda: None)
+    monkeypatch.setattr(
+        terminal_tool,
+        "_check_all_guards",
+        lambda *_args, **_kwargs: {"approved": True},
+    )
+
+    profile_a = {
+        "TERMINAL_SSH_HOST": "profile-a.example",
+        "TERMINAL_SSH_USER": "alice",
+        "TERMINAL_SSH_PORT": "2201",
+        "TERMINAL_SSH_KEY": "/profiles/a/id_ed25519",
+    }
+    profile_b = {
+        "TERMINAL_SSH_HOST": "profile-b.example",
+        "TERMINAL_SSH_USER": "bob",
+        "TERMINAL_SSH_PORT": "2202",
+        "TERMINAL_SSH_KEY": "/profiles/b/id_ed25519",
+    }
+
+    outputs = []
+    for profile in (profile_a, profile_b, profile_a):
+        tok = ss.set_secret_scope(profile)
+        try:
+            result = terminal_tool.terminal_tool("pwd", task_id="shared-session")
+        finally:
+            ss.reset_secret_scope(tok)
+        outputs.append(json.loads(result)["output"])
+
+    assert outputs == ["profile-a.example", "profile-b.example", "profile-a.example"]
+    assert [env.ssh_config["host"] for env in created] == [
+        "profile-a.example", "profile-b.example"
+    ]
+    assert len(terminal_tool._active_environments) == 2
+    assert len(terminal_tool._creation_locks) == 2
+    assert all("profile-a" not in key and "profile-b" not in key
+               for key in terminal_tool._active_environments)
+
+    tok = ss.set_secret_scope(profile_a)
+    try:
+        terminal_tool.cleanup_vm("shared-session")
+    finally:
+        ss.reset_secret_scope(tok)
+
+    assert created[0].cleaned is True
+    assert created[1].cleaned is False
+    assert len(terminal_tool._active_environments) == 1
+    assert len(terminal_tool._creation_locks) == 1
+
+
+def test_file_tracking_never_falls_back_to_raw_task_cache_for_ssh(monkeypatch):
+    """A legacy raw-task cache entry cannot cross an SSH identity boundary."""
+    import tools.file_tools as file_tools
+
+    class CachedOps:
+        cwd = "/wrong-profile"
+        env = None
+
+    monkeypatch.setenv("TERMINAL_ENV", "ssh")
+    monkeypatch.setattr(file_tools, "_file_ops_cache", {"shared-session": CachedOps()})
+    monkeypatch.setattr(file_tools, "_last_known_cwd", {"shared-session": "/wrong-profile"})
+
+    tok = ss.set_secret_scope({
+        "TERMINAL_SSH_HOST": "profile-a.example",
+        "TERMINAL_SSH_USER": "alice",
+    })
+    try:
+        assert file_tools._get_live_tracking_cwd("shared-session") is None
+        assert file_tools._last_known_cwd_for("shared-session") is None
+    finally:
+        ss.reset_secret_scope(tok)
+
+
+def test_ssh_cwd_override_never_mutates_legacy_raw_task_environment(monkeypatch):
+    """Lifecycle helpers must obey the same SSH identity-only lookup rule."""
+    legacy_env = type("LegacyEnvironment", (), {"cwd": "/wrong-profile"})()
+    monkeypatch.setenv("TERMINAL_ENV", "ssh")
+    monkeypatch.setattr(
+        terminal_tool, "_active_environments", {"shared-session": legacy_env}
+    )
+    monkeypatch.setattr(terminal_tool, "_task_env_overrides", {})
+
+    tok = ss.set_secret_scope({
+        "TERMINAL_SSH_HOST": "profile-a.example",
+        "TERMINAL_SSH_USER": "alice",
+    })
+    try:
+        terminal_tool.register_task_env_overrides(
+            "shared-session", {"cwd": "/profile-a"}
+        )
+    finally:
+        ss.reset_secret_scope(tok)
+
+    assert legacy_env.cwd == "/wrong-profile"

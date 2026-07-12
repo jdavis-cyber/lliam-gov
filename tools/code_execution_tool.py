@@ -621,31 +621,32 @@ def _get_or_create_env(task_id: str):
         _active_environments, _env_lock, _create_environment,
         _get_env_config, _last_activity, _start_cleanup_thread,
         _creation_locks, _creation_locks_lock, _task_env_overrides,
-        _resolve_container_task_id,
+        _resolve_container_task_id, _resolve_environment_cache_key,
     )
 
     effective_task_id = _resolve_container_task_id(task_id)
+    config = _get_env_config()
+    env_type = config["env_type"]
+    environment_key = _resolve_environment_cache_key(task_id, config)
 
     # Fast path: environment already exists
     with _env_lock:
-        if effective_task_id in _active_environments:
-            _last_activity[effective_task_id] = time.time()
-            return _active_environments[effective_task_id], _get_env_config()["env_type"]
+        if environment_key in _active_environments:
+            _last_activity[environment_key] = time.time()
+            return _active_environments[environment_key], env_type
 
     # Slow path: create environment (same pattern as file_tools._get_file_ops)
     with _creation_locks_lock:
-        if effective_task_id not in _creation_locks:
-            _creation_locks[effective_task_id] = threading.Lock()
-        task_lock = _creation_locks[effective_task_id]
+        if environment_key not in _creation_locks:
+            _creation_locks[environment_key] = threading.Lock()
+        task_lock = _creation_locks[environment_key]
 
     with task_lock:
         with _env_lock:
-            if effective_task_id in _active_environments:
-                _last_activity[effective_task_id] = time.time()
-                return _active_environments[effective_task_id], _get_env_config()["env_type"]
+            if environment_key in _active_environments:
+                _last_activity[environment_key] = time.time()
+                return _active_environments[environment_key], env_type
 
-        config = _get_env_config()
-        env_type = config["env_type"]
         overrides = _task_env_overrides.get(effective_task_id, {})
 
         if env_type == "docker":
@@ -698,13 +699,13 @@ def _get_or_create_env(task_id: str):
             ssh_config=ssh_config,
             container_config=container_config,
             local_config=local_config,
-            task_id=effective_task_id,
+            task_id=environment_key,
             host_cwd=config.get("host_cwd"),
         )
 
         with _env_lock:
-            _active_environments[effective_task_id] = env
-            _last_activity[effective_task_id] = time.time()
+            _active_environments[environment_key] = env
+            _last_activity[environment_key] = time.time()
 
         _start_cleanup_thread()
         logger.info("%s environment ready for execute_code task %s",

@@ -151,3 +151,31 @@ def test_env_type_override_keeps_own_id():
         )
     finally:
         terminal_tool.clear_task_env_overrides("bench-env")
+
+
+def test_non_ssh_environment_cache_key_preserves_shared_container_key():
+    config = {"env_type": "docker"}
+    assert terminal_tool._resolve_environment_cache_key(None, config) == "default"
+    assert (
+        terminal_tool._resolve_environment_cache_key("subagent-7-cafe", config)
+        == "default"
+    )
+
+
+def test_ssh_environment_cache_key_is_stable_and_secret_opaque():
+    config = {
+        "env_type": "ssh",
+        "ssh_host": "private-host.example",
+        "ssh_user": "private-user",
+        "ssh_port": 2202,
+        "ssh_key": "/private/key/path",
+        "ssh_persistent": True,
+    }
+    first = terminal_tool._resolve_environment_cache_key("session-a", config)
+    second = terminal_tool._resolve_environment_cache_key("session-b", dict(config))
+
+    assert first == second
+    assert first.startswith("default::ssh:")
+    assert all(secret not in first for secret in (
+        "private-host", "private-user", "/private/key/path"
+    ))

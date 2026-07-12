@@ -32,6 +32,7 @@ Usage:
 """
 
 import importlib.util
+import hashlib
 import json
 import logging
 import os
@@ -961,7 +962,7 @@ Do NOT use vim/nano/interactive tools without pty=true — they hang without a p
 _active_environments: Dict[str, Any] = {}
 _last_activity: Dict[str, float] = {}
 _env_lock = threading.Lock()
-_creation_locks: Dict[str, threading.Lock] = {}  # Per-task locks for sandbox creation
+_creation_locks: Dict[str, threading.Lock] = {}  # Per-environment locks for creation
 _creation_locks_lock = threading.Lock()  # Protects _creation_locks dict itself
 _cleanup_thread = None
 _cleanup_running = False
@@ -1084,8 +1085,20 @@ def register_task_env_overrides(task_id: str, overrides: Dict[str, Any]):
         # so a CWD-only override (which collapses to "default") still finds and
         # updates the originating session's env.
         container_id = _resolve_container_task_id(task_id)
+        try:
+            config = _get_env_config()
+            environment_key = _resolve_environment_cache_key(task_id, config)
+            raw_fallback_allowed = config.get("env_type") != "ssh"
+        except Exception:
+            environment_key = container_id
+            raw_fallback_allowed = os.getenv("TERMINAL_ENV", "local") != "ssh"
         with _env_lock:
-            env = _active_environments.get(task_id) or _active_environments.get(container_id)
+            env = _active_environments.get(environment_key)
+            if env is None and raw_fallback_allowed:
+                env = (
+                    _active_environments.get(task_id)
+                    or _active_environments.get(container_id)
+                )
         if env is not None and getattr(env, "cwd", None) is not None:
             env.cwd = new_cwd
 
@@ -1132,6 +1145,37 @@ def _resolve_container_task_id(task_id: Optional[str]) -> str:
         if set(overrides.keys()) & _ISOLATION_KEYS:
             return task_id
     return "default"
+
+
+_SSH_CACHE_KEY_MARKER = "::ssh:"
+
+
+def _resolve_environment_cache_key(
+    task_id: Optional[str], config: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Return the lifecycle/cache key for the resolved terminal environment.
+
+    Container and local backends retain the historical shared task key. SSH
+    environments additionally bind that key to an opaque digest of every
+    connection-defining value, preventing one multiplexed profile from reusing
+    another profile's live SSH session without placing credentials in cache
+    keys or logs.
+    """
+    base_key = _resolve_container_task_id(task_id)
+    config = config if config is not None else _get_env_config()
+    if config.get("env_type") != "ssh":
+        return base_key
+    identity = {
+        "host": config.get("ssh_host", ""),
+        "user": config.get("ssh_user", ""),
+        "port": config.get("ssh_port", 22),
+        "key": config.get("ssh_key", ""),
+    }
+    canonical = json.dumps(
+        identity, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode("utf-8")
+    digest = hashlib.sha256(canonical).hexdigest()
+    return f"{base_key}{_SSH_CACHE_KEY_MARKER}{digest}"
 
 
 def resolve_task_overrides(task_id: Optional[str]) -> Dict[str, Any]:
@@ -1519,9 +1563,9 @@ def _cleanup_inactive_envs(lifetime_seconds: int = 300):
     # background processes (their _last_activity gets refreshed to keep them alive).
     try:
         from tools.process_registry import process_registry
-        for task_id in list(_last_activity.keys()):
-            if process_registry.has_active_processes(task_id):
-                _last_activity[task_id] = current_time  # Keep sandbox alive
+        for environment_key in list(_last_activity.keys()):
+            if process_registry.has_active_processes(environment_key):
+                _last_activity[environment_key] = current_time  # Keep sandbox alive
     except ImportError:
         pass
 
@@ -1610,11 +1654,15 @@ def _stop_cleanup_thread():
             pass
 
 
-def get_active_env(task_id: str):
+def get_active_env(task_id: str, config: Optional[Dict[str, Any]] = None):
     """Return the active BaseEnvironment for *task_id*, or None."""
-    lookup = _resolve_container_task_id(task_id)
+    resolved_config = config if config is not None else _get_env_config()
+    lookup = _resolve_environment_cache_key(task_id, resolved_config)
     with _env_lock:
-        return _active_environments.get(lookup) or _active_environments.get(task_id)
+        env = _active_environments.get(lookup)
+        if env is not None or resolved_config.get("env_type") == "ssh":
+            return env
+        return _active_environments.get(task_id)
 
 
 def is_persistent_env(task_id: str) -> bool:
@@ -1689,17 +1737,24 @@ def cleanup_vm(task_id: str, *, force_remove: bool = False):
     # so other tool calls aren't blocked.
     env = None
     with _env_lock:
-        env = _active_environments.pop(task_id, None)
-        _last_activity.pop(task_id, None)
+        environment_key = task_id if task_id in _active_environments else None
+    if environment_key is None:
+        try:
+            environment_key = _resolve_environment_cache_key(task_id)
+        except Exception:
+            environment_key = _resolve_container_task_id(task_id)
+    with _env_lock:
+        env = _active_environments.pop(environment_key, None)
+        _last_activity.pop(environment_key, None)
 
     # Clean up per-task creation lock
     with _creation_locks_lock:
-        _creation_locks.pop(task_id, None)
+        _creation_locks.pop(environment_key, None)
 
     # Invalidate stale file_ops cache entry
     try:
         from tools.file_tools import clear_file_ops_cache
-        clear_file_ops_cache(task_id)
+        clear_file_ops_cache(environment_key)
     except ImportError:
         pass
 
@@ -1721,14 +1776,14 @@ def cleanup_vm(task_id: str, *, force_remove: bool = False):
         elif hasattr(env, 'terminate'):
             env.terminate()
 
-        logger.info("Manually cleaned up environment for task: %s", task_id)
+        logger.info("Manually cleaned up environment for task: %s", environment_key)
 
     except Exception as e:
         error_str = str(e)
         if "404" in error_str or "not found" in error_str.lower():
-            logger.info("Environment for task %s already cleaned up", task_id)
+            logger.info("Environment for task %s already cleaned up", environment_key)
         else:
-            logger.warning("Error cleaning up environment for task %s: %s", task_id, e)
+            logger.warning("Error cleaning up environment for task %s: %s", environment_key, e)
 
 
 def _atexit_cleanup():
@@ -2044,6 +2099,7 @@ def terminal_tool(
         # every delegate_task child share one container; only task_ids with
         # a registered env override (RL benchmarks) get isolated sandboxes.
         effective_task_id = _resolve_container_task_id(task_id)
+        environment_key = _resolve_environment_cache_key(task_id, config)
 
         # Check per-task overrides (set by environments like TerminalBench2Env)
         # before falling back to global env var config. ``resolve_task_overrides``
@@ -2115,19 +2171,18 @@ def terminal_tool(
         _start_cleanup_thread()
 
         # Get or create environment.
-        # Use a per-task creation lock so concurrent tool calls for the same
-        # task_id wait for the first one to finish creating the sandbox,
-        # instead of each creating their own (wasting Modal resources).
+        # Use a per-environment creation lock so concurrent calls for the same
+        # container or SSH identity wait for one creation, while different SSH
+        # profiles never serialize on or reuse each other's live connection.
         with _env_lock:
-            # Prefer the collapsed container id, but fall back to an env cached
-            # under the raw task_id. Per-session surfaces (ACP/gateway/dashboard)
-            # with a CWD-only override collapse to "default" for container
-            # sharing, yet an env may already be cached under the originating
-            # task_id; honor it instead of spawning a duplicate.
-            _existing_key = (
-                effective_task_id if effective_task_id in _active_environments
-                else (task_id if task_id and task_id in _active_environments else None)
-            )
+            # Non-SSH per-session surfaces may retain a legacy raw-task cache
+            # entry. SSH deliberately has no raw-task fallback: only the
+            # connection-identity digest is eligible for reuse.
+            _existing_key = environment_key if environment_key in _active_environments else None
+            if _existing_key is None and env_type != "ssh":
+                _existing_key = (
+                    task_id if task_id and task_id in _active_environments else None
+                )
             if _existing_key is not None:
                 _last_activity[_existing_key] = time.time()
                 env = _active_environments[_existing_key]
@@ -2138,17 +2193,18 @@ def terminal_tool(
         if needs_creation:
             # Per-task lock: only one thread creates the sandbox, others wait
             with _creation_locks_lock:
-                if effective_task_id not in _creation_locks:
-                    _creation_locks[effective_task_id] = threading.Lock()
-                task_lock = _creation_locks[effective_task_id]
+                if environment_key not in _creation_locks:
+                    _creation_locks[environment_key] = threading.Lock()
+                task_lock = _creation_locks[environment_key]
 
             with task_lock:
                 # Double-check after acquiring the per-task lock
                 with _env_lock:
-                    _existing_key = (
-                        effective_task_id if effective_task_id in _active_environments
-                        else (task_id if task_id and task_id in _active_environments else None)
-                    )
+                    _existing_key = environment_key if environment_key in _active_environments else None
+                    if _existing_key is None and env_type != "ssh":
+                        _existing_key = (
+                            task_id if task_id and task_id in _active_environments else None
+                        )
                     if _existing_key is not None:
                         _last_activity[_existing_key] = time.time()
                         env = _active_environments[_existing_key]
@@ -2201,7 +2257,7 @@ def terminal_tool(
                             ssh_config=ssh_config,
                             container_config=container_config,
                             local_config=local_config,
-                            task_id=effective_task_id,
+                            task_id=environment_key,
                             host_cwd=config.get("host_cwd"),
                         )
                     except ImportError as e:
@@ -2213,8 +2269,8 @@ def terminal_tool(
                         }, ensure_ascii=False)
 
                     with _env_lock:
-                        _active_environments[effective_task_id] = new_env
-                        _last_activity[effective_task_id] = time.time()
+                        _active_environments[environment_key] = new_env
+                        _last_activity[environment_key] = time.time()
                         env = new_env
                     logger.info("%s environment ready for task %s", env_type, effective_task_id[:8])
 
@@ -2335,7 +2391,7 @@ def terminal_tool(
                     proc_session = process_registry.spawn_local(
                         command=command,
                         cwd=effective_cwd,
-                        task_id=effective_task_id,
+                        task_id=environment_key,
                         session_key=session_key,
                         env_vars=env.env if hasattr(env, 'env') else None,
                         use_pty=effective_pty,
@@ -2345,7 +2401,7 @@ def terminal_tool(
                         env=env,
                         command=command,
                         cwd=effective_cwd,
-                        task_id=effective_task_id,
+                        task_id=environment_key,
                         session_key=session_key,
                     )
 
