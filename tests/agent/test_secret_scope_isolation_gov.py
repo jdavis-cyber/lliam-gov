@@ -9,6 +9,8 @@ than leaking whichever value is in os.environ.
 from __future__ import annotations
 
 import json
+import threading
+import time
 
 import pytest
 
@@ -422,6 +424,51 @@ def test_active_and_persistent_lookup_use_owner_index_without_secret_scope(
     assert terminal_tool.is_persistent_env(raw_owner) is True
 
 
+def test_scoped_active_lookup_prefers_current_ssh_identity_over_owned_fallback(
+    monkeypatch,
+):
+    env_a = type("EnvironmentA", (), {"_persistent": True})()
+    raw_owner = "raw-session"
+    profile_a = {
+        "TERMINAL_SSH_HOST": "profile-a.example",
+        "TERMINAL_SSH_USER": "alice",
+        "TERMINAL_SSH_KEY": "/profiles/a/key",
+    }
+    profile_b = {
+        "TERMINAL_SSH_HOST": "profile-b.example",
+        "TERMINAL_SSH_USER": "bob",
+        "TERMINAL_SSH_KEY": "/profiles/b/key",
+    }
+    monkeypatch.setenv("TERMINAL_ENV", "ssh")
+    tok = ss.set_secret_scope(profile_a)
+    try:
+        config_a = terminal_tool._get_env_config()
+        key_a = terminal_tool._resolve_environment_cache_key(raw_owner, config_a)
+    finally:
+        ss.reset_secret_scope(tok)
+    tok = ss.set_secret_scope(profile_b)
+    try:
+        config_b = terminal_tool._get_env_config()
+        key_b = terminal_tool._resolve_environment_cache_key(raw_owner, config_b)
+        monkeypatch.setattr(terminal_tool, "_active_environments", {key_a: env_a})
+        monkeypatch.setattr(
+            terminal_tool,
+            "_environment_keys_by_owner",
+            {raw_owner: {key_a}},
+        )
+        monkeypatch.setattr(
+            terminal_tool,
+            "_environment_owners_by_key",
+            {key_a: {raw_owner}},
+        )
+
+        assert key_a != key_b
+        assert terminal_tool.get_active_env(raw_owner) is None
+        assert terminal_tool.is_persistent_env(raw_owner) is False
+    finally:
+        ss.reset_secret_scope(tok)
+
+
 def test_unowned_unscoped_ssh_active_lookup_does_not_fall_back_to_default(
     monkeypatch,
 ):
@@ -465,7 +512,7 @@ def test_cleanup_task_resources_reaches_unscoped_owned_ssh_cleanup(monkeypatch):
         terminal_tool, "_last_activity", {environment_key: 1.0}
     )
     monkeypatch.setattr(
-        terminal_tool, "_creation_locks", {environment_key: object()}
+        terminal_tool, "_creation_locks", {environment_key: threading.Lock()}
     )
     monkeypatch.setattr(
         terminal_tool,
@@ -496,6 +543,95 @@ def test_cleanup_task_resources_reaches_unscoped_owned_ssh_cleanup(monkeypatch):
     assert env.cleaned is True
     assert browser_calls == [raw_owner]
     assert terminal_tool._active_environments == {}
+
+
+@pytest.mark.parametrize("creation_path", ["terminal", "file", "code"])
+def test_cleanup_cancels_inflight_ssh_environment_publication(
+    monkeypatch, creation_path,
+):
+    import tools.code_execution_tool as code_execution_tool
+    import tools.file_tools as file_tools
+
+    class FakeEnvironment:
+        cwd = "~"
+
+        def __init__(self):
+            self.cleanup_calls = 0
+
+        def cleanup(self):
+            self.cleanup_calls += 1
+
+    raw_owner = f"raw-{creation_path}"
+    create_started = threading.Event()
+    release_create = threading.Event()
+    env = FakeEnvironment()
+    worker_errors = []
+    monkeypatch.setenv("TERMINAL_ENV", "ssh")
+    monkeypatch.setattr(terminal_tool, "_active_environments", {})
+    monkeypatch.setattr(terminal_tool, "_last_activity", {})
+    monkeypatch.setattr(terminal_tool, "_creation_locks", {})
+    monkeypatch.setattr(terminal_tool, "_environment_keys_by_owner", {})
+    monkeypatch.setattr(terminal_tool, "_environment_owners_by_key", {})
+    monkeypatch.setattr(terminal_tool, "_environment_teardown_generation", {})
+    monkeypatch.setattr(terminal_tool, "_environment_teardown_pending", set())
+    monkeypatch.setattr(file_tools, "_file_ops_cache", {})
+    monkeypatch.setattr(terminal_tool, "_start_cleanup_thread", lambda: None)
+    monkeypatch.setattr(
+        terminal_tool, "_check_all_guards", lambda *_a, **_k: {"approved": True}
+    )
+
+    def blocked_create(**kwargs):
+        create_started.set()
+        assert release_create.wait(timeout=5)
+        return env
+
+    monkeypatch.setattr(terminal_tool, "_create_environment", blocked_create)
+
+    profile = {
+        "TERMINAL_SSH_HOST": "profile.example",
+        "TERMINAL_SSH_USER": "alice",
+        "TERMINAL_SSH_KEY": "/profiles/key",
+    }
+
+    def create_worker():
+        tok = ss.set_secret_scope(profile)
+        try:
+            if creation_path == "terminal":
+                terminal_tool.terminal_tool("pwd", task_id=raw_owner)
+            elif creation_path == "file":
+                file_tools._get_file_ops(raw_owner)
+            else:
+                code_execution_tool._get_or_create_env(raw_owner)
+        except Exception as exc:
+            worker_errors.append(exc)
+        finally:
+            ss.reset_secret_scope(tok)
+
+    creator = threading.Thread(target=create_worker)
+    creator.start()
+    assert create_started.wait(timeout=5)
+
+    cleaner = threading.Thread(target=terminal_tool.cleanup_vm, args=(raw_owner,))
+    cleaner.start()
+    deadline = time.monotonic() + 5
+    while not terminal_tool._environment_teardown_pending:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+
+    release_create.set()
+    creator.join(timeout=5)
+    cleaner.join(timeout=5)
+
+    assert not creator.is_alive()
+    assert not cleaner.is_alive()
+    assert env.cleanup_calls == 1
+    assert terminal_tool._active_environments == {}
+    assert terminal_tool._last_activity == {}
+    assert terminal_tool._environment_keys_by_owner == {}
+    assert terminal_tool._environment_owners_by_key == {}
+    assert terminal_tool._environment_teardown_pending == set()
+    if creation_path in {"file", "code"}:
+        assert worker_errors
 
 
 def test_file_tracking_never_falls_back_to_raw_task_cache_for_ssh(monkeypatch):

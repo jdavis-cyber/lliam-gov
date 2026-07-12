@@ -623,6 +623,10 @@ def _get_or_create_env(task_id: str):
         _creation_locks, _creation_locks_lock, _task_env_overrides,
         _resolve_container_task_id, _resolve_environment_cache_key,
         _register_environment_owner_locked,
+        _reserve_environment_creation_locked,
+        _unregister_environment_owner_locked,
+        _environment_creation_is_current_locked,
+        _discard_unpublished_environment,
     )
 
     effective_task_id = _resolve_container_task_id(task_id)
@@ -649,6 +653,11 @@ def _get_or_create_env(task_id: str):
                 _last_activity[environment_key] = time.time()
                 _register_environment_owner_locked(task_id, environment_key)
                 return _active_environments[environment_key], env_type
+            creation_generation = _reserve_environment_creation_locked(
+                task_id, environment_key,
+            )
+        if creation_generation is None:
+            raise RuntimeError("Environment teardown is in progress; retry execution")
 
         overrides = _task_env_overrides.get(effective_task_id, {})
 
@@ -694,22 +703,35 @@ def _get_or_create_env(task_id: str):
 
         logger.info("Creating new %s environment for execute_code task %s...",
                      env_type, effective_task_id[:8])
-        env = _create_environment(
-            env_type=env_type,
-            image=image,
-            cwd=cwd,
-            timeout=config["timeout"],
-            ssh_config=ssh_config,
-            container_config=container_config,
-            local_config=local_config,
-            task_id=environment_key,
-            host_cwd=config.get("host_cwd"),
-        )
+        try:
+            env = _create_environment(
+                env_type=env_type,
+                image=image,
+                cwd=cwd,
+                timeout=config["timeout"],
+                ssh_config=ssh_config,
+                container_config=container_config,
+                local_config=local_config,
+                task_id=environment_key,
+                host_cwd=config.get("host_cwd"),
+            )
+        except Exception:
+            with _env_lock:
+                _unregister_environment_owner_locked(task_id, environment_key)
+            raise
 
         with _env_lock:
-            _active_environments[environment_key] = env
-            _last_activity[environment_key] = time.time()
-            _register_environment_owner_locked(task_id, environment_key)
+            publish = _environment_creation_is_current_locked(
+                environment_key, creation_generation,
+            )
+            if publish:
+                _active_environments[environment_key] = env
+                _last_activity[environment_key] = time.time()
+            else:
+                _unregister_environment_owner_locked(task_id, environment_key)
+        if not publish:
+            _discard_unpublished_environment(env)
+            raise RuntimeError("Environment creation was cancelled by teardown")
 
         _start_cleanup_thread()
         logger.info("%s environment ready for execute_code task %s",

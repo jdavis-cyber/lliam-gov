@@ -967,6 +967,8 @@ _env_lock = threading.Lock()
 # Guarded by _env_lock alongside the environment registry.
 _environment_keys_by_owner: Dict[str, set[str]] = {}
 _environment_owners_by_key: Dict[str, set[str]] = {}
+_environment_teardown_generation: Dict[str, int] = {}
+_environment_teardown_pending: set[str] = set()
 _creation_locks: Dict[str, threading.Lock] = {}  # Per-environment locks for creation
 _creation_locks_lock = threading.Lock()  # Protects _creation_locks dict itself
 _cleanup_thread = None
@@ -1000,6 +1002,66 @@ def _purge_environment_ownership_locked(environment_key: str) -> None:
         keys.discard(environment_key)
         if not keys:
             _environment_keys_by_owner.pop(owner, None)
+
+
+def _reserve_environment_creation_locked(
+    raw_task_id: Optional[str], environment_key: str,
+) -> Optional[int]:
+    """Reserve publication and return its teardown generation under _env_lock."""
+    if environment_key in _environment_teardown_pending:
+        return None
+    _register_environment_owner_locked(raw_task_id, environment_key)
+    return _environment_teardown_generation.get(environment_key, 0)
+
+
+def _unregister_environment_owner_locked(
+    raw_task_id: Optional[str], environment_key: str,
+) -> None:
+    owner = raw_task_id or "default"
+    keys = _environment_keys_by_owner.get(owner)
+    if keys is not None:
+        keys.discard(environment_key)
+        if not keys:
+            _environment_keys_by_owner.pop(owner, None)
+    owners = _environment_owners_by_key.get(environment_key)
+    if owners is not None:
+        owners.discard(owner)
+        if not owners:
+            _environment_owners_by_key.pop(environment_key, None)
+
+
+def _environment_creation_is_current_locked(
+    environment_key: str, generation: int,
+) -> bool:
+    return (
+        environment_key not in _environment_teardown_pending
+        and _environment_teardown_generation.get(environment_key, 0) == generation
+    )
+
+
+def _mark_environment_teardown_locked(environment_key: str) -> None:
+    _environment_teardown_generation[environment_key] = (
+        _environment_teardown_generation.get(environment_key, 0) + 1
+    )
+    _environment_teardown_pending.add(environment_key)
+
+
+def _discard_unpublished_environment(env: Any) -> None:
+    """Destroy a backend that lost a create-vs-cleanup publication race."""
+    try:
+        if hasattr(env, "cleanup"):
+            import inspect
+            sig = inspect.signature(env.cleanup)
+            if "force_remove" in sig.parameters:
+                env.cleanup(force_remove=True)
+            else:
+                env.cleanup()
+        elif hasattr(env, "stop"):
+            env.stop()
+        elif hasattr(env, "terminate"):
+            env.terminate()
+    except Exception as exc:
+        logger.warning("Failed to discard unpublished environment: %s", exc)
 
 
 def _maybe_reap_docker_orphans(container_config: Dict[str, Any]) -> None:
@@ -1691,6 +1753,17 @@ def _stop_cleanup_thread():
 
 def get_active_env(task_id: str, config: Optional[Dict[str, Any]] = None):
     """Return the active BaseEnvironment for *task_id*, or None."""
+    from agent.secret_scope import current_secret_scope
+
+    if config is not None or current_secret_scope() is not None:
+        resolved_config = config if config is not None else _get_env_config()
+        lookup = _resolve_environment_cache_key(task_id, resolved_config)
+        with _env_lock:
+            env = _active_environments.get(lookup)
+            if env is not None or resolved_config.get("env_type") == "ssh":
+                return env
+            return _active_environments.get(task_id)
+
     raw_owner = task_id or "default"
     with _env_lock:
         owned_envs = [
@@ -1705,7 +1778,7 @@ def get_active_env(task_id: str, config: Optional[Dict[str, Any]] = None):
         if explicit_env is not None:
             return explicit_env
 
-    resolved_config = config if config is not None else _get_env_config()
+    resolved_config = _get_env_config()
     lookup = _resolve_environment_cache_key(task_id, resolved_config)
     with _env_lock:
         env = _active_environments.get(lookup)
@@ -1725,6 +1798,12 @@ def is_persistent_env(task_id: str) -> bool:
     (``_cleanup_inactive_envs``) handles persistent envs once they exceed
     ``terminal.lifetime_seconds``.
     """
+    from agent.secret_scope import current_secret_scope
+
+    if current_secret_scope() is not None:
+        env = get_active_env(task_id)
+        return bool(env is not None and getattr(env, "_persistent", False))
+
     raw_owner = task_id or "default"
     with _env_lock:
         owned_envs = [
@@ -1763,6 +1842,8 @@ def cleanup_all_environments():
     with _env_lock:
         _environment_keys_by_owner.clear()
         _environment_owners_by_key.clear()
+        _environment_teardown_generation.clear()
+        _environment_teardown_pending.clear()
     
     # Also clean any orphaned directories
     scratch_dir = _get_scratch_dir()
@@ -1839,6 +1920,7 @@ def cleanup_vm(task_id: str, *, force_remove: bool = False):
 
         if explicit_key or ownership_found:
             for environment_key in environment_keys:
+                _mark_environment_teardown_locked(environment_key)
                 env = _active_environments.pop(environment_key, None)
                 _last_activity.pop(environment_key, None)
                 if env is not None:
@@ -1857,46 +1939,66 @@ def cleanup_vm(task_id: str, *, force_remove: bool = False):
     if not explicit_key and not ownership_found:
         with _env_lock:
             for environment_key in environment_keys:
+                _mark_environment_teardown_locked(environment_key)
                 env = _active_environments.pop(environment_key, None)
                 _last_activity.pop(environment_key, None)
                 if env is not None:
                     envs_to_stop.append((environment_key, env))
 
+    creation_locks = []
     with _creation_locks_lock:
         for environment_key in environment_keys:
-            _creation_locks.pop(environment_key, None)
+            task_lock = _creation_locks.get(environment_key)
+            if task_lock is not None:
+                creation_locks.append((environment_key, task_lock, task_lock.locked()))
+
+    # Wait for any slow creator without holding either registry lock. Its
+    # generation check will reject publication after the tombstone above.
+    for _environment_key, task_lock, _was_locked in creation_locks:
+        task_lock.acquire()
 
     try:
-        from tools.file_tools import clear_file_ops_cache
-        for environment_key in environment_keys:
-            clear_file_ops_cache(environment_key)
-    except ImportError:
-        pass
-
-    for environment_key, env in envs_to_stop:
         try:
-            if hasattr(env, 'cleanup'):
-                # Pass force_remove only if the env's cleanup() accepts it
-                # (DockerEnvironment after issue #20561; others don't).
-                import inspect
-                sig = inspect.signature(env.cleanup)
-                if "force_remove" in sig.parameters:
-                    env.cleanup(force_remove=force_remove)
+            from tools.file_tools import clear_file_ops_cache
+            for environment_key in environment_keys:
+                clear_file_ops_cache(environment_key)
+        except ImportError:
+            pass
+
+        for environment_key, env in envs_to_stop:
+            try:
+                if hasattr(env, 'cleanup'):
+                    # Pass force_remove only if the env's cleanup() accepts it
+                    # (DockerEnvironment after issue #20561; others don't).
+                    import inspect
+                    sig = inspect.signature(env.cleanup)
+                    if "force_remove" in sig.parameters:
+                        env.cleanup(force_remove=force_remove)
+                    else:
+                        env.cleanup()
+                elif hasattr(env, 'stop'):
+                    env.stop()
+                elif hasattr(env, 'terminate'):
+                    env.terminate()
+
+                logger.info("Manually cleaned up environment for task: %s", environment_key)
+
+            except Exception as e:
+                error_str = str(e)
+                if "404" in error_str or "not found" in error_str.lower():
+                    logger.info("Environment for task %s already cleaned up", environment_key)
                 else:
-                    env.cleanup()
-            elif hasattr(env, 'stop'):
-                env.stop()
-            elif hasattr(env, 'terminate'):
-                env.terminate()
-
-            logger.info("Manually cleaned up environment for task: %s", environment_key)
-
-        except Exception as e:
-            error_str = str(e)
-            if "404" in error_str or "not found" in error_str.lower():
-                logger.info("Environment for task %s already cleaned up", environment_key)
-            else:
-                logger.warning("Error cleaning up environment for task %s: %s", environment_key, e)
+                    logger.warning("Error cleaning up environment for task %s: %s", environment_key, e)
+    finally:
+        with _env_lock:
+            for environment_key in environment_keys:
+                _environment_teardown_pending.discard(environment_key)
+        with _creation_locks_lock:
+            for environment_key, task_lock, was_locked in creation_locks:
+                if not was_locked and _creation_locks.get(environment_key) is task_lock:
+                    _creation_locks.pop(environment_key, None)
+        for _environment_key, task_lock, _was_locked in reversed(creation_locks):
+            task_lock.release()
 
 
 def _atexit_cleanup():
@@ -2326,6 +2428,17 @@ def terminal_tool(
                         needs_creation = False
 
                 if needs_creation:
+                    with _env_lock:
+                        creation_generation = _reserve_environment_creation_locked(
+                            task_id, environment_key,
+                        )
+                    if creation_generation is None:
+                        return json.dumps({
+                            "output": "",
+                            "exit_code": -1,
+                            "error": "Environment teardown is in progress; retry the command.",
+                            "status": "error",
+                        }, ensure_ascii=False)
                     if env_type == "singularity":
                         _check_disk_usage_warning()
                     logger.info("Creating new %s environment for task %s...", env_type, effective_task_id[:8])
@@ -2376,18 +2489,37 @@ def terminal_tool(
                             host_cwd=config.get("host_cwd"),
                         )
                     except ImportError as e:
+                        with _env_lock:
+                            _unregister_environment_owner_locked(task_id, environment_key)
                         return json.dumps({
                             "output": "",
                             "exit_code": -1,
                             "error": f"Terminal tool disabled: environment creation failed ({e})",
                             "status": "disabled"
                         }, ensure_ascii=False)
+                    except Exception:
+                        with _env_lock:
+                            _unregister_environment_owner_locked(task_id, environment_key)
+                        raise
 
                     with _env_lock:
-                        _active_environments[environment_key] = new_env
-                        _last_activity[environment_key] = time.time()
-                        _register_environment_owner_locked(task_id, environment_key)
-                        env = new_env
+                        publish = _environment_creation_is_current_locked(
+                            environment_key, creation_generation,
+                        )
+                        if publish:
+                            _active_environments[environment_key] = new_env
+                            _last_activity[environment_key] = time.time()
+                            env = new_env
+                        else:
+                            _unregister_environment_owner_locked(task_id, environment_key)
+                    if not publish:
+                        _discard_unpublished_environment(new_env)
+                        return json.dumps({
+                            "output": "",
+                            "exit_code": -1,
+                            "error": "Environment creation was cancelled by teardown.",
+                            "status": "error",
+                        }, ensure_ascii=False)
                     logger.info("%s environment ready for task %s", env_type, effective_task_id[:8])
 
         # Hard-block: gateway lifecycle commands (systemctl/launchctl/hermes

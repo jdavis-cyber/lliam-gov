@@ -848,6 +848,10 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
         _creation_locks_lock,
         _resolve_environment_cache_key,
         _register_environment_owner_locked,
+        _reserve_environment_creation_locked,
+        _unregister_environment_owner_locked,
+        _environment_creation_is_current_locked,
+        _discard_unpublished_environment,
     )
     import time
 
@@ -894,6 +898,14 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
                 terminal_env = None
 
         if terminal_env is None:
+            with _env_lock:
+                creation_generation = _reserve_environment_creation_locked(
+                    raw_task_id, task_id,
+                )
+            if creation_generation is None:
+                raise RuntimeError(
+                    "Environment teardown is in progress; retry file operation"
+                )
             from tools.terminal_tool import resolve_task_overrides
 
             env_type = config["env_type"]
@@ -942,22 +954,35 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
                     "persistent": config.get("local_persistent", False),
                 }
 
-            terminal_env = _create_environment(
-                env_type=env_type,
-                image=image,
-                cwd=cwd,
-                timeout=config["timeout"],
-                ssh_config=ssh_config,
-                container_config=container_config,
-                local_config=local_config,
-                task_id=task_id,
-                host_cwd=config.get("host_cwd"),
-            )
+            try:
+                terminal_env = _create_environment(
+                    env_type=env_type,
+                    image=image,
+                    cwd=cwd,
+                    timeout=config["timeout"],
+                    ssh_config=ssh_config,
+                    container_config=container_config,
+                    local_config=local_config,
+                    task_id=task_id,
+                    host_cwd=config.get("host_cwd"),
+                )
+            except Exception:
+                with _env_lock:
+                    _unregister_environment_owner_locked(raw_task_id, task_id)
+                raise
 
             with _env_lock:
-                _active_environments[task_id] = terminal_env
-                _last_activity[task_id] = time.time()
-                _register_environment_owner_locked(raw_task_id, task_id)
+                publish = _environment_creation_is_current_locked(
+                    task_id, creation_generation,
+                )
+                if publish:
+                    _active_environments[task_id] = terminal_env
+                    _last_activity[task_id] = time.time()
+                else:
+                    _unregister_environment_owner_locked(raw_task_id, task_id)
+            if not publish:
+                _discard_unpublished_environment(terminal_env)
+                raise RuntimeError("Environment creation was cancelled by teardown")
 
             _start_cleanup_thread()
             logger.info("%s environment ready for task %s", env_type, task_id[:8])

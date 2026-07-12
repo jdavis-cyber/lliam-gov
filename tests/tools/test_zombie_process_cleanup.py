@@ -142,7 +142,7 @@ class TestAgentCloseMethod:
             terminal_tool, "_last_activity", {environment_key: 1.0}
         )
         monkeypatch.setattr(
-            terminal_tool, "_creation_locks", {environment_key: object()}
+            terminal_tool, "_creation_locks", {environment_key: threading.Lock()}
         )
         monkeypatch.setattr(
             terminal_tool,
