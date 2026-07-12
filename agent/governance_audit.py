@@ -396,6 +396,46 @@ class GovernanceLedger:
     # -- tail handling (under the exclusive file lock) ----------------------
 
     @staticmethod
+    def _read_predecessor(f: IO[bytes], end: int) -> Optional[tuple[int, str]]:
+        """Read the complete record ending at ``end`` in a bounded window.
+
+        ``end`` is immediately after that record's LF. Zero denotes the
+        genesis predecessor. Only the adjacent record is read; repair never
+        scans the full ledger to establish candidate continuity.
+        """
+        if end == 0:
+            return 0, GENESIS_PREV_HASH
+        line_end = end - 1  # exclude the known LF terminator
+        window = _TAIL_WINDOW_INITIAL
+        while True:
+            start = max(0, line_end - window)
+            f.seek(start)
+            chunk = f.read(line_end - start)
+            idx = chunk.rfind(b"\n")
+            if idx == -1 and start > 0:
+                if window >= _TAIL_WINDOW_MAX:
+                    return None
+                window *= 4
+                continue
+            line = chunk[idx + 1:] if idx != -1 else chunk
+            break
+        try:
+            rec = json.loads(line.decode("utf-8"))
+            seq = rec["seq"]
+            sealed = rec["record_hash"]
+            if (
+                not isinstance(seq, int)
+                or isinstance(seq, bool)
+                or seq <= 0
+                or not isinstance(sealed, str)
+                or _sha256_hex(canonical_bytes(rec)) != sealed
+            ):
+                return None
+            return seq, sealed
+        except Exception:
+            return None
+
+    @staticmethod
     def _repair_torn_tail(f: IO[bytes]) -> Optional[str]:
         """Repair bytes after the last newline without deleting evidence.
 
@@ -445,9 +485,13 @@ class GovernanceLedger:
                 and len(prev_hash) == 64
                 and all(c in "0123456789abcdef" for c in prev_hash)
             )
+            predecessor = GovernanceLedger._read_predecessor(f, keep)
             valid_seal = (
                 valid_shape
                 and _sha256_hex(canonical_bytes(rec)) == sealed
+                and predecessor is not None
+                and seq == predecessor[0] + 1
+                and prev_hash == predecessor[1]
             )
         except Exception:
             valid_seal = False

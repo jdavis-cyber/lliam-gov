@@ -261,6 +261,48 @@ def test_self_sealed_non_record_tail_is_truncated(tmp_path, invalid_field):
     _assert_chain_valid(records)
 
 
+@pytest.mark.parametrize("broken_link", ["prev_hash", "seq"])
+def test_self_sealed_unterminated_tail_requires_chain_continuity(
+    tmp_path, broken_link
+):
+    """Shape-valid candidates must directly extend the complete predecessor;
+    self-sealing cannot legitimize a forked hash or sequence gap."""
+    led = _ledger(tmp_path)
+    first = led.emit("tool.result", action="op-0", source_module="tests")
+    candidate = {
+        "schema": ga.SCHEMA_VERSION,
+        "seq": 2,
+        "prev_hash": first["record_hash"],
+        "event": "tool.result",
+    }
+    if broken_link == "prev_hash":
+        candidate["prev_hash"] = "f" * 64
+    else:
+        candidate["seq"] = 7
+    candidate["record_hash"] = _independent_hash(candidate)
+    with open(led.path, "ab") as f:
+        f.write(json.dumps(
+            candidate, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8"))
+
+    rec = led.emit(
+        "tool.dispatch",
+        action="file.write",
+        risk_scope={"mutating"},
+        source_module="tests",
+    )
+
+    assert rec is not None
+    records = list(iter_records(led.path))
+    assert [r["action"] for r in records] == [
+        "op-0", "ledger.torn_write_repair", "file.write",
+    ]
+    assert records[1]["outcome"]["error"].startswith(
+        "invalid unterminated trailing fragment truncated"
+    )
+    _assert_chain_valid(records)
+
+
 def test_redaction_on_write_masks_secret_and_keeps_content_hash(tmp_path):
     led = _ledger(tmp_path)
     secret = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
