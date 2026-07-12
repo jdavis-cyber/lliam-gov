@@ -192,6 +192,30 @@ def test_torn_trailing_fragment_is_repaired_and_recorded(tmp_path):
         "tool.result", "security.error", "tool.result",
     ]
     assert records[1]["action"] == "ledger.torn_write_repair"
+    assert records[1]["outcome"]["error"] == (
+        "invalid unterminated trailing fragment truncated (crashed writer); "
+        "no sealed record removed"
+    )
+    _assert_chain_valid(records)
+
+
+def test_valid_unterminated_tail_survives_append_and_is_recorded(tmp_path):
+    """A complete sealed record missing only its trailing LF is evidence,
+    not a partial fragment: repair the terminator and preserve the record."""
+    led = _ledger(tmp_path)
+    led.emit("tool.result", action="op-0", source_module="tests")
+    led.path.write_bytes(led.path.read_bytes().removesuffix(b"\n"))
+
+    led.emit("tool.result", action="op-1", source_module="tests")
+
+    records = list(iter_records(led.path))
+    assert [r["action"] for r in records] == [
+        "op-0", "ledger.torn_write_repair", "op-1",
+    ]
+    assert records[1]["outcome"]["error"] == (
+        "valid sealed trailing record was missing its LF terminator; "
+        "terminator appended"
+    )
     _assert_chain_valid(records)
 
 
@@ -384,6 +408,22 @@ def test_module_emit_is_noop_when_disabled(tmp_path, monkeypatch):
     monkeypatch.setattr(ga, "_ledger_singleton", None)
     monkeypatch.setattr(ga, "_was_enabled", False)
     assert ga.emit("tool.dispatch", action="x", source_module="tests") is None
+
+
+def test_first_use_config_failure_is_fail_closed(monkeypatch):
+    monkeypatch.setattr(ga, "_audit_config_or_none", lambda: None)
+    monkeypatch.setattr(ga, "_ledger_singleton", None)
+    monkeypatch.setattr(ga, "_was_enabled", False)
+
+    ledger = ga.get_ledger()
+    assert ledger is not None
+    with pytest.raises(AuditWriteError, match="config load failure"):
+        ga.emit(
+            "tool.dispatch",
+            action="file.write",
+            risk_scope={"mutating"},
+            source_module="tests",
+        )
 
 
 def test_mid_session_disable_is_sticky_on(tmp_path, monkeypatch):

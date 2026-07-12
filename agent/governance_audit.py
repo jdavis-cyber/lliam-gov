@@ -396,22 +396,22 @@ class GovernanceLedger:
     # -- tail handling (under the exclusive file lock) ----------------------
 
     @staticmethod
-    def _repair_torn_tail(f: IO[bytes]) -> bool:
-        """Truncate a torn trailing fragment (bytes after the last newline).
+    def _repair_torn_tail(f: IO[bytes]) -> Optional[str]:
+        """Repair bytes after the last newline without deleting evidence.
 
         A crashed/interrupted writer can leave a partial line at EOF. The
-        fragment was never a sealed record (no terminator, no seal), so
-        removing it deletes no evidence; leaving it would corrupt the next
-        append into an unparseable line. Returns True when a repair was
-        made — the caller records it as a ``security.error`` event.
+        bytes may be either a complete sealed record whose LF terminator was
+        not written, or an invalid partial fragment. Preserve the former by
+        appending its terminator; truncate only the latter. Returns the repair
+        kind for the caller's ``security.error`` event, or None when intact.
         """
         f.seek(0, os.SEEK_END)
         size = f.tell()
         if size == 0:
-            return False
+            return None
         f.seek(size - 1)
         if f.read(1) == b"\n":
-            return False
+            return None
         # Find the last newline scanning backward in growing windows.
         window = _TAIL_WINDOW_INITIAL
         while True:
@@ -426,8 +426,19 @@ class GovernanceLedger:
                 keep = 0  # the whole file is one unterminated fragment
                 break
             window *= 4
+        fragment = chunk[idx + 1:] if idx != -1 else chunk
+        try:
+            rec = json.loads(fragment.decode("utf-8"))
+            sealed = str(rec["record_hash"])
+            valid_seal = _sha256_hex(canonical_bytes(rec)) == sealed
+        except Exception:
+            valid_seal = False
+        if valid_seal:
+            f.seek(0, os.SEEK_END)
+            f.write(b"\n")
+            return "terminator_appended"
         f.truncate(keep)
-        return True
+        return "fragment_truncated"
 
     @staticmethod
     def _read_tail(f: IO[bytes]) -> tuple[int, str]:
@@ -556,17 +567,23 @@ class GovernanceLedger:
 
     def _append_locked(self, f: IO[bytes], record_fields: dict) -> dict:
         """Seal + append one record; caller holds instance + file locks."""
-        repaired = self._repair_torn_tail(f)
+        repair_kind = self._repair_torn_tail(f)
         seq, prev_hash = self._read_tail(f)
-        if repaired:
+        if repair_kind:
+            repair_error = (
+                "valid sealed trailing record was missing its LF terminator; "
+                "terminator appended"
+                if repair_kind == "terminator_appended"
+                else "invalid unterminated trailing fragment truncated "
+                     "(crashed writer); no sealed record removed"
+            )
             note = self.build_record(
                 "security.error",
                 action="ledger.torn_write_repair",
                 outcome={
                     "status": "success",
                     "class": "torn_write_repair",
-                    "error": "unterminated trailing fragment truncated "
-                             "(crashed writer); no sealed record removed",
+                    "error": repair_error,
                 },
                 source_module="agent/governance_audit.py:_repair_torn_tail",
                 seq=seq + 1,
@@ -712,15 +729,20 @@ def get_ledger() -> Optional[Any]:
     global _ledger_singleton, _was_enabled, _disable_flip_logged
     cfg = _audit_config_or_none()
     enabled_now = bool(cfg and cfg.get("ledger_enabled", False))
-    if not enabled_now and not _was_enabled:
+    if cfg is not None and not enabled_now and not _was_enabled:
         return None
     with _singleton_lock:
         if _ledger_singleton is None:
-            try:
-                _ledger_singleton = GovernanceLedger()
-            except Exception as e:
-                _log.critical("governance ledger construction failed: %s", e)
-                _ledger_singleton = _PoisonedLedger(str(e))
+            if cfg is None:
+                reason = "config load failure"
+                _log.critical("governance ledger unavailable: %s", reason)
+                _ledger_singleton = _PoisonedLedger(reason)
+            else:
+                try:
+                    _ledger_singleton = GovernanceLedger()
+                except Exception as e:
+                    _log.critical("governance ledger construction failed: %s", e)
+                    _ledger_singleton = _PoisonedLedger(str(e))
         if _was_enabled and not enabled_now and not _disable_flip_logged:
             _disable_flip_logged = True
             reason = (
