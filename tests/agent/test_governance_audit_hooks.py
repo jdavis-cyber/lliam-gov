@@ -57,6 +57,39 @@ def test_mutating_and_unknown_tools_are_gated():
     assert gah.classify_risk("some_mcp_tool") == gah._DEFAULT_RISK
 
 
+def test_vision_and_video_tools_are_external_egress():
+    """LG-AU-09: vision/video analysis ships local media to an external
+    provider — external egress, not a read-only local op. Must be gated
+    (non-empty risk including 'egress') so an audit-write outage fails closed
+    rather than letting data leave off-the-books."""
+    for name in ("vision_analyze", "video_analyze"):
+        risk = gah.classify_risk(name)
+        assert "egress" in risk, name
+        assert name not in gah._READ_ONLY_TOOLS, name
+
+
+# ---- provenance: middleware trace on dispatch + outcome (LG-MC-03) --------
+
+def test_predispatch_records_middleware_trace(ledger):
+    gah.predispatch_gate(
+        _agent(), function_name="write_file", function_args={"path": "x"},
+        tool_call_id="tc", effective_task_id="op1",
+        middleware_trace=[{"name": "redactor"}, {"name": "policy_mw"}],
+    )
+    rec = next(iter_records(ledger.path))
+    assert rec["trace"]["middleware"] == ["redactor", "policy_mw"]
+
+
+def test_record_outcome_records_middleware_trace(ledger):
+    gah.record_outcome(
+        function_name="write_file", function_args={"path": "x"},
+        status="ok", task_id="op1",
+        middleware_trace=[{"name": "redactor"}],
+    )
+    rec = next(iter_records(ledger.path))
+    assert rec["trace"]["middleware"] == ["redactor"]
+
+
 # ---- predispatch gate (LG-AU-02 / LG-AU-09) ------------------------------
 
 def test_predispatch_records_and_allows(ledger):

@@ -451,6 +451,7 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
                     function_args=function_args,
                     tool_call_id=getattr(tool_call, "id", "") or "",
                     effective_task_id=effective_task_id,
+                    middleware_trace=list(middleware_trace),
                 )
             except Exception:
                 _gov_decision = None
@@ -992,6 +993,7 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     function_args=function_args,
                     tool_call_id=getattr(tool_call, "id", "") or "",
                     effective_task_id=effective_task_id,
+                    middleware_trace=list(middleware_trace),
                 )
             except Exception:
                 _gov_decision = None
@@ -1358,6 +1360,9 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     enabled_toolsets=getattr(agent, "enabled_toolsets", None),
                     disabled_toolsets=getattr(agent, "disabled_toolsets", None),
                     tool_request_middleware_trace=list(middleware_trace),
+                    # The executor already ran predispatch_gate above; skip the
+                    # public dispatcher's own gate to avoid a double record.
+                    skip_governance_predispatch=True,
                 )
                 _spinner_result = function_result
             except KeyboardInterrupt:
@@ -1400,6 +1405,9 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     enabled_toolsets=getattr(agent, "enabled_toolsets", None),
                     disabled_toolsets=getattr(agent, "disabled_toolsets", None),
                     tool_request_middleware_trace=list(middleware_trace),
+                    # The executor already ran predispatch_gate above; skip the
+                    # public dispatcher's own gate to avoid a double record.
+                    skip_governance_predispatch=True,
                 )
             except KeyboardInterrupt:
                 _emit_cancelled_terminal_post_tool_call(

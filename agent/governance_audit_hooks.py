@@ -95,7 +95,7 @@ _READ_ONLY_TOOLS: frozenset[str] = frozenset({
     "read_file", "search_files", "session_search", "skills_list",
     "skill_view", "todo", "clarify", "read_terminal", "project_list",
     "browser_snapshot", "browser_console", "browser_get_images",
-    "vision_analyze", "video_analyze", "feishu_doc_read",
+    "feishu_doc_read",
     "feishu_drive_list_comments", "feishu_drive_list_comment_replies",
 })
 
@@ -112,6 +112,11 @@ _RISK_BY_TOOL: dict[str, frozenset[str]] = {
     "delegate_task": frozenset({"mutating", "privileged"}),
     "computer_use": frozenset({"mutating", "privileged", "high_impact"}),
     "text_to_speech": frozenset({"egress"}),
+    # Vision/video analysis ships local media to an external provider — the
+    # dispatch is external egress, not a read-only local op, so its record is
+    # part of the fail-closed guarantee during an audit-write outage.
+    "vision_analyze": frozenset({"egress"}),
+    "video_analyze": frozenset({"egress"}),
     "feishu_drive_add_comment": frozenset({"egress", "mutating"}),
     "feishu_drive_reply_comment": frozenset({"egress", "mutating"}),
 }
@@ -242,6 +247,7 @@ def predispatch_gate(
     function_args: dict,
     tool_call_id: str = "",
     effective_task_id: str = "",
+    middleware_trace: Optional[list] = None,
 ):
     """Emit ``tool.dispatch`` for an about-to-execute tool call.
 
@@ -271,6 +277,7 @@ def predispatch_gate(
                     agent,
                     tool_call_id=tool_call_id,
                     task_id=effective_task_id,
+                    middleware_trace=middleware_trace,
                 ),
                 source_module=_SOURCE_DISPATCH,
             )
@@ -319,6 +326,7 @@ def record_outcome(
     turn_id: str = "",
     api_request_id: str = "",
     duration_ms: int = 0,
+    middleware_trace: Optional[list] = None,
 ) -> None:
     """Record one terminal tool outcome. Post-facto: never gates, never raises.
 
@@ -363,6 +371,7 @@ def record_outcome(
                 session_id=session_id,
                 turn_id=turn_id,
                 api_request_id=api_request_id,
+                middleware_trace=middleware_trace,
             ),
             source_module=_SOURCE_OUTCOME,
             # Post-facto record: the action already ran; a write failure
