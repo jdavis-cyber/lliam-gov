@@ -585,6 +585,10 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
                     pre_tool_block_checked=True,
                     skip_tool_request_middleware=True,
                     tool_request_middleware_trace=list(middleware_trace),
+                    # This concurrent path already ran predispatch_gate above
+                    # (parse loop); skip the public dispatcher's own gate to
+                    # avoid a duplicate tool.dispatch record.
+                    skip_governance_predispatch=True,
                 )
             except KeyboardInterrupt:
                 try:

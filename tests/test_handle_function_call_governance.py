@@ -10,7 +10,10 @@ the already-gated executor path is not double-recorded.
 
 from __future__ import annotations
 
+import ast
+import inspect
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -139,3 +142,63 @@ def test_predispatch_fail_closed_blocks_direct_call(monkeypatch):
     )
     assert "error" in json.loads(out)
     assert dispatched["ran"] is False  # high-risk call must NOT execute
+
+
+# ---- concurrent executor path: exactly-one dispatch (no double) -----------
+
+def _concurrent_agent():
+    # _memory_manager=None so a registry tool (write_file) falls through the
+    # agent-tool routing branches to the handle_function_call else-branch.
+    return SimpleNamespace(
+        session_id="s1", _current_turn_id="t", _current_api_request_id="r",
+        valid_tool_names=None, enabled_toolsets=None, disabled_toolsets=None,
+        _memory_manager=None,
+    )
+
+
+def test_concurrent_invoke_tool_skips_predispatch_when_flagged(gov_ledger, monkeypatch):
+    """invoke_tool is the CONCURRENT executor's dispatch seam. The executor
+    already ran predispatch_gate, so when it passes skip_governance_predispatch
+    the public dispatcher must NOT emit a second tool.dispatch (LG-AU-02
+    exactly-once)."""
+    from agent.agent_runtime_helpers import invoke_tool
+    _stub_dispatch(monkeypatch)
+    invoke_tool(
+        _concurrent_agent(), "write_file", {"path": "x", "content": "y"}, "task1",
+        skip_tool_request_middleware=True, skip_governance_predispatch=True,
+    )
+    evs = _events(gov_ledger)
+    assert "tool.dispatch" not in evs   # no duplicate dispatch
+    assert "tool.result" in evs         # outcome still recorded
+
+
+def test_concurrent_invoke_tool_gates_by_default(gov_ledger, monkeypatch):
+    from agent.agent_runtime_helpers import invoke_tool
+    _stub_dispatch(monkeypatch)
+    invoke_tool(
+        _concurrent_agent(), "write_file", {"path": "x", "content": "y"}, "task1",
+        skip_tool_request_middleware=True,  # skip flag defaults False
+    )
+    assert "tool.dispatch" in _events(gov_ledger)
+
+
+def test_concurrent_executor_passes_skip_governance_predispatch():
+    """Source-level wiring guard: execute_tool_calls_concurrent already runs
+    predispatch_gate in its parse loop, so its agent._invoke_tool(...) call MUST
+    pass skip_governance_predispatch=True. Reverting the wiring re-introduces a
+    duplicate tool.dispatch per concurrently-executed tool."""
+    from agent import tool_executor
+    src = inspect.getsource(tool_executor.execute_tool_calls_concurrent)
+    tree = ast.parse(src)
+    invoke_calls = [
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+        and n.func.attr == "_invoke_tool"
+    ]
+    assert invoke_calls, "no agent._invoke_tool call found in concurrent executor"
+    assert all(
+        any(kw.arg == "skip_governance_predispatch"
+            and isinstance(kw.value, ast.Constant) and kw.value.value is True
+            for kw in call.keywords)
+        for call in invoke_calls
+    ), "concurrent executor must call _invoke_tool with skip_governance_predispatch=True"
