@@ -148,6 +148,8 @@ def test_terminal_ssh_environment_cache_isolated_by_profile_identity(monkeypatch
     monkeypatch.setattr(terminal_tool, "_active_environments", {})
     monkeypatch.setattr(terminal_tool, "_last_activity", {})
     monkeypatch.setattr(terminal_tool, "_creation_locks", {})
+    monkeypatch.setattr(terminal_tool, "_environment_keys_by_owner", {})
+    monkeypatch.setattr(terminal_tool, "_environment_owners_by_key", {})
     monkeypatch.setattr(terminal_tool, "_create_environment", fake_create_environment)
     monkeypatch.setattr(terminal_tool, "_start_cleanup_thread", lambda: None)
     monkeypatch.setattr(
@@ -187,16 +189,207 @@ def test_terminal_ssh_environment_cache_isolated_by_profile_identity(monkeypatch
     assert all("profile-a" not in key and "profile-b" not in key
                for key in terminal_tool._active_environments)
 
-    tok = ss.set_secret_scope(profile_a)
-    try:
-        terminal_tool.cleanup_vm("shared-session")
-    finally:
-        ss.reset_secret_scope(tok)
+    profile_a_key = next(
+        key for key, env in terminal_tool._active_environments.items()
+        if env.ssh_config["host"] == "profile-a.example"
+    )
+    terminal_tool.cleanup_vm(profile_a_key)
 
     assert created[0].cleaned is True
     assert created[1].cleaned is False
     assert len(terminal_tool._active_environments) == 1
     assert len(terminal_tool._creation_locks) == 1
+    assert profile_a_key not in terminal_tool._environment_owners_by_key
+    assert all(
+        profile_a_key not in keys
+        for keys in terminal_tool._environment_keys_by_owner.values()
+    )
+
+
+def test_unscoped_raw_session_cleanup_uses_durable_ssh_ownership(monkeypatch):
+    import tools.file_tools as file_tools
+
+    class FakeSSHEnvironment:
+        cwd = "~"
+
+        def __init__(self):
+            self.cleaned = False
+
+        def execute(self, command, **kwargs):
+            return {"output": "ok", "returncode": 0}
+
+        def cleanup(self):
+            self.cleaned = True
+
+    created = []
+    monkeypatch.setenv("TERMINAL_ENV", "ssh")
+    monkeypatch.setattr(terminal_tool, "_active_environments", {})
+    monkeypatch.setattr(terminal_tool, "_last_activity", {})
+    monkeypatch.setattr(terminal_tool, "_creation_locks", {})
+    monkeypatch.setattr(terminal_tool, "_environment_keys_by_owner", {})
+    monkeypatch.setattr(terminal_tool, "_environment_owners_by_key", {})
+    monkeypatch.setattr(file_tools, "_file_ops_cache", {})
+    monkeypatch.setattr(
+        terminal_tool,
+        "_create_environment",
+        lambda **kwargs: created.append(FakeSSHEnvironment()) or created[-1],
+    )
+    monkeypatch.setattr(terminal_tool, "_start_cleanup_thread", lambda: None)
+    monkeypatch.setattr(
+        terminal_tool, "_check_all_guards", lambda *_a, **_k: {"approved": True}
+    )
+
+    tok = ss.set_secret_scope({
+        "TERMINAL_SSH_HOST": "profile-a.example",
+        "TERMINAL_SSH_USER": "alice",
+        "TERMINAL_SSH_KEY": "/profiles/a/id_ed25519",
+    })
+    try:
+        terminal_tool.terminal_tool("pwd", task_id="raw-session-a")
+        environment_key = next(iter(terminal_tool._active_environments))
+        file_tools._file_ops_cache[environment_key] = object()
+    finally:
+        ss.reset_secret_scope(tok)
+
+    terminal_tool.cleanup_vm("raw-session-a")
+
+    assert created[0].cleaned is True
+    assert terminal_tool._active_environments == {}
+    assert terminal_tool._last_activity == {}
+    assert terminal_tool._creation_locks == {}
+    assert terminal_tool._environment_keys_by_owner == {}
+    assert terminal_tool._environment_owners_by_key == {}
+    assert file_tools._file_ops_cache == {}
+
+
+def test_shared_ssh_environment_waits_for_final_raw_owner(monkeypatch):
+    class FakeSSHEnvironment:
+        cwd = "~"
+
+        def __init__(self):
+            self.cleanup_calls = 0
+
+        def execute(self, command, **kwargs):
+            return {"output": "ok", "returncode": 0}
+
+        def cleanup(self):
+            self.cleanup_calls += 1
+
+    env = FakeSSHEnvironment()
+    monkeypatch.setenv("TERMINAL_ENV", "ssh")
+    monkeypatch.setattr(terminal_tool, "_active_environments", {})
+    monkeypatch.setattr(terminal_tool, "_last_activity", {})
+    monkeypatch.setattr(terminal_tool, "_creation_locks", {})
+    monkeypatch.setattr(terminal_tool, "_environment_keys_by_owner", {})
+    monkeypatch.setattr(terminal_tool, "_environment_owners_by_key", {})
+    monkeypatch.setattr(terminal_tool, "_create_environment", lambda **kwargs: env)
+    monkeypatch.setattr(terminal_tool, "_start_cleanup_thread", lambda: None)
+    monkeypatch.setattr(
+        terminal_tool, "_check_all_guards", lambda *_a, **_k: {"approved": True}
+    )
+
+    tok = ss.set_secret_scope({
+        "TERMINAL_SSH_HOST": "shared.example",
+        "TERMINAL_SSH_USER": "alice",
+        "TERMINAL_SSH_KEY": "/profiles/shared/id_ed25519",
+    })
+    try:
+        terminal_tool.terminal_tool("pwd", task_id="raw-session-a")
+        terminal_tool.terminal_tool("pwd", task_id="raw-session-b")
+        environment_key = next(iter(terminal_tool._active_environments))
+    finally:
+        ss.reset_secret_scope(tok)
+
+    terminal_tool.cleanup_vm("raw-session-a")
+    assert terminal_tool._active_environments[environment_key] is env
+    assert env.cleanup_calls == 0
+    assert terminal_tool._environment_owners_by_key[environment_key] == {
+        "raw-session-b"
+    }
+
+    terminal_tool.cleanup_vm("raw-session-b")
+    assert env.cleanup_calls == 1
+    assert terminal_tool._active_environments == {}
+    assert terminal_tool._environment_keys_by_owner == {}
+    assert terminal_tool._environment_owners_by_key == {}
+
+
+def test_idle_cleanup_purges_environment_ownership_indexes(monkeypatch):
+    env = type("Environment", (), {"cleanup": lambda self: None})()
+    key = "default::ssh:opaque"
+    monkeypatch.setattr(terminal_tool, "_active_environments", {key: env})
+    monkeypatch.setattr(terminal_tool, "_last_activity", {key: 0.0})
+    monkeypatch.setattr(terminal_tool, "_creation_locks", {key: object()})
+    monkeypatch.setattr(
+        terminal_tool, "_environment_keys_by_owner", {"raw-session": {key}}
+    )
+    monkeypatch.setattr(
+        terminal_tool, "_environment_owners_by_key", {key: {"raw-session"}}
+    )
+
+    terminal_tool._cleanup_inactive_envs(lifetime_seconds=0)
+
+    assert terminal_tool._active_environments == {}
+    assert terminal_tool._creation_locks == {}
+    assert terminal_tool._environment_keys_by_owner == {}
+    assert terminal_tool._environment_owners_by_key == {}
+
+
+def test_cleanup_all_purges_orphaned_environment_ownership_indexes(
+    monkeypatch, tmp_path,
+):
+    monkeypatch.setattr(terminal_tool, "_active_environments", {})
+    monkeypatch.setattr(terminal_tool, "_last_activity", {})
+    monkeypatch.setattr(terminal_tool, "_creation_locks", {})
+    monkeypatch.setattr(
+        terminal_tool,
+        "_environment_keys_by_owner",
+        {"raw-session": {"default::ssh:stale"}},
+    )
+    monkeypatch.setattr(
+        terminal_tool,
+        "_environment_owners_by_key",
+        {"default::ssh:stale": {"raw-session"}},
+    )
+    monkeypatch.setattr(terminal_tool, "_get_scratch_dir", lambda: tmp_path)
+
+    assert terminal_tool.cleanup_all_environments() == 0
+    assert terminal_tool._environment_keys_by_owner == {}
+    assert terminal_tool._environment_owners_by_key == {}
+
+
+def test_file_and_code_paths_register_raw_owners_for_shared_ssh_env(monkeypatch):
+    import tools.code_execution_tool as code_execution_tool
+    import tools.file_tools as file_tools
+
+    env = type("Environment", (), {"cwd": "~"})()
+    monkeypatch.setenv("TERMINAL_ENV", "ssh")
+    monkeypatch.setattr(terminal_tool, "_active_environments", {})
+    monkeypatch.setattr(terminal_tool, "_last_activity", {})
+    monkeypatch.setattr(terminal_tool, "_creation_locks", {})
+    monkeypatch.setattr(terminal_tool, "_environment_keys_by_owner", {})
+    monkeypatch.setattr(terminal_tool, "_environment_owners_by_key", {})
+    monkeypatch.setattr(terminal_tool, "_create_environment", lambda **kwargs: env)
+    monkeypatch.setattr(terminal_tool, "_start_cleanup_thread", lambda: None)
+    monkeypatch.setattr(file_tools, "_file_ops_cache", {})
+
+    tok = ss.set_secret_scope({
+        "TERMINAL_SSH_HOST": "shared.example",
+        "TERMINAL_SSH_USER": "alice",
+        "TERMINAL_SSH_KEY": "/profiles/shared/id_ed25519",
+    })
+    try:
+        file_tools._get_file_ops("file-owner")
+        claimed_env, env_type = code_execution_tool._get_or_create_env("code-owner")
+    finally:
+        ss.reset_secret_scope(tok)
+
+    environment_key = next(iter(terminal_tool._active_environments))
+    assert claimed_env is env
+    assert env_type == "ssh"
+    assert terminal_tool._environment_owners_by_key[environment_key] == {
+        "file-owner", "code-owner"
+    }
 
 
 def test_file_tracking_never_falls_back_to_raw_task_cache_for_ssh(monkeypatch):

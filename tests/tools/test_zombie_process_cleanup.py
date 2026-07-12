@@ -118,6 +118,60 @@ class TestAgentCloseMethod:
                 mock_cleanup_vm.assert_called_once_with("test-close-cleanup")
                 mock_cleanup_browser.assert_called_once_with("test-close-cleanup")
 
+    def test_close_cleans_owned_ssh_environment_without_secret_scope(
+        self, monkeypatch,
+    ):
+        from unittest.mock import patch
+        from tools import terminal_tool
+
+        class FakeEnvironment:
+            def __init__(self):
+                self.cleaned = False
+
+            def cleanup(self):
+                self.cleaned = True
+
+        raw_session = "test-unscoped-ssh-close"
+        environment_key = "default::ssh:opaque"
+        env = FakeEnvironment()
+        monkeypatch.setenv("TERMINAL_ENV", "ssh")
+        monkeypatch.setattr(
+            terminal_tool, "_active_environments", {environment_key: env}
+        )
+        monkeypatch.setattr(
+            terminal_tool, "_last_activity", {environment_key: 1.0}
+        )
+        monkeypatch.setattr(
+            terminal_tool, "_creation_locks", {environment_key: object()}
+        )
+        monkeypatch.setattr(
+            terminal_tool,
+            "_environment_keys_by_owner",
+            {raw_session: {environment_key}},
+        )
+        monkeypatch.setattr(
+            terminal_tool,
+            "_environment_owners_by_key",
+            {environment_key: {raw_session}},
+        )
+
+        with patch("run_agent.AIAgent.__init__", return_value=None):
+            from run_agent import AIAgent
+            agent = AIAgent.__new__(AIAgent)
+            agent.session_id = raw_session
+            agent._active_children = []
+            agent._active_children_lock = threading.Lock()
+            agent.client = None
+
+            with patch("tools.process_registry.process_registry"), \
+                 patch("run_agent.cleanup_browser"):
+                agent.close()
+
+        assert env.cleaned is True
+        assert terminal_tool._active_environments == {}
+        assert terminal_tool._environment_keys_by_owner == {}
+        assert terminal_tool._environment_owners_by_key == {}
+
     def test_close_is_idempotent(self):
         """close() can be called multiple times without error."""
         from unittest.mock import patch

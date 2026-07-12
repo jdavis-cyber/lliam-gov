@@ -963,6 +963,10 @@ Do NOT use vim/nano/interactive tools without pty=true — they hang without a p
 _active_environments: Dict[str, Any] = {}
 _last_activity: Dict[str, float] = {}
 _env_lock = threading.Lock()
+# Durable in-process ownership for derived/non-default environment keys.
+# Guarded by _env_lock alongside the environment registry.
+_environment_keys_by_owner: Dict[str, set[str]] = {}
+_environment_owners_by_key: Dict[str, set[str]] = {}
 _creation_locks: Dict[str, threading.Lock] = {}  # Per-environment locks for creation
 _creation_locks_lock = threading.Lock()  # Protects _creation_locks dict itself
 _cleanup_thread = None
@@ -973,6 +977,29 @@ _cleanup_running = False
 # calls for parallel subagents won't re-trigger the sweep.
 _docker_orphan_reaper_ran = False
 _docker_orphan_reaper_lock = threading.Lock()
+
+
+def _register_environment_owner_locked(
+    raw_task_id: Optional[str], environment_key: str,
+) -> None:
+    """Record ownership of a derived/non-default key while holding _env_lock."""
+    if environment_key == "default":
+        return
+    owner = raw_task_id or "default"
+    _environment_keys_by_owner.setdefault(owner, set()).add(environment_key)
+    _environment_owners_by_key.setdefault(environment_key, set()).add(owner)
+
+
+def _purge_environment_ownership_locked(environment_key: str) -> None:
+    """Remove every ownership edge for *environment_key* under _env_lock."""
+    owners = _environment_owners_by_key.pop(environment_key, set())
+    for owner in owners:
+        keys = _environment_keys_by_owner.get(owner)
+        if keys is None:
+            continue
+        keys.discard(environment_key)
+        if not keys:
+            _environment_keys_by_owner.pop(owner, None)
 
 
 def _maybe_reap_docker_orphans(container_config: Dict[str, Any]) -> None:
@@ -1579,18 +1606,21 @@ def _cleanup_inactive_envs(lifetime_seconds: int = 300):
     # Docker teardown can block for 10-15s, which would stall every concurrent
     # terminal/file tool call waiting on _env_lock.
     envs_to_stop = []  # list of (task_id, env) pairs
+    stale_keys = []
 
     with _env_lock:
         for task_id, last_time in list(_last_activity.items()):
             if current_time - last_time > lifetime_seconds:
                 env = _active_environments.pop(task_id, None)
                 _last_activity.pop(task_id, None)
+                _purge_environment_ownership_locked(task_id)
+                stale_keys.append(task_id)
                 if env is not None:
                     envs_to_stop.append((task_id, env))
 
         # Also purge per-task creation locks for cleaned-up tasks
         with _creation_locks_lock:
-            for task_id, _ in envs_to_stop:
+            for task_id in stale_keys:
                 _creation_locks.pop(task_id, None)
 
     # Phase 2: stop the actual sandboxes OUTSIDE the lock so other tool calls
@@ -1700,6 +1730,12 @@ def cleanup_all_environments():
             cleaned += 1
         except Exception as e:
             logger.error("Error cleaning %s: %s", task_id, e, exc_info=True)
+
+    # Explicit-key cleanup above normally removes every ownership edge. Clear
+    # any orphaned index entries left without a live environment as well.
+    with _env_lock:
+        _environment_keys_by_owner.clear()
+        _environment_owners_by_key.clear()
     
     # Also clean any orphaned directories
     scratch_dir = _get_scratch_dir()
@@ -1719,6 +1755,12 @@ def cleanup_all_environments():
 def cleanup_vm(task_id: str, *, force_remove: bool = False):
     """Manually clean up a specific environment by task_id.
 
+    A raw session/task id releases that owner's derived environments and only
+    tears down keys with no remaining owners. Passing an explicit active
+    environment key bypasses ownership retention for idle/global teardown.
+    This index-first resolution lets agent/TUI close run after SSH secret scope
+    has already been cleared without recomputing a secret-derived HMAC.
+
     *force_remove* (default False) is forwarded to backends that accept it
     — currently only ``DockerEnvironment``. The default of False matches
     session-lifecycle semantics: this function is called from
@@ -1737,58 +1779,97 @@ def cleanup_vm(task_id: str, *, force_remove: bool = False):
     via this function), so persist-mode idle envs are similarly no-op'd —
     only the orphan reaper at next startup reclaims them.
     """
-    # Remove from tracking dicts while holding the lock, but defer the
-    # actual (potentially slow) env.cleanup() call to outside the lock
-    # so other tool calls aren't blocked.
-    env = None
+    # Resolve raw-session ownership from the durable index before consulting
+    # secret-scoped configuration. Explicit environment keys bypass refcounts
+    # (idle/global teardown) and purge every ownership edge.
+    raw_owner = task_id or "default"
+    explicit_key = False
+    ownership_found = False
+    envs_to_stop = []
     with _env_lock:
-        environment_key = task_id if task_id in _active_environments else None
-    if environment_key is None:
+        explicit_key = (
+            raw_owner in _active_environments
+            or raw_owner in _environment_owners_by_key
+        )
+        if explicit_key:
+            environment_keys = [raw_owner]
+            _purge_environment_ownership_locked(raw_owner)
+        elif raw_owner in _environment_keys_by_owner:
+            ownership_found = True
+            owned_keys = list(_environment_keys_by_owner.pop(raw_owner))
+            environment_keys = []
+            for environment_key in owned_keys:
+                owners = _environment_owners_by_key.get(environment_key)
+                if owners is None:
+                    continue
+                owners.discard(raw_owner)
+                if owners:
+                    continue
+                _environment_owners_by_key.pop(environment_key, None)
+                environment_keys.append(environment_key)
+        else:
+            environment_keys = []
+
+        if explicit_key or ownership_found:
+            for environment_key in environment_keys:
+                env = _active_environments.pop(environment_key, None)
+                _last_activity.pop(environment_key, None)
+                if env is not None:
+                    envs_to_stop.append((environment_key, env))
+
+    if not explicit_key and not ownership_found and not environment_keys:
         try:
-            environment_key = _resolve_environment_cache_key(task_id)
+            environment_keys = [_resolve_environment_cache_key(raw_owner)]
         except Exception:
-            environment_key = _resolve_container_task_id(task_id)
-    with _env_lock:
-        env = _active_environments.pop(environment_key, None)
-        _last_activity.pop(environment_key, None)
+            # SSH identity resolution fails closed without an active secret
+            # scope. Never reinterpret an unscoped SSH teardown as "default".
+            if os.getenv("TERMINAL_ENV", "local") == "ssh":
+                return
+            environment_keys = [_resolve_container_task_id(raw_owner)]
 
-    # Clean up per-task creation lock
+    if not explicit_key and not ownership_found:
+        with _env_lock:
+            for environment_key in environment_keys:
+                env = _active_environments.pop(environment_key, None)
+                _last_activity.pop(environment_key, None)
+                if env is not None:
+                    envs_to_stop.append((environment_key, env))
+
     with _creation_locks_lock:
-        _creation_locks.pop(environment_key, None)
+        for environment_key in environment_keys:
+            _creation_locks.pop(environment_key, None)
 
-    # Invalidate stale file_ops cache entry
     try:
         from tools.file_tools import clear_file_ops_cache
-        clear_file_ops_cache(environment_key)
+        for environment_key in environment_keys:
+            clear_file_ops_cache(environment_key)
     except ImportError:
         pass
 
-    if env is None:
-        return
+    for environment_key, env in envs_to_stop:
+        try:
+            if hasattr(env, 'cleanup'):
+                # Pass force_remove only if the env's cleanup() accepts it
+                # (DockerEnvironment after issue #20561; others don't).
+                import inspect
+                sig = inspect.signature(env.cleanup)
+                if "force_remove" in sig.parameters:
+                    env.cleanup(force_remove=force_remove)
+                else:
+                    env.cleanup()
+            elif hasattr(env, 'stop'):
+                env.stop()
+            elif hasattr(env, 'terminate'):
+                env.terminate()
 
-    try:
-        if hasattr(env, 'cleanup'):
-            # Pass force_remove only if the env's cleanup() accepts it
-            # (DockerEnvironment after issue #20561; other backends don't).
-            import inspect
-            sig = inspect.signature(env.cleanup)
-            if "force_remove" in sig.parameters:
-                env.cleanup(force_remove=force_remove)
+            logger.info("Manually cleaned up environment for task: %s", environment_key)
+
+        except Exception as e:
+            error_str = str(e)
+            if "404" in error_str or "not found" in error_str.lower():
+                logger.info("Environment for task %s already cleaned up", environment_key)
             else:
-                env.cleanup()
-        elif hasattr(env, 'stop'):
-            env.stop()
-        elif hasattr(env, 'terminate'):
-            env.terminate()
-
-        logger.info("Manually cleaned up environment for task: %s", environment_key)
-
-    except Exception as e:
-        error_str = str(e)
-        if "404" in error_str or "not found" in error_str.lower():
-            logger.info("Environment for task %s already cleaned up", environment_key)
-        else:
-            logger.warning("Error cleaning up environment for task %s: %s", environment_key, e)
+                logger.warning("Error cleaning up environment for task %s: %s", environment_key, e)
 
 
 def _atexit_cleanup():
@@ -2190,6 +2271,7 @@ def terminal_tool(
                 )
             if _existing_key is not None:
                 _last_activity[_existing_key] = time.time()
+                _register_environment_owner_locked(task_id, _existing_key)
                 env = _active_environments[_existing_key]
                 needs_creation = False
             else:
@@ -2212,6 +2294,7 @@ def terminal_tool(
                         )
                     if _existing_key is not None:
                         _last_activity[_existing_key] = time.time()
+                        _register_environment_owner_locked(task_id, _existing_key)
                         env = _active_environments[_existing_key]
                         needs_creation = False
 
@@ -2276,6 +2359,7 @@ def terminal_tool(
                     with _env_lock:
                         _active_environments[environment_key] = new_env
                         _last_activity[environment_key] = time.time()
+                        _register_environment_owner_locked(task_id, environment_key)
                         env = new_env
                     logger.info("%s environment ready for task %s", env_type, effective_task_id[:8])
 

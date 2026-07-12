@@ -847,6 +847,7 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
         _creation_locks,
         _creation_locks_lock,
         _resolve_environment_cache_key,
+        _register_environment_owner_locked,
     )
     import time
 
@@ -862,6 +863,7 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
         with _env_lock:
             if task_id in _active_environments:
                 _last_activity[task_id] = time.time()
+                _register_environment_owner_locked(raw_task_id, task_id)
                 return cached
             else:
                 # Environment was cleaned up -- preserve the old cwd before
@@ -886,6 +888,7 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
         with _env_lock:
             if task_id in _active_environments:
                 _last_activity[task_id] = time.time()
+                _register_environment_owner_locked(raw_task_id, task_id)
                 terminal_env = _active_environments[task_id]
             else:
                 terminal_env = None
@@ -954,6 +957,7 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
             with _env_lock:
                 _active_environments[task_id] = terminal_env
                 _last_activity[task_id] = time.time()
+                _register_environment_owner_locked(raw_task_id, task_id)
 
             _start_cleanup_thread()
             logger.info("%s environment ready for task %s", env_type, task_id[:8])

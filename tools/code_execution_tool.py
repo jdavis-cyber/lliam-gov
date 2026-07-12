@@ -622,6 +622,7 @@ def _get_or_create_env(task_id: str):
         _get_env_config, _last_activity, _start_cleanup_thread,
         _creation_locks, _creation_locks_lock, _task_env_overrides,
         _resolve_container_task_id, _resolve_environment_cache_key,
+        _register_environment_owner_locked,
     )
 
     effective_task_id = _resolve_container_task_id(task_id)
@@ -633,6 +634,7 @@ def _get_or_create_env(task_id: str):
     with _env_lock:
         if environment_key in _active_environments:
             _last_activity[environment_key] = time.time()
+            _register_environment_owner_locked(task_id, environment_key)
             return _active_environments[environment_key], env_type
 
     # Slow path: create environment (same pattern as file_tools._get_file_ops)
@@ -645,6 +647,7 @@ def _get_or_create_env(task_id: str):
         with _env_lock:
             if environment_key in _active_environments:
                 _last_activity[environment_key] = time.time()
+                _register_environment_owner_locked(task_id, environment_key)
                 return _active_environments[environment_key], env_type
 
         overrides = _task_env_overrides.get(effective_task_id, {})
@@ -706,6 +709,7 @@ def _get_or_create_env(task_id: str):
         with _env_lock:
             _active_environments[environment_key] = env
             _last_activity[environment_key] = time.time()
+            _register_environment_owner_locked(task_id, environment_key)
 
         _start_cleanup_thread()
         logger.info("%s environment ready for execute_code task %s",
