@@ -101,3 +101,48 @@ def test_code_hash_covers_enforcement_modules():
     # The redaction boundary + policy gates are part of the identity surface.
     assert "agent/redact.py" in ai._CODE_SURFACE
     assert "tools/tool_policy.py" in ai._CODE_SURFACE
+
+
+def _tool_definition(description: str, parameter_type: str = "string"):
+    return {
+        "type": "function",
+        "function": {
+            "name": "same_exported_name",
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": {"value": {"type": parameter_type}},
+            },
+        },
+    }
+
+
+def test_uncached_toolset_hash_covers_full_definition(monkeypatch):
+    import model_tools
+
+    definition = _tool_definition("old behavior")
+    monkeypatch.setattr(model_tools, "get_tool_definitions", lambda **_: [definition])
+    before = ai._toolset_hash_uncached(None, None)
+
+    definition = _tool_definition("new behavior", parameter_type="integer")
+    monkeypatch.setattr(model_tools, "get_tool_definitions", lambda **_: [definition])
+    after = ai._toolset_hash_uncached(None, None)
+
+    assert before != after
+
+
+def test_cached_toolset_hash_covers_full_definition_after_registry_change(monkeypatch):
+    import model_tools
+
+    generation = 1
+    definition = _tool_definition("old behavior")
+    monkeypatch.setattr(ai, "_registry_generation", lambda: generation)
+    monkeypatch.setattr(model_tools, "get_tool_definitions", lambda **_: [definition])
+    before = ai._toolset_hash()
+
+    generation = 2
+    definition = _tool_definition("new behavior", parameter_type="integer")
+    monkeypatch.setattr(model_tools, "get_tool_definitions", lambda **_: [definition])
+    after = ai._toolset_hash()
+
+    assert before != after

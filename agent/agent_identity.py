@@ -142,8 +142,45 @@ def _registry_generation() -> int:
         return 0
 
 
+def _tool_manifest_default(value: Any) -> Any:
+    """Return a stable JSON representation for uncommon schema values.
+
+    Resolved tool definitions should normally be JSON-native. Sets and paths
+    have natural deterministic encodings; any other unexpected object is
+    represented only by its qualified type so an implementation-object repr
+    (often containing a process-specific memory address) never enters an
+    identity hash.
+    """
+    if isinstance(value, (set, frozenset)):
+        return sorted(value, key=lambda item: json.dumps(
+            item, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+            default=_tool_manifest_default,
+        ))
+    if isinstance(value, Path):
+        return str(value)
+    cls = type(value)
+    return {"__non_json_type__": f"{cls.__module__}.{cls.__qualname__}"}
+
+
+def _canonical_tool_manifest(definitions: Any) -> bytes:
+    """Canonical JSON for the complete resolved tool-definition manifest."""
+    encoded = [
+        json.dumps(
+            definition,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            default=_tool_manifest_default,
+        )
+        for definition in definitions
+    ]
+    # Tool discovery order is not behavior-bearing; definition content is.
+    encoded.sort()
+    return ("[" + ",".join(encoded) + "]").encode("utf-8")
+
+
 def _toolset_hash(agent: Any = None, *, enabled: Any = None, disabled: Any = None) -> str:
-    """sha256 over the sorted resolved tool/skill name manifest for a scope.
+    """sha256 over the canonical resolved tool-definition manifest for a scope.
 
     Memoized on (registry generation, enabled scope, disabled scope) — the
     call is ~100ms (``get_tool_definitions``), so the per-dispatch hot path
@@ -167,15 +204,10 @@ def _toolset_hash(agent: Any = None, *, enabled: Any = None, disabled: Any = Non
             disabled_toolsets=disabled,
             quiet_mode=True,
         ) or []
-        names = sorted(
-            d["function"]["name"]
-            for d in defs
-            if isinstance(d, dict) and "function" in d
-        )
+        manifest = _canonical_tool_manifest(defs)
     except Exception as e:
         _log.debug("toolset manifest unavailable: %s", e)
         return "unknown:toolset"
-    manifest = json.dumps(names, separators=(",", ":")).encode("utf-8")
     digest = hashlib.sha256(manifest).hexdigest()
     with _lock:
         _toolset_memo[memo_key] = digest
@@ -261,15 +293,10 @@ def _toolset_hash_uncached(enabled: Any, disabled: Any) -> str:
         defs = model_tools.get_tool_definitions(
             enabled_toolsets=enabled, disabled_toolsets=disabled, quiet_mode=True,
         ) or []
-        names = sorted(
-            d["function"]["name"] for d in defs
-            if isinstance(d, dict) and "function" in d
-        )
+        manifest = _canonical_tool_manifest(defs)
     except Exception:
         return "unknown:toolset"
-    return hashlib.sha256(
-        json.dumps(names, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(manifest).hexdigest()
 
 
 def reset_identity_cache() -> None:

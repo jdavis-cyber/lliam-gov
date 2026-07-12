@@ -1156,13 +1156,25 @@ def resolve_task_overrides(task_id: Optional[str]) -> Dict[str, Any]:
 
 # Configuration from environment variables
 
+def _resolve_terminal_setting(name: str, default: Optional[str] = None) -> Optional[str]:
+    """Resolve terminal settings without bypassing profile secret scoping.
+
+    ``get_secret`` already distinguishes profile-scoped SSH identity fields
+    from genuinely-global ``TERMINAL_*`` deployment settings. Import lazily to
+    keep terminal-tool discovery independent of the agent module graph.
+    """
+    from agent.secret_scope import get_secret
+
+    return get_secret(name, default)
+
+
 def _parse_env_var(name: str, default: str, converter: Any = int, type_label: str = "integer"):
     """Parse an environment variable with *converter*, raising a clear error on bad values.
 
     Without this wrapper, a single malformed env var (e.g. TERMINAL_TIMEOUT=5m)
     causes an unhandled ValueError that kills every terminal command.
     """
-    raw = os.getenv(name, default)
+    raw = _resolve_terminal_setting(name, default)
     try:
         return converter(raw)
     except (ValueError, json.JSONDecodeError):
@@ -1299,10 +1311,10 @@ def _get_env_config() -> Dict[str, Any]:
         "timeout": _parse_env_var("TERMINAL_TIMEOUT", "180"),
         "lifetime_seconds": _parse_env_var("TERMINAL_LIFETIME_SECONDS", "300"),
         # SSH-specific config
-        "ssh_host": os.getenv("TERMINAL_SSH_HOST", ""),
-        "ssh_user": os.getenv("TERMINAL_SSH_USER", ""),
+        "ssh_host": _resolve_terminal_setting("TERMINAL_SSH_HOST", ""),
+        "ssh_user": _resolve_terminal_setting("TERMINAL_SSH_USER", ""),
         "ssh_port": _parse_env_var("TERMINAL_SSH_PORT", "22"),
-        "ssh_key": os.getenv("TERMINAL_SSH_KEY", ""),
+        "ssh_key": _resolve_terminal_setting("TERMINAL_SSH_KEY", ""),
         # Persistent shell: SSH defaults to the config-level persistent_shell
         # setting (true by default for non-local backends); local is always opt-in.
         # Per-backend env vars override if explicitly set.

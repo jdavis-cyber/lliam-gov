@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 import agent.secret_scope as ss
+from tools import terminal_tool
 
 
 @pytest.fixture(autouse=True)
@@ -73,3 +74,44 @@ def test_non_credential_terminal_settings_stay_global(monkeypatch):
     # broken by the SSH carve-out).
     monkeypatch.setenv("TERMINAL_BACKEND", "docker")
     assert ss.get_secret("TERMINAL_BACKEND") == "docker"
+
+
+def test_terminal_env_config_uses_active_profile_ssh_scope(monkeypatch):
+    """The real terminal resolver must not reuse profile A's process env."""
+    profile_a = {
+        "TERMINAL_SSH_HOST": "profile-a.example",
+        "TERMINAL_SSH_USER": "profile-a",
+        "TERMINAL_SSH_PORT": "2201",
+        "TERMINAL_SSH_KEY": "/profiles/a/id_ed25519",
+    }
+    for name, value in profile_a.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("TERMINAL_TIMEOUT", "91")
+
+    profile_b = {
+        "TERMINAL_SSH_HOST": "profile-b.example",
+        "TERMINAL_SSH_USER": "profile-b",
+        "TERMINAL_SSH_PORT": "2202",
+        "TERMINAL_SSH_KEY": "/profiles/b/id_ed25519",
+        # Noncredential TERMINAL_* settings remain process-global even if a
+        # profile scope happens to contain a conflicting value.
+        "TERMINAL_TIMEOUT": "999",
+    }
+    tok = ss.set_secret_scope(profile_b)
+    try:
+        config = terminal_tool._get_env_config()
+    finally:
+        ss.reset_secret_scope(tok)
+
+    assert (
+        config["ssh_host"], config["ssh_user"], config["ssh_port"], config["ssh_key"]
+    ) == (
+        "profile-b.example", "profile-b", 2202, "/profiles/b/id_ed25519"
+    )
+    assert config["timeout"] == 91
+
+
+def test_terminal_env_config_fails_closed_for_unscoped_ssh(monkeypatch):
+    monkeypatch.setenv("TERMINAL_SSH_HOST", "must-not-leak.example")
+    with pytest.raises(ss.UnscopedSecretError):
+        terminal_tool._get_env_config()
