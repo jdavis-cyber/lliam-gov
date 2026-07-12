@@ -34,18 +34,73 @@ def _make_session(
     exit_code=None,
     output="",
     started_at=None,
+    session_key="",
 ) -> ProcessSession:
     """Helper to create a ProcessSession for testing."""
     s = ProcessSession(
         id=sid,
         command=command,
         task_id=task_id,
+        session_key=session_key,
         started_at=started_at or time.time(),
         exited=exited,
         exit_code=exit_code,
         output_buffer=output,
     )
     return s
+
+
+def test_kill_all_matches_raw_session_owner_without_cross_session_teardown(
+    monkeypatch, registry,
+):
+    owned_ssh = _make_session(
+        sid="owned-ssh",
+        task_id="default::ssh:opaque-a",
+        session_key="raw-session-a",
+    )
+    legacy_owned = _make_session(
+        sid="owned-legacy",
+        task_id="raw-session-a",
+        session_key="",
+    )
+    other_session = _make_session(
+        sid="other-ssh",
+        task_id="default::ssh:opaque-b",
+        session_key="raw-session-b",
+    )
+    registry._running = {
+        session.id: session
+        for session in (owned_ssh, legacy_owned, other_session)
+    }
+    killed = []
+    monkeypatch.setattr(
+        registry,
+        "kill_process",
+        lambda sid, **kwargs: killed.append(sid) or {"status": "killed"},
+    )
+
+    assert registry.kill_all(task_id="raw-session-a") == 2
+    assert set(killed) == {"owned-ssh", "owned-legacy"}
+    assert "other-ssh" not in killed
+
+
+def test_kill_all_empty_task_id_does_not_claim_unowned_session_keys(
+    monkeypatch, registry,
+):
+    legacy_empty_task = _make_session(sid="empty-task", task_id="", session_key="")
+    unrelated = _make_session(sid="other-task", task_id="other", session_key="")
+    registry._running = {
+        session.id: session for session in (legacy_empty_task, unrelated)
+    }
+    killed = []
+    monkeypatch.setattr(
+        registry,
+        "kill_process",
+        lambda sid, **kwargs: killed.append(sid) or {"status": "killed"},
+    )
+
+    assert registry.kill_all(task_id="") == 1
+    assert killed == ["empty-task"]
 
 
 def _spawn_python_sleep(seconds: float) -> subprocess.Popen:

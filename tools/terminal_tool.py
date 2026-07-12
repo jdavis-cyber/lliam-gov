@@ -31,8 +31,9 @@ Usage:
     result = terminal_tool("python server.py", background=True)
 """
 
-import importlib.util
 import hashlib
+import hmac
+import importlib.util
 import json
 import logging
 import os
@@ -1148,6 +1149,10 @@ def _resolve_container_task_id(task_id: Optional[str]) -> str:
 
 
 _SSH_CACHE_KEY_MARKER = "::ssh:"
+# Cache/lifecycle keys can be logged and persisted in process checkpoints. A
+# process-random HMAC key keeps SSH identity equality useful within this
+# process without exposing an offline hash oracle for host/user/key material.
+_SSH_CACHE_HMAC_KEY = os.urandom(32)
 
 
 def _resolve_environment_cache_key(
@@ -1174,7 +1179,7 @@ def _resolve_environment_cache_key(
     canonical = json.dumps(
         identity, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
     ).encode("utf-8")
-    digest = hashlib.sha256(canonical).hexdigest()
+    digest = hmac.new(_SSH_CACHE_HMAC_KEY, canonical, hashlib.sha256).hexdigest()
     return f"{base_key}{_SSH_CACHE_KEY_MARKER}{digest}"
 
 

@@ -15,6 +15,9 @@ containers?" section, and the Container lifecycle paragraph under
 Docker Backend in ``website/docs/user-guide/configuration.md``.
 """
 
+import hashlib
+import json
+
 import pytest
 
 from tools import terminal_tool
@@ -179,3 +182,15 @@ def test_ssh_environment_cache_key_is_stable_and_secret_opaque():
     assert all(secret not in first for secret in (
         "private-host", "private-user", "/private/key/path"
     ))
+    canonical = json.dumps(
+        {
+            "host": config["ssh_host"],
+            "key": config["ssh_key"],
+            "port": config["ssh_port"],
+            "user": config["ssh_user"],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    assert first.rsplit(":", 1)[-1] != hashlib.sha256(canonical).hexdigest()

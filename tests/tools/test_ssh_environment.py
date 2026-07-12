@@ -121,11 +121,56 @@ class TestControlSocketPath:
         )
 
     def test_path_is_deterministic_across_instances(self):
-        """Same (user, host, port) must yield the same control socket so
-        ControlMaster reuse works across reconnects."""
-        first = SSHEnvironment(host="example.com", user="alice", port=2222)
-        second = SSHEnvironment(host="example.com", user="alice", port=2222)
+        """Same authentication identity reuses one socket within a process."""
+        first = SSHEnvironment(
+            host="example.com", user="alice", port=2222, key_path="/keys/a"
+        )
+        second = SSHEnvironment(
+            host="example.com", user="alice", port=2222, key_path="/keys/a"
+        )
         assert first.control_socket == second.control_socket
+
+    def test_path_differs_for_different_authentication_keys(self):
+        """ControlMaster must never reuse a connection authenticated by another key."""
+        first = SSHEnvironment(
+            host="example.com", user="alice", port=2222, key_path="/keys/a"
+        )
+        second = SSHEnvironment(
+            host="example.com", user="alice", port=2222, key_path="/keys/b"
+        )
+
+        assert first.control_socket != second.control_socket
+
+    def test_cleanup_targets_only_its_authentication_identity(self, monkeypatch):
+        first = SSHEnvironment(
+            host="example.com", user="alice", port=2222, key_path="/keys/a"
+        )
+        second = SSHEnvironment(
+            host="example.com", user="alice", port=2222, key_path="/keys/b"
+        )
+        calls = []
+        first._sync_manager = None
+        socket_path_type = type(first.control_socket)
+        monkeypatch.setattr(
+            socket_path_type, "exists", lambda path: path == first.control_socket
+        )
+        monkeypatch.setattr(
+            socket_path_type,
+            "unlink",
+            lambda path: calls.append(("unlink", path)),
+        )
+        monkeypatch.setattr(
+            "tools.environments.ssh.subprocess.run",
+            lambda cmd, **kwargs: calls.append(cmd) or subprocess.CompletedProcess(cmd, 0),
+        )
+
+        first.cleanup()
+
+        exit_cmd = next(call for call in calls if isinstance(call, list))
+        assert f"ControlPath={first.control_socket}" in exit_cmd
+        assert f"ControlPath={second.control_socket}" not in exit_cmd
+        assert ("unlink", first.control_socket) in calls
+        assert ("unlink", second.control_socket) not in calls
 
     def test_path_differs_for_different_targets(self):
         """Different (user, host, port) triples must produce different paths."""
