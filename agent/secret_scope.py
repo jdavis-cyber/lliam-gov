@@ -127,9 +127,9 @@ _GLOBAL_ENV_PREFIXES = (
 # that would let one profile's turn resolve another profile's SSH host/user/key.
 # Carved out of the `TERMINAL_` global prefix so they fall through to per-profile
 # scoping (LG-IA-03 allowlist minimization — the crosswalk requires the audit,
-# not just the flag flip). NB: tools/terminal_tool.py still reads these via
-# os.getenv directly, bypassing get_secret — migrating those call sites to
-# get_secret is tracked as LG-IA-03-R1 for the remediation pass.
+# not just the flag flip). tools/terminal_tool.py consumes these exclusions via
+# its scoped terminal-setting resolver, including parsed values such as the SSH
+# port, while noncredential TERMINAL_* settings remain process-global.
 _GLOBAL_ENV_CREDENTIAL_EXCLUSIONS = frozenset({
     "TERMINAL_SSH_KEY", "TERMINAL_SSH_HOST", "TERMINAL_SSH_USER",
     "TERMINAL_SSH_PORT", "TERMINAL_SSH_PASSWORD", "TERMINAL_SSH_PASSPHRASE",
@@ -227,4 +227,3 @@ def build_profile_secret_scope(lliam_home: Path) -> Dict[str, str]:
     from ``os.environ`` directly, so the scope holds only profile secrets.
     """
     return load_env_file(Path(lliam_home) / ".env")
-
