@@ -1691,6 +1691,20 @@ def _stop_cleanup_thread():
 
 def get_active_env(task_id: str, config: Optional[Dict[str, Any]] = None):
     """Return the active BaseEnvironment for *task_id*, or None."""
+    raw_owner = task_id or "default"
+    with _env_lock:
+        owned_envs = [
+            _active_environments[key]
+            for key in _environment_keys_by_owner.get(raw_owner, set())
+            if key in _active_environments
+        ]
+        if len(owned_envs) == 1:
+            return owned_envs[0]
+        # Explicit environment-key callers never need config resolution.
+        explicit_env = _active_environments.get(raw_owner)
+        if explicit_env is not None:
+            return explicit_env
+
     resolved_config = config if config is not None else _get_env_config()
     lookup = _resolve_environment_cache_key(task_id, resolved_config)
     with _env_lock:
@@ -1711,6 +1725,19 @@ def is_persistent_env(task_id: str) -> bool:
     (``_cleanup_inactive_envs``) handles persistent envs once they exceed
     ``terminal.lifetime_seconds``.
     """
+    raw_owner = task_id or "default"
+    with _env_lock:
+        owned_envs = [
+            _active_environments[key]
+            for key in _environment_keys_by_owner.get(raw_owner, set())
+            if key in _active_environments
+        ]
+    if owned_envs:
+        # Raw cleanup releases every derived key owned by the session. It is
+        # safe to skip cleanup only when every live owned environment is
+        # persistent; one non-persistent backend requires the cleanup branch.
+        return all(bool(getattr(env, "_persistent", False)) for env in owned_envs)
+
     env = get_active_env(task_id)
     if env is None:
         return False

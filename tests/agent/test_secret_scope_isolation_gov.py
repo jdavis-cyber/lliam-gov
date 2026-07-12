@@ -392,6 +392,112 @@ def test_file_and_code_paths_register_raw_owners_for_shared_ssh_env(monkeypatch)
     }
 
 
+def test_active_and_persistent_lookup_use_owner_index_without_secret_scope(
+    monkeypatch,
+):
+    env = type("Environment", (), {"_persistent": True})()
+    raw_owner = "raw-session"
+    environment_key = "default::ssh:opaque"
+    monkeypatch.setenv("TERMINAL_ENV", "ssh")
+    monkeypatch.setattr(
+        terminal_tool, "_active_environments", {environment_key: env}
+    )
+    monkeypatch.setattr(
+        terminal_tool,
+        "_environment_keys_by_owner",
+        {raw_owner: {environment_key}},
+    )
+    monkeypatch.setattr(
+        terminal_tool,
+        "_environment_owners_by_key",
+        {environment_key: {raw_owner}},
+    )
+    monkeypatch.setattr(
+        terminal_tool,
+        "_get_env_config",
+        lambda: pytest.fail("owned lookup must not read scoped SSH config"),
+    )
+
+    assert terminal_tool.get_active_env(raw_owner) is env
+    assert terminal_tool.is_persistent_env(raw_owner) is True
+
+
+def test_unowned_unscoped_ssh_active_lookup_does_not_fall_back_to_default(
+    monkeypatch,
+):
+    default_env = object()
+    monkeypatch.setenv("TERMINAL_ENV", "ssh")
+    monkeypatch.setattr(terminal_tool, "_active_environments", {"default": default_env})
+    monkeypatch.setattr(terminal_tool, "_environment_keys_by_owner", {})
+    monkeypatch.setattr(terminal_tool, "_environment_owners_by_key", {})
+    monkeypatch.setattr(
+        terminal_tool,
+        "_get_env_config",
+        lambda: (_ for _ in ()).throw(ss.UnscopedSecretError("unscoped")),
+    )
+
+    with pytest.raises(ss.UnscopedSecretError):
+        terminal_tool.get_active_env("unowned-session")
+
+
+def test_cleanup_task_resources_reaches_unscoped_owned_ssh_cleanup(monkeypatch):
+    from types import SimpleNamespace
+    import agent.chat_completion_helpers as helpers
+
+    class FakeEnvironment:
+        _persistent = False
+
+        def __init__(self):
+            self.cleaned = False
+
+        def cleanup(self):
+            self.cleaned = True
+
+    raw_owner = "raw-session"
+    environment_key = "default::ssh:opaque"
+    env = FakeEnvironment()
+    browser_calls = []
+    monkeypatch.setenv("TERMINAL_ENV", "ssh")
+    monkeypatch.setattr(
+        terminal_tool, "_active_environments", {environment_key: env}
+    )
+    monkeypatch.setattr(
+        terminal_tool, "_last_activity", {environment_key: 1.0}
+    )
+    monkeypatch.setattr(
+        terminal_tool, "_creation_locks", {environment_key: object()}
+    )
+    monkeypatch.setattr(
+        terminal_tool,
+        "_environment_keys_by_owner",
+        {raw_owner: {environment_key}},
+    )
+    monkeypatch.setattr(
+        terminal_tool,
+        "_environment_owners_by_key",
+        {environment_key: {raw_owner}},
+    )
+    monkeypatch.setattr(
+        terminal_tool,
+        "_get_env_config",
+        lambda: pytest.fail("cleanup wrapper must not read scoped SSH config"),
+    )
+    monkeypatch.setattr(
+        helpers,
+        "_ra",
+        lambda: SimpleNamespace(
+            cleanup_vm=terminal_tool.cleanup_vm,
+            cleanup_browser=lambda task_id: browser_calls.append(task_id),
+        ),
+    )
+
+    helpers.cleanup_task_resources(SimpleNamespace(verbose_logging=False), raw_owner)
+
+    assert env.cleaned is True
+    assert browser_calls == [raw_owner]
+    assert terminal_tool._active_environments == {}
+
+
 def test_file_tracking_never_falls_back_to_raw_task_cache_for_ssh(monkeypatch):
     """A legacy raw-task cache entry cannot cross an SSH identity boundary."""
     import tools.file_tools as file_tools
