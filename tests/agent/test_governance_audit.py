@@ -219,6 +219,28 @@ def test_valid_unterminated_tail_survives_append_and_is_recorded(tmp_path):
     _assert_chain_valid(records)
 
 
+def test_oversized_unterminated_tail_refuses_repair_without_mutation(
+    tmp_path, monkeypatch
+):
+    led = _ledger(tmp_path)
+    led.emit(
+        "tool.result", action="oversized",
+        outcome={"blob": "x" * 200}, source_module="tests",
+    )
+    led.path.write_bytes(led.path.read_bytes().removesuffix(b"\n"))
+    original = led.path.read_bytes()
+    monkeypatch.setattr(ga, "_TAIL_WINDOW_INITIAL", 16)
+    monkeypatch.setattr(ga, "_TAIL_WINDOW_MAX", 32)
+
+    with pytest.raises(AuditWriteError, match="maximum recovery window"):
+        led.emit(
+            "tool.dispatch", action="file.write",
+            risk_scope={"mutating"}, source_module="tests",
+        )
+
+    assert led.path.read_bytes() == original
+
+
 @pytest.mark.parametrize("invalid_field", ["missing_seq", "schema", "prev_hash"])
 def test_self_sealed_non_record_tail_is_truncated(tmp_path, invalid_field):
     """A self-hashed JSON object is not evidence unless its sequence,
@@ -258,6 +280,33 @@ def test_self_sealed_non_record_tail_is_truncated(tmp_path, invalid_field):
     assert records[1]["outcome"]["error"].startswith(
         "invalid unterminated trailing fragment truncated"
     )
+    _assert_chain_valid(records)
+
+
+def test_self_sealed_record_missing_required_field_is_truncated(tmp_path):
+    led = _ledger(tmp_path)
+    first = led.emit("tool.result", action="op-0", source_module="tests")
+    candidate = led.build_record(
+        "tool.result", action="op-1", source_module="tests",
+        seq=2, prev_hash=first["record_hash"],
+    )
+    del candidate["action"]
+    candidate["record_hash"] = _independent_hash(candidate)
+    with open(led.path, "ab") as f:
+        f.write(json.dumps(
+            candidate, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8"))
+
+    rec = led.emit(
+        "tool.dispatch", action="file.write",
+        risk_scope={"mutating"}, source_module="tests",
+    )
+
+    assert rec is not None
+    records = list(iter_records(led.path))
+    assert [r["action"] for r in records] == [
+        "op-0", "ledger.torn_write_repair", "file.write",
+    ]
     _assert_chain_valid(records)
 
 
@@ -532,6 +581,68 @@ def test_mid_session_disable_is_sticky_on(tmp_path, monkeypatch):
     assert "security.error" in events, "disable attempt must be recorded"
 
 
+def test_get_ledger_constructs_from_one_config_snapshot(tmp_path, monkeypatch):
+    first_path = tmp_path / "first.log"
+    second_path = tmp_path / "second.log"
+    configs = iter([
+        {
+            "ledger_enabled": True,
+            "ledger_path": str(first_path),
+            "fail_closed": False,
+            "sync_fsync": True,
+        },
+        {
+            "ledger_enabled": False,
+            "ledger_path": str(second_path),
+            "fail_closed": True,
+            "sync_fsync": False,
+        },
+    ])
+    loads = []
+
+    def _load():
+        loads.append(1)
+        return next(configs)
+
+    monkeypatch.setattr(ga, "_audit_config_or_none", _load)
+    monkeypatch.setattr(
+        ga, "resolve_ledger_path", lambda cfg=None: Path(cfg["ledger_path"])
+    )
+    monkeypatch.setattr(ga, "_ledger_singleton", None)
+    monkeypatch.setattr(ga, "_was_enabled", False)
+    monkeypatch.setattr(ga, "_disable_flip_logged", False)
+
+    ledger = ga.get_ledger()
+
+    assert len(loads) == 1
+    assert ledger.path == first_path
+    assert ledger.fail_closed is False
+    assert ledger.sync_fsync_all is True
+    ledger.emit("session.start", action="run", source_module="tests")
+    assert first_path.exists()
+    assert not second_path.exists()
+
+
+def test_direct_ledger_construction_loads_config_once(tmp_path, monkeypatch):
+    path = tmp_path / "direct.log"
+    loads = []
+
+    def _load():
+        loads.append(1)
+        return {"ledger_path": str(path), "fail_closed": False}
+
+    monkeypatch.setattr(ga, "_audit_config_or_none", _load)
+    monkeypatch.setattr(
+        ga, "resolve_ledger_path", lambda cfg=None: Path(cfg["ledger_path"])
+    )
+
+    ledger = GovernanceLedger()
+
+    assert len(loads) == 1
+    assert ledger.path == path
+    assert ledger.fail_closed is False
+
+
 def test_configured_ledger_path_outside_home_logs_is_refused(tmp_path, monkeypatch):
     """audit.ledger_path outside <home>/logs would leave the LG-AU-07
     denylist — the resolver must refuse it and use the default."""
@@ -638,6 +749,22 @@ def test_verify_chain_treats_garbage_line_as_break(tmp_path):
     result = ga.verify_chain(led.path)  # must NOT raise
     assert not result.ok
     assert "unparseable" in result.reason
+
+
+def test_verify_chain_rejects_self_sealed_incomplete_record(tmp_path):
+    led = _ledger(tmp_path)
+    record = led.emit("tool.result", action="op", source_module="tests")
+    del record["action"]
+    record["record_hash"] = _independent_hash(record)
+    led.path.write_text(
+        json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+
+    result = ga.verify_chain(led.path)
+
+    assert not result.ok
+    assert "action" in result.reason
 
 
 def test_ledger_path_is_write_denied(tmp_path, monkeypatch):

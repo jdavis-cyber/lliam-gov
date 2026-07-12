@@ -22,10 +22,10 @@ Multi-writer safety (post-review hardening): every append takes an
 EXCLUSIVE OS file lock (``flock``/``msvcrt``) on the ledger file and
 re-reads the chain tail under that lock before sealing, so concurrent
 processes (CLI agent, gateway, cron sessions sharing one home) extend one
-linear chain instead of forking it. A torn trailing fragment from a
-crashed writer (bytes after the last newline) is repaired by truncating
-the fragment — never a sealed record — and the repair itself is recorded
-as a ``security.error`` event before the requested record.
+linear chain instead of forking it. An unterminated tail from a crashed
+writer is repaired by preserving a complete, valid chained record and
+truncating only invalid partial data; the repair itself is recorded as a
+``security.error`` event before the requested record.
 
 Hard invariants (not configurable at runtime):
   * Redaction-on-write always runs — there is no knob that disables the
@@ -120,6 +120,12 @@ DEFAULT_FAIL_CLOSED_SCOPE = frozenset({
 })
 
 _DECISIONS = frozenset({"allow", "deny", "approve", "timeout", "halt", "n/a"})
+
+_REQUIRED_RECORD_FIELDS = frozenset({
+    "schema", "seq", "event_id", "correlation_id", "ts", "event",
+    "severity", "actor", "subject", "action", "decision", "outcome",
+    "source_module", "prev_hash", "record_hash",
+})
 
 _TAIL_WINDOW_INITIAL = 65536
 _TAIL_WINDOW_MAX = 16 * 1024 * 1024
@@ -227,6 +233,47 @@ def canonical_bytes(record: dict) -> bytes:
 
 def _sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _is_sha256_hex(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(c in "0123456789abcdef" for c in value)
+    )
+
+
+def _standard_record_error(record: Any) -> Optional[str]:
+    """Return why ``record`` is not a usable, sealed ``lg-au/1`` record."""
+    if not isinstance(record, dict):
+        return "record is not a JSON object"
+    missing = sorted(_REQUIRED_RECORD_FIELDS - record.keys())
+    if missing:
+        return f"missing required field: {missing[0]}"
+    if record["schema"] != SCHEMA_VERSION:
+        return f"unsupported schema: {record['schema']!r}"
+    seq = record["seq"]
+    if not isinstance(seq, int) or isinstance(seq, bool) or seq <= 0:
+        return f"invalid seq: {seq!r}"
+    for field in ("event_id", "correlation_id", "ts", "action", "source_module"):
+        if not isinstance(record[field], str) or not record[field]:
+            return f"invalid {field}: expected non-empty string"
+    if record["event"] not in AUDITABLE_EVENTS:
+        return f"unknown auditable event: {record['event']!r}"
+    if record["severity"] not in SEVERITIES:
+        return f"unknown severity: {record['severity']!r}"
+    if record["decision"] not in _DECISIONS:
+        return f"unknown decision: {record['decision']!r}"
+    for field in ("actor", "subject", "outcome"):
+        if not isinstance(record[field], dict):
+            return f"invalid {field}: expected object"
+    if not _is_sha256_hex(record["prev_hash"]):
+        return "invalid prev_hash: expected lowercase SHA-256"
+    if not _is_sha256_hex(record["record_hash"]):
+        return "invalid record_hash: expected lowercase SHA-256"
+    if _sha256_hex(canonical_bytes(record)) != record["record_hash"]:
+        return "record_hash mismatch (seal mismatch)"
+    return None
 
 
 def _jsonify(value: Any) -> Any:
@@ -365,8 +412,9 @@ class GovernanceLedger:
         fail_closed: Optional[bool] = None,
         fail_closed_scope: Optional[frozenset[str]] = None,
         sync_fsync_gated: bool = True,
+        _config: Optional[dict] = None,
     ) -> None:
-        cfg = _audit_config()
+        cfg = dict(_config) if _config is not None else _audit_config()
         self.path = Path(path) if path is not None else resolve_ledger_path(cfg)
         algo = str(cfg.get("hash_algo") or HASH_ALGO).lower()
         if algo != HASH_ALGO:
@@ -406,7 +454,7 @@ class GovernanceLedger:
         if end == 0:
             return 0, GENESIS_PREV_HASH
         line_end = end - 1  # exclude the known LF terminator
-        window = _TAIL_WINDOW_INITIAL
+        window = min(_TAIL_WINDOW_INITIAL, _TAIL_WINDOW_MAX)
         while True:
             start = max(0, line_end - window)
             f.seek(start)
@@ -415,23 +463,15 @@ class GovernanceLedger:
             if idx == -1 and start > 0:
                 if window >= _TAIL_WINDOW_MAX:
                     return None
-                window *= 4
+                window = min(window * 4, _TAIL_WINDOW_MAX)
                 continue
             line = chunk[idx + 1:] if idx != -1 else chunk
             break
         try:
             rec = json.loads(line.decode("utf-8"))
-            seq = rec["seq"]
-            sealed = rec["record_hash"]
-            if (
-                not isinstance(seq, int)
-                or isinstance(seq, bool)
-                or seq <= 0
-                or not isinstance(sealed, str)
-                or _sha256_hex(canonical_bytes(rec)) != sealed
-            ):
+            if _standard_record_error(rec) is not None:
                 return None
-            return seq, sealed
+            return rec["seq"], rec["record_hash"]
         except Exception:
             return None
 
@@ -453,7 +493,7 @@ class GovernanceLedger:
         if f.read(1) == b"\n":
             return None
         # Find the last newline scanning backward in growing windows.
-        window = _TAIL_WINDOW_INITIAL
+        window = min(_TAIL_WINDOW_INITIAL, _TAIL_WINDOW_MAX)
         while True:
             start = max(0, size - window)
             f.seek(start)
@@ -465,37 +505,25 @@ class GovernanceLedger:
             if start == 0:
                 keep = 0  # the whole file is one unterminated fragment
                 break
-            window *= 4
+            if window >= _TAIL_WINDOW_MAX:
+                raise AuditWriteError(
+                    "audit ledger unterminated tail exceeds the maximum "
+                    f"recovery window ({_TAIL_WINDOW_MAX} bytes)"
+                )
+            window = min(window * 4, _TAIL_WINDOW_MAX)
         fragment = chunk[idx + 1:] if idx != -1 else chunk
         try:
             rec = json.loads(fragment.decode("utf-8"))
-            seq = rec["seq"]
-            sealed = rec["record_hash"]
-            prev_hash = rec["prev_hash"]
-            valid_shape = (
-                isinstance(rec, dict)
-                and rec.get("schema") == SCHEMA_VERSION
-                and isinstance(seq, int)
-                and not isinstance(seq, bool)
-                and seq > 0
-                and isinstance(sealed, str)
-                and len(sealed) == 64
-                and all(c in "0123456789abcdef" for c in sealed)
-                and isinstance(prev_hash, str)
-                and len(prev_hash) == 64
-                and all(c in "0123456789abcdef" for c in prev_hash)
-            )
             predecessor = GovernanceLedger._read_predecessor(f, keep)
-            valid_seal = (
-                valid_shape
-                and _sha256_hex(canonical_bytes(rec)) == sealed
+            valid_record = (
+                _standard_record_error(rec) is None
                 and predecessor is not None
-                and seq == predecessor[0] + 1
-                and prev_hash == predecessor[1]
+                and rec["seq"] == predecessor[0] + 1
+                and rec["prev_hash"] == predecessor[1]
             )
         except Exception:
-            valid_seal = False
-        if valid_seal:
+            valid_record = False
+        if valid_record:
             f.seek(0, os.SEEK_END)
             f.write(b"\n")
             return "terminator_appended"
@@ -516,7 +544,7 @@ class GovernanceLedger:
         size = f.tell()
         if size == 0:
             return 0, GENESIS_PREV_HASH
-        window = _TAIL_WINDOW_INITIAL
+        window = min(_TAIL_WINDOW_INITIAL, _TAIL_WINDOW_MAX)
         while True:
             start = max(0, size - window)
             f.seek(start)
@@ -529,7 +557,7 @@ class GovernanceLedger:
                         "audit ledger tail line exceeds the maximum recovery "
                         f"window ({_TAIL_WINDOW_MAX} bytes)"
                     )
-                window *= 4
+                window = min(window * 4, _TAIL_WINDOW_MAX)
                 continue
             last_line = body[idx + 1:] if idx != -1 else body
             break
@@ -537,19 +565,15 @@ class GovernanceLedger:
             return 0, GENESIS_PREV_HASH
         try:
             rec = json.loads(last_line.decode("utf-8"))
-            seq = int(rec["seq"])
-            sealed = str(rec["record_hash"])
+            error = _standard_record_error(rec)
+            if error is not None:
+                raise ValueError(error)
+            seq = rec["seq"]
+            sealed = rec["record_hash"]
         except Exception as e:
             raise AuditWriteError(
-                "audit ledger tail unreadable (complete but unparseable last "
-                f"line): {e}"
+                f"audit ledger tail invalid: {e}"
             ) from e
-        recomputed = _sha256_hex(canonical_bytes(rec))
-        if recomputed != sealed:
-            raise AuditWriteError(
-                f"audit ledger tail seal mismatch at seq {seq} — the chain "
-                "head cannot be trusted (possible tamper)"
-            )
         return seq, sealed
 
     # -- record construction (LG-AU-04) ------------------------------------
@@ -801,7 +825,7 @@ def get_ledger() -> Optional[Any]:
                 _ledger_singleton = _PoisonedLedger(reason)
             else:
                 try:
-                    _ledger_singleton = GovernanceLedger()
+                    _ledger_singleton = GovernanceLedger(_config=cfg)
                 except Exception as e:
                     _log.critical("governance ledger construction failed: %s", e)
                     _ledger_singleton = _PoisonedLedger(str(e))
@@ -999,14 +1023,15 @@ def verify_chain(
         # Fast-forward to the segment start when verifying after an anchor.
         if not started:
             if seq == start_after_seq:
-                sealed = record.get("record_hash")
-                if _sha256_hex(canonical_bytes(record)) != sealed:
+                validation_error = _standard_record_error(record)
+                if validation_error is not None:
                     return ChainVerificationResult(
                         ok=False, checked=checked, total=total,
                         break_seq=seq, break_index=index,
-                        reason="anchor record seal mismatch (anchor itself edited)",
+                        reason=f"anchor record invalid: {validation_error}",
                         ledger_path=str(p),
                     )
+                sealed = record.get("record_hash")
                 if start_prev_hash != GENESIS_PREV_HASH and sealed != start_prev_hash:
                     return ChainVerificationResult(
                         ok=False, checked=checked, total=total,
@@ -1021,6 +1046,14 @@ def verify_chain(
                 expected_prev = str(sealed)
                 expected_seq = start_after_seq + 1
             continue
+        validation_error = _standard_record_error(record)
+        if validation_error is not None:
+            return ChainVerificationResult(
+                ok=False, checked=checked, total=total,
+                break_seq=seq if isinstance(seq, int) else None,
+                break_index=index, reason=validation_error,
+                ledger_path=str(p),
+            )
         if not isinstance(seq, int) or seq != expected_seq:
             return ChainVerificationResult(
                 ok=False, checked=checked, total=total,
@@ -1040,15 +1073,7 @@ def verify_chain(
                 ),
                 ledger_path=str(p),
             )
-        sealed = record.get("record_hash")
-        recomputed = _sha256_hex(canonical_bytes(record))
-        if sealed != recomputed:
-            return ChainVerificationResult(
-                ok=False, checked=checked, total=total, break_seq=seq,
-                break_index=index,
-                reason="record_hash mismatch: record content was edited in place",
-                ledger_path=str(p),
-            )
+        sealed = record["record_hash"]
         checked += 1
         expected_prev = str(sealed)
         expected_seq = seq + 1
