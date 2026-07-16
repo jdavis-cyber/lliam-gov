@@ -1,0 +1,105 @@
+# =============================================================================
+# mcp-allowlist.yaml — Lliam-GOV Approved-MCP-Server Allowlist Policy
+# =============================================================================
+#
+# | Field          | Value                                                      |
+# |----------------|------------------------------------------------------------|
+# | Document       | Approved-MCP-Server Allowlist Policy (mcp-allowlist.yaml)   |
+# | Owner          | Lliam-GOV Program                                          |
+# | Classification | CUI//SP-PRIV (template — mark per instance)                |
+# | Version        | 0.1 DRAFT                                                  |
+#
+# WHAT THIS FILE IS  [ACTIVE @ P3.3]
+#   The register of the approved Model Context Protocol (MCP) servers Lliam-GOV
+#   may connect. Consumed by the NEW tools/mcp_allowlist.py (check_mcp_server),
+#   layered over the existing mcp_tool / managed_tool_gateway load path. It:
+#     1. DENIES any live mcp_servers.<name> not in approved_servers[] (LG-SC-07);
+#     2. BLOCKS shell-egress / OS-persistence / IOC command shapes (LG-SC-04);
+#     3. enforces least-privilege scope + default-deny write (LG-SC-05);
+#     4. requires TLS on HTTP/StreamableHTTP transports (LG-SC-08).
+#   It renames nothing (mcp_servers, mcp_tool.py, managed_tool_gateway.py keep
+#   every identifier). An empty approved_servers[] = NO MCP server connects.
+#
+# HOW IT LOADS
+#   security.mcp_allowlist_enforce + security.mcp_allowlist_path in
+#   cli-config.gov.yaml (via HERMES_CONFIG). No-op unless strict + the enforce
+#   flag (capability-preserving on low-side).
+# =============================================================================
+
+policy:
+  default_action: deny                   # [LG-SC-07] deny unlisted servers
+  allow_unlisted_servers: false          # never auto-trust a discovered server
+  require_explicit_include: true         # [LG-SC-05] every server declares tools.include[]
+  default_deny_write: true               # [LG-SC-05] write tools only within approved scope
+  prefer_stdio_for_local: true           # local servers SHOULD use stdio, not loopback HTTP
+  ioc_blocklist_version: "lliam-gov-2026-07"   # provenance of the IOC shapes (mirrors mcp_security)
+  result_handling:
+    default_trust: untrusted             # [LG-PI-01] MCP results are untrusted input
+    injection_scan: true                 # threat_patterns.scan_for_threats (LG-PI-04)
+    high_risk_on: [egress, exec, file_mutation]
+  drift_detection:
+    enabled: true                        # [LG-SC-07] compare live schema+scope to baseline_fingerprint
+    detect_shadow_servers: true          # cross-check live registry vs approved_servers[]
+  review:
+    cadence_days: 90
+    last_validated: "2026-07-16"
+    next_due: "2026-10-14"
+
+# TEMPLATE — replace with YOUR authorized servers. An empty list = maximum
+# restriction (no MCP connects). The two examples show the preferred shapes.
+approved_servers:
+
+  # --- In-boundary STDIO (preferred high-side shape): local, no egress --------
+  - name: gov-filesystem
+    description: "Read-only access to the approved CUI working directory."
+    owner: "Data Platform Team"
+    transport: stdio
+    command: "uvx"
+    args: ["mcp-server-filesystem", "--root", "/srv/cui/workspace", "--read-only"]
+    egress: {posture: none, destinations: []}
+    auth: {mode: none}
+    scope:
+      allow_write: false                 # default-deny write honored
+      include: [read_file, list_directory, search_files]
+      exclude: [write_file, edit_file, move_file, create_directory]
+      write_tools: []
+    schema_validation: reject
+    result_trust: untrusted
+    baseline_fingerprint: "sha256:REPLACE_WITH_BASELINED_SCHEMA+SCOPE_HASH"
+    sdl_review:
+      reviewed: true
+      reviewer: "isso@example.gov"
+      review_date: "2026-07-16"
+      provenance_checked: true
+      osv_checked: true
+      record_ref: "SDL-MCP-0001"
+
+  # --- In-boundary HTTPS with OAuth + one scoped, HITL-gated write tool -------
+  - name: gov-ticketing
+    description: "Create/read tickets in the authorized in-boundary tracker."
+    owner: "ITSM Team"
+    transport: streamable_http
+    url: "https://itsm.gov-boundary.internal/mcp"   # https only
+    tls: {require_tls: true, verify_ca_bundle: true, mtls: optional}
+    http_controls:
+      origin_allowlist: ["https://itsm.gov-boundary.internal"]
+      max_payload_bytes: 1048576
+    auth: {mode: oauth}                  # token-exchange, not operator passthrough
+    egress: {posture: proxied, destinations: ["itsm.gov-boundary.internal"]}
+    scope:
+      allow_write: true
+      include: [read_ticket, create_ticket]
+      write_tools: [create_ticket]       # the single write tool, HITL-gated by the PDP
+    schema_validation: reject
+    result_trust: untrusted
+    baseline_fingerprint: "sha256:REPLACE_WITH_BASELINED_SCHEMA+SCOPE_HASH"
+    sdl_review:
+      reviewed: true
+      reviewer: "isso@example.gov"
+      review_date: "2026-07-16"
+      provenance_checked: true
+      osv_checked: true
+      record_ref: "SDL-MCP-0002"
+
+# Built on Hermes Agent (Nous Research, MIT). Governance overlay is additive and
+# capability-preserving.

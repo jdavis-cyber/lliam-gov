@@ -182,6 +182,16 @@ security:
   model_manifest_path: model_manifest.yaml   # [additive] LG-MP-06 signed manifest of record
   trusted_signers:                       # [additive] LG-MP-06 signer id -> key (KEY provisioned out-of-repo)
     lliam-gov-signer: "REPLACE-WITH-PROVISIONED-SIGNING-KEY"
+
+  # [ACTIVE @ P3.3]  MCP & SKILL SUPPLY-CHAIN VETTING  (LG-SC-03/04/05/07/08/09)
+  # Consumed by the NEW tools/mcp_allowlist.py. Deny-by-default for unlisted MCP
+  # servers; block shell-egress/persistence IOC command shapes; least-privilege
+  # scope + default-deny write; TLS required on HTTP transports; unsigned/
+  # unvetted third-party skills refused. require_signed_skills was set at P0.3.
+  mcp_allowlist_enforce: true            # [additive] LG-SC-07 deny-by-default MCP vetting ON
+  mcp_allowlist_path: policy/mcp-allowlist.yaml   # [additive] approved-server policy of record
+  mcp_require_tls: true                  # [additive] LG-SC-08 TLS/mTLS on HTTP MCP transports
+  supplier_vetting_register: docs/governance/supplier-vetting-register.md   # [additive] LG-TP-03
   tool_allowlist: []               # [additive] LG-AZ-02 (empty = no positive tool allowlist yet)
   tool_denylist:                   # [additive] LG-AZ-11/AZ-02: refuse these capabilities for CUI
     - computer_use
