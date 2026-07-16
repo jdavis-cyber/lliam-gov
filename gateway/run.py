@@ -18509,6 +18509,29 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     except Exception as _mi_exc:
         logger.debug("Model-integrity check failed (non-fatal): %s", _mi_exc)
 
+    # LG-GV-01/06/10 (additive @ P4.1): fail-closed governance-artifacts gate.
+    # Refuses to serve work under strict posture when the top-management layer
+    # is absent or stale — AI-policy identity missing/placeholder or past its
+    # review date, go/no-go authorization record absent/expired/mismatched, or
+    # a baseline-denied high-risk skill re-enabled without a valid CAIO waiver.
+    # Complete no-op on the low-side posture.
+    from lliam_cli.security_audit_startup import (
+        enforce_governance_artifacts_at_startup,
+        GovernanceArtifactError,
+    )
+    try:
+        try:
+            from lliam_cli.config import load_config as _load_merged_ga
+
+            _ga_cfg = _load_merged_ga()
+        except Exception:
+            _ga_cfg = _audit_cfg
+        enforce_governance_artifacts_at_startup(config=_ga_cfg)
+    except GovernanceArtifactError:
+        raise
+    except Exception as _ga_exc:
+        logger.debug("Governance-artifacts check failed (non-fatal): %s", _ga_exc)
+
     from lliam_cli.security_audit_startup import (
         verify_audit_chain_at_startup,
         AuditChainVerificationError,

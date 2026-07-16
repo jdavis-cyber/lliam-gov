@@ -450,6 +450,27 @@ governance:
     engineer: "npe:lliam-gov"               #   the acting party is the NPE agent — Approver ≠ Engineer ✓
     auditor: auditor@independent.mil        #   independent of approver/engineer/risk (SoD)
     killswitch_owner: jdavis@agency.mil
+  # ---------------------------------------------------------------------------
+  # [ACTIVE @ P4.1]  TOP-MANAGEMENT POLICY IDENTITY + REGISTER BINDINGS
+  #   Controls: LG-GV-01 (policy of record), LG-GV-03 (regulatory register),
+  #             LG-GV-06 (go/no-go authorization), LG-GV-10 (CAIO waivers)
+  #   Consumed by: lliam_cli/security_audit_startup.py
+  #                enforce_governance_artifacts_at_startup (fail-closed under
+  #                strict; complete no-op low-side) and
+  #                ci/governance-ci-gates/regulatory_reconciliation_gate.py.
+  # Register paths resolve relative to this overlay's directory (the repo root).
+  # ---------------------------------------------------------------------------
+  policy_id: LG-POL-001                    # [additive @ P4.1] LG-GV-01 policy of record
+  policy_version: "1.0"                    # [additive @ P4.1] must match ai-policy.md §11
+  policy_approved_by: jdavis@agency.mil    # [additive @ P4.1] CAIO (role_bindings.caio)
+  policy_review_date: 2027-07-16           # [additive @ P4.1] past-due -> fail-closed (strict)
+  policy_path: docs/governance/ai-policy.md
+  authorization_id: LG-ATO-2026-001        # [additive @ P4.1] LG-GV-06 go/no-go of record
+  registers:                               # [additive @ P4.1] register bindings of record
+    regulatory: docs/governance/regulatory-register.yaml     # LG-GV-03
+    authorization: docs/governance/authorization-record.yaml # LG-GV-06
+    waiver: docs/governance/waiver-register.yaml             # LG-GV-10
+    deviation: docs/governance/deviation-register.yaml       # LG-CH-08 (P0.7)
 # NOTE: LG-IA-01 managed-account inventory (security.accounts) and the
 # LG-IA-05 no-default-credential switch (security.no_default_credentials) live
 # in the EXISTING `security:` block at the top of this file — a SECOND top-level
