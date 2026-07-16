@@ -341,16 +341,16 @@ controls:
 - id: LG-GV-07
   domain: GV
   title: Operate continuous authorization (cATO) with evidence-driven re-authorization tied to ISCM telemetry
-  status: planned
+  status: implemented
   realized_in: P5.4
-  poam_ref: POAM-P5-CATO
+  evidence: docs/governance/verification/P5.4-report.md
 - id: LG-GV-08
   domain: GV
   title: Conduct periodic management review and re-authorize continued autonomous operation; record residual-risk
     sign-off
-  status: planned
+  status: implemented
   realized_in: P5.4
-  poam_ref: POAM-P5-CATO
+  evidence: docs/governance/verification/P5.4-report.md
 - id: LG-GV-09
   domain: GV
   title: Define a generative-AI acceptable-use policy realized as enforced provider/tool/skill allowlists
@@ -1270,23 +1270,23 @@ controls:
   domain: TP
   title: Classify Lliam autonomy level (L0-L5) and intervention tiers (T1-T5) with scheduled, recorded
     kill-switch tests
-  status: planned
+  status: implemented
   realized_in: P5.4
-  poam_ref: POAM-P5-CATO
+  evidence: docs/governance/verification/P5.4-report.md
 - id: LG-TP-06
   domain: TP
   title: Document third-party contingency/fallback and incident-response responsibilities (degrade to
     approved on-prem, not arbitrary cloud)
-  status: planned
+  status: implemented
   realized_in: P5.4
-  poam_ref: POAM-P5-CATO
+  evidence: docs/governance/verification/P5.4-report.md
 - id: LG-TP-07
   domain: TP
   title: Generate a portable posture/attestation export (control coverage + provenance + audit-chain hash)
     for reciprocity/inheritance
-  status: planned
+  status: implemented
   realized_in: P5.4
-  poam_ref: POAM-P5-CATO
+  evidence: docs/governance/verification/P5.4-report.md
 - id: LG-TP-08
   domain: TP
   title: Maintain a layered evidence register (Governance/Technical/Operational/Assessment/Attestation)

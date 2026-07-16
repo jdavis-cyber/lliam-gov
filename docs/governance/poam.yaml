@@ -101,7 +101,8 @@ items:
     interim_compensating: >-
       Point-in-time authorization with hard expiry enforced fail-closed at
       startup (LG-GV-06, P4.1); baseline drift gate blocks unapproved change.
-    status: open
+    status: closed
+    closed: 2026-07-16 (P5.4 — cATO loop with posture-break auto-suspend, autonomy L0-L5 classification, third-party contingency, portable attestation export)
 
   - id: POAM-FIPS
     title: FIPS-validated cryptographic modules for at-rest encryption

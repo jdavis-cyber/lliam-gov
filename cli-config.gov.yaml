@@ -445,6 +445,27 @@ incident_response:
 
 
 # =============================================================================
+# [ACTIVE @ P5.4]  cATO LOOP + AUTONOMY CLASSIFICATION + RECIPROCITY
+#    Controls: LG-GV-07 (continuous authorization + posture-break auto-suspend),
+#              LG-GV-08 (management review + re-authorization), LG-TP-05
+#              (autonomy L0-L5 + kill-switch cadence), LG-TP-06 (third-party
+#              contingency), LG-TP-07 (portable attestation export).
+#    Consumed by: agent/cato_loop.py (evaluate/run_cato_cycle → killswitch on a
+#    real posture-break; steady-state no-op) + ci/governance-ci-gates/
+#    attestation_export.py.
+# =============================================================================
+cato:
+  enabled: true                      # [additive @ P5.4] LG-GV-07 continuous authorization ON
+  autonomy_level: L3                 # [additive @ P5.4] LG-TP-05 authorized level (conditional autonomy + HITL on high-impact)
+  auto_suspend_on_break: true        # [additive @ P5.4] LG-GV-07 posture-break -> kill-switch
+  reauthorization_required_after_suspend: true   # [additive] LG-GV-06/08 re-auth gate
+  management_review_cadence_days: 90 # [additive @ P5.4] LG-GV-08 review cadence
+  autonomy_classification: docs/governance/autonomy-classification.md   # LG-TP-05
+  contingency: docs/governance/third-party-contingency.md               # LG-TP-06
+  management_review: docs/governance/management-review.md               # LG-GV-08
+
+
+# =============================================================================
 # [ACTIVE @ P1.4]  AGENT IDENTITY + MANAGED CREDENTIALS  (LG-IA-01..05, IA-10)
 # -----------------------------------------------------------------------------
 # LG-IA-02 agent NPE identity is computed by the NEW additive module

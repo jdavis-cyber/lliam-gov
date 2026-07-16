@@ -44,6 +44,13 @@ layers:
                   docs/governance/ai-disclosure-notice.md]
     - control: LG-PF-06
       artifacts: [docs/governance/bias-risk-register.yaml]
+    - control: [LG-GV-07, LG-GV-08]
+      artifacts: [agent/cato_loop.py, docs/governance/management-review.md]
+    - control: [LG-TP-05, LG-TP-06]
+      artifacts: [docs/governance/autonomy-classification.md,
+                  docs/governance/third-party-contingency.md]
+    - control: LG-TP-07
+      artifacts: [ci/governance-ci-gates/attestation_export.py]
 
   technical:
     - control: LG-CH-01

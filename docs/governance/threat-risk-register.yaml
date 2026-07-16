@@ -265,8 +265,7 @@ risks:
                LG-CH-04, LG-CH-06, LG-CH-08, LG-RM-04, LG-GV-04, LG-GV-05,
                LG-GV-06, LG-GV-07, LG-GV-08, LG-RM-09, LG-TP-03, LG-RM-03,
                LG-QT-02, LG-MO-09, LG-RM-08]
-    poam_ref: POAM-P5-CATO
     notes: >-
       Baseline/drift/SoD/authorization gates enforced through P4.1; the SoA/
-      POA&M layer lands this step; cATO re-authorization + management-review
-      loop land P5.4.
+      POA&M layer delivered P4.2; cATO re-authorization + management-review
+      loop with posture-break auto-suspend delivered P5.4.
