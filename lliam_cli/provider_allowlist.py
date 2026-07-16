@@ -190,7 +190,11 @@ def validate_provider(
     # Host match — closes the right-slug/wrong-endpoint bypass (LG-MP-02).
     host = _host_of(base_url)
     approved_hosts = [str(h).strip().lower() for h in (entry.get("base_url_hosts") or [])]
-    if approved_hosts and host and host not in approved_hosts:
+    if approved_hosts and not host:
+        return ProviderDecision(disposition="deny", provider=slug, host=host, path=path,
+                                reason=(f"blank or invalid base_url for provider '{slug}' — "
+                                        "cannot verify approved endpoint (LG-MP-02)"))
+    if approved_hosts and host not in approved_hosts:
         return ProviderDecision(disposition="deny", provider=slug, host=host, path=path,
                                 reason=(f"base_url host '{host}' not approved for provider "
                                         f"'{slug}' (approved: {approved_hosts}) — LG-MP-02"))

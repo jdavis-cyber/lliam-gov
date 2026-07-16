@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -26,28 +27,22 @@ from typing import Any, Dict, List, Tuple
 # SBOM (LG-SS-05)
 # --------------------------------------------------------------------------- #
 
-def build_sbom() -> Dict[str, Any]:
-    """A CycloneDX-shaped SBOM of the installed Python distributions."""
+def build_sbom(repo: Path | None = None) -> Dict[str, Any]:
+    """A CycloneDX-shaped SBOM from the repository's locked dependencies."""
+    repo = Path(repo) if repo is not None else Path(__file__).resolve().parents[2]
+    lock_path = repo / "uv.lock"
+    if not lock_path.is_file():
+        raise FileNotFoundError(f"required lockfile missing: {lock_path}")
+    lock = tomllib.loads(lock_path.read_text(encoding="utf-8"))
     components: List[Dict[str, Any]] = []
-    try:
-        from importlib import metadata as importlib_metadata
-        for dist in importlib_metadata.distributions():
-            try:
-                name = dist.metadata["Name"]
-            except Exception:
-                name = getattr(dist, "name", None)
-            if not name:
-                continue
-            components.append({
-                "type": "library",
-                "name": str(name),
-                "version": str(dist.version or ""),
-                "purl": f"pkg:pypi/{str(name).lower()}@{dist.version or ''}",
-            })
-    except Exception:
-        pass
-    # Always include the application component itself so the SBOM is never empty.
-    components.append({"type": "application", "name": "lliam-gov", "version": "governed"})
+    for package in lock.get("package") or []:
+        if not isinstance(package, dict) or not package.get("name") or not package.get("version"):
+            continue
+        name, version = str(package["name"]), str(package["version"])
+        components.append({"type": "library", "name": name, "version": version,
+                           "purl": f"pkg:pypi/{name.lower()}@{version}"})
+    if not components:
+        raise ValueError("uv.lock contains no versioned package entries")
     seen = set()
     deduped = []
     for c in components:
@@ -67,14 +62,19 @@ def build_sbom() -> Dict[str, Any]:
 # AI-BOM (LG-SS-05, IN-02, IN-03)
 # --------------------------------------------------------------------------- #
 
-def _load_yaml(path: Path) -> Dict[str, Any]:
+def _load_yaml(path: Path, *, required: bool = True) -> Dict[str, Any]:
     try:
         import yaml
-        if path.is_file():
-            return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not path.is_file():
+            raise FileNotFoundError(f"required AI-BOM input missing: {path}")
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(data, dict):
+            raise ValueError(f"AI-BOM input is not a mapping: {path}")
+        return data
     except Exception:
-        pass
-    return {}
+        if required:
+            raise
+        return {}
 
 
 def build_ai_bom(repo: Path) -> Dict[str, Any]:
@@ -83,6 +83,7 @@ def build_ai_bom(repo: Path) -> Dict[str, Any]:
     providers_doc = _load_yaml(repo / "policy" / "provider-allowlist.yaml")
     cards_doc = _load_yaml(repo / "docs" / "governance" / "model-cards" / "model-cards.yaml")
     mcp_doc = _load_yaml(repo / "policy" / "mcp-allowlist.yaml")
+    skills_doc = _load_yaml(repo / "policy" / "skills-allowlist.yaml")
     manifest = _load_yaml(repo / "model_manifest.yaml")
 
     providers = [
@@ -101,6 +102,16 @@ def build_ai_bom(repo: Path) -> Dict[str, Any]:
          "sdl_record": (s.get("sdl_review") or {}).get("record_ref")}
         for s in (mcp_doc.get("approved_servers") or []) if isinstance(s, dict)
     ]
+    skills = [
+        {"name": s.get("name"), "source": s.get("source"),
+         "ast_audit": s.get("ast_audit"), "provenance": s.get("provenance"),
+         "attestation": s.get("attestation"),
+         "signed_hash": (manifest.get("skill_hashes") or {}).get(s.get("name"))}
+        for s in (((skills_doc.get("security") or {}).get("skill_allowlist")) or [])
+        if isinstance(s, dict)
+    ]
+    if not providers or not models:
+        raise ValueError("AI-BOM provider/model inventories must not be empty")
     return {
         "ai_bom_version": "lg-aibom/1",
         "application": "lliam-gov",
@@ -108,6 +119,16 @@ def build_ai_bom(repo: Path) -> Dict[str, Any]:
         "providers": providers,
         "models": models,
         "mcp_servers": mcp_servers,
+        "skills": skills,
+        "attestations": {
+            "manifest_signature": manifest.get("signature"),
+            "model_primary": (manifest.get("models") or {}).get("primary"),
+            "model_fallback": (manifest.get("models") or {}).get("fallback"),
+        },
+        "relationships": [
+            {"model": m.get("id"), "provider": m.get("provider")}
+            for m in models
+        ],
         "policies": {
             "provider_allowlist": "policy/provider-allowlist.yaml",
             "model_cards": "docs/governance/model-cards/model-cards.yaml",
@@ -124,7 +145,7 @@ def write_boms(repo: Path, out_dir: Path) -> Tuple[str, str]:
     out_dir.mkdir(parents=True, exist_ok=True)
     sbom_path = out_dir / "sbom.json"
     ai_bom_path = out_dir / "ai-bom.yaml"
-    sbom_path.write_text(json.dumps(build_sbom(), indent=2, sort_keys=True), encoding="utf-8")
+    sbom_path.write_text(json.dumps(build_sbom(repo), indent=2, sort_keys=True), encoding="utf-8")
     try:
         import yaml
         ai_bom_path.write_text(yaml.safe_dump(build_ai_bom(repo), sort_keys=False), encoding="utf-8")

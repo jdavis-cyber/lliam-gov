@@ -21,12 +21,12 @@
 # =============================================================================
 
 signer: "lliam-gov-signer"
-signature: "df81ecd2e54de71675c4984f622844de9d1f7fa67c6e5137767d0b3f62a9be4a"
+signature: "REPLACE-WITH-PROVISIONED-SIGNATURE"
 
 manifest_version: "lg-mp/1"
 models:
-  primary: "lmstudio/llama-3.1-8b-instruct@v1"
-  fallback: "bedrock/anthropic.claude-3-5-sonnet@v1"
+  primary: "lmstudio/llama-3.1-8b-instruct"
+  fallback: "bedrock/anthropic.claude-3-5-sonnet"
 skill_hashes:
   pdf: "sha256:PLACEHOLDER-recompute-at-build"
   xlsx: "sha256:PLACEHOLDER-recompute-at-build"

@@ -63,6 +63,8 @@ approved_servers:
       include: [read_file, list_directory, search_files]
       exclude: [write_file, edit_file, move_file, create_directory]
       write_tools: []
+      resources: false
+      prompts: false
     schema_validation: reject
     result_trust: untrusted
     baseline_fingerprint: "sha256:REPLACE_WITH_BASELINED_SCHEMA+SCOPE_HASH"
@@ -83,6 +85,7 @@ approved_servers:
     tls: {require_tls: true, verify_ca_bundle: true, mtls: optional}
     http_controls:
       origin_allowlist: ["https://itsm.gov-boundary.internal"]
+      allowed_headers: []                # OAuth is injected by the runtime, not static config
       max_payload_bytes: 1048576
     auth: {mode: oauth}                  # token-exchange, not operator passthrough
     egress: {posture: proxied, destinations: ["itsm.gov-boundary.internal"]}
@@ -90,6 +93,8 @@ approved_servers:
       allow_write: true
       include: [read_ticket, create_ticket]
       write_tools: [create_ticket]       # the single write tool, HITL-gated by the PDP
+      resources: false
+      prompts: false
     schema_validation: reject
     result_trust: untrusted
     baseline_fingerprint: "sha256:REPLACE_WITH_BASELINED_SCHEMA+SCOPE_HASH"

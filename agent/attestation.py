@@ -213,6 +213,18 @@ def _trusted_signers() -> Dict[str, str]:
     return signers if isinstance(signers, dict) else {}
 
 
+def _provisioned_signing_key(value: Any) -> bool:
+    """Reject shipped templates and unresolved environment placeholders."""
+    key = str(value or "").strip()
+    upper = key.upper()
+    return bool(key) and not (
+        key.startswith("${")
+        or "REPLACE" in upper
+        or "PLACEHOLDER" in upper
+        or "EXAMPLE" in upper
+    )
+
+
 def verify_manifest(manifest: Dict[str, Any]) -> ManifestVerdict:
     """LG-MP-06: verify a signed manifest against the trusted-signer register.
 
@@ -226,13 +238,50 @@ def verify_manifest(manifest: Dict[str, Any]) -> ManifestVerdict:
     if not signer or not signature:
         return ManifestVerdict(valid=False, signer=signer, reason="missing signer/signature")
     key = _trusted_signers().get(signer)
-    if not key:
+    if not _provisioned_signing_key(key):
         return ManifestVerdict(valid=False, signer=signer, reason=f"signer '{signer}' not trusted (LG-MP-06)")
     body = {k: v for k, v in manifest.items() if k not in ("signer", "signature")}
     expected = compute_signature(body, key)
     if not hmac.compare_digest(expected, signature):
         return ManifestVerdict(valid=False, signer=signer, reason="signature mismatch — manifest tampered (LG-MP-06)")
     return ManifestVerdict(valid=True, signer=signer, reason="signature verified")
+
+
+def runtime_model_attested(model_id: str) -> ManifestVerdict:
+    """Bind an explicit runtime model switch to a signed manifest entry/card."""
+    if not _is_strict():
+        return ManifestVerdict(valid=True, reason="not enforced (low-side)")
+    mid = str(model_id or "").strip()
+    if not mid:
+        return ManifestVerdict(valid=False, reason="blank runtime model — fail-closed")
+    if require_model_card() and not model_cui_eligible(mid):
+        return ManifestVerdict(valid=False, reason=f"runtime model '{mid}' has no CUI-eligible card")
+    configured = str(_security_cfg().get("model_manifest_path") or "").strip()
+    if not configured:
+        return ManifestVerdict(valid=False, reason="runtime model manifest path is not configured")
+    path = Path(configured).expanduser()
+    if not path.is_absolute() and not path.is_file():
+        path = Path(__file__).resolve().parent.parent / path
+    if not path.is_file():
+        return ManifestVerdict(valid=False, reason=f"runtime model manifest '{configured}' is missing")
+    try:
+        import yaml
+        manifest = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        return ManifestVerdict(valid=False, reason=f"runtime model manifest unreadable ({exc})")
+    verdict = verify_manifest(manifest)
+    if not verdict.valid:
+        return verdict
+    signed_models = {
+        str(value).strip()
+        for value in ((manifest.get("models") or {}).values())
+        if str(value or "").strip()
+    }
+    if mid not in signed_models:
+        return ManifestVerdict(valid=False, signer=verdict.signer,
+                               reason=f"runtime model '{mid}' is not in the signed manifest")
+    return ManifestVerdict(valid=True, signer=verdict.signer,
+                           reason="runtime model is signed and carded")
 
 
 def attest_high_impact(tool_name: str, *, manifest: Dict[str, Any], runtime_model: str):
@@ -247,7 +296,7 @@ def attest_high_impact(tool_name: str, *, manifest: Dict[str, Any], runtime_mode
     try:
         verdict = verify_manifest(manifest)
         signed_primary = str(((manifest or {}).get("models") or {}).get("primary") or "").strip()
-        mismatch = signed_primary and str(runtime_model or "").strip() != signed_primary
+        mismatch = not signed_primary or str(runtime_model or "").strip() != signed_primary
         if verdict.valid and not mismatch:
             return None
         reason = verdict.reason if not verdict.valid else (

@@ -87,7 +87,7 @@ def test_non_allowlisted_fallback_blocks(tmp_path, monkeypatch):
 def test_non_allowlisted_moa_slot_blocks(tmp_path, monkeypatch):
     cfg = _cfg(tmp_path, {
         "model": {"provider": "lmstudio", "base_url": "http://127.0.0.1:1234/v1"},
-        "moa": {"presets": {"default": {
+        "moa": {"active_preset": "default", "presets": {"default": {
             "reference_models": [{"provider": "openrouter", "model": "m",
                                    "base_url": "https://openrouter.ai"}],
             "aggregator": {"provider": "lmstudio", "model": "a",
@@ -95,6 +95,27 @@ def test_non_allowlisted_moa_slot_blocks(tmp_path, monkeypatch):
     })
     monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
     with pytest.raises(sas.ProviderAllowlistError, match="moa"):
+        sas.enforce_provider_allowlist_at_startup(config=cfg)
+
+
+def test_dormant_moa_preset_does_not_block_startup(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path, {
+        "model": {"provider": "lmstudio", "base_url": "http://127.0.0.1:1234/v1"},
+        "moa": {"active_preset": "", "presets": {"dormant": {
+            "reference_models": [{"provider": "openrouter", "model": "m",
+                                   "base_url": "https://openrouter.ai"}]}}},
+    })
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
+    assert sas.enforce_provider_allowlist_at_startup(config=cfg) is None
+
+
+def test_legacy_fallback_model_is_validated(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path, {
+        "model": {"provider": "lmstudio", "base_url": "http://127.0.0.1:1234/v1"},
+        "fallback_model": {"provider": "openrouter", "base_url": "https://openrouter.ai"},
+    })
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
+    with pytest.raises(sas.ProviderAllowlistError, match="fallback"):
         sas.enforce_provider_allowlist_at_startup(config=cfg)
 
 

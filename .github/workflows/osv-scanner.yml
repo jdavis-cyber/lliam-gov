@@ -17,8 +17,8 @@ name: OSV-Scanner
 # Uses Google's officially-recommended reusable workflow, pinned by SHA.
 # Findings are kept as workflow artifacts and step-summary output; SARIF upload
 # stays disabled unless repository code scanning is enabled.
-# fail-on-vuln is disabled so the job does not block merges on pre-existing
-# vulnerabilities in pinned deps that we may need to patch deliberately.
+# Phase 3 makes this a blocking CUI-build gate. Any known vulnerability in a
+# pinned dependency blocks until patched or handled through the deviation log.
 
 on:
   workflow_call:
@@ -46,5 +46,5 @@ jobs:
         --lockfile=uv.lock
         --lockfile=package-lock.json
         --lockfile=website/package-lock.json
-      fail-on-vuln: false
+      fail-on-vuln: true
       upload-sarif: false

@@ -4155,6 +4155,7 @@ def _resolve_runtime_with_fallback(
                     fb_kwargs["explicit_base_url"] = entry["base_url"]
                 if entry.get("api_key"):
                     fb_kwargs["explicit_api_key"] = entry["api_key"]
+                fb_kwargs["governance_path"] = "fallback"
                 runtime = resolve_runtime_provider(**fb_kwargs)
                 import logging
 

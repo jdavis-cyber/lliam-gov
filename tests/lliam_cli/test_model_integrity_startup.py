@@ -82,6 +82,46 @@ def test_tampered_manifest_blocks(tmp_path, monkeypatch):
         sas.enforce_model_integrity_at_startup(config=cfg)
 
 
+def test_missing_manifest_blocks(tmp_path, monkeypatch):
+    manifest = tmp_path / "missing-model-manifest.yaml"
+    cfg = _cfg(tmp_path, primary_model="lmstudio/llama-3.1-8b-instruct", manifest=manifest)
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
+    with pytest.raises(sas.ModelIntegrityError, match="missing|manifest"):
+        sas.enforce_model_integrity_at_startup(config=cfg)
+
+
+def test_signed_manifest_must_match_configured_primary(tmp_path, monkeypatch):
+    manifest = _signed_manifest_file(tmp_path, "lmstudio/model-a")
+    cfg = _cfg(tmp_path, primary_model="lmstudio/llama-3.1-8b-instruct", manifest=manifest)
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
+    with pytest.raises(sas.ModelIntegrityError, match="does not match"):
+        sas.enforce_model_integrity_at_startup(config=cfg)
+
+
+def test_signed_manifest_requires_primary_binding(tmp_path, monkeypatch):
+    _cards, manifest = _write(tmp_path)
+    body = {"models": {}}
+    import yaml
+    manifest.write_text(yaml.safe_dump({
+        "signer": "lliam-gov-signer",
+        "signature": att.compute_signature(body, "k-001"),
+        **body,
+    }), encoding="utf-8")
+    cfg = _cfg(tmp_path, primary_model="lmstudio/llama-3.1-8b-instruct", manifest=manifest)
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
+    with pytest.raises(sas.ModelIntegrityError, match="models.primary"):
+        sas.enforce_model_integrity_at_startup(config=cfg)
+
+
+def test_unqualified_scalar_primary_still_binds_to_manifest(tmp_path, monkeypatch):
+    manifest = _signed_manifest_file(tmp_path, "lmstudio/model-a")
+    cfg = _cfg(tmp_path, primary_model="unused", manifest=manifest)
+    cfg["model"] = "model-b"
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
+    with pytest.raises(sas.ModelIntegrityError, match="does not match"):
+        sas.enforce_model_integrity_at_startup(config=cfg)
+
+
 def test_uncarded_primary_model_blocks(tmp_path, monkeypatch):
     manifest = _signed_manifest_file(tmp_path, "lmstudio/uncarded")
     cfg = _cfg(tmp_path, primary_model="lmstudio/uncarded", manifest=manifest)

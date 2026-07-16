@@ -181,7 +181,7 @@ security:
   model_hash_verify: true                # [additive] LG-MP-07: verify artifact hash at load
   model_manifest_path: model_manifest.yaml   # [additive] LG-MP-06 signed manifest of record
   trusted_signers:                       # [additive] LG-MP-06 signer id -> key (KEY provisioned out-of-repo)
-    lliam-gov-signer: "REPLACE-WITH-PROVISIONED-SIGNING-KEY"
+    lliam-gov-signer: "${LLIAM_GOV_SIGNING_KEY}"
 
   # [ACTIVE @ P3.3]  MCP & SKILL SUPPLY-CHAIN VETTING  (LG-SC-03/04/05/07/08/09)
   # Consumed by the NEW tools/mcp_allowlist.py. Deny-by-default for unlisted MCP

@@ -50,11 +50,37 @@ def test_base64_exec_combo_flagged(tmp_path):
     assert any(f["kind"] == "base64_exec" for f in findings)
 
 
+def test_multiline_base64_exec_combo_flagged(tmp_path):
+    gate = _load("supply_chain_gate")
+    payload = "import base64\n" + "ex" + "ec(\n base64.b64decode('cA==')\n)\n"
+    (tmp_path / "mod.py").write_text(payload, encoding="utf-8")
+    assert any(f["kind"] == "base64_exec" for f in gate.scan_tree(tmp_path))
+
+
 def test_install_hook_flagged(tmp_path):
     gate = _load("supply_chain_gate")
     (tmp_path / "sitecustomize.py").write_text("VALUE = 1\n", encoding="utf-8")
     findings = gate.scan_tree(tmp_path)
     assert any(f["kind"] == "install_hook" for f in findings)
+
+
+def test_setup_py_dynamic_execution_flagged(tmp_path):
+    gate = _load("supply_chain_gate")
+    (tmp_path / "setup.py").write_text("eval('1 + 1')\n", encoding="utf-8")
+    assert any(f["kind"] == "install_hook" for f in gate.scan_tree(tmp_path))
+
+
+def test_release_artifacts_are_scanned(tmp_path):
+    gate = _load("supply_chain_gate")
+    release = tmp_path / "release"
+    release.mkdir()
+    (release / "evil.pth").write_text("import evil\n", encoding="utf-8")
+    assert any(f["kind"] == "pth_file" for f in gate.scan_tree(tmp_path))
+
+
+def test_missing_scan_root_fails_closed(tmp_path):
+    gate = _load("supply_chain_gate")
+    assert gate.run_gate(tmp_path / "missing") != 0
 
 
 def test_clean_tree_no_findings(tmp_path):
@@ -110,13 +136,48 @@ def test_osv_gate_passes_on_clean(tmp_path):
     assert rc == 0 and findings == []
 
 
+def test_osv_gate_rejects_invalid_threshold(tmp_path):
+    gate = _load("osv_gate")
+    results = tmp_path / "osv.json"
+    results.write_text('{"results": []}', encoding="utf-8")
+    rc, findings = gate.evaluate(results, fail_on="hihg")
+    assert rc != 0 and "invalid" in findings[0]
+
+
+def test_osv_gate_parses_critical_cvss_vector(tmp_path):
+    gate = _load("osv_gate")
+    results = tmp_path / "osv.json"
+    results.write_text(textwrap.dedent("""
+    {"results": [{"packages": [{"package": {"name": "critical-dep"},
+      "vulnerabilities": [{"id": "GHSA-critical", "severity": [
+        {"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"}
+      ]}]}]}]}
+    """), encoding="utf-8")
+    rc, findings = gate.evaluate(results, fail_on="critical")
+    assert rc != 0 and any("critical" in f.lower() for f in findings)
+
+
+def test_osv_gate_does_not_promote_low_cvss_to_high(tmp_path):
+    gate = _load("osv_gate")
+    results = tmp_path / "osv.json"
+    results.write_text(textwrap.dedent("""
+    {"results": [{"packages": [{"package": {"name": "low-dep"},
+      "vulnerabilities": [{"id": "GHSA-low", "severity": [
+        {"type": "CVSS_V3", "score": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:L/I:N/A:N"}
+      ]}]}]}]}
+    """), encoding="utf-8")
+    rc, _ = gate.evaluate(results, fail_on="high")
+    assert rc == 0
+
+
 # ---------------------------------------------------------------------------
 # 3. LG-SS-05 / IN-02 / IN-03 — SBOM + AI-BOM generation
 # ---------------------------------------------------------------------------
 
 def test_generate_sbom_has_components(tmp_path):
     gen = _load("generate_bom")
-    sbom = gen.build_sbom()
+    repo = Path(__file__).resolve().parents[2]
+    sbom = gen.build_sbom(repo)
     assert sbom.get("bomFormat") == "CycloneDX"
     assert isinstance(sbom.get("components"), list) and len(sbom["components"]) >= 1
 
@@ -131,6 +192,15 @@ def test_generate_ai_bom_indexes_providers_models_mcp(tmp_path):
     assert "lmstudio" in provider_ids and "bedrock" in provider_ids
     model_ids = {m.get("id") for m in ai_bom["models"]}
     assert any("llama" in (mid or "") for mid in model_ids)
+    assert {s.get("name") for s in ai_bom["skills"]} >= {"pdf", "xlsx", "docx"}
+
+
+def test_generate_boms_fail_closed_on_missing_inputs(tmp_path):
+    gen = _load("generate_bom")
+    with pytest.raises(FileNotFoundError):
+        gen.build_sbom(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        gen.build_ai_bom(tmp_path)
 
 
 def test_bom_artifacts_written(tmp_path):

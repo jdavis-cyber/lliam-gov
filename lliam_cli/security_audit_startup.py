@@ -392,8 +392,12 @@ def enforce_model_integrity_at_startup(
     sec = eff.get("security") or {}
     try:
         import agent.attestation as att
-    except Exception:
-        return None
+    except Exception as e:
+        finding = f"model attestation control unavailable — fail-closed ({e})"
+        if _effective_is_strict(eff):
+            raise ModelIntegrityError(finding) from e
+        logger.warning("[model-integrity] (advisory — not strict) %s", finding)
+        return [finding]
 
     blocking: list[str] = []
 
@@ -404,19 +408,51 @@ def enforce_model_integrity_at_startup(
             import yaml
             from pathlib import Path as _P
             mp = _P(manifest_path).expanduser()
-            if mp.is_file():
+            if not mp.is_absolute() and not mp.is_file():
+                mp = _P(__file__).resolve().parent.parent / mp
+            if not mp.is_file():
+                blocking.append(f"model manifest '{manifest_path}' is missing — fail-closed (LG-MP-06)")
+            else:
                 manifest = yaml.safe_load(mp.read_text(encoding="utf-8")) or {}
                 verdict = att.verify_manifest(manifest)
                 if not verdict.valid:
                     blocking.append(f"model manifest: {verdict.reason}")
+                signed_primary = str(((manifest or {}).get("models") or {}).get("primary") or "").strip()
+                if not signed_primary:
+                    blocking.append("model manifest has no signed models.primary — fail-closed (LG-MP-06)")
+                else:
+                    model = eff.get("model") or {}
+                    if isinstance(model, dict):
+                        provider = str(model.get("provider") or "").strip()
+                        model_name = str(model.get("model") or model.get("default") or "").strip()
+                    else:
+                        raw = str(model or "").strip()
+                        if "/" in raw:
+                            provider, model_name = raw.split("/", 1)
+                        else:
+                            provider, model_name = "", raw
+                    configured_primary = model_name if "/" in model_name else (
+                        f"{provider}/{model_name}" if provider and model_name else model_name)
+                    if configured_primary and configured_primary != signed_primary:
+                        blocking.append(
+                            f"configured primary '{configured_primary}' does not match signed manifest "
+                            f"'{signed_primary}' (LG-MP-06)"
+                        )
         except Exception as e:
             blocking.append(f"model manifest could not be verified — fail-closed ({e})")
 
     # (b) LG-MP-05 — the configured primary model must have a card.
     if att.require_model_card():
         model = eff.get("model") or {}
-        provider = str(model.get("provider") or "").strip()
-        model_name = str(model.get("model") or "").strip()
+        if isinstance(model, dict):
+            provider = str(model.get("provider") or "").strip()
+            model_name = str(model.get("model") or model.get("default") or "").strip()
+        else:
+            raw = str(model or "").strip()
+            if "/" in raw:
+                provider, model_name = raw.split("/", 1)
+            else:
+                provider, model_name = "", raw
         model_id = model_name if "/" in model_name else (
             f"{provider}/{model_name}" if provider and model_name else model_name)
         if model_id and not att.model_cui_eligible(model_id):
@@ -461,10 +497,13 @@ def _iter_configured_provider_routes(cfg: dict):
     resolver's own fail-closed concern, not a spillage route).
     """
     def _emit(path, slot):
-        if not isinstance(slot, dict):
-            return None
-        provider = str(slot.get("provider") or "").strip()
-        base_url = str(slot.get("base_url") or "").strip()
+        if isinstance(slot, dict):
+            provider = str(slot.get("provider") or "").strip()
+            base_url = str(slot.get("base_url") or "").strip()
+        else:
+            raw = str(slot or "").strip()
+            provider = raw.partition("/")[0] if raw else ""
+            base_url = ""
         if provider:
             return (path, provider, base_url)
         return None
@@ -477,9 +516,16 @@ def _iter_configured_provider_routes(cfg: dict):
         r = _emit("fallback", fb)
         if r:
             routes.append(r)
+    r = _emit("fallback", cfg.get("fallback_model") or {})
+    if r:
+        routes.append(r)
     moa = cfg.get("moa") or {}
-    for _name, preset in (moa.get("presets") or {}).items():
+    active_preset = str(moa.get("active_preset") or "").strip()
+    active = (moa.get("presets") or {}).get(active_preset) if active_preset else None
+    for _name, preset in ((active_preset, active),):
         if not isinstance(preset, dict):
+            continue
+        if preset.get("enabled") is False:
             continue
         for ref in preset.get("reference_models") or []:
             r = _emit("moa", ref)
@@ -490,6 +536,8 @@ def _iter_configured_provider_routes(cfg: dict):
             routes.append(r)
     aux = cfg.get("auxiliary") or {}
     for _task, slot in aux.items():
+        if isinstance(slot, dict) and str(slot.get("provider") or "").strip().lower() == "auto":
+            continue
         r = _emit("auxiliary", slot)
         if r:
             routes.append(r)
@@ -528,8 +576,12 @@ def enforce_provider_allowlist_at_startup(
 
     try:
         from lliam_cli import provider_allowlist as pa
-    except Exception:
-        return None
+    except Exception as e:
+        finding = f"provider allowlist control unavailable — fail-closed ({e})"
+        if _effective_is_strict(eff):
+            raise ProviderAllowlistError(finding) from e
+        logger.warning("[provider-allowlist] (advisory — not strict) %s", finding)
+        return [finding]
 
     if not pa.enforcement_enabled():
         _PROVIDER_ALLOWLIST_CHECKED = True

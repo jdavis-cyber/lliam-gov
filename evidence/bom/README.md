@@ -3,8 +3,8 @@
 - **ai-bom.yaml** — machine-readable AI inventory (providers / models / MCP
   servers / skills), reconciled from the P3 policy artifacts. Stable,
   repo-derived; committed as evidence of record.
-- **sbom.json** — CycloneDX SBOM of the installed Python distributions.
-  Environment-specific and regenerated **per build/release** (not committed
+- **sbom.json** — CycloneDX SBOM of the versions pinned by `uv.lock`.
+  Build-specific and regenerated **per build/release** (not committed
   here). Produce it with:
 
       python ci/governance-ci-gates/generate_bom.py evidence/bom

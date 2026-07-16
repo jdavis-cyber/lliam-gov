@@ -178,6 +178,14 @@ def check_mcp_server(name: str, live_entry: Dict[str, Any]) -> MCPDecision:
         return MCPDecision(allowed=False, server=name,
                            reason=f"server command matches a shell-egress/persistence IOC shape (LG-SC-04)")
 
+    if live_entry.get("command") and live_entry.get("url"):
+        return MCPDecision(allowed=False, server=name,
+                           reason=f"server '{name}' cannot declare both command and URL transports (LG-SC-07/08)")
+    env = live_entry.get("env") or {}
+    if isinstance(env, dict) and any(str(k).upper() == "PATH" for k in env):
+        return MCPDecision(allowed=False, server=name,
+                           reason=f"server '{name}' cannot override executable search PATH (LG-SC-07)")
+
     # LG-SC-07 — deny-by-default for unlisted servers.
     entry = _approved_entry(policy, name)
     if entry is None:
@@ -197,6 +205,12 @@ def check_mcp_server(name: str, live_entry: Dict[str, Any]) -> MCPDecision:
     # LG-SC-05 — default-deny write: a write tool must be within the approved
     # server's allow_write + write_tools scope.
     scope = entry.get("scope") or {}
+    approved_include = {str(t).strip() for t in (scope.get("include") or [])}
+    unapproved_tools = sorted(set(include) - approved_include)
+    if unapproved_tools:
+        return MCPDecision(allowed=False, server=name,
+                           reason=(f"server '{name}' includes tools outside approved scope: "
+                                   f"{unapproved_tools} (LG-SC-05)"))
     allow_write = bool(scope.get("allow_write"))
     approved_write_tools = {str(t).strip() for t in (scope.get("write_tools") or [])}
     for t in include:
@@ -204,16 +218,70 @@ def check_mcp_server(name: str, live_entry: Dict[str, Any]) -> MCPDecision:
             if not allow_write or t not in approved_write_tools:
                 return MCPDecision(allowed=False, server=name,
                                    reason=(f"server '{name}' includes write tool '{t}' outside its approved "
-                                           "write scope (default-deny-write, LG-SC-05)"))
+                                       "write scope (default-deny-write, LG-SC-05)"))
+
+    for capability in ("resources", "prompts"):
+        if bool(tools.get(capability)) and not bool(scope.get(capability)):
+            return MCPDecision(allowed=False, server=name,
+                               reason=(f"server '{name}' enables {capability} outside its approved "
+                                       "capability scope (LG-SC-05)"))
 
     # LG-SC-08 — TLS required on HTTP transports.
-    transport = str(live_entry.get("transport") or entry.get("transport") or "").strip().lower()
+    live_url = str(live_entry.get("url") or "").strip()
+    live_transport = str(live_entry.get("transport") or "").strip().lower()
+    if not live_transport:
+        live_transport = "streamable_http" if live_url else "stdio"
+    transport = live_transport
     if transport in ("streamable_http", "sse", "http"):
-        url = str(live_entry.get("url") or "").strip().lower()
-        tls = live_entry.get("tls") or {}
-        if not tls.get("require_tls") or not url.startswith("https://"):
+        url = live_url.lower()
+        if not url.startswith("https://") or live_entry.get("ssl_verify") is False:
             return MCPDecision(allowed=False, server=name,
-                               reason=f"HTTP MCP transport for '{name}' must require TLS (https) (LG-SC-08)")
+                               reason=(f"HTTP MCP transport for '{name}' must use TLS/https with certificate "
+                                       "verification enabled (LG-SC-08)"))
+
+    # Bind the approved name to the concrete runtime identity.  A matching
+    # label alone is not provenance: command/args or URL/transport drift is a
+    # same-name substitution and must fail closed.
+    approved_transport = str(entry.get("transport") or "").strip().lower()
+    if approved_transport and live_transport != approved_transport:
+        return MCPDecision(allowed=False, server=name,
+                           reason=f"server '{name}' transport drifted from approved identity (LG-SC-07)")
+    if live_transport == "stdio":
+        if str(live_entry.get("command") or "").strip() != str(entry.get("command") or "").strip():
+            return MCPDecision(allowed=False, server=name,
+                               reason=f"server '{name}' command does not match approved identity (LG-SC-07)")
+        if list(live_entry.get("args") or []) != list(entry.get("args") or []):
+            return MCPDecision(allowed=False, server=name,
+                               reason=f"server '{name}' arguments do not match approved identity (LG-SC-07)")
+    elif live_url != str(entry.get("url") or "").strip():
+        return MCPDecision(allowed=False, server=name,
+                           reason=f"server '{name}' URL does not match approved identity (LG-SC-07)")
+
+    approved_auth = entry.get("auth") or {}
+    live_auth = live_entry.get("auth") or {}
+    approved_auth_mode = str(
+        approved_auth.get("mode") if isinstance(approved_auth, dict) else approved_auth
+    ).strip().lower()
+    live_auth_mode = str(
+        live_auth.get("mode") if isinstance(live_auth, dict) else live_auth
+    ).strip().lower() or "none"
+    if approved_auth_mode and live_auth_mode != approved_auth_mode:
+        return MCPDecision(allowed=False, server=name,
+                           reason=f"server '{name}' auth mode does not match approved identity (LG-SC-07)")
+
+    live_headers = live_entry.get("headers") or {}
+    allowed_headers = {
+        str(h).strip().lower()
+        for h in ((entry.get("http_controls") or {}).get("allowed_headers") or [])
+    }
+    if isinstance(live_headers, dict):
+        extra_headers = sorted(
+            str(h) for h in live_headers if str(h).strip().lower() not in allowed_headers
+        )
+        if extra_headers:
+            return MCPDecision(allowed=False, server=name,
+                               reason=(f"server '{name}' declares unapproved HTTP headers: "
+                                       f"{extra_headers} (LG-SC-07)"))
 
     return MCPDecision(allowed=True, server=name, reason=f"server '{name}' approved and within scope")
 

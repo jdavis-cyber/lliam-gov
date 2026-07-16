@@ -1382,7 +1382,7 @@ def _resolve_explicit_runtime(
     return None
 
 
-def resolve_runtime_provider(
+def _resolve_runtime_provider_unchecked(
     *,
     requested: Optional[str] = None,
     explicit_api_key: Optional[str] = None,
@@ -1851,6 +1851,75 @@ def resolve_runtime_provider(
     )
     runtime["requested_provider"] = requested_provider
     return runtime
+
+
+def resolve_runtime_provider(
+    *,
+    requested: Optional[str] = None,
+    explicit_api_key: Optional[str] = None,
+    explicit_base_url: Optional[str] = None,
+    target_model: Optional[str] = None,
+    governance_path: str = "primary",
+    high_sensitivity: bool = False,
+) -> Dict[str, Any]:
+    """Resolve credentials and enforce the effective provider endpoint policy.
+
+    The allowlist check intentionally happens after resolution so symbolic
+    providers (``auto``), environment-supplied endpoints, credential pools, and
+    mid-session model switches are checked against the endpoint that will
+    actually receive the request.  Enforcement remains a complete no-op on
+    low-side profiles or when the Phase 3 control is disabled.
+    """
+    runtime = _resolve_runtime_provider_unchecked(
+        requested=requested,
+        explicit_api_key=explicit_api_key,
+        explicit_base_url=explicit_base_url,
+        target_model=target_model,
+    )
+    if str(runtime.get("provider") or "").strip().lower() == "moa":
+        return runtime
+
+    from lliam_cli import provider_allowlist as _provider_allowlist
+
+    requested_provider = str(runtime.get("requested_provider") or requested or "").strip().lower()
+    resolved_provider = str(runtime.get("provider") or "").strip().lower()
+    policy_provider = (
+        requested_provider
+        if requested_provider not in {"", "auto", "custom"}
+        else resolved_provider
+    )
+    decision = _provider_allowlist.validate_provider(
+        policy_provider,
+        str(runtime.get("base_url") or ""),
+        path=governance_path,
+        cui=True,
+        high_sensitivity=high_sensitivity,
+    )
+    if decision.disposition != "allow":
+        raise AuthError(
+            f"Provider route blocked by governance: {decision.reason}",
+            code="provider_not_allowlisted",
+        )
+    security_cfg = (load_config().get("security") or {})
+    if target_model and (
+        security_cfg.get("model_manifest_path") or security_cfg.get("require_model_card")
+    ):
+        from agent.attestation import runtime_model_attested
+        model_id = str(target_model).strip()
+        if "/" not in model_id and policy_provider:
+            model_id = f"{policy_provider}/{model_id}"
+        attestation = runtime_model_attested(model_id)
+        if not attestation.valid:
+            raise AuthError(
+                f"Runtime model blocked by governance: {attestation.reason}",
+                code="model_not_attested",
+            )
+    return runtime
+
+
+def is_provider_governance_error(error: Exception) -> bool:
+    """True when a runtime resolution was denied by the provider policy."""
+    return isinstance(error, AuthError) and error.code == "provider_not_allowlisted"
 
 
 def format_runtime_provider_error(error: Exception) -> str:

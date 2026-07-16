@@ -32,14 +32,20 @@ _POLICY = textwrap.dedent(
           include: ["read_file", "list_directory", "search_files"]
           exclude: ["write_file", "edit_file"]
           write_tools: []
+          resources: false
+          prompts: false
       - name: gov-ticketing
         transport: streamable_http
         url: "https://itsm.gov-boundary.internal/mcp"
         tls: {require_tls: true, verify_ca_bundle: true}
+        auth: {mode: oauth}
+        http_controls: {allowed_headers: []}
         scope:
           allow_write: true
           include: ["read_ticket", "create_ticket"]
           write_tools: ["create_ticket"]
+          resources: false
+          prompts: false
     """
 )
 
@@ -67,6 +73,7 @@ def strict_mcp(tmp_path, monkeypatch):
 def test_allowlisted_stdio_server_allowed(strict_mcp):
     d = strict_mcp.check_mcp_server("gov-filesystem", {
         "transport": "stdio", "command": "uvx",
+        "args": ["mcp-server-filesystem", "--root", "/srv/cui/workspace", "--read-only"],
         "tools": {"include": ["read_file"], "exclude": ["write_file"]}})
     assert d.allowed is True
 
@@ -87,6 +94,7 @@ def test_write_broad_server_rejected(strict_mcp):
     # gov-filesystem is allow_write:false, but the live entry declares a write tool.
     d = strict_mcp.check_mcp_server("gov-filesystem", {
         "transport": "stdio", "command": "uvx",
+        "args": ["mcp-server-filesystem", "--root", "/srv/cui/workspace", "--read-only"],
         "tools": {"include": ["read_file", "write_file"], "exclude": []}})
     assert d.allowed is False
     assert "write" in d.reason.lower()
@@ -95,6 +103,7 @@ def test_write_broad_server_rejected(strict_mcp):
 def test_allowlisted_write_tool_within_scope_allowed(strict_mcp):
     d = strict_mcp.check_mcp_server("gov-ticketing", {
         "transport": "streamable_http", "url": "https://itsm.gov-boundary.internal/mcp",
+        "auth": {"mode": "oauth"},
         "tls": {"require_tls": True},
         "tools": {"include": ["read_ticket", "create_ticket"]}})
     assert d.allowed is True
@@ -102,7 +111,9 @@ def test_allowlisted_write_tool_within_scope_allowed(strict_mcp):
 
 def test_missing_include_rejected_when_required(strict_mcp):
     d = strict_mcp.check_mcp_server("gov-filesystem", {
-        "transport": "stdio", "command": "uvx", "tools": {}})
+        "transport": "stdio", "command": "uvx",
+        "args": ["mcp-server-filesystem", "--root", "/srv/cui/workspace", "--read-only"],
+        "tools": {}})
     assert d.allowed is False
     assert "include" in d.reason.lower()
 
@@ -135,6 +146,71 @@ def test_http_server_without_tls_rejected(strict_mcp):
         "tools": {"include": ["read_ticket"]}})
     assert d.allowed is False
     assert "tls" in d.reason.lower() or "plaintext" in d.reason.lower()
+
+
+def test_same_name_stdio_command_or_args_substitution_rejected(strict_mcp):
+    d = strict_mcp.check_mcp_server("gov-filesystem", {
+        "transport": "stdio", "command": "python",
+        "args": ["-c", "print('substituted')"],
+        "tools": {"include": ["read_file"]}})
+    assert d.allowed is False
+    assert "identity" in d.reason.lower()
+
+
+def test_http_certificate_verification_cannot_be_disabled(strict_mcp):
+    d = strict_mcp.check_mcp_server("gov-ticketing", {
+        "transport": "streamable_http", "url": "https://itsm.gov-boundary.internal/mcp",
+        "auth": {"mode": "oauth"},
+        "ssl_verify": False,
+        "tools": {"include": ["read_ticket"]}})
+    assert d.allowed is False
+    assert "certificate" in d.reason.lower() or "tls" in d.reason.lower()
+
+
+def test_read_tool_outside_approved_scope_rejected(strict_mcp):
+    d = strict_mcp.check_mcp_server("gov-filesystem", {
+        "transport": "stdio", "command": "uvx",
+        "args": ["mcp-server-filesystem", "--root", "/srv/cui/workspace", "--read-only"],
+        "tools": {"include": ["send_email"]}})
+    assert d.allowed is False
+    assert "scope" in d.reason.lower()
+
+
+def test_declared_stdio_with_url_is_rejected(strict_mcp):
+    d = strict_mcp.check_mcp_server("gov-filesystem", {
+        "transport": "stdio", "command": "uvx",
+        "args": ["mcp-server-filesystem", "--root", "/srv/cui/workspace", "--read-only"],
+        "url": "http://outside.example/mcp",
+        "tools": {"include": ["read_file"]}})
+    assert d.allowed is False
+
+
+def test_stdio_path_override_is_rejected(strict_mcp):
+    d = strict_mcp.check_mcp_server("gov-filesystem", {
+        "transport": "stdio", "command": "uvx",
+        "args": ["mcp-server-filesystem", "--root", "/srv/cui/workspace", "--read-only"],
+        "env": {"PATH": "/attacker/bin"},
+        "tools": {"include": ["read_file"]}})
+    assert d.allowed is False
+    assert "path" in d.reason.lower()
+
+
+def test_resources_and_prompts_require_approved_scope(strict_mcp):
+    d = strict_mcp.check_mcp_server("gov-filesystem", {
+        "transport": "stdio", "command": "uvx",
+        "args": ["mcp-server-filesystem", "--root", "/srv/cui/workspace", "--read-only"],
+        "tools": {"include": ["read_file"], "resources": True}})
+    assert d.allowed is False
+    assert "resources" in d.reason.lower()
+
+
+def test_http_auth_and_headers_are_bound(strict_mcp):
+    d = strict_mcp.check_mcp_server("gov-ticketing", {
+        "transport": "streamable_http", "url": "https://itsm.gov-boundary.internal/mcp",
+        "auth": {"mode": "none"}, "headers": {"Authorization": "Bearer rogue"},
+        "tools": {"include": ["read_ticket"]}})
+    assert d.allowed is False
+    assert "auth" in d.reason.lower() or "header" in d.reason.lower()
 
 
 # ---------------------------------------------------------------------------

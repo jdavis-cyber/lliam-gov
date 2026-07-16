@@ -36,6 +36,34 @@ mcp_servers:
 - name: gov-ticketing
   transport: streamable_http
   sdl_record: SDL-MCP-0002
+skills:
+- name: pdf
+  source: builtin
+  ast_audit: pass
+  provenance: foreground
+  attestation: builtin
+  signed_hash: sha256:PLACEHOLDER-recompute-at-build
+- name: xlsx
+  source: builtin
+  ast_audit: pass
+  provenance: foreground
+  attestation: builtin
+  signed_hash: sha256:PLACEHOLDER-recompute-at-build
+- name: docx
+  source: builtin
+  ast_audit: pass
+  provenance: foreground
+  attestation: builtin
+  signed_hash: sha256:PLACEHOLDER-recompute-at-build
+attestations:
+  manifest_signature: REPLACE-WITH-PROVISIONED-SIGNATURE
+  model_primary: lmstudio/llama-3.1-8b-instruct
+  model_fallback: bedrock/anthropic.claude-3-5-sonnet
+relationships:
+- model: lmstudio/llama-3.1-8b-instruct
+  provider: lmstudio
+- model: bedrock/anthropic.claude-3-5-sonnet
+  provider: bedrock
 policies:
   provider_allowlist: policy/provider-allowlist.yaml
   model_cards: docs/governance/model-cards/model-cards.yaml

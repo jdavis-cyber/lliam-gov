@@ -145,6 +145,18 @@ def test_untrusted_signer_fails(strict_att):
     assert strict_att.verify_manifest(manifest).valid is False
 
 
+@pytest.mark.parametrize("key", [
+    "REPLACE-WITH-PROVISIONED-SIGNING-KEY",
+    "${LLIAM_GOV_SIGNING_KEY}",
+    "EXAMPLE-KEY",
+])
+def test_placeholder_signing_keys_are_never_trusted(strict_att, monkeypatch, key):
+    monkeypatch.setattr(strict_att, "_trusted_signers", lambda: {"lliam-gov-signer": key})
+    body = {"models": {"primary": "lmstudio/llama-3.1-8b-instruct"}}
+    manifest = _signed_manifest(strict_att, body, key=key)
+    assert strict_att.verify_manifest(manifest).valid is False
+
+
 def test_high_impact_blocked_on_attestation_mismatch(strict_att):
     body = {"models": {"primary": "lmstudio/llama-3.1-8b-instruct@v1"}}
     good = _signed_manifest(strict_att, body)
