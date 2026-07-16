@@ -1,0 +1,44 @@
+ai_bom_version: lg-aibom/1
+application: lliam-gov
+manifest_signer: lliam-gov-signer
+providers:
+- id: lmstudio
+  class: local
+  residency: local
+  cui_eligible: true
+- id: ollama
+  class: local
+  residency: local
+  cui_eligible: true
+- id: vllm
+  class: local
+  residency: local
+  cui_eligible: true
+- id: bedrock
+  class: gov-cloud
+  residency: us
+  cui_eligible: true
+models:
+- id: lmstudio/llama-3.1-8b-instruct
+  provider: lmstudio
+  serialization: safetensors
+  cui_eligible: true
+  card: docs/governance/model-cards/lmstudio-llama-3.1-8b-instruct.md
+- id: bedrock/anthropic.claude-3-5-sonnet
+  provider: bedrock
+  serialization: n/a (managed provider endpoint)
+  cui_eligible: true
+  card: docs/governance/model-cards/bedrock-claude-3-5-sonnet.md
+mcp_servers:
+- name: gov-filesystem
+  transport: stdio
+  sdl_record: SDL-MCP-0001
+- name: gov-ticketing
+  transport: streamable_http
+  sdl_record: SDL-MCP-0002
+policies:
+  provider_allowlist: policy/provider-allowlist.yaml
+  model_cards: docs/governance/model-cards/model-cards.yaml
+  mcp_allowlist: policy/mcp-allowlist.yaml
+  skills_allowlist: policy/skills-allowlist.yaml
+  vetting_register: docs/governance/supplier-vetting-register.md
