@@ -108,16 +108,22 @@ security:
     - name: docx
       source: builtin
 
-  # [ACTIVE @ P0.4]  LEAST-PRIVILEGE TOOL ENABLEMENT  (LG-AZ-03/11, LG-AZ-02)
+  # [ACTIVE @ P0.4; PDP wired @ P2.1]  LEAST-PRIVILEGE TOOL ENABLEMENT + PER-CALL
+  # PDP  (LG-AZ-01/02/03/06/07/10/11/12, LG-RM-08)
   # Mirror of policy/tool-risk-policy.yaml. computer_use + browser are policy-
   # disabled in the CUI baseline (also enforced via agent.disabled_toolsets below
   # which removes them from the resolved toolset). tool_denylist is read by the
-  # NEW tools/tool_policy.py gate. The full per-call PDP lands in Phase 2.
+  # tools/tool_policy.py enablement gate. As of P2.1 the same module's per-call
+  # PDP (evaluate_call/pdp_gate) enforces the four-tier ladder at the dispatch
+  # chokepoint (tool_executor before_call seams + model_tools direct funnel).
   tool_risk_policy:
-    enabled: true                  # [additive] policy of record active (PDP wiring = Phase 2)
-    policy_path: policy/tool-risk-policy.yaml   # [additive] reviewable tier policy
-    default_disposition: deny      # [additive] deny-by-default for the Phase-2 PDP
+    enabled: true                  # [additive] per-call PDP ACTIVE under strict posture (P2.1)
+    policy_path: policy/tool-risk-policy.yaml   # [additive] reviewable tier policy of record
+    default_disposition: deny      # [additive] unmatched action class -> deny (fail-closed)
     fail_closed: true              # [additive] on policy parse/eval error -> deny
+  max_mutating_calls:              # [additive @ P2.1] LG-AZ-10 mirror of policy budgets (PDP reads the policy file; this key is the one-artifact audit mirror)
+    per_turn: 25
+    per_session: 200
   tool_allowlist: []               # [additive] LG-AZ-02 (empty = no positive tool allowlist yet)
   tool_denylist:                   # [additive] LG-AZ-11/AZ-02: refuse these capabilities for CUI
     - computer_use
@@ -243,6 +249,20 @@ agent:
   disabled_toolsets:          # config.py:1091  DEFAULT [] -> disable high-risk toolsets for CUI
     - computer_use            #   LG-AZ-11: desktop/OS automation OFF in CUI baseline
     - browser                 #   LG-AZ-03: interactive web automation OFF in CUI baseline
+
+
+# [ACTIVE @ P2.1]  RUNAWAY-LOOP HARD STOPS  (LG-AZ-12)
+# Shipped default is hard_stop_enabled: false (soft warnings only) so
+# interactive sessions keep flowing; the gov overlay flips hard stops ON so a
+# genuine runaway/non-progress loop halts via ToolGuardrailDecision.should_halt.
+# Complements the PDP's mutating-call budgets (security.max_mutating_calls).
+tool_loop_guardrails:
+  warnings_enabled: true      # config.py:1329  DEFAULT True   (confirm-pinned)
+  hard_stop_enabled: true     # config.py:1330  DEFAULT False -> OVERRIDE true (LG-AZ-12)
+  hard_stop_after:
+    exact_failure: 5
+    same_tool_failure: 8
+    idempotent_no_progress: 12   # tuned up from shipped 5 — long legitimate tasks must not trip it
 
 
 # =============================================================================

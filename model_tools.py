@@ -1208,6 +1208,32 @@ def handle_function_call(
         # high-risk call whose audit record cannot be written is refused
         # (fail-closed) before dispatch.
         if not skip_governance_predispatch:
+            # LG-AZ-01/RM-08 (additive): tool-risk PDP for DIRECT callers of
+            # this public dispatcher (nested code execution, the API server).
+            # The executor path already ran pdp_gate and passes
+            # skip_governance_predispatch=True — evaluated exactly once so
+            # mutating-budget counters are never double-consumed.
+            try:
+                from tools.tool_policy import pdp_gate
+                _pdp_decision = pdp_gate(function_name, function_args)
+            except Exception:
+                _pdp_decision = None
+            if _pdp_decision is not None:
+                _pdp_msg = (
+                    getattr(_pdp_decision, "message", None)
+                    or "Blocked by tool-risk policy"
+                )
+                _pdp_result = json.dumps({"error": _pdp_msg}, ensure_ascii=False)
+                _emit_post_tool_call_hook(
+                    function_name=function_name, function_args=function_args,
+                    result=_pdp_result, task_id=task_id, session_id=session_id,
+                    tool_call_id=tool_call_id, turn_id=turn_id,
+                    api_request_id=api_request_id,
+                    status="blocked", error_type="guardrail_block",
+                    error_message=_pdp_msg,
+                    middleware_trace=list(_tool_middleware_trace),
+                )
+                return _pdp_result
             try:
                 from agent.governance_audit_hooks import predispatch_gate
                 _gov_decision = predispatch_gate(
