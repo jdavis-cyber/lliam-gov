@@ -518,6 +518,16 @@ def grant_capability(
         "expires": time.time() + max(0, int(ttl_seconds)),
         "approver": str(approver),
     }
+    try:
+        from tools.hitl_oversight import record_decision
+        record_decision(
+            decision="approve", gate=str(action_class).strip(),
+            target=str(action_class).strip(),
+            description=f"JIT capability grant, ttl={ttl_seconds}s (LG-AZ-07)",
+            approver=str(approver), origin="jit_grant",
+        )
+    except Exception:
+        logger.warning("JIT grant ledger record failed (non-blocking)", exc_info=True)
 
 
 def _active_grant(action_class: str) -> Optional[Dict[str, Any]]:
