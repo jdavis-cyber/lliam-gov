@@ -708,30 +708,30 @@ controls:
   domain: MO
   title: Conduct scheduled adversarial/red-team evaluation (prompt injection, jailbreak, tool abuse) with
     results as control evidence
-  status: planned
+  status: implemented
   realized_in: P5.2
-  poam_ref: POAM-P5-EVAL
+  evidence: docs/governance/verification/P5.2-report.md
 - id: LG-MO-08
   domain: MO
   title: Verify on a cadence that controls remain effective (encryption-at-rest, audit integrity, godmode
     disabled, allowlists enforced)
-  status: planned
+  status: implemented
   realized_in: P5.2
-  poam_ref: POAM-P5-EVAL
+  evidence: docs/governance/verification/P5.2-report.md
 - id: LG-MO-09
   domain: MO
   title: Define and review governance metrics (block rates, approval latency, provider-route compliance,
     override rate) at management review
-  status: planned
+  status: implemented
   realized_in: P5.2
-  poam_ref: POAM-P5-EVAL
+  evidence: docs/governance/verification/P5.2-report.md
 - id: LG-MO-10
   domain: MO
   title: Conduct ongoing post-deployment monitoring of high-impact use for performance degradation and
     adverse impacts (M-25-21 4(b)(iii))
-  status: planned
+  status: implemented
   realized_in: P5.2
-  poam_ref: POAM-P5-EVAL
+  evidence: docs/governance/verification/P5.2-report.md
 - id: LG-MP-01
   domain: MP
   title: Enforce an approved-provider allowlist restricting CUI routing to vetted US/FedRAMP/local endpoints
@@ -882,15 +882,15 @@ controls:
   domain: PF
   title: Monitor deployed outputs for bias, toxic content, and quality regressions; alert and provide
     recourse/appeal
-  status: planned
+  status: implemented
   realized_in: P5.2
-  poam_ref: POAM-P5-EVAL
+  evidence: docs/governance/verification/P5.2-report.md
 - id: LG-PF-09
   domain: PF
   title: Detect PII/CUI in generated output and block egress to unapproved sinks (MP-4.1-009)
-  status: planned
+  status: implemented
   realized_in: P5.2
-  poam_ref: POAM-P5-EVAL
+  evidence: docs/governance/verification/P5.2-report.md
 - id: LG-PI-01
   domain: PI
   title: Treat all untrusted/external content (web, files, tool results, MCP, RAG) as hostile input by

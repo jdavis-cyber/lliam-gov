@@ -92,6 +92,13 @@ layers:
                   tests/governance/test_p3_capability_corpus.py]
     - control: LG-SD-06
       artifacts: [ci/governance-ci-gates/go_no_go_gate.py]
+    - control: [LG-MO-07, LG-MO-08, LG-MO-09]
+      artifacts: [ci/governance-ci-gates/scheduled_redteam.py,
+                  ci/governance-ci-gates/control_effectiveness.py,
+                  ci/governance-ci-gates/governance_metrics.py,
+                  ci/governance-ci-gates/scheduled_assurance_cron.sh]
+    - control: [LG-PF-08, LG-PF-09]
+      artifacts: [agent/output_monitor.py]
     - control: LG-PF-07
       artifacts: [ci/governance-ci-gates/fairness_gate.py,
                   docs/governance/fairness-evaluations.yaml]

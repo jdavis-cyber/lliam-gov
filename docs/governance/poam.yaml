@@ -75,7 +75,8 @@ items:
     interim_compensating: >-
       One-time pre-deployment gates (prohibited-skills, drift, audit-chain,
       SoD) run at every local CI pass since P0.7.
-    status: open
+    status: closed
+    closed: 2026-07-16 (P5.2 — scheduled red-team + control-effectiveness + governance-metrics + output monitoring delivered)
 
   - id: POAM-P5-IR
     title: Incident response runbook execution, tested kill-switch, DIBNet 72-hr procedure

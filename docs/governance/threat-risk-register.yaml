@@ -174,11 +174,11 @@ risks:
     status: in_treatment
     controls: [LG-DP-01, LG-DP-02, LG-DP-04, LG-DP-07, LG-DP-09, LG-DP-11,
                LG-PF-03, LG-PF-09, LG-MC-05, LG-MC-06]
-    poam_ref: POAM-P5-EVAL
     notes: >-
       DP-domain controls enforced since P2.4; PF-domain privacy policy +
-      redaction bindings delivered P4.4; generated-output PII/CUI detection
-      (LG-PF-09) lands P5.2. FIPS-validated crypto carried as POAM-FIPS.
+      redaction bindings delivered P4.4; generated-output PII/CUI egress
+      detection (LG-PF-09) delivered P5.2. FIPS-validated crypto carried as
+      POAM-FIPS.
 
   - id: R-12
     threat: Software & model supply-chain integrity
@@ -248,11 +248,10 @@ risks:
     status: in_treatment
     controls: [LG-QT-05, LG-QT-06, LG-QT-07, LG-HO-08, LG-HO-09, LG-PI-08,
                LG-MO-10]
-    poam_ref: POAM-P5-EVAL
     notes: >-
       JIT rationale + inbound screening enforced; grounding/provenance
-      controls delivered P4.4 (LG-QT-05/06/07); post-deployment output
-      monitoring (LG-MO-10) lands P5.2.
+      controls delivered P4.4 (LG-QT-05/06/07); post-deployment output +
+      bias/toxicity monitoring (LG-MO-10/LG-PF-08) delivered P5.2.
 
   - id: R-17
     threat: Cross-cutting governance & lifecycle drift
