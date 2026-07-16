@@ -82,6 +82,10 @@ layers:
       artifacts: [docs/governance/deviation-register.yaml]
     - control: LG-SD-07
       artifacts: [docs/governance/change-record.md]
+    - control: [LG-IR-01, LG-IR-05, LG-IR-08, LG-RM-09]
+      artifacts: [agent/killswitch.py,
+                  docs/governance/incident-response-plan.md,
+                  docs/governance/halt-rollback-runbook.md]
 
   assessment:
     - control: LG-SD-02

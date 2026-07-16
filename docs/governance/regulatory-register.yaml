@@ -41,13 +41,14 @@ obligations:
     obligation: >-
       Rapidly report cyber incidents to DoD via DIBNet within 72 hours;
       preserve images/artifacts and support damage assessment.
-    controls: [LG-AU-01, LG-AU-08, LG-IR-02]
-    status: partial
-    poam_ref: "POAM-P5-IR — IR runbook + DIBNet 72-hr reporting procedure lands at P5.3 (AI-501); tamper-evident evidence trail already enforced"
+    controls: [LG-AU-01, LG-AU-08, LG-IR-02, LG-IR-06]
+    status: implemented
     config_points:
       - {kind: config_key, key: audit.ledger_enabled}
       - {kind: config_key, key: audit.fail_closed}
       - {kind: module, path: agent/governance_audit.py}
+      - {kind: config_key, key: incident_response.reporting.dfars_dibnet_hours}
+      - {kind: file, path: docs/governance/incident-response-plan.md}
 
   # --------------------------------------------------- NIST SP 800-171 r3 ---
   - id: REG-171R3-AC
@@ -109,11 +110,12 @@ obligations:
       Establish operational incident-handling capability with containment
       and recovery; test the response capability.
     controls: [LG-IR-01, LG-RM-09]
-    status: partial
-    poam_ref: "POAM-P5-IR — kill-switch/containment/recovery runbook + tests land at P5.3 (AI-501); interrupt primitive and audit trail already present"
+    status: implemented
     config_points:
       - {kind: module, path: tools/interrupt.py}
-      - {kind: config_key, key: audit.ledger_enabled}
+      - {kind: module, path: agent/killswitch.py}
+      - {kind: config_key, key: incident_response.killswitch.enabled}
+      - {kind: file, path: docs/governance/incident-response-plan.md}
 
   - id: REG-171R3-SC
     source: NIST SP 800-171 r3 §03.13 (System & Communications Protection)
@@ -193,11 +195,12 @@ obligations:
       Maintain a documented, tested capability to promptly disengage or
       deactivate the AI system (kill-switch / fail-safe).
     controls: [LG-RM-09, LG-AZ-12]
-    status: partial
-    poam_ref: "POAM-P5-IR — documented+tested kill-switch with clean restore lands at P5.3 (AI-501); runaway-loop hard stop already enforced"
+    status: implemented
     config_points:
       - {kind: config_key, key: tool_loop_guardrails.hard_stop_enabled}
       - {kind: module, path: tools/interrupt.py}
+      - {kind: module, path: agent/killswitch.py}
+      - {kind: config_key, key: incident_response.killswitch.require_verified_chain_to_recover}
 
   # ---------------------------------------------------------- Contractual ---
   - id: REG-MIT-UPSTREAM

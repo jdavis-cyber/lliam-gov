@@ -89,7 +89,8 @@ items:
       Interrupt primitive exists (tools/interrupt.py); halt/rollback runbook
       documented (docs/governance/halt-rollback-runbook.md, P4.2); tamper-
       evident evidence trail for any incident already enforced (LG-AU-01/08).
-    status: open
+    status: closed
+    closed: 2026-07-16 (P5.3 — agent/killswitch.py wired at tool+inference seams; IR plan; fail-closed recovery; scheduled kill-switch drill)
 
   - id: POAM-P5-CATO
     title: cATO re-authorization loop, autonomy tiers, reciprocity export

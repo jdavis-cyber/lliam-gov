@@ -84,10 +84,13 @@ families:
   - family: "03.06"
     title: Incident Response
     status: implemented
-    controls: [LG-IR-01, LG-RM-09, LG-AZ-12, LG-GV-04]
+    controls: [LG-IR-01, LG-IR-02, LG-IR-03, LG-IR-08, LG-RM-09, LG-AZ-12, LG-GV-04]
     config_points:
       - {kind: config_key, key: tool_loop_guardrails.hard_stop_enabled}
+      - {kind: config_key, key: incident_response.killswitch.enabled}
       - {kind: module, path: tools/interrupt.py}
+      - {kind: module, path: agent/killswitch.py}
+      - {kind: file, path: docs/governance/incident-response-plan.md}
       - {kind: file, path: docs/governance/halt-rollback-runbook.md}
 
   - family: "03.07"

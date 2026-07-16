@@ -560,62 +560,62 @@ controls:
   domain: IR
   title: Provide a kill-switch/interrupt that immediately suspends all tool execution and inference egress
     (interrupt.py + wrapper hook)
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-02
   domain: IR
   title: 'Provide agentic containment: disable tool classes, force HITL, revoke/rotate provider+MCP credentials,
     freeze sessions'
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-03
   domain: IR
   title: Auto-trip the circuit breaker/network-disconnect on defined high-risk conditions with escalation
     to a watch role
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-04
   domain: IR
   title: Preserve forensic state (raw prompts/outputs/tool I/O, checkpoints) with chain of custody before
     containment destroys it
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-05
   domain: IR
   title: Maintain an agent-incident runbook with severity triage keyed to CUI exposure and provider boundary
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-06
   domain: IR
   title: Map incident types to required external reporting with timelines (DFARS/DIBNet 72-hour, agency)
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-07
   domain: IR
   title: Reconstruct incidents and root cause from the integrity-verified audit chain + trajectory record
     (forensic reconstruction)
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-08
   domain: IR
   title: Execute recovery to a known-good secure baseline (restore checkpoint/memory, rotate secrets,
     re-run startup audit) before resuming autonomy
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-09
   domain: IR
   title: Communicate recovery status and autonomy re-enablement to designated stakeholders; record notifications
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-MC-01
   domain: MC
   title: Validate/sanitize content before it enters persistent memory; strip dangerous tokens (memory-poisoning
@@ -1070,10 +1070,10 @@ controls:
 - id: LG-RM-09
   domain: RM
   title: Define GenAI risk tiers and a documented halt/rollback plan for unacceptable-risk configurations
-  status: partial
+  status: implemented
   realized_in: P4.2
-  poam_ref: POAM-P5-IR
-  evidence: docs/governance/halt-rollback-runbook.md
+  evidence: docs/governance/verification/P5.3-report.md
+  evidence: docs/governance/incident-response-plan.md
 - id: LG-SC-01
   domain: SC
   title: Enforce a deny-by-default skill/plugin/MCP allowlist; disable the godmode jailbreak skill and

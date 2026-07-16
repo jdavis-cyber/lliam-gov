@@ -422,6 +422,29 @@ monitoring:
 
 
 # =============================================================================
+# [ACTIVE @ P5.3]  KILL-SWITCH / CONTAINMENT / RECOVERY  (LG-IR-01/02/08, RM-09)
+#    Consumed by: agent/killswitch.py (durable state under $HERMES_HOME/
+#    killswitch.state), wired fail-safe at agent/governance_audit_hooks.
+#    predispatch_gate (tool exec) + lliam_cli/runtime_provider.
+#    resolve_runtime_provider (inference). Recovery is fail-closed on a broken
+#    audit chain (verify_chain PASS required before re-enable). Complete no-op
+#    when not engaged — NO false auto-suspension on steady state.
+# =============================================================================
+incident_response:
+  killswitch:
+    enabled: true                    # [additive @ P5.3] LG-IR-01 kill-switch authority active
+    default_scope: global            # [additive] SEV-1 emergency posture; session scope per incident
+    require_verified_chain_to_recover: true   # [additive @ P5.3] LG-IR-08 fail-closed re-enable
+  runbook: docs/governance/incident-response-plan.md          # [additive @ P5.3] LG-IR-05
+  reporting:
+    dfars_dibnet_hours: 72           # [additive @ P5.3] LG-IR-06 DFARS 252.204-7012 clock
+  circuit_breaker:
+    conditions: [egress_violation, cui_taint, loop_exhaustion, audit_break]   # LG-IR-03
+    action: halt                     # [additive] halt | degrade
+    notify_role: isso
+
+
+# =============================================================================
 # [ACTIVE @ P1.4]  AGENT IDENTITY + MANAGED CREDENTIALS  (LG-IA-01..05, IA-10)
 # -----------------------------------------------------------------------------
 # LG-IA-02 agent NPE identity is computed by the NEW additive module
