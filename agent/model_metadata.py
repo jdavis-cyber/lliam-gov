@@ -1663,7 +1663,9 @@ def get_model_context_length(
             agg_provider = str(agg.get("provider") or "").strip()
             agg_model = str(agg.get("model") or "").strip()
             if agg_model and agg_provider and agg_provider.lower() != "moa":
-                rt = resolve_runtime_provider(requested=agg_provider, target_model=agg_model)
+                rt = resolve_runtime_provider(
+                    requested=agg_provider, target_model=agg_model, governance_path="moa"
+                )
                 return get_model_context_length(
                     agg_model,
                     base_url=rt.get("base_url", "") or "",

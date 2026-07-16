@@ -2831,7 +2831,11 @@ def _resolve_delegation_credentials(cfg: dict, parent_agent) -> dict:
     try:
         from lliam_cli.runtime_provider import resolve_runtime_provider
 
-        runtime = resolve_runtime_provider(requested=configured_provider, target_model=configured_model)
+        runtime = resolve_runtime_provider(
+            requested=configured_provider,
+            target_model=configured_model,
+            governance_path="delegation",
+        )
     except Exception as exc:
         raise ValueError(
             f"Cannot resolve delegation provider '{configured_provider}': {exc}. "

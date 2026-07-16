@@ -92,7 +92,9 @@ def _slot_runtime(slot: dict[str, str]) -> dict[str, Any]:
     try:
         from lliam_cli.runtime_provider import resolve_runtime_provider
 
-        rt = resolve_runtime_provider(requested=provider, target_model=model)
+        rt = resolve_runtime_provider(
+            requested=provider, target_model=model, governance_path="moa"
+        )
         resolved_provider = str(rt.get("provider") or provider).strip().lower()
         # call_llm treats an explicit base_url as a custom endpoint. That is
         # correct for ordinary OpenAI-compatible targets, but wrong for OAuth /
@@ -110,6 +112,9 @@ def _slot_runtime(slot: dict[str, str]) -> dict[str, Any]:
         if rt.get("api_key"):
             out["api_key"] = rt["api_key"]
     except Exception as exc:  # pragma: no cover - defensive
+        from lliam_cli.runtime_provider import is_provider_governance_error
+        if is_provider_governance_error(exc):
+            raise
         logger.debug("MoA slot runtime resolution failed for %s: %s", _slot_label(slot), exc)
     return out
 

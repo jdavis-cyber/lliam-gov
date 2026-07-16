@@ -1798,6 +1798,7 @@ def _try_resolve_fallback_provider() -> dict | None:
                     requested=entry.get("provider"),
                     explicit_base_url=entry.get("base_url"),
                     explicit_api_key=explicit_api_key,
+                    governance_path="fallback",
                 )
                 # Log the literal `provider` key from config, not the resolved
                 # runtime category — an Ollama fallback resolves through the
@@ -18465,6 +18466,48 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
         raise
     except Exception as _cp_exc:
         logger.debug("Control-plane auth check failed (non-fatal): %s", _cp_exc)
+
+    # LG-MP-01/02 (additive @ P3.1): fail-closed provider-allowlist gate.
+    # Refuses to start when any configured routing path (primary/fallback/MoA/
+    # auxiliary/delegation) names a non-allowlisted inference provider or host,
+    # under strict posture + security.provider_allowlist_enforce — no silent
+    # off-boundary CUI route.
+    from lliam_cli.security_audit_startup import (
+        enforce_provider_allowlist_at_startup,
+        ProviderAllowlistError,
+    )
+    try:
+        try:
+            from lliam_cli.config import load_config as _load_merged_pa
+
+            _pa_cfg = _load_merged_pa()
+        except Exception:
+            _pa_cfg = _audit_cfg
+        enforce_provider_allowlist_at_startup(config=_pa_cfg)
+    except ProviderAllowlistError:
+        raise
+    except Exception as _pa_exc:
+        logger.debug("Provider-allowlist check failed (non-fatal): %s", _pa_exc)
+
+    # LG-MP-05/06 (additive @ P3.2): fail-closed model-integrity gate. Refuses
+    # to start when the signed model manifest is invalid/untrusted or the
+    # configured primary model lacks a required model card, under strict posture.
+    from lliam_cli.security_audit_startup import (
+        enforce_model_integrity_at_startup,
+        ModelIntegrityError,
+    )
+    try:
+        try:
+            from lliam_cli.config import load_config as _load_merged_mi
+
+            _mi_cfg = _load_merged_mi()
+        except Exception:
+            _mi_cfg = _audit_cfg
+        enforce_model_integrity_at_startup(config=_mi_cfg)
+    except ModelIntegrityError:
+        raise
+    except Exception as _mi_exc:
+        logger.debug("Model-integrity check failed (non-fatal): %s", _mi_exc)
 
     from lliam_cli.security_audit_startup import (
         verify_audit_chain_at_startup,

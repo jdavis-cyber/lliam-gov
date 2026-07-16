@@ -335,6 +335,299 @@ class ControlPlaneAuthError(RuntimeError):
 _CONTROL_PLANE_CHECKED = False
 
 
+class ProviderAllowlistError(RuntimeError):
+    """A configured routing path names a non-allowlisted inference provider.
+
+    Raised only when the effective posture is strict AND
+    ``security.provider_allowlist_enforce`` is on, when any of the five routing
+    paths (primary / fallback / MoA / auxiliary / delegation) resolves to a
+    provider or base_url host that is not on the approved allowlist. Routing CUI
+    to a non-vetted / non-US endpoint is CUI spillage — a CUI deployment must
+    refuse to start rather than silently egress off-boundary (LG-MP-01/02).
+    """
+
+
+# Sentinel so the provider-allowlist gate runs once per process.
+_PROVIDER_ALLOWLIST_CHECKED = False
+
+
+class ModelIntegrityError(RuntimeError):
+    """A model-integrity precondition failed under strict posture.
+
+    Raised when the signed model manifest is invalid/untrusted (LG-MP-06) or a
+    configured model lacks a required model card (LG-MP-05). Routing CUI through
+    an unattested model or an undocumented model violates supply-chain integrity
+    — a CUI deployment refuses to start rather than proceed unverified.
+    """
+
+
+# Sentinel so the model-integrity gate runs once per process.
+_MODEL_INTEGRITY_CHECKED = False
+
+
+def enforce_model_integrity_at_startup(
+    *, config: Optional[dict] = None, force: bool = False
+) -> Optional[list[str]]:
+    """Fail-closed gate for model integrity (LG-MP-05/06).
+
+    Under strict posture: (a) verifies the signed manifest
+    (security.model_manifest_path) against security.trusted_signers — a bad or
+    untrusted signature blocks; (b) if security.require_model_card is set,
+    verifies the configured primary model has a card. Advisory (returns
+    findings) when non-strict. Idempotent per process.
+    """
+    global _MODEL_INTEGRITY_CHECKED
+    if _MODEL_INTEGRITY_CHECKED and not force:
+        return None
+
+    if isinstance(config, dict) and config.get("security"):
+        eff = config
+    else:
+        try:
+            from lliam_cli import config as _cfg
+            eff = _cfg.load_config()
+        except Exception:
+            eff = config or {}
+
+    sec = eff.get("security") or {}
+    try:
+        import agent.attestation as att
+    except Exception as e:
+        finding = f"model attestation control unavailable — fail-closed ({e})"
+        if _effective_is_strict(eff):
+            raise ModelIntegrityError(finding) from e
+        logger.warning("[model-integrity] (advisory — not strict) %s", finding)
+        return [finding]
+
+    blocking: list[str] = []
+
+    # (a) LG-MP-06 — signed manifest verification.
+    manifest_path = str(sec.get("model_manifest_path") or "").strip()
+    if manifest_path:
+        try:
+            import yaml
+            from pathlib import Path as _P
+            mp = _P(manifest_path).expanduser()
+            if not mp.is_absolute() and not mp.is_file():
+                mp = _P(__file__).resolve().parent.parent / mp
+            if not mp.is_file():
+                blocking.append(f"model manifest '{manifest_path}' is missing — fail-closed (LG-MP-06)")
+            else:
+                manifest = yaml.safe_load(mp.read_text(encoding="utf-8")) or {}
+                verdict = att.verify_manifest(manifest)
+                if not verdict.valid:
+                    blocking.append(f"model manifest: {verdict.reason}")
+                signed_primary = str(((manifest or {}).get("models") or {}).get("primary") or "").strip()
+                if not signed_primary:
+                    blocking.append("model manifest has no signed models.primary — fail-closed (LG-MP-06)")
+                else:
+                    model = eff.get("model") or {}
+                    if isinstance(model, dict):
+                        provider = str(model.get("provider") or "").strip()
+                        model_name = str(model.get("model") or model.get("default") or "").strip()
+                    else:
+                        raw = str(model or "").strip()
+                        if "/" in raw:
+                            provider, model_name = raw.split("/", 1)
+                        else:
+                            provider, model_name = "", raw
+                    configured_primary = model_name if "/" in model_name else (
+                        f"{provider}/{model_name}" if provider and model_name else model_name)
+                    if configured_primary and configured_primary != signed_primary:
+                        blocking.append(
+                            f"configured primary '{configured_primary}' does not match signed manifest "
+                            f"'{signed_primary}' (LG-MP-06)"
+                        )
+        except Exception as e:
+            blocking.append(f"model manifest could not be verified — fail-closed ({e})")
+
+    # (b) LG-MP-05 — the configured primary model must have a card.
+    if att.require_model_card():
+        model = eff.get("model") or {}
+        if isinstance(model, dict):
+            provider = str(model.get("provider") or "").strip()
+            model_name = str(model.get("model") or model.get("default") or "").strip()
+        else:
+            raw = str(model or "").strip()
+            if "/" in raw:
+                provider, model_name = raw.split("/", 1)
+            else:
+                provider, model_name = "", raw
+        model_id = model_name if "/" in model_name else (
+            f"{provider}/{model_name}" if provider and model_name else model_name)
+        if model_id and not att.model_cui_eligible(model_id):
+            blocking.append(f"primary model '{model_id}' has no model card / is not CUI-eligible (LG-MP-05)")
+
+    _MODEL_INTEGRITY_CHECKED = True
+    if not blocking:
+        return None
+
+    strict = _effective_is_strict(eff)
+    if not strict:
+        for f in blocking:
+            logger.warning("[model-integrity] (advisory — not strict) %s", f)
+        return blocking
+
+    for f in blocking:
+        logger.critical("[model-integrity] BLOCKING: %s", f)
+    try:
+        from agent import governance_audit as ga
+        led = ga.get_ledger()
+        if led is not None:
+            led.emit(
+                "security.error",
+                action="model.integrity_violation",
+                decision="halt",
+                severity="critical",
+                outcome={"status": "blocked", "class": "model_integrity",
+                         "error": "; ".join(blocking)[:1000]},
+                source_module="lliam_cli/security_audit_startup.py:enforce_model_integrity_at_startup",
+            )
+    except Exception:
+        pass
+    raise ModelIntegrityError("; ".join(blocking))
+
+
+def _iter_configured_provider_routes(cfg: dict):
+    """Yield (path, provider, base_url) for every configured routing path.
+
+    Reads the real config keys: model (primary), fallback_providers (fallback),
+    moa.presets.*.{reference_models[],aggregator} (moa), auxiliary.<task> (aux),
+    delegation (delegation). Blank slots are skipped (a blank primary is the
+    resolver's own fail-closed concern, not a spillage route).
+    """
+    def _emit(path, slot):
+        if isinstance(slot, dict):
+            provider = str(slot.get("provider") or "").strip()
+            base_url = str(slot.get("base_url") or "").strip()
+        else:
+            raw = str(slot or "").strip()
+            provider = raw.partition("/")[0] if raw else ""
+            base_url = ""
+        if provider:
+            return (path, provider, base_url)
+        return None
+
+    routes = []
+    r = _emit("primary", cfg.get("model") or {})
+    if r:
+        routes.append(r)
+    for fb in cfg.get("fallback_providers") or []:
+        r = _emit("fallback", fb)
+        if r:
+            routes.append(r)
+    r = _emit("fallback", cfg.get("fallback_model") or {})
+    if r:
+        routes.append(r)
+    moa = cfg.get("moa") or {}
+    active_preset = str(moa.get("active_preset") or "").strip()
+    active = (moa.get("presets") or {}).get(active_preset) if active_preset else None
+    for _name, preset in ((active_preset, active),):
+        if not isinstance(preset, dict):
+            continue
+        if preset.get("enabled") is False:
+            continue
+        for ref in preset.get("reference_models") or []:
+            r = _emit("moa", ref)
+            if r:
+                routes.append(r)
+        r = _emit("moa", preset.get("aggregator") or {})
+        if r:
+            routes.append(r)
+    aux = cfg.get("auxiliary") or {}
+    for _task, slot in aux.items():
+        if isinstance(slot, dict) and str(slot.get("provider") or "").strip().lower() == "auto":
+            continue
+        r = _emit("auxiliary", slot)
+        if r:
+            routes.append(r)
+    r = _emit("delegation", cfg.get("delegation") or {})
+    if r:
+        routes.append(r)
+    return routes
+
+
+def enforce_provider_allowlist_at_startup(
+    *, config: Optional[dict] = None, force: bool = False
+) -> Optional[list[str]]:
+    """Fail-closed gate for the approved-provider allowlist (LG-MP-01/02).
+
+    Validates every configured routing path against
+    policy/provider-allowlist.yaml via ``provider_allowlist.validate_provider``.
+    A ``deny`` verdict on any path is a blocking finding under strict posture +
+    ``security.provider_allowlist_enforce``: logs ``critical``, appends a
+    ``security.error`` alert to the ledger, and raises
+    :class:`ProviderAllowlistError`. Advisory (returns findings, no raise) when
+    non-strict or the flag is off. Returns None when there is nothing to report.
+    Idempotent per process.
+    """
+    global _PROVIDER_ALLOWLIST_CHECKED
+    if _PROVIDER_ALLOWLIST_CHECKED and not force:
+        return None
+
+    if isinstance(config, dict) and config.get("security"):
+        eff = config
+    else:
+        try:
+            from lliam_cli import config as _cfg
+            eff = _cfg.load_config()
+        except Exception:
+            eff = config or {}
+
+    try:
+        from lliam_cli import provider_allowlist as pa
+    except Exception as e:
+        finding = f"provider allowlist control unavailable — fail-closed ({e})"
+        if _effective_is_strict(eff):
+            raise ProviderAllowlistError(finding) from e
+        logger.warning("[provider-allowlist] (advisory — not strict) %s", finding)
+        return [finding]
+
+    if not pa.enforcement_enabled():
+        _PROVIDER_ALLOWLIST_CHECKED = True
+        return None
+
+    blocking: list[str] = []
+    for path, provider, base_url in _iter_configured_provider_routes(eff):
+        try:
+            decision = pa.validate_provider(provider, base_url, path=path, cui=True)
+        except Exception:
+            # Fail-closed: a validator fault on an enforced profile is a block.
+            blocking.append(f"{path}: provider '{provider}' could not be validated (fail-closed)")
+            continue
+        if decision.disposition == "deny":
+            blocking.append(f"{path}: {decision.reason}")
+
+    _PROVIDER_ALLOWLIST_CHECKED = True
+    if not blocking:
+        return None
+
+    strict = _effective_is_strict(eff)
+    if not strict:
+        for f in blocking:
+            logger.warning("[provider-allowlist] (advisory — not strict) %s", f)
+        return blocking
+
+    for f in blocking:
+        logger.critical("[provider-allowlist] BLOCKING: %s", f)
+    try:
+        from agent import governance_audit as ga
+        led = ga.get_ledger()
+        if led is not None:
+            led.emit(
+                "security.error",
+                action="provider.non_allowlisted_route",
+                decision="halt",
+                severity="critical",
+                outcome={"status": "blocked", "class": "provider_allowlist",
+                         "error": "; ".join(blocking)[:1000]},
+                source_module="lliam_cli/security_audit_startup.py:enforce_provider_allowlist_at_startup",
+            )
+    except Exception:
+        pass
+    raise ProviderAllowlistError("; ".join(blocking))
+
+
 def enforce_control_plane_auth_at_startup(
     *, config: Optional[dict] = None, force: bool = False
 ) -> Optional[list[str]]:

@@ -107,6 +107,36 @@ jobs:
       - name: Assert no separation-of-duties conflicts
         run: python "${GOV_CI_DIR}/sod_check.py"
 
+  # P3.4 — deterministic full-tree supply-chain hard block (LG-SS-04).
+  supply-chain-artifacts:
+    name: Supply-chain artifact gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with: { python-version: "3.13" }
+      - name: Block executable install/startup artifacts
+        run: python "${GOV_CI_DIR}/supply_chain_gate.py" .
+
+  # P3.4 — lockfile-derived SBOM and policy-derived AI-BOM (LG-SS-05).
+  sbom-ai-bom:
+    name: Generate SBOM + AI-BOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with: { python-version: "3.13" }
+      - name: Install YAML parser
+        run: python -m pip install --quiet pyyaml
+      - name: Generate build evidence
+        run: python "${GOV_CI_DIR}/generate_bom.py" build/governance-bom
+      - name: Retain BOM evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lliam-gov-bom
+          path: build/governance-bom/
+          if-no-files-found: error
+
   # GATE 8 — path-freeze guardrail (LG-SD-01) — PR only (needs base/head)
   path-freeze:
     name: Path-freeze guardrail
