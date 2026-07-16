@@ -881,6 +881,17 @@ def _emit_post_tool_call_hook(
     result *after* the gate (parsing the result is only worth it when a
     listener will actually consume it).
     """
+    # LG-PI-04/06 (additive @ P2.3): classify the tool RESULT for indirect
+    # injection at this universal funnel. A high-risk result taints the
+    # session so the model's NEXT egress/exec action is escalated to HITL by
+    # the PDP (tools/tool_policy.evaluate_call) rather than auto-triggered.
+    # Never gates this call, never raises.
+    try:
+        from tools.injection_defense import note_tool_result
+        note_tool_result(function_name, result if isinstance(result, str) else str(result))
+    except Exception:
+        pass
+
     # LG-AU-02 (additive): the governance audit ledger records every
     # terminal tool outcome at this universal funnel — independent of, and
     # before, the plugin observer gate below (which no-ops without

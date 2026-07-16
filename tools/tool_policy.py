@@ -763,6 +763,29 @@ def evaluate_call(
             disposition="deny", action_class=action_class, tool_name=name, reason=reason,
         )
 
+    # LG-PI-06 (P2.3): if this session has observed indirect-injection content,
+    # escalate the dangerous side-effect classes (egress/exec/external send) to
+    # hitl_approve so injected content cannot auto-trigger them. Reads/analysis
+    # are untouched — the agent keeps working; only the side effect pauses.
+    try:
+        from tools.injection_defense import (
+            injection_taint_reason,
+            should_escalate_for_injection,
+        )
+        if should_escalate_for_injection(action_class):
+            if _TIER_ORDER.index("hitl_approve") > _TIER_ORDER.index(tier):
+                return PolicyDecision(
+                    disposition="hitl_approve", action_class=action_class,
+                    tool_name=name, origin="injection",
+                    reason=(
+                        "session tainted by observed indirect-injection content "
+                        f"({injection_taint_reason()}) — side-effect action "
+                        "routed to HITL, not auto-triggered (LG-PI-06)"
+                    ),
+                )
+    except Exception:
+        logger.warning("injection taint check failed (non-blocking)", exc_info=True)
+
     # Privileged force-up (LG-AZ-06): members never resolve below hitl_approve.
     priv = policy.get("privileged_functions") or {}
     if action_class in _as_set(priv.get("members")):
