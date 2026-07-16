@@ -1,0 +1,67 @@
+# authorization-record.yaml — Go/no-go (ATO-style) deployment authorization
+# (LG-GV-06, P4.1 / AI-493).
+#
+# Purpose: the signed authorization of record gating activation on baseline
+# compliance and signed risk acceptance. Enforced fail-closed at startup by
+# lliam_cli/security_audit_startup.enforce_governance_artifacts_at_startup:
+# under strict posture the agent refuses to serve work when this record is
+# absent, expired, decision != authorized, or its authorization_id does not
+# match governance.authorization_id in cli-config.gov.yaml.
+#
+# Review-by: 2027-01-16 (expiry-driven re-authorization; LG-GV-08).
+
+schema: lg-gv/1
+owner: Lliam-GOV Program
+classification: CUI//SP-PRIV   # template — mark per instance
+
+authorization_id: LG-ATO-2026-001
+system: >-
+  Lliam-GOV agent — governance-hardened fork of Hermes Agent (Nous Research,
+  MIT), operated under the strict gov overlay (cli-config.gov.yaml via
+  HERMES_CONFIG).
+authorization_type: eval/demo go/no-go authorization (ATO-style)
+decision: authorized
+
+authorizing_official:
+  role: approver                       # governance.role_bindings.approver
+  principal: jdavis@agency.mil
+
+risk_acceptance:
+  signed_by: jdavis@agency.mil         # CAIO (governance.role_bindings.caio)
+  role: caio
+  date: 2026-07-16
+  residual_risk: moderate
+  basis: >-
+    Residual risk accepted for a single-operator demo/eval deployment with
+    no CUI in scope (fail-closed CUI floor SP 800-171 r3 / CMMC L2).
+    Tracked deviations: docs/governance/roles.yaml sod_deviations;
+    docs/governance/deviation-register.yaml.
+
+baseline:
+  git_tag: gov-P3-good
+  git_commit: e92b6f35a15420455d7b74b043fc3b885fc5312a
+  overlay: cli-config.gov.yaml
+
+issued: 2026-07-16
+expires: 2027-01-16                    # 6-month eval authorization window
+
+scope: >-
+  Single-operator demo/eval on a personally-owned workstation; authorized
+  mission scope per docs/governance/intended-use.md. NOT an authorization
+  for production CUI processing.
+
+conditions:
+  - security.posture strict overlay loaded via HERMES_CONFIG
+  - godmode/obliteratus remain disabled (never waivable, LG-GV-10)
+  - provider allowlist enforced on all five routing paths (LG-MP-01/02)
+  - audit ledger enabled with verify-on-startup (LG-AU-01/08)
+  - control-plane authentication enforced for any network bind (LG-IA-11)
+  - re-authorization required on posture-break or baseline drift (LG-GV-07)
+
+go_no_go_checklist:
+  - {item: signed AI policy of record present, ref: docs/governance/ai-policy.md, result: go}
+  - {item: baseline pinned to signed tag, ref: gov-P3-good, result: go}
+  - {item: prohibited skills disabled, ref: cli-config.gov.yaml skills.disabled, result: go}
+  - {item: provider allowlist enforced, ref: policy/provider-allowlist.yaml, result: go}
+  - {item: audit chain verified, ref: ci/governance-ci-gates/audit_chain_selftest.py, result: go}
+  - {item: SoD gate clean, ref: ci/governance-ci-gates/sod_check.py, result: go}

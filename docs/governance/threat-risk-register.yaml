@@ -1,0 +1,271 @@
+# threat-risk-register.yaml — Living agent-threat risk register
+# (LG-RM-02 / LG-RM-08, P4.2 / AI-494).
+#
+# Purpose: the machine-readable risk register of record, adapted from the
+# governance package's populated Risk_Register.md (17 risks, seeded from the
+# Agentic Threat Model §19 rollup P1-P16). Each risk carries the mandatory
+# agent-threat class tags, inherent/residual ratings, mitigating LG-*
+# controls (validated against docs/governance/control-catalog.yaml by the
+# P4.2 test suite), the accountable owner ROLE (bound to a principal via
+# governance.role_bindings), and treatment status reflecting the P4.2 build
+# state. Statuses: open | in_treatment | monitored | accepted_poam.
+#
+# Method: docs/governance/risk-assessment-process.md (LG-RM-01).
+# Acceptance: residual risk accepted 2026-07-16 per
+# docs/governance/authorization-record.yaml (LG-ATO-2026-001) and the signed
+# block in docs/governance/ai-impact-assessment.md §11.
+#
+# Review-by: at each phase verify gate and at management review (LG-GV-08).
+
+schema: lg-rm/1
+owner: Lliam-GOV Program
+classification: CUI//SP-PRIV   # template — mark per instance
+method: docs/governance/risk-assessment-process.md
+tiering_matrix: policy/tool-risk-policy.yaml   # LG-RM-03 — the PDP's file
+acceptance_ref: docs/governance/authorization-record.yaml
+
+risks:
+  - id: R-01
+    threat: Network egress / exfiltration & SSRF pivot
+    threat_classes: [provider_exfiltration]
+    threat_model_ref: "§14 (P1); OWASP LLM02/LLM10, ASI-T02"
+    inherent: Critical
+    residual: Low-Med
+    owner_role: isso
+    status: monitored
+    controls: [LG-NE-01, LG-NE-02, LG-NE-03, LG-NE-04, LG-NE-05, LG-NE-06,
+               LG-DP-10]
+    notes: >-
+      Deny-by-default egress + SSRF/metadata block + DLP taint gating
+      enforced since P2.5. Network-layer proxy enclave carried as
+      POAM-EGRESS-ENCLAVE; egress-anomaly monitoring lands P5.1 (POAM-P5-MON).
+
+  - id: R-02
+    threat: Prompt injection (direct and indirect)
+    threat_classes: [prompt_injection]
+    threat_model_ref: "§2 (P2); OWASP LLM01, ASI-T06"
+    inherent: Critical
+    residual: Med
+    owner_role: isso
+    status: monitored
+    controls: [LG-PI-01, LG-PI-02, LG-PI-04, LG-PI-05, LG-PI-06, LG-PI-07,
+               LG-PI-09, LG-NE-02, LG-NE-03, LG-MO-04]
+    notes: >-
+      Zero-trust input, sanitize/delimit, detection-to-approval, and sink
+      validation enforced since P0.5/P2.3. Trajectory-level drift detection
+      (LG-MO-04, L3 enhancement) lands P5.1 (POAM-P5-MON).
+
+  - id: R-03
+    threat: Excessive agency / over-permissioned tools (RCE path)
+    threat_classes: [excessive_agency]
+    threat_model_ref: "§3 (P3); OWASP LLM06, ASI-T02/T11"
+    inherent: Critical
+    residual: Low-Med
+    owner_role: isso
+    status: monitored
+    controls: [LG-AZ-01, LG-AZ-02, LG-AZ-03, LG-AZ-04, LG-AZ-05, LG-AZ-07,
+               LG-AZ-09, LG-AZ-11, LG-CH-04, LG-CH-05]
+    notes: >-
+      Per-call PDP + least-privilege toolset + safe-root confinement + docker
+      sandbox enforced since P0.4/P2.1 (policy/tool-risk-policy.yaml).
+
+  - id: R-04
+    threat: Excessive autonomy & approval-system subversion
+    threat_classes: [excessive_agency]
+    threat_model_ref: "§13 (P4); OWASP LLM06, ASI-T10/T15"
+    inherent: Critical
+    residual: Low-Med
+    owner_role: isso
+    status: monitored
+    controls: [LG-HO-01, LG-HO-02, LG-HO-03, LG-HO-05, LG-HO-06, LG-HO-07,
+               LG-HO-08, LG-HO-10, LG-PI-07, LG-CH-02, LG-CH-03]
+    notes: >-
+      deny_on_no_approver + require_authenticated_approver + hardline blocks
+      enforced since P0.1/P2.2; every approval recorded with principal.
+
+  - id: R-05
+    threat: Audit-log tampering & repudiation
+    threat_classes: [tool_mcp_abuse]
+    threat_model_ref: "§11 (P5); ASI-T08"
+    inherent: Critical
+    residual: Low
+    owner_role: isso
+    status: monitored
+    controls: [LG-AU-01, LG-AU-02, LG-AU-03, LG-AU-04, LG-AU-05, LG-AU-06,
+               LG-AU-07, LG-AU-08, LG-AU-09, LG-AU-10]
+    notes: Hash-chained ledger + chokepoint + verify-on-startup since P1.1-P1.3.
+
+  - id: R-06
+    threat: Provider risk & CUI data-residency egress
+    threat_classes: [provider_exfiltration]
+    threat_model_ref: "§7 (P6); OWASP LLM02"
+    inherent: Critical
+    residual: Low-Med
+    owner_role: ai_risk_owner
+    status: monitored
+    controls: [LG-MP-01, LG-MP-02, LG-MP-03, LG-MP-04, LG-MP-06, LG-MP-07,
+               LG-DP-01, LG-DP-10, LG-MO-02]
+    notes: >-
+      Allowlist enforced on all five routing paths since P3.1; model
+      integrity since P3.2. Provider-switch monitoring lands P5.1.
+
+  - id: R-07
+    threat: Bundled godmode jailbreak skill (insider / misuse)
+    threat_classes: [supply_chain, excessive_agency]
+    threat_model_ref: "§6 (P7); OWASP LLM06, ASI-T13/T15"
+    inherent: High
+    residual: Low
+    owner_role: caio
+    status: monitored
+    controls: [LG-SC-01, LG-GV-02, LG-RM-04, LG-CH-06, LG-PI-07, LG-MO-08,
+               LG-GV-10]
+    notes: >-
+      Denied + deny_tags + CI build-stop since P0.3/P0.7; never-waivable in
+      the waiver register and SoA exclusion (P4.1/P4.2). Periodic re-check
+      (LG-MO-08) lands P5.2.
+
+  - id: R-08
+    threat: MCP & plugin/skill supply-chain compromise
+    threat_classes: [supply_chain, tool_mcp_abuse]
+    threat_model_ref: "§5 (P8); OWASP LLM03, CoSAI MCP-T3/T4/T7"
+    inherent: High
+    residual: Med
+    owner_role: ai_risk_owner
+    status: monitored
+    controls: [LG-SC-01, LG-SC-02, LG-SC-03, LG-SC-04, LG-SC-05, LG-SC-06,
+               LG-SC-07, LG-PI-03, LG-MO-03, LG-SC-09, LG-SD-04]
+    notes: >-
+      Deny-by-default MCP allowlist + skill attestation + schema validation
+      since P3.3/P0.5. Cross-session drift monitoring (LG-MO-03) lands P5.1;
+      CODEOWNERS challenge (LG-SD-04) landed P4.5.
+
+  - id: R-09
+    threat: Memory / context poisoning & persistence
+    threat_classes: [memory_poisoning]
+    threat_model_ref: "§8 (P9); OWASP LLM04/LLM08, ASI-T01"
+    inherent: High
+    residual: Med
+    owner_role: isso
+    status: monitored
+    controls: [LG-MC-01, LG-MC-02, LG-MC-03, LG-MC-04, LG-MC-05, LG-MC-06,
+               LG-MC-07, LG-HO-04, LG-PI-08]
+    notes: Write-side validation + partitioning + staged approvals since P0.5/P2.6.
+
+  - id: R-10
+    threat: Secret / credential exposure
+    threat_classes: [provider_exfiltration, excessive_agency]
+    threat_model_ref: "§9 (P10); OWASP LLM02"
+    inherent: High
+    residual: Low-Med
+    owner_role: isso
+    status: monitored
+    controls: [LG-IA-01, LG-IA-03, LG-IA-04, LG-IA-05, LG-DP-03, LG-DP-05,
+               LG-DP-08, LG-AZ-07, LG-NE-02]
+    notes: Scoped credentials + managed accounts + redaction since P1.4/P2.4.
+
+  - id: R-11
+    threat: Sensitive-information (CUI/PII) disclosure
+    threat_classes: [provider_exfiltration]
+    threat_model_ref: "§10 (P11); OWASP LLM02/LLM07"
+    inherent: High
+    residual: Med
+    owner_role: isso
+    status: in_treatment
+    controls: [LG-DP-01, LG-DP-02, LG-DP-04, LG-DP-07, LG-DP-09, LG-DP-11,
+               LG-PF-03, LG-PF-09, LG-MC-05, LG-MC-06]
+    poam_ref: POAM-P5-EVAL
+    notes: >-
+      DP-domain controls enforced since P2.4; PF-domain privacy policy +
+      redaction bindings delivered P4.4; generated-output PII/CUI detection
+      (LG-PF-09) lands P5.2. FIPS-validated crypto carried as POAM-FIPS.
+
+  - id: R-12
+    threat: Software & model supply-chain integrity
+    threat_classes: [supply_chain]
+    threat_model_ref: "§15 (P12); OWASP LLM03/LLM04"
+    inherent: High
+    residual: Med
+    owner_role: ai_risk_owner
+    status: monitored
+    controls: [LG-SS-01, LG-SS-02, LG-SS-03, LG-SS-04, LG-SS-05, LG-SS-06,
+               LG-SS-07, LG-IN-02, LG-IN-03, LG-MP-06, LG-MP-07]
+    notes: >-
+      Hash-pinned installs, OSV gate, SBOM/AI-BOM reconciliation, signed
+      model manifest since P0.6/P3.2/P3.4.
+
+  - id: R-13
+    threat: Denial-of-wallet / resource & runaway loop
+    threat_classes: [excessive_agency]
+    threat_model_ref: "§12 (P13); OWASP LLM10, ASI-T04"
+    inherent: High
+    residual: Low-Med
+    owner_role: isso
+    status: in_treatment
+    controls: [LG-AZ-10, LG-AZ-12, LG-MO-01, LG-MO-02, LG-IR-01, LG-IR-03]
+    poam_ref: POAM-P5-IR
+    notes: >-
+      Hard-stop + mutating budgets enforced since P2.1; kill-switch/circuit
+      breaker + volume monitoring land P5.1/P5.3.
+
+  - id: R-14
+    threat: Insecure tool / output handling (RCE / SSRF path)
+    threat_classes: [tool_mcp_abuse]
+    threat_model_ref: "§4 (P14); OWASP LLM05, ASI-T11"
+    inherent: High
+    residual: Low-Med
+    owner_role: isso
+    status: monitored
+    controls: [LG-PI-09, LG-AZ-05, LG-AZ-08, LG-NE-02, LG-QT-06, LG-CH-05]
+    notes: >-
+      Sink-side validation + path traversal + last-mile re-auth enforced
+      since P0.5/P2.3; agent-generated-code validation (LG-QT-06) enforced
+      in the sandboxed backend via the PDP privileged tier (P4.4).
+
+  - id: R-15
+    threat: Behavioral / goal drift & rogue-agent behavior
+    threat_classes: [excessive_agency, tool_mcp_abuse]
+    threat_model_ref: "§17 (P15); ASI-T06/T07/T13"
+    inherent: High
+    residual: Med
+    owner_role: isso
+    status: in_treatment
+    controls: [LG-MO-04, LG-MO-05, LG-MO-06, LG-MO-07, LG-IA-02, LG-IA-10,
+               LG-IR-02]
+    poam_ref: POAM-P5-MON
+    notes: >-
+      Instance identity + delegation-chain records enforced since P1.4;
+      trajectory monitoring and containment land P5.1-P5.3.
+
+  - id: R-16
+    threat: Confabulation / misinformation / overreliance
+    threat_classes: [tool_mcp_abuse]
+    threat_model_ref: "§16 (P16); OWASP LLM09, ASI-T05"
+    inherent: Med
+    residual: Low-Med
+    owner_role: caio
+    status: in_treatment
+    controls: [LG-QT-05, LG-QT-06, LG-QT-07, LG-HO-08, LG-HO-09, LG-PI-08,
+               LG-MO-10]
+    poam_ref: POAM-P5-EVAL
+    notes: >-
+      JIT rationale + inbound screening enforced; grounding/provenance
+      controls delivered P4.4 (LG-QT-05/06/07); post-deployment output
+      monitoring (LG-MO-10) lands P5.2.
+
+  - id: R-17
+    threat: Cross-cutting governance & lifecycle drift
+    threat_classes: [supply_chain, excessive_agency]
+    threat_model_ref: "§18 (management-system layer)"
+    inherent: High
+    residual: Low-Med
+    owner_role: caio
+    status: in_treatment
+    controls: [LG-CH-01, LG-CH-02, LG-CH-03, LG-CH-09, LG-MO-08, LG-GV-09,
+               LG-CH-04, LG-CH-06, LG-CH-08, LG-RM-04, LG-GV-04, LG-GV-05,
+               LG-GV-06, LG-GV-07, LG-GV-08, LG-RM-09, LG-TP-03, LG-RM-03,
+               LG-QT-02, LG-MO-09, LG-RM-08]
+    poam_ref: POAM-P5-CATO
+    notes: >-
+      Baseline/drift/SoD/authorization gates enforced through P4.1; the SoA/
+      POA&M layer lands this step; cATO re-authorization + management-review
+      loop land P5.4.

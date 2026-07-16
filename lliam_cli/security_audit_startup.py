@@ -1032,3 +1032,267 @@ def _effective_is_strict(config: Optional[dict]) -> bool:
         return bool(_pr.is_strict(_cfg.load_config()))
     except Exception:
         return False
+
+
+# ---------------------------------------------------------------------------
+# LG-GV-01/03/06/10 (additive @ P4.1): top-management governance artifacts.
+# ---------------------------------------------------------------------------
+
+class GovernanceArtifactError(RuntimeError):
+    """Raised when a mandatory top-management governance artifact is absent,
+    placeholder-valued, or expired under strict posture (LG-GV-01/06/10)."""
+
+
+_GOVERNANCE_ARTIFACTS_CHECKED = False
+
+# Values that can never satisfy a mandatory governance field (fail-closed on
+# absent/placeholder — an unfilled template must not pass the gate).
+_GOV_PLACEHOLDER_TOKENS = (
+    "replace", "placeholder", "example", "changeme", "pending", "tbd", "fixme",
+)
+
+
+def _gov_is_placeholder(value: Any) -> bool:
+    if value is None:
+        return True
+    text = str(value).strip()
+    if not text or text.lower() in {"null", "none"}:
+        return True
+    if "${" in text:  # unresolved env interpolation
+        return True
+    lowered = text.lower()
+    return any(tok in lowered for tok in _GOV_PLACEHOLDER_TOKENS)
+
+
+def _gov_as_date(value: Any):
+    import datetime as _dt
+    if isinstance(value, _dt.datetime):
+        return value.date()
+    if isinstance(value, _dt.date):
+        return value
+    try:
+        return _dt.date.fromisoformat(str(value).strip()[:10])
+    except Exception:
+        return None
+
+
+def _gov_repo_root(repo_root: Optional[Path] = None) -> Path:
+    """Directory the governance artifacts resolve against.
+
+    Explicit override first (tests); else the directory containing the gov
+    overlay named by the existing HERMES_CONFIG / LLIAM_CONFIG selector (the
+    overlay lives at the repo root); else this checkout's root.
+    """
+    if repo_root is not None:
+        return Path(repo_root)
+    for var in ("HERMES_CONFIG", "LLIAM_CONFIG"):
+        raw = os.environ.get(var, "").strip()
+        if raw:
+            try:
+                return Path(raw).expanduser().resolve().parent
+            except Exception:
+                pass
+    return Path(__file__).resolve().parent.parent
+
+
+def enforce_governance_artifacts_at_startup(
+    *, config: Optional[dict] = None, repo_root: Optional[Path] = None,
+    force: bool = False,
+) -> None:
+    """Fail-closed mandatory-artifacts gate (LG-GV-01/03/06/10, P4.1).
+
+    Under strict posture, before serving work, verify the top-management
+    governance layer is real and current:
+
+    * LG-GV-01 — ``governance.policy_id`` / ``policy_version`` /
+      ``policy_approved_by`` present and non-placeholder; the AI policy file
+      exists; ``policy_review_date`` is not past due.
+    * LG-GV-03 — the regulatory register exists and carries obligations
+      (register→control reconciliation runs in the CI gate).
+    * LG-GV-06 — the signed authorization record exists, matches
+      ``governance.authorization_id``, is decision=authorized and unexpired.
+    * LG-GV-10 — any baseline-denied high-risk skill that has been re-enabled
+      carries a valid, signed, unexpired CAIO waiver; never-waivable
+      capabilities (godmode/obliteratus) block regardless of waivers.
+
+    Complete no-op on the low-side posture (low-side deployments do not load
+    the governance overlay; nothing is required of them). Idempotent per
+    process (``force`` re-runs).
+    """
+    global _GOVERNANCE_ARTIFACTS_CHECKED
+    if _GOVERNANCE_ARTIFACTS_CHECKED and not force:
+        return None
+
+    if isinstance(config, dict) and config.get("governance"):
+        eff = config
+    else:
+        try:
+            from lliam_cli import config as _cfg
+            eff = _cfg.load_config()
+        except Exception:
+            eff = config or {}
+    if not isinstance(eff, dict):
+        eff = {}
+
+    if not _effective_is_strict(eff):
+        _GOVERNANCE_ARTIFACTS_CHECKED = True
+        return None
+
+    import datetime as _dt
+    import yaml as _yaml
+
+    today = _dt.date.today()
+    root = _gov_repo_root(repo_root)
+    gov = eff.get("governance") or {}
+    blocking: list[str] = []
+
+    if not gov:
+        blocking.append("governance block missing from effective config "
+                        "(LG-GV-01)")
+    else:
+        registers = gov.get("registers") or {}
+
+        # LG-GV-01 — policy identity of record.
+        for field in ("policy_id", "policy_version", "policy_approved_by"):
+            if _gov_is_placeholder(gov.get(field)):
+                blocking.append(f"governance.{field} is absent or a "
+                                f"placeholder (LG-GV-01)")
+        review = _gov_as_date(gov.get("policy_review_date"))
+        if review is None:
+            blocking.append("governance.policy_review_date is absent or "
+                            "unparseable (LG-GV-01)")
+        elif review < today:
+            blocking.append(f"AI policy review is past due ({review}) "
+                            f"(LG-GV-01)")
+        policy_rel = str(gov.get("policy_path")
+                         or "docs/governance/ai-policy.md")
+        if not (root / policy_rel).is_file():
+            blocking.append(f"ai-policy file '{policy_rel}' is missing "
+                            f"(LG-GV-01)")
+
+        # LG-GV-03 — regulatory register present and populated.
+        reg_rel = str(registers.get("regulatory")
+                      or "docs/governance/regulatory-register.yaml")
+        reg_file = root / reg_rel
+        if not reg_file.is_file():
+            blocking.append(f"regulatory register '{reg_rel}' is missing "
+                            f"(LG-GV-03)")
+        else:
+            try:
+                reg_data = _yaml.safe_load(
+                    reg_file.read_text(encoding="utf-8")) or {}
+                if not reg_data.get("obligations"):
+                    blocking.append("regulatory register has no obligations "
+                                    "(LG-GV-03)")
+            except Exception as e:
+                blocking.append(f"regulatory register unreadable ({e}) "
+                                f"(LG-GV-03)")
+
+        # LG-GV-06 — signed go/no-go authorization record.
+        auth_rel = str(registers.get("authorization")
+                       or "docs/governance/authorization-record.yaml")
+        auth_file = root / auth_rel
+        if not auth_file.is_file():
+            blocking.append(f"authorization record '{auth_rel}' is missing "
+                            f"(LG-GV-06)")
+        else:
+            try:
+                record = _yaml.safe_load(
+                    auth_file.read_text(encoding="utf-8")) or {}
+            except Exception as e:
+                record = None
+                blocking.append(f"authorization record unreadable ({e}) "
+                                f"(LG-GV-06)")
+            if isinstance(record, dict):
+                cfg_id = gov.get("authorization_id")
+                if _gov_is_placeholder(cfg_id):
+                    blocking.append("governance.authorization_id is absent "
+                                    "or a placeholder (LG-GV-06)")
+                elif str(record.get("authorization_id")) != str(cfg_id):
+                    blocking.append(
+                        f"authorization_id mismatch: record has "
+                        f"'{record.get('authorization_id')}', config expects "
+                        f"'{cfg_id}' (LG-GV-06)")
+                if str(record.get("decision", "")).lower() != "authorized":
+                    blocking.append(
+                        f"authorization decision is "
+                        f"'{record.get('decision')}' — not 'authorized' "
+                        f"(LG-GV-06)")
+                expires = _gov_as_date(record.get("expires"))
+                if expires is None:
+                    blocking.append("authorization record has no parseable "
+                                    "'expires' date (LG-GV-06)")
+                elif expires < today:
+                    blocking.append(f"authorization expired ({expires}) "
+                                    f"(LG-GV-06)")
+                official = ((record.get("authorizing_official") or {})
+                            .get("principal"))
+                if _gov_is_placeholder(official):
+                    blocking.append("authorization record has no "
+                                    "authorizing-official principal "
+                                    "(LG-GV-06)")
+
+        # LG-GV-10 — CAIO waiver register gates high-risk enablement.
+        wav_rel = str(registers.get("waiver")
+                      or "docs/governance/waiver-register.yaml")
+        wav_file = root / wav_rel
+        if not wav_file.is_file():
+            blocking.append(f"waiver register '{wav_rel}' is missing "
+                            f"(LG-GV-10)")
+        else:
+            try:
+                wav = _yaml.safe_load(
+                    wav_file.read_text(encoding="utf-8")) or {}
+            except Exception as e:
+                wav = None
+                blocking.append(f"waiver register unreadable ({e}) "
+                                f"(LG-GV-10)")
+            if isinstance(wav, dict):
+                never = set(wav.get("never_waivable") or [])
+                denied = list(wav.get("baseline_denied_skills") or [])
+                disabled = set((eff.get("skills") or {}).get("disabled") or [])
+                valid_waivers: dict[str, dict] = {}
+                for entry in (wav.get("waivers") or []):
+                    if not isinstance(entry, dict):
+                        continue
+                    cap = entry.get("capability")
+                    exp = _gov_as_date(entry.get("expires"))
+                    if (cap
+                            and not _gov_is_placeholder(entry.get("waiver_id"))
+                            and not _gov_is_placeholder(entry.get("signed_by"))
+                            and exp is not None and exp >= today):
+                        valid_waivers[str(cap)] = entry
+                for skill in denied:
+                    if skill in disabled:
+                        continue
+                    if skill in never:
+                        blocking.append(
+                            f"'{skill}' is enabled but NEVER waivable — "
+                            f"mandatory deny (LG-GV-10 / LG-SC-01)")
+                    elif skill not in valid_waivers:
+                        blocking.append(
+                            f"high-risk skill '{skill}' is enabled without a "
+                            f"valid, signed, unexpired CAIO waiver (LG-GV-10)")
+
+    _GOVERNANCE_ARTIFACTS_CHECKED = True
+    if not blocking:
+        return None
+
+    for f in blocking:
+        logger.critical("[governance-artifacts] BLOCKING: %s", f)
+    try:
+        from agent import governance_audit as ga
+        led = ga.get_ledger()
+        if led is not None:
+            led.emit(
+                "security.error",
+                action="governance.artifacts_violation",
+                decision="halt",
+                severity="critical",
+                outcome={"status": "blocked", "class": "governance_artifacts",
+                         "error": "; ".join(blocking)[:1000]},
+                source_module="lliam_cli/security_audit_startup.py:enforce_governance_artifacts_at_startup",
+            )
+    except Exception:
+        pass
+    raise GovernanceArtifactError("; ".join(blocking))
