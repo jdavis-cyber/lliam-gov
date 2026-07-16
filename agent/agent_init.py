@@ -1214,6 +1214,8 @@ def init_agent(
                 agent._memory_store = MemoryStore(
                     memory_char_limit=mem_config.get("memory_char_limit", 2200),
                     user_char_limit=mem_config.get("user_char_limit", 1375),
+                    session_id=agent.session_id,
+                    identity=getattr(agent, "_user_id", None) or "default",
                 )
                 agent._memory_store.load_from_disk()
         except Exception:

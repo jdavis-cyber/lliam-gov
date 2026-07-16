@@ -24,6 +24,7 @@ Design:
 """
 
 import json
+import hashlib
 import logging
 import os
 import tempfile
@@ -121,11 +122,28 @@ class MemoryStore:
         Tool responses always reflect this live state.
     """
 
-    def __init__(self, memory_char_limit: int = 2200, user_char_limit: int = 1375):
+    def __init__(
+        self,
+        memory_char_limit: int = 2200,
+        user_char_limit: int = 1375,
+        *,
+        session_id: Optional[str] = None,
+        identity: str = "default",
+    ):
         self.memory_entries: List[str] = []
         self.user_entries: List[str] = []
         self.memory_char_limit = memory_char_limit
         self.user_char_limit = user_char_limit
+        self.session_id = str(session_id or "default")
+        self.identity = str(identity or "default")
+        base = get_memory_dir()
+        from agent.memory_governance import partition_path
+        self._memory_dir = partition_path(
+            base, session_id=self.session_id, identity=self.identity,
+        )
+        self._entry_timestamps: Dict[str, Dict[str, float]] = {
+            "memory": {}, "user": {},
+        }
         # Frozen snapshot for system prompt -- set once at load_from_disk()
         self._system_prompt_snapshot: Dict[str, str] = {"memory": "", "user": ""}
 
@@ -146,11 +164,11 @@ class MemoryStore:
         Scanning is deterministic from disk bytes, so the snapshot remains
         stable for the entire session (prefix-cache invariant holds).
         """
-        mem_dir = get_memory_dir()
+        mem_dir = self._memory_dir
         mem_dir.mkdir(parents=True, exist_ok=True)
 
-        self.memory_entries = self._read_file(mem_dir / "MEMORY.md")
-        self.user_entries = self._read_file(mem_dir / "USER.md")
+        self.memory_entries = self._load_retained_entries("memory")
+        self.user_entries = self._load_retained_entries("user")
 
         # Deduplicate entries (preserves order, keeps first occurrence)
         self.memory_entries = list(dict.fromkeys(self.memory_entries))
@@ -241,9 +259,8 @@ class MemoryStore:
                     pass
             fd.close()
 
-    @staticmethod
-    def _path_for(target: str) -> Path:
-        mem_dir = get_memory_dir()
+    def _path_for(self, target: str) -> Path:
+        mem_dir = self._memory_dir
         if target == "user":
             return mem_dir / "USER.md"
         return mem_dir / "MEMORY.md"
@@ -272,8 +289,15 @@ class MemoryStore:
 
     def save_to_disk(self, target: str):
         """Persist entries to the appropriate file. Called after every mutation."""
-        get_memory_dir().mkdir(parents=True, exist_ok=True)
-        self._write_file(self._path_for(target), self._entries_for(target))
+        self._memory_dir.mkdir(parents=True, exist_ok=True)
+        entries = self._entries_for(target)
+        now = time.time()
+        previous = self._entry_timestamps.get(target, {})
+        self._entry_timestamps[target] = {
+            entry: float(previous.get(entry, now)) for entry in entries
+        }
+        self._write_file(self._path_for(target), entries)
+        self._write_metadata(target)
 
     def _entries_for(self, target: str) -> List[str]:
         if target == "user":
@@ -307,6 +331,11 @@ class MemoryStore:
         scan_error = _scan_memory_content(content)
         if scan_error:
             return {"success": False, "error": scan_error}
+        if self._pii_excluded(content):
+            return {
+                "success": False,
+                "error": "Content contains CUI/PII and is excluded from persistent memory (LG-MC-05).",
+            }
 
         with self._file_lock(self._path_for(target)):
             # Re-read from disk under lock to pick up writes from other sessions.
@@ -357,6 +386,11 @@ class MemoryStore:
             return {"success": False, "error": "old_text cannot be empty."}
         if not new_content:
             return {"success": False, "error": "new_content cannot be empty. Use 'remove' to delete entries."}
+        if self._pii_excluded(new_content):
+            return {
+                "success": False,
+                "error": "Content contains CUI/PII and is excluded from persistent memory (LG-MC-05).",
+            }
 
         # Scan replacement content for injection/exfiltration
         scan_error = _scan_memory_content(new_content)
@@ -475,6 +509,14 @@ class MemoryStore:
                 scan_error = _scan_memory_content(new_content)
                 if scan_error:
                     return {"success": False, "error": f"Operation {i + 1}: {scan_error}"}
+                if self._pii_excluded(str(new_content)):
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Operation {i + 1}: content contains CUI/PII and is "
+                            "excluded from persistent memory (LG-MC-05)."
+                        ),
+                    }
 
         with self._file_lock(self._path_for(target)):
             bak = self._reload_target(target)
@@ -582,6 +624,86 @@ class MemoryStore:
         return block if block else None
 
     # -- Internal helpers --
+
+    @staticmethod
+    def _pii_excluded(content: str) -> bool:
+        try:
+            from agent.memory_governance import pii_excluded
+            return pii_excluded(content)
+        except Exception:
+            logger.warning("memory PII classifier unavailable; excluding content", exc_info=True)
+            return True
+
+    def _metadata_path(self, target: str) -> Path:
+        return self._path_for(target).with_suffix(".retention.json")
+
+    @staticmethod
+    def _entry_key(entry: str) -> str:
+        return hashlib.sha256(entry.encode("utf-8")).hexdigest()
+
+    def _load_retained_entries(self, target: str) -> List[str]:
+        path = self._path_for(target)
+        entries = self._read_file(path)
+        if not entries:
+            return []
+        original_entries = list(entries)
+        fallback_ts = path.stat().st_mtime if path.exists() else time.time()
+        timestamps: Dict[str, float] = {}
+        try:
+            raw = json.loads(self._metadata_path(target).read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                timestamps = {str(k): float(v) for k, v in raw.items()}
+        except Exception:
+            timestamps = {}
+        self._entry_timestamps[target] = {
+            entry: timestamps.get(self._entry_key(entry), fallback_ts) for entry in entries
+        }
+        try:
+            from lliam_cli.config import load_config
+            from agent.memory_governance import sweep_expired
+            governance = ((load_config() or {}).get("memory") or {}).get("governance") or {}
+            ttl = int(governance.get("retention_ttl_seconds") or 0)
+            if ttl > 0:
+                wrapped = [
+                    {"content": entry, "ts": self._entry_timestamps[target][entry]}
+                    for entry in entries
+                ]
+                kept = sweep_expired(wrapped, ttl_seconds=ttl)
+                entries = [str(item["content"]) for item in kept]
+                self._entry_timestamps[target] = {
+                    entry: self._entry_timestamps[target][entry] for entry in entries
+                }
+        except Exception:
+            pass
+        if entries != original_entries:
+            self._write_file(path, entries)
+            self._write_metadata(target)
+        return entries
+
+    def _write_metadata(self, target: str) -> None:
+        path = self._metadata_path(target)
+        payload = json.dumps(
+            {
+                self._entry_key(entry): timestamp
+                for entry, timestamp in self._entry_timestamps.get(target, {}).items()
+            },
+            sort_keys=True,
+        )
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(path.parent), suffix=".tmp", prefix=".retention_"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            atomic_replace(tmp_path, path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def _success_response(self, target: str, message: str = None) -> Dict[str, Any]:
         entries = self._entries_for(target)
@@ -735,7 +857,9 @@ class MemoryStore:
             raise RuntimeError(f"Failed to write memory file {path}: {e}")
 
 
-def load_on_disk_store() -> "MemoryStore":
+def load_on_disk_store(
+    *, session_id: Optional[str] = None, identity: str = "default"
+) -> "MemoryStore":
     """Build a fresh on-disk :class:`MemoryStore`, honoring configured char limits.
 
     Use this from any context that has no live agent (the messaging gateway, the
@@ -762,6 +886,8 @@ def load_on_disk_store() -> "MemoryStore":
     store = MemoryStore(
         memory_char_limit=memory_char_limit,
         user_char_limit=user_char_limit,
+        session_id=session_id,
+        identity=identity,
     )
     store.load_from_disk()
     return store
@@ -1087,7 +1213,3 @@ registry.register(
     check_fn=check_memory_requirements,
     emoji="🧠",
 )
-
-
-
-

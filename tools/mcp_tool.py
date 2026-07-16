@@ -2025,6 +2025,12 @@ class MCPServerTask:
             )
 
         url = config["url"]
+        from tools.egress_policy import check_egress
+        egress = check_egress(url, surface="mcp", session_id=self.name)
+        if egress.disposition != "allow":
+            raise PermissionError(
+                f"MCP server '{self.name}' blocked by egress policy: {egress.reason}"
+            )
         headers = dict(config.get("headers") or {})
         # Some MCP servers require MCP-Protocol-Version on the initial
         # initialize request and reject session-less POSTs otherwise.

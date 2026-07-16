@@ -1320,6 +1320,37 @@ def check_dangerous_command(command: str, env_type: str,
     is_gateway = _is_gateway_approval_context()
 
     if not is_cli and not is_gateway:
+        # LG-HO-02 (additive @ P2.2): under strict posture the legacy
+        # auto-approve below is fail-closed DENY — a dangerous command with no
+        # approver present must not run for CUI (closes the R6 gap). Applies
+        # to cron too (strict floor beats approvals.cron_mode: approve).
+        _strict_ho = False
+        try:
+            from tools.hitl_oversight import record_decision, strict_fail_closed
+            _strict_ho = strict_fail_closed()
+        except Exception:
+            _strict_ho = False
+        if _strict_ho:
+            try:
+                record_decision(
+                    decision="deny", gate="shell.dangerous", target=command,
+                    description=description, origin="non_interactive_fail_closed",
+                )
+            except Exception:
+                pass
+            return {
+                "approved": False,
+                "pattern_key": pattern_key,
+                "description": description,
+                "message": (
+                    f"BLOCKED (fail-closed): this command is potentially dangerous "
+                    f"({description}) and no approver is present in this "
+                    "non-interactive session (LG-HO-02). Run it from an "
+                    "interactive or gateway session where an authenticated "
+                    "approver can rule on it, or have an operator grant the "
+                    "capability (operator_override)."
+                ),
+            }
         # Cron sessions: respect cron_mode config
         if env_var_enabled("HERMES_CRON_SESSION"):
             if _get_cron_approval_mode() == "deny":
@@ -1358,10 +1389,26 @@ def check_dangerous_command(command: str, env_type: str,
             ),
         }
 
+    # LG-HO-07/10 (additive @ P2.2): count the prompt for fatigue tracking and
+    # record the operator's verdict to the governance ledger. Never blocking.
+    try:
+        from tools.hitl_oversight import note_approval_prompt as _ho_note
+        from tools.hitl_oversight import record_decision as _ho_record
+        _ho_note(session_key)
+    except Exception:
+        _ho_record = None
+
     choice = prompt_dangerous_approval(command, description,
                                        approval_callback=approval_callback)
 
     if choice == "deny":
+        if _ho_record is not None:
+            try:
+                _ho_record(decision="deny", gate="shell.dangerous",
+                           target=command, description=description,
+                           origin="interactive_prompt")
+            except Exception:
+                pass
         return {
             "approved": False,
             "message": f"BLOCKED: User denied this potentially dangerous command (matched '{description}' pattern). Do NOT retry this command - the user has explicitly rejected it.",
@@ -1376,6 +1423,13 @@ def check_dangerous_command(command: str, env_type: str,
         approve_permanent(pattern_key)
         save_permanent_allowlist(_permanent_approved)
 
+    if _ho_record is not None:
+        try:
+            _ho_record(decision="approve", gate="shell.dangerous",
+                       target=command, description=description,
+                       origin="interactive_prompt")
+        except Exception:
+            pass
     return {"approved": True, "message": None}
 
 
@@ -1577,6 +1631,34 @@ def check_all_command_guards(command: str, env_type: str,
     # Preserve the existing non-interactive behavior: outside CLI/gateway/ask
     # flows, we do not block on approvals and we skip external guard work.
     if not is_cli and not is_gateway and not is_ask:
+        # LG-HO-02: this is the terminal dispatcher's real guard. Strict
+        # sessions must not inherit the shipped headless auto-approve behavior
+        # for a dangerous command when no authenticated approver is present.
+        is_dangerous, pattern_key, description = detect_dangerous_command(command)
+        try:
+            from tools.hitl_oversight import record_decision, strict_fail_closed
+            strict_no_approver = strict_fail_closed()
+        except Exception:
+            strict_no_approver = False
+        if is_dangerous and strict_no_approver:
+            try:
+                record_decision(
+                    decision="deny", gate="shell.dangerous", target=command,
+                    description=description, origin="non_interactive_fail_closed",
+                )
+            except Exception:
+                pass
+            return {
+                "approved": False,
+                "pattern_key": pattern_key,
+                "description": description,
+                "message": (
+                    f"BLOCKED (fail-closed): this command is potentially dangerous "
+                    f"({description}) and no approver is present in this "
+                    "non-interactive session (LG-HO-02). Run it from an "
+                    "interactive or gateway session with an authenticated approver."
+                ),
+            }
         # Cron sessions: respect cron_mode config
         if env_var_enabled("HERMES_CRON_SESSION"):
             if _get_cron_approval_mode() == "deny":

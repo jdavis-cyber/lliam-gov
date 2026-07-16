@@ -964,6 +964,17 @@ async def web_extract_tool(
         safe_urls = []
         ssrf_blocked: List[Dict[str, Any]] = []
         for url in normalized_urls:
+            try:
+                from tools.egress_policy import check_egress
+                egress = check_egress(url, surface="web")
+            except Exception:
+                egress = None
+            if egress is not None and egress.disposition != "allow":
+                ssrf_blocked.append({
+                    "url": url, "title": "", "content": "",
+                    "error": f"Blocked by egress policy: {egress.reason}",
+                })
+                continue
             if not await async_is_safe_url(url):
                 ssrf_blocked.append({
                     "url": url, "title": "", "content": "",
