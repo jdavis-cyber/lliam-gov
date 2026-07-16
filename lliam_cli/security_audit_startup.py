@@ -335,6 +335,146 @@ class ControlPlaneAuthError(RuntimeError):
 _CONTROL_PLANE_CHECKED = False
 
 
+class ProviderAllowlistError(RuntimeError):
+    """A configured routing path names a non-allowlisted inference provider.
+
+    Raised only when the effective posture is strict AND
+    ``security.provider_allowlist_enforce`` is on, when any of the five routing
+    paths (primary / fallback / MoA / auxiliary / delegation) resolves to a
+    provider or base_url host that is not on the approved allowlist. Routing CUI
+    to a non-vetted / non-US endpoint is CUI spillage — a CUI deployment must
+    refuse to start rather than silently egress off-boundary (LG-MP-01/02).
+    """
+
+
+# Sentinel so the provider-allowlist gate runs once per process.
+_PROVIDER_ALLOWLIST_CHECKED = False
+
+
+def _iter_configured_provider_routes(cfg: dict):
+    """Yield (path, provider, base_url) for every configured routing path.
+
+    Reads the real config keys: model (primary), fallback_providers (fallback),
+    moa.presets.*.{reference_models[],aggregator} (moa), auxiliary.<task> (aux),
+    delegation (delegation). Blank slots are skipped (a blank primary is the
+    resolver's own fail-closed concern, not a spillage route).
+    """
+    def _emit(path, slot):
+        if not isinstance(slot, dict):
+            return None
+        provider = str(slot.get("provider") or "").strip()
+        base_url = str(slot.get("base_url") or "").strip()
+        if provider:
+            return (path, provider, base_url)
+        return None
+
+    routes = []
+    r = _emit("primary", cfg.get("model") or {})
+    if r:
+        routes.append(r)
+    for fb in cfg.get("fallback_providers") or []:
+        r = _emit("fallback", fb)
+        if r:
+            routes.append(r)
+    moa = cfg.get("moa") or {}
+    for _name, preset in (moa.get("presets") or {}).items():
+        if not isinstance(preset, dict):
+            continue
+        for ref in preset.get("reference_models") or []:
+            r = _emit("moa", ref)
+            if r:
+                routes.append(r)
+        r = _emit("moa", preset.get("aggregator") or {})
+        if r:
+            routes.append(r)
+    aux = cfg.get("auxiliary") or {}
+    for _task, slot in aux.items():
+        r = _emit("auxiliary", slot)
+        if r:
+            routes.append(r)
+    r = _emit("delegation", cfg.get("delegation") or {})
+    if r:
+        routes.append(r)
+    return routes
+
+
+def enforce_provider_allowlist_at_startup(
+    *, config: Optional[dict] = None, force: bool = False
+) -> Optional[list[str]]:
+    """Fail-closed gate for the approved-provider allowlist (LG-MP-01/02).
+
+    Validates every configured routing path against
+    policy/provider-allowlist.yaml via ``provider_allowlist.validate_provider``.
+    A ``deny`` verdict on any path is a blocking finding under strict posture +
+    ``security.provider_allowlist_enforce``: logs ``critical``, appends a
+    ``security.error`` alert to the ledger, and raises
+    :class:`ProviderAllowlistError`. Advisory (returns findings, no raise) when
+    non-strict or the flag is off. Returns None when there is nothing to report.
+    Idempotent per process.
+    """
+    global _PROVIDER_ALLOWLIST_CHECKED
+    if _PROVIDER_ALLOWLIST_CHECKED and not force:
+        return None
+
+    if isinstance(config, dict) and config.get("security"):
+        eff = config
+    else:
+        try:
+            from lliam_cli import config as _cfg
+            eff = _cfg.load_config()
+        except Exception:
+            eff = config or {}
+
+    try:
+        from lliam_cli import provider_allowlist as pa
+    except Exception:
+        return None
+
+    if not pa.enforcement_enabled():
+        _PROVIDER_ALLOWLIST_CHECKED = True
+        return None
+
+    blocking: list[str] = []
+    for path, provider, base_url in _iter_configured_provider_routes(eff):
+        try:
+            decision = pa.validate_provider(provider, base_url, path=path, cui=True)
+        except Exception:
+            # Fail-closed: a validator fault on an enforced profile is a block.
+            blocking.append(f"{path}: provider '{provider}' could not be validated (fail-closed)")
+            continue
+        if decision.disposition == "deny":
+            blocking.append(f"{path}: {decision.reason}")
+
+    _PROVIDER_ALLOWLIST_CHECKED = True
+    if not blocking:
+        return None
+
+    strict = _effective_is_strict(eff)
+    if not strict:
+        for f in blocking:
+            logger.warning("[provider-allowlist] (advisory — not strict) %s", f)
+        return blocking
+
+    for f in blocking:
+        logger.critical("[provider-allowlist] BLOCKING: %s", f)
+    try:
+        from agent import governance_audit as ga
+        led = ga.get_ledger()
+        if led is not None:
+            led.emit(
+                "security.error",
+                action="provider.non_allowlisted_route",
+                decision="halt",
+                severity="critical",
+                outcome={"status": "blocked", "class": "provider_allowlist",
+                         "error": "; ".join(blocking)[:1000]},
+                source_module="lliam_cli/security_audit_startup.py:enforce_provider_allowlist_at_startup",
+            )
+    except Exception:
+        pass
+    raise ProviderAllowlistError("; ".join(blocking))
+
+
 def enforce_control_plane_auth_at_startup(
     *, config: Optional[dict] = None, force: bool = False
 ) -> Optional[list[str]]:

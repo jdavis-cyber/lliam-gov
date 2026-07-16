@@ -1,0 +1,134 @@
+# =============================================================================
+# provider-allowlist.yaml — Lliam-GOV Approved-Provider Allowlist Policy
+# =============================================================================
+#
+# | Field          | Value                                                      |
+# |----------------|------------------------------------------------------------|
+# | Document       | Approved-Provider Allowlist Policy (provider-allowlist.yaml)|
+# | Owner          | Lliam-GOV Program                                          |
+# | Classification | CUI//SP-PRIV (template — mark per instance)                |
+# | Version        | 0.1 DRAFT                                                  |
+#
+# WHAT THIS FILE IS  [ACTIVE @ P3.1]
+#   The register of the ONLY inference providers/endpoints authorized to receive
+#   CUI/PII from Lliam-GOV. Consumed by the NEW module
+#   lliam_cli/provider_allowlist.py (validate_provider), invoked at every routing
+#   path — primary, fallback, MoA, auxiliary, delegation — so no path silently
+#   routes CUI to a non-US / unvetted endpoint. It renames nothing; `id` values
+#   are the REAL provider slugs (auth.py PROVIDER_REGISTRY keys) and host strings
+#   are the REAL inference_base_url hosts the validator matches against.
+#
+#   Implements LG-MP-01 (allowlist, fail-closed), LG-MP-02 (all routing paths),
+#   LG-MP-03 (residency + no-train + TLS), LG-MP-04 (prefer local for high-
+#   sensitivity), LG-MP-08 (re-validation cadence); supports LG-DP-01/06.
+#
+# HOW IT LOADS
+#   security.provider_allowlist_enforce + security.provider_allowlist_path in
+#   cli-config.gov.yaml (via HERMES_CONFIG). Resolution order in
+#   provider_allowlist.py: configured path → $HERMES_HOME/provider-allowlist.yaml
+#   → repo policy/. Enforcement is a no-op unless strict posture AND the enforce
+#   flag are both set (capability-preserving on low-side).
+# =============================================================================
+
+metadata:
+  policy_id: "LG-PROVIDER-ALLOWLIST"
+  version: "0.1-DRAFT"
+  classification: "CUI//SP-PRIV"
+  owner: "Lliam-GOV Program"
+  default_disposition: deny             # [LG-MP-01] deny-by-default, fail-closed
+  enforce: true                         # mirrors security.provider_allowlist_enforce
+  cui_floor: "NIST SP 800-171 r3 / CMMC L2"
+  review:
+    cadence_days: 90                    # [LG-MP-08]
+    last_validated: "2026-07-16"
+    next_due: "2026-10-14"
+    register: "docs/governance/provider-vetting-register.md"
+
+
+# -----------------------------------------------------------------------------
+# 1. ROUTING-PATH BINDING  [LG-MP-02]
+# -----------------------------------------------------------------------------
+# The allowlist is enforced identically on every path that can egress CUI to a
+# model. A missing/blank provider or base_url fails closed. Path → real config:
+#   primary     runtime_provider.py  ← model.provider / model.base_url
+#   fallback    fallback_config.py   ← fallback_providers[].{provider,base_url}
+#   moa         moa_config.py        ← moa.presets.<n>.{reference_models[],aggregator}
+#   auxiliary   config.py            ← auxiliary.<task>.{provider,base_url}
+#   delegation  config.py            ← delegation.{provider,model,base_url}
+enforcement:
+  paths:
+    primary:    {enforce: true, on_violation: deny}
+    fallback:   {enforce: true, on_violation: deny, fail_closed_to: lmstudio}
+    moa:        {enforce: true, on_violation: deny}
+    auxiliary:  {enforce: true, on_violation: deny, fail_closed_to: lmstudio}
+    delegation: {enforce: true, on_violation: deny}
+  require_for_cui:
+    data_residency: us                  # us or local
+    no_train: true
+    tls_required: true                  # [LG-DP-06] reject plaintext base_urls
+  high_sensitivity:                     # [LG-MP-04]
+    local_only: true
+    preference: [lmstudio, ollama, vllm]
+
+
+# -----------------------------------------------------------------------------
+# 2. APPROVED PROVIDERS  [LG-MP-01, LG-MP-03, LG-MP-04]
+# -----------------------------------------------------------------------------
+providers:
+
+  # ---- In-boundary LOCAL inference (PREFERRED for high-sensitivity) ----------
+  - id: lmstudio
+    provider_class: local
+    base_url_hosts: ["127.0.0.1", "localhost"]
+    jurisdiction: "on-prem (operator enclave)"
+    fedramp_status: "n/a — local, no external egress"
+    data_residency: local
+    no_train: true
+    agreement_ref: "ENCLAVE-LOCAL-001"
+    cui_eligible: true
+    cui_only: true
+    notes: "Preferred high-side path. safetensors/gguf only (LG-MP-07); enroll in model-cards.yaml (LG-MP-05)."
+  - id: ollama
+    provider_class: local
+    base_url_hosts: ["127.0.0.1", "localhost"]
+    jurisdiction: "on-prem (operator enclave)"
+    fedramp_status: "n/a — local, no external egress"
+    data_residency: local
+    no_train: true
+    agreement_ref: "ENCLAVE-LOCAL-002"
+    cui_eligible: true
+    cui_only: true
+    notes: "LOCAL Ollama only. 'ollama-cloud' is a SEPARATE, non-allowlisted slug (denied)."
+  - id: vllm
+    provider_class: local
+    base_url_hosts: ["127.0.0.1", "localhost"]
+    jurisdiction: "on-prem (operator enclave)"
+    fedramp_status: "n/a — local, no external egress"
+    data_residency: local
+    no_train: true
+    agreement_ref: "ENCLAVE-LOCAL-003"
+    cui_eligible: true
+    cui_only: true
+    notes: "Self-hosted vLLM/OpenAI-compatible server pinned to the enclave host."
+
+  # ---- Authorized GOV-CLOUD / FedRAMP endpoint -------------------------------
+  - id: bedrock
+    provider_class: gov-cloud
+    base_url_hosts:
+      - "bedrock-runtime.us-gov-west-1.amazonaws.com"   # AWS GovCloud (US)
+      - "bedrock-runtime.us-gov-east-1.amazonaws.com"
+      # commercial bedrock-runtime hosts are intentionally NOT listed → denied for CUI
+    jurisdiction: "US (AWS GovCloud)"
+    fedramp_status: "FedRAMP High / DoD IL4-IL5 (GovCloud) — verify per account/ATO"
+    data_residency: us
+    no_train: true
+    agreement_ref: "AWS-GOVCLOUD-ATO-<id> / BAA-<id>"
+    cui_eligible: true
+    cui_only: false
+    bind:
+      guardrail_identifier: "<bedrock-guardrail-id>"    # [LG-MP-08] provider-side guardrail
+      guardrail_version: "DRAFT"
+    notes: "Pin AWS_REGION to a GovCloud region. Commercial hosts are not on the host list."
+
+# Built on Hermes Agent (Nous Research, MIT). Governance overlay is additive and
+# capability-preserving.

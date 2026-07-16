@@ -155,6 +155,20 @@ security:
     mode: allowlist                # [additive] LG-NE-03 allowlist mode on web/browser tools
     allow_domains_from: policy/egress-allowlist.yaml
     fail_closed: true
+
+  # [ACTIVE @ P3.1]  APPROVED-PROVIDER ALLOWLIST  (LG-MP-01/02/03/04/08)
+  # Consumed by the NEW lliam_cli/provider_allowlist.py validator + the
+  # fail-closed startup gate enforce_provider_allowlist_at_startup (wired at
+  # gateway startup next to the control-plane gate). Restricts CUI inference
+  # routing to vetted US/FedRAMP/local endpoints on every routing path; a
+  # non-allowlisted provider/host refuses to start. No-op unless strict + the
+  # enforce flag (capability-preserving on low-side).
+  provider_allowlist_enforce: true       # [additive] LG-MP-01/02 fail-closed enforcement ON
+  provider_allowlist_path: policy/provider-allowlist.yaml   # [additive] policy of record
+  allowed_providers: [lmstudio, ollama, vllm, bedrock]      # [additive] mirror of allowlist ids
+  allowlist_paths: [primary, fallback, moa, auxiliary, delegation]   # [additive] LG-MP-02 all paths
+  high_sensitivity_local_only: true      # [additive] LG-MP-04 clamp high-sensitivity CUI to local
+  local_provider_preference: [lmstudio, ollama, vllm]       # [additive] LG-MP-04 preference order
   tool_allowlist: []               # [additive] LG-AZ-02 (empty = no positive tool allowlist yet)
   tool_denylist:                   # [additive] LG-AZ-11/AZ-02: refuse these capabilities for CUI
     - computer_use

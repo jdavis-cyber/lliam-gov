@@ -18466,6 +18466,28 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     except Exception as _cp_exc:
         logger.debug("Control-plane auth check failed (non-fatal): %s", _cp_exc)
 
+    # LG-MP-01/02 (additive @ P3.1): fail-closed provider-allowlist gate.
+    # Refuses to start when any configured routing path (primary/fallback/MoA/
+    # auxiliary/delegation) names a non-allowlisted inference provider or host,
+    # under strict posture + security.provider_allowlist_enforce — no silent
+    # off-boundary CUI route.
+    from lliam_cli.security_audit_startup import (
+        enforce_provider_allowlist_at_startup,
+        ProviderAllowlistError,
+    )
+    try:
+        try:
+            from lliam_cli.config import load_config as _load_merged_pa
+
+            _pa_cfg = _load_merged_pa()
+        except Exception:
+            _pa_cfg = _audit_cfg
+        enforce_provider_allowlist_at_startup(config=_pa_cfg)
+    except ProviderAllowlistError:
+        raise
+    except Exception as _pa_exc:
+        logger.debug("Provider-allowlist check failed (non-fatal): %s", _pa_exc)
+
     from lliam_cli.security_audit_startup import (
         verify_audit_chain_at_startup,
         AuditChainVerificationError,
