@@ -148,15 +148,17 @@ obligations:
     obligation: >-
       Maintain assessment-ready evidence of 800-171 practice implementation:
       documented scope/boundary, SoA, SSP, and POA&M.
-    controls: [LG-GV-02, LG-RM-04, LG-IN-05]
-    status: partial
-    poam_ref: "POAM-P4-DOCS — boundary + SSP land at P4.3 (AI-495); intended-use, deviation register, SoA, and POA&M already in force"
+    controls: [LG-GV-02, LG-RM-04, LG-IN-05, LG-IN-07]
+    status: implemented
     config_points:
       - {kind: file, path: docs/governance/intended-use.md}
       - {kind: file, path: docs/governance/deviation-register.yaml}
       - {kind: file, path: docs/governance/roles.yaml}
       - {kind: file, path: docs/governance/SoA.md}
       - {kind: file, path: docs/governance/poam.yaml}
+      - {kind: file, path: docs/governance/SSP.md}
+      - {kind: file, path: docs/governance/boundary-scope.md}
+      - {kind: file, path: docs/governance/traceability-171r3.yaml}
 
   # ---------------------------------------------------------- OMB M-25-21 ---
   - id: REG-M2521-CAIO

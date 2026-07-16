@@ -512,9 +512,9 @@ controls:
   domain: IN
   title: Publish an authorized boundary/scope statement (in/out tools, skills, providers, MCP servers)
     for the CUI deployment
-  status: planned
+  status: implemented
   realized_in: P4.3
-  poam_ref: POAM-P4-DOCS
+  evidence: docs/governance/verification/P4.3-report.md
 - id: LG-IN-02
   domain: IN
   title: Generate a machine-readable AI-BOM/component inventory (tools, skills, plugins, MCP, providers,
@@ -532,30 +532,30 @@ controls:
   domain: IN
   title: Classify and prioritize assets; tag CUI-bearing workspace roots, memory, and secret stores by
     sensitivity
-  status: planned
+  status: implemented
   realized_in: P4.3
-  poam_ref: POAM-P4-DOCS
+  evidence: docs/governance/verification/P4.3-report.md
 - id: LG-IN-05
   domain: IN
   title: Map and document CUI storage/processing locations (workspace, persistent memory, audit/cache,
     provider context)
-  status: planned
+  status: implemented
   realized_in: P4.3
-  poam_ref: POAM-P4-DOCS
+  evidence: docs/governance/verification/P4.3-report.md
 - id: LG-IN-06
   domain: IN
   title: Inventory execution-surface hosts and local inference servers (LM Studio/Ollama/vLLM) and constrain
     computer-use to enrolled hosts
-  status: planned
+  status: implemented
   realized_in: P4.3
-  poam_ref: POAM-P4-DOCS
+  evidence: docs/governance/verification/P4.3-report.md
 - id: LG-IN-07
   domain: IN
   title: Author and maintain the System Security Plan (SSP) mapping each 800-171 r3 requirement to its
     Lliam config point
-  status: planned
+  status: implemented
   realized_in: P4.3
-  poam_ref: POAM-P4-DOCS
+  evidence: docs/governance/verification/P4.3-report.md
 - id: LG-IR-01
   domain: IR
   title: Provide a kill-switch/interrupt that immediately suspends all tool execution and inference egress

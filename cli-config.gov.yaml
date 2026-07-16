@@ -480,6 +480,10 @@ governance:
     impact_assessment: docs/governance/ai-impact-assessment.md       # LG-RM-05
     risk_process: docs/governance/risk-assessment-process.md         # LG-RM-01
     halt_runbook: docs/governance/halt-rollback-runbook.md           # LG-RM-09
+    # [additive @ P4.3] boundary/inventory + SSP layer (LG-IN-01/04..07)
+    ssp: docs/governance/SSP.md                                      # LG-IN-07
+    boundary_scope: docs/governance/boundary-scope.md                # LG-IN-01/04/05/06
+    traceability: docs/governance/traceability-171r3.yaml            # LG-IN-07
 # NOTE: LG-IA-01 managed-account inventory (security.accounts) and the
 # LG-IA-05 no-default-credential switch (security.no_default_credentials) live
 # in the EXISTING `security:` block at the top of this file — a SECOND top-level

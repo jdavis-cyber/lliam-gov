@@ -23,7 +23,8 @@ items:
     interim_compensating: >-
       AI-BOM/SBOM generation + baseline reconciliation (LG-IN-02/03, P3.4);
       intended-use boundary statement (LG-GV-02, P0.7).
-    status: open
+    status: closed
+    closed: 2026-07-16 (P4.3 — boundary-scope.md + SSP.md + traceability matrix delivered)
 
   - id: POAM-P4-QMS
     title: QMS process maps, privacy/bias registers, fairness CI gate
