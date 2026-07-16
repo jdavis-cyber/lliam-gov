@@ -1,0 +1,33 @@
+# =============================================================================
+# model_manifest.yaml — Lliam-GOV Signed Model/Skill Manifest  [ACTIVE @ P3.2]
+# =============================================================================
+# LG-MP-06: the signed manifest of record. agent/attestation.verify_manifest
+# checks the `signature` (HMAC-SHA256 over the canonical body — every field
+# except `signer`/`signature`) against the trusted-signer key in
+# security.trusted_signers. attest_high_impact re-checks it before a high-impact
+# action and blocks on a runtime/manifest mismatch. DSSE/Sigstore-compatible in
+# shape; this repo copy uses the HMAC scheme so it verifies with no external
+# dependency. Renames nothing.
+#
+# SIGNING (ops):
+#   The `signature` below was computed with an EXAMPLE key. Before enabling
+#   attestation in production, re-sign with the provisioned signing key (held
+#   in the key store, NOT the repo) and set the matching
+#   security.trusted_signers.<signer> in cli-config.gov.yaml:
+#     python -c "import agent.attestation as a, yaml; \
+#       b=yaml.safe_load(open('model_manifest.yaml')); \
+#       b.pop('signer',None); b.pop('signature',None); \
+#       print(a.compute_signature(b, '<KEY>'))"
+# =============================================================================
+
+signer: "lliam-gov-signer"
+signature: "df81ecd2e54de71675c4984f622844de9d1f7fa67c6e5137767d0b3f62a9be4a"
+
+manifest_version: "lg-mp/1"
+models:
+  primary: "lmstudio/llama-3.1-8b-instruct@v1"
+  fallback: "bedrock/anthropic.claude-3-5-sonnet@v1"
+skill_hashes:
+  pdf: "sha256:PLACEHOLDER-recompute-at-build"
+  xlsx: "sha256:PLACEHOLDER-recompute-at-build"
+  docx: "sha256:PLACEHOLDER-recompute-at-build"

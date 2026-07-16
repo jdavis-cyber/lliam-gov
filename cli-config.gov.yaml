@@ -169,6 +169,19 @@ security:
   allowlist_paths: [primary, fallback, moa, auxiliary, delegation]   # [additive] LG-MP-02 all paths
   high_sensitivity_local_only: true      # [additive] LG-MP-04 clamp high-sensitivity CUI to local
   local_provider_preference: [lmstudio, ollama, vllm]       # [additive] LG-MP-04 preference order
+  allowlist_review_cadence_days: 90      # [additive] LG-MP-08 provider posture re-validation cadence
+
+  # [ACTIVE @ P3.2]  MODEL INTEGRITY + ATTESTATION  (LG-MP-05/06/07)
+  # Consumed by the NEW agent/attestation.py. A model needs a card before it is
+  # CUI-eligible (LG-MP-05); a signed manifest is verified before high-impact
+  # actions (LG-MP-06); only safe serialization formats load (LG-MP-07).
+  require_model_card: true               # [additive] LG-MP-05: uncarded model refused for CUI
+  model_cards_path: docs/governance/model-cards/model-cards.yaml   # [additive] card index of record
+  safe_serialization_only: true          # [additive] LG-MP-07: allow safetensors/gguf; deny code-executing formats
+  model_hash_verify: true                # [additive] LG-MP-07: verify artifact hash at load
+  model_manifest_path: model_manifest.yaml   # [additive] LG-MP-06 signed manifest of record
+  trusted_signers:                       # [additive] LG-MP-06 signer id -> key (KEY provisioned out-of-repo)
+    lliam-gov-signer: "REPLACE-WITH-PROVISIONED-SIGNING-KEY"
   tool_allowlist: []               # [additive] LG-AZ-02 (empty = no positive tool allowlist yet)
   tool_denylist:                   # [additive] LG-AZ-11/AZ-02: refuse these capabilities for CUI
     - computer_use

@@ -18488,6 +18488,26 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     except Exception as _pa_exc:
         logger.debug("Provider-allowlist check failed (non-fatal): %s", _pa_exc)
 
+    # LG-MP-05/06 (additive @ P3.2): fail-closed model-integrity gate. Refuses
+    # to start when the signed model manifest is invalid/untrusted or the
+    # configured primary model lacks a required model card, under strict posture.
+    from lliam_cli.security_audit_startup import (
+        enforce_model_integrity_at_startup,
+        ModelIntegrityError,
+    )
+    try:
+        try:
+            from lliam_cli.config import load_config as _load_merged_mi
+
+            _mi_cfg = _load_merged_mi()
+        except Exception:
+            _mi_cfg = _audit_cfg
+        enforce_model_integrity_at_startup(config=_mi_cfg)
+    except ModelIntegrityError:
+        raise
+    except Exception as _mi_exc:
+        logger.debug("Model-integrity check failed (non-fatal): %s", _mi_exc)
+
     from lliam_cli.security_audit_startup import (
         verify_audit_chain_at_startup,
         AuditChainVerificationError,

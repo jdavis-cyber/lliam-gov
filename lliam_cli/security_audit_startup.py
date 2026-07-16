@@ -351,6 +351,107 @@ class ProviderAllowlistError(RuntimeError):
 _PROVIDER_ALLOWLIST_CHECKED = False
 
 
+class ModelIntegrityError(RuntimeError):
+    """A model-integrity precondition failed under strict posture.
+
+    Raised when the signed model manifest is invalid/untrusted (LG-MP-06) or a
+    configured model lacks a required model card (LG-MP-05). Routing CUI through
+    an unattested model or an undocumented model violates supply-chain integrity
+    — a CUI deployment refuses to start rather than proceed unverified.
+    """
+
+
+# Sentinel so the model-integrity gate runs once per process.
+_MODEL_INTEGRITY_CHECKED = False
+
+
+def enforce_model_integrity_at_startup(
+    *, config: Optional[dict] = None, force: bool = False
+) -> Optional[list[str]]:
+    """Fail-closed gate for model integrity (LG-MP-05/06).
+
+    Under strict posture: (a) verifies the signed manifest
+    (security.model_manifest_path) against security.trusted_signers — a bad or
+    untrusted signature blocks; (b) if security.require_model_card is set,
+    verifies the configured primary model has a card. Advisory (returns
+    findings) when non-strict. Idempotent per process.
+    """
+    global _MODEL_INTEGRITY_CHECKED
+    if _MODEL_INTEGRITY_CHECKED and not force:
+        return None
+
+    if isinstance(config, dict) and config.get("security"):
+        eff = config
+    else:
+        try:
+            from lliam_cli import config as _cfg
+            eff = _cfg.load_config()
+        except Exception:
+            eff = config or {}
+
+    sec = eff.get("security") or {}
+    try:
+        import agent.attestation as att
+    except Exception:
+        return None
+
+    blocking: list[str] = []
+
+    # (a) LG-MP-06 — signed manifest verification.
+    manifest_path = str(sec.get("model_manifest_path") or "").strip()
+    if manifest_path:
+        try:
+            import yaml
+            from pathlib import Path as _P
+            mp = _P(manifest_path).expanduser()
+            if mp.is_file():
+                manifest = yaml.safe_load(mp.read_text(encoding="utf-8")) or {}
+                verdict = att.verify_manifest(manifest)
+                if not verdict.valid:
+                    blocking.append(f"model manifest: {verdict.reason}")
+        except Exception as e:
+            blocking.append(f"model manifest could not be verified — fail-closed ({e})")
+
+    # (b) LG-MP-05 — the configured primary model must have a card.
+    if att.require_model_card():
+        model = eff.get("model") or {}
+        provider = str(model.get("provider") or "").strip()
+        model_name = str(model.get("model") or "").strip()
+        model_id = model_name if "/" in model_name else (
+            f"{provider}/{model_name}" if provider and model_name else model_name)
+        if model_id and not att.model_cui_eligible(model_id):
+            blocking.append(f"primary model '{model_id}' has no model card / is not CUI-eligible (LG-MP-05)")
+
+    _MODEL_INTEGRITY_CHECKED = True
+    if not blocking:
+        return None
+
+    strict = _effective_is_strict(eff)
+    if not strict:
+        for f in blocking:
+            logger.warning("[model-integrity] (advisory — not strict) %s", f)
+        return blocking
+
+    for f in blocking:
+        logger.critical("[model-integrity] BLOCKING: %s", f)
+    try:
+        from agent import governance_audit as ga
+        led = ga.get_ledger()
+        if led is not None:
+            led.emit(
+                "security.error",
+                action="model.integrity_violation",
+                decision="halt",
+                severity="critical",
+                outcome={"status": "blocked", "class": "model_integrity",
+                         "error": "; ".join(blocking)[:1000]},
+                source_module="lliam_cli/security_audit_startup.py:enforce_model_integrity_at_startup",
+            )
+    except Exception:
+        pass
+    raise ModelIntegrityError("; ".join(blocking))
+
+
 def _iter_configured_provider_routes(cfg: dict):
     """Yield (path, provider, base_url) for every configured routing path.
 
