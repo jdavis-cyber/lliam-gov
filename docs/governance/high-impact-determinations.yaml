@@ -1,0 +1,116 @@
+# high-impact-determinations.yaml — OMB M-25-21 high-impact AI determination
+# register with SIGNED risk acceptance (LG-RM-06, P4.2 / AI-494).
+#
+# Purpose: the per-use-case determination register. Each row records whether
+# a use case falls inside the M-25-21 high-impact presumption, the rationale,
+# the SIGNED risk acceptance, and the independent reviewer (LG-RM-05). The
+# master assessment is docs/governance/ai-impact-assessment.md; capability
+# dispositions trace to the PDP tiering matrix policy/tool-risk-policy.yaml
+# (LG-RM-03). A "not high-impact" determination for a presumed-high-impact
+# category requires a documented CAIO notification (none claimed here).
+#
+# Signers are the authenticated principals bound in governance.role_bindings;
+# co-held roles in the eval deployment are covered by the tracked deviations
+# in docs/governance/roles.yaml.
+#
+# Review-by: at re-authorization (authorization-record.yaml expiry) and at
+# management review (LG-GV-08).
+
+schema: lg-rm/1
+owner_role: caio
+classification: CUI//SP-PRIV   # template — mark per instance
+master_assessment: docs/governance/ai-impact-assessment.md
+tiering_matrix: policy/tool-risk-policy.yaml
+
+determinations:
+  - id: HID-2026-001
+    use_case: >-
+      Agentic software engineering over a confined workspace (file
+      read/write/edit + sandboxed shell) under graduated enforcement.
+    high_impact: true
+    determination_rationale: >-
+      Autonomy (headless/batch turns) combined with real-world tool actions
+      (shell, file mutation) satisfies the M-25-21 presumption: model output
+      becomes real consequences on the host. Mitigated to acceptable
+      residual by the per-call PDP, safe-root confinement, docker sandbox,
+      and HITL on destructive actions.
+    action_classes: [file_read, file_write.in_safe_root,
+                     file_write.outside_safe_root, shell.non_destructive,
+                     shell.destructive]
+    signed_acceptance:
+      signed_by: jdavis@agency.mil
+      role: caio
+      date: 2026-07-16
+      reference: docs/governance/authorization-record.yaml
+    independent_reviewer:
+      role: auditor
+      principal: auditor@independent.mil
+      disposition: concur
+      date: 2026-07-16
+
+  - id: HID-2026-002
+    use_case: >-
+      Document/data analysis with inference routed across the approved
+      in-boundary provider set (primary/fallback/MoA/auxiliary/delegation).
+    high_impact: true
+    determination_rationale: >-
+      CUI exposure to inference providers satisfies the presumption: a
+      mis-routed context window is a reportable data-residency spillage.
+      Mitigated by the fail-closed provider allowlist on all five routing
+      paths, PII redaction, and DLP taint gating.
+    action_classes: [provider_call.allowlisted, provider_call.non_allowlisted,
+                     network.egress]
+    signed_acceptance:
+      signed_by: jdavis@agency.mil
+      role: caio
+      date: 2026-07-16
+      reference: docs/governance/authorization-record.yaml
+    independent_reviewer:
+      role: auditor
+      principal: auditor@independent.mil
+      disposition: concur
+      date: 2026-07-16
+
+  - id: HID-2026-003
+    use_case: >-
+      Persistent memory and agent-authored skill curation (background
+      review, memory writes, skill writes).
+    high_impact: true
+    determination_rationale: >-
+      Autonomous self-modification satisfies the presumption: a poisoned
+      memory or skill write is a durable backdoor steering future CUI
+      decisions. Mitigated by write-side validation, provenance tagging,
+      staged HITL write-approval, and AST audit of agent-authored skills.
+    action_classes: [memory_write, skill_write]
+    signed_acceptance:
+      signed_by: jdavis@agency.mil
+      role: caio
+      date: 2026-07-16
+      reference: docs/governance/authorization-record.yaml
+    independent_reviewer:
+      role: auditor
+      principal: auditor@independent.mil
+      disposition: concur
+      date: 2026-07-16
+
+  - id: HID-2026-004
+    use_case: >-
+      Desktop/browser automation (computer-use, interactive web control).
+    high_impact: true
+    determination_rationale: >-
+      Unbounded desktop control over a CUI workstation is presumed
+      high-impact; no current mission requires it. DISPOSITION: disabled in
+      the CUI baseline (deny) rather than risk-accepted for use —
+      re-enablement requires a deviation-register entry, JIT grant, and
+      approval, and re-determination here.
+    action_classes: [computer_use.desktop_control, browser.unlisted_or_action]
+    signed_acceptance:
+      signed_by: jdavis@agency.mil
+      role: caio
+      date: 2026-07-16
+      reference: docs/governance/authorization-record.yaml
+    independent_reviewer:
+      role: auditor
+      principal: auditor@independent.mil
+      disposition: concur
+      date: 2026-07-16

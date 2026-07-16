@@ -150,11 +150,13 @@ obligations:
       documented scope/boundary, SoA, SSP, and POA&M.
     controls: [LG-GV-02, LG-RM-04, LG-IN-05]
     status: partial
-    poam_ref: "POAM-P4-DOCS — SoA + POA&M land at P4.2 (AI-494); boundary + SSP at P4.3 (AI-495); intended-use + deviation register already in force"
+    poam_ref: "POAM-P4-DOCS — boundary + SSP land at P4.3 (AI-495); intended-use, deviation register, SoA, and POA&M already in force"
     config_points:
       - {kind: file, path: docs/governance/intended-use.md}
       - {kind: file, path: docs/governance/deviation-register.yaml}
       - {kind: file, path: docs/governance/roles.yaml}
+      - {kind: file, path: docs/governance/SoA.md}
+      - {kind: file, path: docs/governance/poam.yaml}
 
   # ---------------------------------------------------------- OMB M-25-21 ---
   - id: REG-M2521-CAIO
@@ -176,12 +178,12 @@ obligations:
       oversight on consequential actions, documented determinations, and
       signed risk acceptance before enablement.
     controls: [LG-HO-01, LG-GV-05, LG-RM-06]
-    status: partial
-    poam_ref: "POAM-P4-RM — signed high-impact determinations land at P4.2 (AI-494); HITL approval gating already enforced at the tool chokepoint"
+    status: implemented
     config_points:
       - {kind: config_key, key: security.deny_on_no_approver}
       - {kind: config_key, key: security.require_authenticated_approver}
       - {kind: module, path: tools/hitl_oversight.py}
+      - {kind: file, path: docs/governance/high-impact-determinations.yaml}
 
   - id: REG-M2521-FAILSAFE
     source: OMB M-25-21 §4(c) (Human oversight with fail-safe)

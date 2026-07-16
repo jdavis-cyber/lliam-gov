@@ -172,7 +172,7 @@ This path **preserves capability** by providing a tracked, justified, time-boxed
 
 **This policy is not advisory text — it is bound to running configuration.** Its identity lives in the `governance:` block of `cli-config.gov.yaml`, selected via the existing `HERMES_CONFIG` env var. The startup gate refuses to serve work under strict posture if the policy is absent, placeholder-valued, or past its review date. Every subordinate artifact named in this policy — roles/RACI (LG-GV-04, in force), regulatory register (LG-GV-03, in force), authorization record (LG-GV-06, in force), waiver register (LG-GV-10, in force), deviation register (LG-CH-08, in force), SoA/POA&M/risk registers (LG-RM-*, issued at P4.2), SSP (P4.3), and halt/rollback runbook (LG-RM-09, P5.3) — is referenced from this document and reconciled against running configuration at boot and in CI.
 
-**Path-freeze attestation.** Every enforcement point above is realized by setting an existing env var / YAML key / CLI flag / policy file, or by adding a **new** additive file or module. No existing Hermes/Lliam module, file, CLI command, tool name, or identifier is renamed, moved, or refactored by this policy or its overlay.
+**Path-freeze attestation.** Every enforcement point above is realized by setting an existing env var / YAML key / CLI flag / policy file, or by adding a **new** additive file or module. No existing upstream or Lliam module, file, CLI command, tool name, or identifier is renamed, moved, or refactored by this policy or its overlay.
 
 ---
 

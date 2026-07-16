@@ -471,6 +471,15 @@ governance:
     authorization: docs/governance/authorization-record.yaml # LG-GV-06
     waiver: docs/governance/waiver-register.yaml             # LG-GV-10
     deviation: docs/governance/deviation-register.yaml       # LG-CH-08 (P0.7)
+    # [additive @ P4.2] risk & applicability layer (LG-RM-01..07,09)
+    control_catalog: docs/governance/control-catalog.yaml    # LG-RM-04 machine canon
+    soa: docs/governance/SoA.md                              # LG-RM-04
+    poam: docs/governance/poam.yaml                          # LG-RM-07
+    threat_risk: docs/governance/threat-risk-register.yaml   # LG-RM-02
+    determinations: docs/governance/high-impact-determinations.yaml  # LG-RM-06
+    impact_assessment: docs/governance/ai-impact-assessment.md       # LG-RM-05
+    risk_process: docs/governance/risk-assessment-process.md         # LG-RM-01
+    halt_runbook: docs/governance/halt-rollback-runbook.md           # LG-RM-09
 # NOTE: LG-IA-01 managed-account inventory (security.accounts) and the
 # LG-IA-05 no-default-credential switch (security.no_default_credentials) live
 # in the EXISTING `security:` block at the top of this file — a SECOND top-level
