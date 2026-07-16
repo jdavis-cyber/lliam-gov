@@ -50,7 +50,8 @@ items:
     interim_compensating: >-
       Path-freeze + baseline-drift + supply-chain CI gates operating since
       P0.7/P3.4; supplier-vetting register (LG-TP-03) in force since P3.3.
-    status: open
+    status: closed
+    closed: 2026-07-16 (P4.5 — traceability, V&V gates, CODEOWNERS, red-team corpus, go/no-go gate, training + shared-responsibility + evidence registers delivered)
 
   - id: POAM-P5-MON
     title: ISCM/SIEM streaming and runtime anomaly/drift/runaway monitors

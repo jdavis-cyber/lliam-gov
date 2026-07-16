@@ -1147,51 +1147,51 @@ controls:
   domain: SD
   title: Capture CUI/CMMC requirements as testable agent requirements and maintain a requirements-to-control
     traceability matrix
-  status: planned
+  status: implemented
   realized_in: P4.5
-  poam_ref: POAM-P4-SDLC
+  evidence: docs/governance/verification/P4.5-report.md
 - id: LG-SD-03
   domain: SD
   title: Define V&V gates with pass/fail criteria proving guardrails fire (approval, url_safety, tirith,
     audit integrity) before release
-  status: planned
+  status: implemented
   realized_in: P4.5
-  poam_ref: POAM-P4-SDLC
+  evidence: docs/governance/verification/P4.5-report.md
 - id: LG-SD-04
   domain: SD
   title: Require peer review (CODEOWNERS) and independent challenge on governance-config, skill, and prompt/policy
     changes
-  status: planned
+  status: implemented
   realized_in: P4.5
-  poam_ref: POAM-P4-SDLC
+  evidence: docs/governance/verification/P4.5-report.md
 - id: LG-SD-05
   domain: SD
   title: Add additive security tests (approval, egress, injection, audit-chain) and a prompt-injection
     red-team suite run in CI
-  status: planned
+  status: implemented
   realized_in: P4.5
-  poam_ref: POAM-P4-SDLC
+  evidence: docs/governance/verification/P4.5-report.md
 - id: LG-SD-06
   domain: SD
   title: Gate deployment/release on a go/no-go checklist (godmode off, allowlist enforced, audit+encryption
     on, SoA signed)
-  status: planned
+  status: implemented
   realized_in: P4.5
-  poam_ref: POAM-P4-SDLC
+  evidence: docs/governance/verification/P4.5-report.md
 - id: LG-SD-07
   domain: SD
   title: Control in-operation/runtime changes (hot config reload, allowlist edit, provider failover) with
     approval and pre/post config hash
-  status: planned
+  status: implemented
   realized_in: P4.5
-  poam_ref: POAM-P4-SDLC
+  evidence: docs/governance/verification/P4.5-report.md
 - id: LG-SD-08
   domain: SD
   title: Operate a nonconformity/corrective-action loop with root-cause analysis and effectiveness re-testing
     (CAR)
-  status: planned
+  status: implemented
   realized_in: P4.5
-  poam_ref: POAM-P4-SDLC
+  evidence: docs/governance/verification/P4.5-report.md
 - id: LG-SS-01
   domain: SS
   title: Pin dependencies with upper bounds and hash verification (pyproject/uv.lock); enforce in supply-chain
@@ -1243,16 +1243,16 @@ controls:
   domain: TP
   title: Require role-based operator AI training and periodic assessment with audited acknowledgement
     before CUI access
-  status: planned
+  status: implemented
   realized_in: P4.5
-  poam_ref: POAM-P4-SDLC
+  evidence: docs/governance/verification/P4.5-report.md
 - id: LG-TP-02
   domain: TP
   title: Maintain operator rules-of-behavior/access agreements and encode agent operational guardrails
     as enforced policy
-  status: planned
+  status: implemented
   realized_in: P4.5
-  poam_ref: POAM-P4-SDLC
+  evidence: docs/governance/verification/P4.5-report.md
 - id: LG-TP-03
   domain: TP
   title: Maintain a supplier/provider/MCP/skill vetting register with data-handling and US-residency agreements
@@ -1263,9 +1263,9 @@ controls:
 - id: LG-TP-04
   domain: TP
   title: Produce a five-layer shared-responsibility matrix with exactly one accountable party per component/provider
-  status: planned
+  status: implemented
   realized_in: P4.5
-  poam_ref: POAM-P4-SDLC
+  evidence: docs/governance/verification/P4.5-report.md
 - id: LG-TP-05
   domain: TP
   title: Classify Lliam autonomy level (L0-L5) and intervention tiers (T1-T5) with scheduled, recorded
@@ -1291,6 +1291,6 @@ controls:
   domain: TP
   title: Maintain a layered evidence register (Governance/Technical/Operational/Assessment/Attestation)
     mapping each control to its artifact
-  status: planned
+  status: implemented
   realized_in: P4.5
-  poam_ref: POAM-P4-SDLC
+  evidence: docs/governance/verification/P4.5-report.md

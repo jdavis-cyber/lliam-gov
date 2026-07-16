@@ -137,7 +137,7 @@ risks:
     notes: >-
       Deny-by-default MCP allowlist + skill attestation + schema validation
       since P3.3/P0.5. Cross-session drift monitoring (LG-MO-03) lands P5.1;
-      CODEOWNERS challenge (LG-SD-04) lands P4.5.
+      CODEOWNERS challenge (LG-SD-04) landed P4.5.
 
   - id: R-09
     threat: Memory / context poisoning & persistence

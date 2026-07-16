@@ -490,6 +490,13 @@ governance:
     ai_disclosure: docs/governance/ai-disclosure-notice.md           # LG-PF-04
     bias_risk: docs/governance/bias-risk-register.yaml               # LG-PF-06
     fairness_evaluations: docs/governance/fairness-evaluations.yaml  # LG-PF-07
+    # [additive @ P4.5] secure-dev + personnel/supplier layer (LG-SD-*, LG-TP-*)
+    secure_development: docs/governance/secure-development.md        # LG-SD-02..08
+    requirements_traceability: docs/governance/requirements-traceability.yaml  # LG-SD-02
+    shared_responsibility: docs/governance/shared-responsibility-matrix.yaml   # LG-TP-04
+    training_register: docs/governance/training-register.yaml        # LG-TP-01
+    rules_of_behavior: docs/governance/rules-of-behavior.md          # LG-TP-02
+    evidence_register: docs/governance/evidence-register.yaml        # LG-TP-08
 # NOTE: LG-IA-01 managed-account inventory (security.accounts) and the
 # LG-IA-05 no-default-credential switch (security.no_default_credentials) live
 # in the EXISTING `security:` block at the top of this file — a SECOND top-level
