@@ -257,6 +257,17 @@ def predispatch_gate(
     action's audit record could not be written — the caller must not
     execute it (LG-AU-09). Never raises.
     """
+    # LG-IR-01 (additive @ P5.3): the kill-switch halts ALL tool execution
+    # when engaged — checked before the audit/PDP path so a contained agent
+    # cannot act even if the ledger is disabled. Fail-safe (no-op unengaged).
+    try:
+        from agent import killswitch as _ks
+        _halt = _ks.guard_tool_dispatch(function_name)
+        if _halt is not None:
+            return _halt
+    except Exception:
+        pass
+
     ledger = _enabled_ledger()
     if ledger is None:
         return None

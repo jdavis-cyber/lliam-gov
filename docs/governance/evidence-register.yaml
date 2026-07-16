@@ -44,6 +44,13 @@ layers:
                   docs/governance/ai-disclosure-notice.md]
     - control: LG-PF-06
       artifacts: [docs/governance/bias-risk-register.yaml]
+    - control: [LG-GV-07, LG-GV-08]
+      artifacts: [agent/cato_loop.py, docs/governance/management-review.md]
+    - control: [LG-TP-05, LG-TP-06]
+      artifacts: [docs/governance/autonomy-classification.md,
+                  docs/governance/third-party-contingency.md]
+    - control: LG-TP-07
+      artifacts: [ci/governance-ci-gates/attestation_export.py]
 
   technical:
     - control: LG-CH-01
@@ -66,6 +73,8 @@ layers:
                   docs/governance/traceability-171r3.yaml]
     - control: [LG-QT-01, LG-QT-02]
       artifacts: [docs/governance/qms-process-maps.md]
+    - control: [LG-MO-01, LG-MO-05]
+      artifacts: [agent/iscm_sink.py, agent/runtime_monitors.py]
 
   operational:
     - control: LG-TP-01
@@ -80,6 +89,10 @@ layers:
       artifacts: [docs/governance/deviation-register.yaml]
     - control: LG-SD-07
       artifacts: [docs/governance/change-record.md]
+    - control: [LG-IR-01, LG-IR-05, LG-IR-08, LG-RM-09]
+      artifacts: [agent/killswitch.py,
+                  docs/governance/incident-response-plan.md,
+                  docs/governance/halt-rollback-runbook.md]
 
   assessment:
     - control: LG-SD-02
@@ -90,6 +103,13 @@ layers:
                   tests/governance/test_p3_capability_corpus.py]
     - control: LG-SD-06
       artifacts: [ci/governance-ci-gates/go_no_go_gate.py]
+    - control: [LG-MO-07, LG-MO-08, LG-MO-09]
+      artifacts: [ci/governance-ci-gates/scheduled_redteam.py,
+                  ci/governance-ci-gates/control_effectiveness.py,
+                  ci/governance-ci-gates/governance_metrics.py,
+                  ci/governance-ci-gates/scheduled_assurance_cron.sh]
+    - control: [LG-PF-08, LG-PF-09]
+      artifacts: [agent/output_monitor.py]
     - control: LG-PF-07
       artifacts: [ci/governance-ci-gates/fairness_gate.py,
                   docs/governance/fairness-evaluations.yaml]

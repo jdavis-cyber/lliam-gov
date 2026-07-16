@@ -341,16 +341,16 @@ controls:
 - id: LG-GV-07
   domain: GV
   title: Operate continuous authorization (cATO) with evidence-driven re-authorization tied to ISCM telemetry
-  status: planned
+  status: implemented
   realized_in: P5.4
-  poam_ref: POAM-P5-CATO
+  evidence: docs/governance/verification/P5.4-report.md
 - id: LG-GV-08
   domain: GV
   title: Conduct periodic management review and re-authorize continued autonomous operation; record residual-risk
     sign-off
-  status: planned
+  status: implemented
   realized_in: P5.4
-  poam_ref: POAM-P5-CATO
+  evidence: docs/governance/verification/P5.4-report.md
 - id: LG-GV-09
   domain: GV
   title: Define a generative-AI acceptable-use policy realized as enforced provider/tool/skill allowlists
@@ -560,62 +560,62 @@ controls:
   domain: IR
   title: Provide a kill-switch/interrupt that immediately suspends all tool execution and inference egress
     (interrupt.py + wrapper hook)
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-02
   domain: IR
   title: 'Provide agentic containment: disable tool classes, force HITL, revoke/rotate provider+MCP credentials,
     freeze sessions'
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-03
   domain: IR
   title: Auto-trip the circuit breaker/network-disconnect on defined high-risk conditions with escalation
     to a watch role
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-04
   domain: IR
   title: Preserve forensic state (raw prompts/outputs/tool I/O, checkpoints) with chain of custody before
     containment destroys it
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-05
   domain: IR
   title: Maintain an agent-incident runbook with severity triage keyed to CUI exposure and provider boundary
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-06
   domain: IR
   title: Map incident types to required external reporting with timelines (DFARS/DIBNet 72-hour, agency)
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-07
   domain: IR
   title: Reconstruct incidents and root cause from the integrity-verified audit chain + trajectory record
     (forensic reconstruction)
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-08
   domain: IR
   title: Execute recovery to a known-good secure baseline (restore checkpoint/memory, rotate secrets,
     re-run startup audit) before resuming autonomy
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-IR-09
   domain: IR
   title: Communicate recovery status and autonomy re-enablement to designated stakeholders; record notifications
-  status: planned
+  status: implemented
   realized_in: P5.3
-  poam_ref: POAM-P5-IR
+  evidence: docs/governance/verification/P5.3-report.md
 - id: LG-MC-01
   domain: MC
   title: Validate/sanitize content before it enters persistent memory; strip dangerous tokens (memory-poisoning
@@ -667,71 +667,71 @@ controls:
   domain: MO
   title: Monitor for runaway tool loops and non-progress via guardrails loop-detection and iteration budgets
     (tool_guardrails)
-  status: planned
+  status: implemented
   realized_in: P5.1
-  poam_ref: POAM-P5-MON
+  evidence: docs/governance/verification/P5.1-report.md
 - id: LG-MO-02
   domain: MO
   title: Monitor egress anomalies (first-seen domains, provider switches, volume spikes) and denied-action/credential-access
     bursts
-  status: planned
+  status: implemented
   realized_in: P5.1
-  poam_ref: POAM-P5-MON
+  evidence: docs/governance/verification/P5.1-report.md
 - id: LG-MO-03
   domain: MO
   title: Monitor external provider/MCP activity for schema/permission drift and anomalous responses (mcp_security,
     schema_sanitizer)
-  status: planned
+  status: implemented
   realized_in: P5.1
-  poam_ref: POAM-P5-MON
+  evidence: docs/governance/verification/P5.1-report.md
 - id: LG-MO-04
   domain: MO
   title: Detect behavioral/goal drift and policy-violation patterns in agent tool-call sequences
-  status: planned
+  status: implemented
   realized_in: P5.1
-  poam_ref: POAM-P5-MON
+  evidence: docs/governance/verification/P5.1-report.md
 - id: LG-MO-05
   domain: MO
   title: Stream the hash-chained audit/telemetry as ISCM/SIEM-consumable events (syslog/OTel) for cATO
     continuous visibility
-  status: planned
+  status: implemented
   realized_in: P5.1
-  poam_ref: POAM-P5-MON
+  evidence: docs/governance/verification/P5.1-report.md
 - id: LG-MO-06
   domain: MO
   title: Correlate detections into session risk timelines (trajectory + background_review) and notify
     named staff in near-real-time
-  status: planned
+  status: implemented
   realized_in: P5.1
-  poam_ref: POAM-P5-MON
+  evidence: docs/governance/verification/P5.1-report.md
 - id: LG-MO-07
   domain: MO
   title: Conduct scheduled adversarial/red-team evaluation (prompt injection, jailbreak, tool abuse) with
     results as control evidence
-  status: planned
+  status: implemented
   realized_in: P5.2
-  poam_ref: POAM-P5-EVAL
+  evidence: docs/governance/verification/P5.2-report.md
 - id: LG-MO-08
   domain: MO
   title: Verify on a cadence that controls remain effective (encryption-at-rest, audit integrity, godmode
     disabled, allowlists enforced)
-  status: planned
+  status: implemented
   realized_in: P5.2
-  poam_ref: POAM-P5-EVAL
+  evidence: docs/governance/verification/P5.2-report.md
 - id: LG-MO-09
   domain: MO
   title: Define and review governance metrics (block rates, approval latency, provider-route compliance,
     override rate) at management review
-  status: planned
+  status: implemented
   realized_in: P5.2
-  poam_ref: POAM-P5-EVAL
+  evidence: docs/governance/verification/P5.2-report.md
 - id: LG-MO-10
   domain: MO
   title: Conduct ongoing post-deployment monitoring of high-impact use for performance degradation and
     adverse impacts (M-25-21 4(b)(iii))
-  status: planned
+  status: implemented
   realized_in: P5.2
-  poam_ref: POAM-P5-EVAL
+  evidence: docs/governance/verification/P5.2-report.md
 - id: LG-MP-01
   domain: MP
   title: Enforce an approved-provider allowlist restricting CUI routing to vetted US/FedRAMP/local endpoints
@@ -882,15 +882,15 @@ controls:
   domain: PF
   title: Monitor deployed outputs for bias, toxic content, and quality regressions; alert and provide
     recourse/appeal
-  status: planned
+  status: implemented
   realized_in: P5.2
-  poam_ref: POAM-P5-EVAL
+  evidence: docs/governance/verification/P5.2-report.md
 - id: LG-PF-09
   domain: PF
   title: Detect PII/CUI in generated output and block egress to unapproved sinks (MP-4.1-009)
-  status: planned
+  status: implemented
   realized_in: P5.2
-  poam_ref: POAM-P5-EVAL
+  evidence: docs/governance/verification/P5.2-report.md
 - id: LG-PI-01
   domain: PI
   title: Treat all untrusted/external content (web, files, tool results, MCP, RAG) as hostile input by
@@ -1070,10 +1070,10 @@ controls:
 - id: LG-RM-09
   domain: RM
   title: Define GenAI risk tiers and a documented halt/rollback plan for unacceptable-risk configurations
-  status: partial
+  status: implemented
   realized_in: P4.2
-  poam_ref: POAM-P5-IR
-  evidence: docs/governance/halt-rollback-runbook.md
+  evidence: docs/governance/verification/P5.3-report.md
+  evidence: docs/governance/incident-response-plan.md
 - id: LG-SC-01
   domain: SC
   title: Enforce a deny-by-default skill/plugin/MCP allowlist; disable the godmode jailbreak skill and
@@ -1270,23 +1270,23 @@ controls:
   domain: TP
   title: Classify Lliam autonomy level (L0-L5) and intervention tiers (T1-T5) with scheduled, recorded
     kill-switch tests
-  status: planned
+  status: implemented
   realized_in: P5.4
-  poam_ref: POAM-P5-CATO
+  evidence: docs/governance/verification/P5.4-report.md
 - id: LG-TP-06
   domain: TP
   title: Document third-party contingency/fallback and incident-response responsibilities (degrade to
     approved on-prem, not arbitrary cloud)
-  status: planned
+  status: implemented
   realized_in: P5.4
-  poam_ref: POAM-P5-CATO
+  evidence: docs/governance/verification/P5.4-report.md
 - id: LG-TP-07
   domain: TP
   title: Generate a portable posture/attestation export (control coverage + provenance + audit-chain hash)
     for reciprocity/inheritance
-  status: planned
+  status: implemented
   realized_in: P5.4
-  poam_ref: POAM-P5-CATO
+  evidence: docs/governance/verification/P5.4-report.md
 - id: LG-TP-08
   domain: TP
   title: Maintain a layered evidence register (Governance/Technical/Operational/Assessment/Attestation)

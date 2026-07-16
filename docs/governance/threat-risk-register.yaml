@@ -38,7 +38,7 @@ risks:
     notes: >-
       Deny-by-default egress + SSRF/metadata block + DLP taint gating
       enforced since P2.5. Network-layer proxy enclave carried as
-      POAM-EGRESS-ENCLAVE; egress-anomaly monitoring lands P5.1 (POAM-P5-MON).
+      POAM-EGRESS-ENCLAVE; egress-anomaly monitoring (LG-MO-02) landed P5.1.
 
   - id: R-02
     threat: Prompt injection (direct and indirect)
@@ -53,7 +53,7 @@ risks:
     notes: >-
       Zero-trust input, sanitize/delimit, detection-to-approval, and sink
       validation enforced since P0.5/P2.3. Trajectory-level drift detection
-      (LG-MO-04, L3 enhancement) lands P5.1 (POAM-P5-MON).
+      (LG-MO-04, L3 enhancement) landed P5.1.
 
   - id: R-03
     threat: Excessive agency / over-permissioned tools (RCE path)
@@ -107,7 +107,8 @@ risks:
                LG-DP-01, LG-DP-10, LG-MO-02]
     notes: >-
       Allowlist enforced on all five routing paths since P3.1; model
-      integrity since P3.2. Provider-switch monitoring lands P5.1.
+      integrity since P3.2. Provider-switch/drift monitoring (LG-MO-02/03)
+      landed P5.1.
 
   - id: R-07
     threat: Bundled godmode jailbreak skill (insider / misuse)
@@ -173,11 +174,11 @@ risks:
     status: in_treatment
     controls: [LG-DP-01, LG-DP-02, LG-DP-04, LG-DP-07, LG-DP-09, LG-DP-11,
                LG-PF-03, LG-PF-09, LG-MC-05, LG-MC-06]
-    poam_ref: POAM-P5-EVAL
     notes: >-
       DP-domain controls enforced since P2.4; PF-domain privacy policy +
-      redaction bindings delivered P4.4; generated-output PII/CUI detection
-      (LG-PF-09) lands P5.2. FIPS-validated crypto carried as POAM-FIPS.
+      redaction bindings delivered P4.4; generated-output PII/CUI egress
+      detection (LG-PF-09) delivered P5.2. FIPS-validated crypto carried as
+      POAM-FIPS.
 
   - id: R-12
     threat: Software & model supply-chain integrity
@@ -231,10 +232,11 @@ risks:
     status: in_treatment
     controls: [LG-MO-04, LG-MO-05, LG-MO-06, LG-MO-07, LG-IA-02, LG-IA-10,
                LG-IR-02]
-    poam_ref: POAM-P5-MON
+    poam_ref: POAM-P5-IR
     notes: >-
       Instance identity + delegation-chain records enforced since P1.4;
-      trajectory monitoring and containment land P5.1-P5.3.
+      trajectory/goal-drift monitoring (LG-MO-04/06) landed P5.1; containment
+      (LG-IR-02) lands P5.3.
 
   - id: R-16
     threat: Confabulation / misinformation / overreliance
@@ -246,11 +248,10 @@ risks:
     status: in_treatment
     controls: [LG-QT-05, LG-QT-06, LG-QT-07, LG-HO-08, LG-HO-09, LG-PI-08,
                LG-MO-10]
-    poam_ref: POAM-P5-EVAL
     notes: >-
       JIT rationale + inbound screening enforced; grounding/provenance
-      controls delivered P4.4 (LG-QT-05/06/07); post-deployment output
-      monitoring (LG-MO-10) lands P5.2.
+      controls delivered P4.4 (LG-QT-05/06/07); post-deployment output +
+      bias/toxicity monitoring (LG-MO-10/LG-PF-08) delivered P5.2.
 
   - id: R-17
     threat: Cross-cutting governance & lifecycle drift
@@ -264,8 +265,7 @@ risks:
                LG-CH-04, LG-CH-06, LG-CH-08, LG-RM-04, LG-GV-04, LG-GV-05,
                LG-GV-06, LG-GV-07, LG-GV-08, LG-RM-09, LG-TP-03, LG-RM-03,
                LG-QT-02, LG-MO-09, LG-RM-08]
-    poam_ref: POAM-P5-CATO
     notes: >-
       Baseline/drift/SoD/authorization gates enforced through P4.1; the SoA/
-      POA&M layer lands this step; cATO re-authorization + management-review
-      loop land P5.4.
+      POA&M layer delivered P4.2; cATO re-authorization + management-review
+      loop with posture-break auto-suspend delivered P5.4.

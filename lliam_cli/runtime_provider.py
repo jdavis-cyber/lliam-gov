@@ -1870,6 +1870,16 @@ def resolve_runtime_provider(
     actually receive the request.  Enforcement remains a complete no-op on
     low-side profiles or when the Phase 3 control is disabled.
     """
+    # LG-IR-01 (additive @ P5.3): the kill-switch halts inference on EVERY
+    # routing path (primary/fallback/MoA/auxiliary/delegation all resolve
+    # here). Raises KillSwitchEngaged when engaged; complete no-op otherwise.
+    try:
+        from agent import killswitch as _ks
+        _ks.assert_inference_live()
+    except Exception as _ks_exc:
+        if _ks_exc.__class__.__name__ == "KillSwitchEngaged":
+            raise
+
     runtime = _resolve_runtime_provider_unchecked(
         requested=requested,
         explicit_api_key=explicit_api_key,

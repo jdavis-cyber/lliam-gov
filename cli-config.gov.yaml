@@ -399,6 +399,73 @@ audit:
 
 
 # =============================================================================
+# [ACTIVE @ P5.1]  CONTINUOUS MONITORING — ISCM/SIEM + RUNTIME MONITORS
+#    Controls: LG-MO-01 (runaway/non-progress), LG-MO-02 (egress anomaly /
+#              first-seen domain / volume spike), LG-MO-03 (provider/MCP
+#              schema/permission drift), LG-MO-04 (goal-drift + policy-violation
+#              patterns), LG-MO-05 (ISCM/SIEM stream of the hash-chained
+#              ledger), LG-MO-06 (session risk-timeline + near-real-time notify)
+#    Consumed by: agent/iscm_sink.py (build_sink) + agent/runtime_monitors.py
+#              (MonitorHub), hooked fail-safe at agent/governance_audit.emit
+#              after the record seals. Complete no-op when absent (low side).
+# =============================================================================
+monitoring:
+  iscm_sink:
+    enabled: true                    # [additive @ P5.1] LG-MO-05 stream ON in the gov profile
+    kind: file                       # [additive] file | syslog — a syslog/OTel collector tails the file
+    path: "$HERMES_HOME/logs/iscm-events.log"   # [additive] SIEM-consumable JSONL of the sealed ledger
+    format: json                     # [additive] json (SIEM default) | cef
+  runaway_threshold: 8               # [additive @ P5.1] LG-MO-01 consecutive-identical-dispatch alert threshold
+  egress_volume_threshold: 50        # [additive @ P5.1] LG-MO-02 per-session egress-count spike threshold
+  notify: [jdavis@agency.mil]        # [additive @ P5.1] LG-MO-06 near-real-time notify list (role_bindings.isso)
+  notify_severity: warning           # [additive @ P5.1] LG-MO-06 min alert severity that pages named staff
+
+
+# =============================================================================
+# [ACTIVE @ P5.3]  KILL-SWITCH / CONTAINMENT / RECOVERY  (LG-IR-01/02/08, RM-09)
+#    Consumed by: agent/killswitch.py (durable state under $HERMES_HOME/
+#    killswitch.state), wired fail-safe at agent/governance_audit_hooks.
+#    predispatch_gate (tool exec) + lliam_cli/runtime_provider.
+#    resolve_runtime_provider (inference). Recovery is fail-closed on a broken
+#    audit chain (verify_chain PASS required before re-enable). Complete no-op
+#    when not engaged — NO false auto-suspension on steady state.
+# =============================================================================
+incident_response:
+  killswitch:
+    enabled: true                    # [additive @ P5.3] LG-IR-01 kill-switch authority active
+    default_scope: global            # [additive] SEV-1 emergency posture; session scope per incident
+    require_verified_chain_to_recover: true   # [additive @ P5.3] LG-IR-08 fail-closed re-enable
+  runbook: docs/governance/incident-response-plan.md          # [additive @ P5.3] LG-IR-05
+  reporting:
+    dfars_dibnet_hours: 72           # [additive @ P5.3] LG-IR-06 DFARS 252.204-7012 clock
+  circuit_breaker:
+    conditions: [egress_violation, cui_taint, loop_exhaustion, audit_break]   # LG-IR-03
+    action: halt                     # [additive] halt | degrade
+    notify_role: isso
+
+
+# =============================================================================
+# [ACTIVE @ P5.4]  cATO LOOP + AUTONOMY CLASSIFICATION + RECIPROCITY
+#    Controls: LG-GV-07 (continuous authorization + posture-break auto-suspend),
+#              LG-GV-08 (management review + re-authorization), LG-TP-05
+#              (autonomy L0-L5 + kill-switch cadence), LG-TP-06 (third-party
+#              contingency), LG-TP-07 (portable attestation export).
+#    Consumed by: agent/cato_loop.py (evaluate/run_cato_cycle → killswitch on a
+#    real posture-break; steady-state no-op) + ci/governance-ci-gates/
+#    attestation_export.py.
+# =============================================================================
+cato:
+  enabled: true                      # [additive @ P5.4] LG-GV-07 continuous authorization ON
+  autonomy_level: L3                 # [additive @ P5.4] LG-TP-05 authorized level (conditional autonomy + HITL on high-impact)
+  auto_suspend_on_break: true        # [additive @ P5.4] LG-GV-07 posture-break -> kill-switch
+  reauthorization_required_after_suspend: true   # [additive] LG-GV-06/08 re-auth gate
+  management_review_cadence_days: 90 # [additive @ P5.4] LG-GV-08 review cadence
+  autonomy_classification: docs/governance/autonomy-classification.md   # LG-TP-05
+  contingency: docs/governance/third-party-contingency.md               # LG-TP-06
+  management_review: docs/governance/management-review.md               # LG-GV-08
+
+
+# =============================================================================
 # [ACTIVE @ P1.4]  AGENT IDENTITY + MANAGED CREDENTIALS  (LG-IA-01..05, IA-10)
 # -----------------------------------------------------------------------------
 # LG-IA-02 agent NPE identity is computed by the NEW additive module

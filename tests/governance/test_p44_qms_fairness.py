@@ -197,9 +197,10 @@ def test_qt_pf_controls_now_implemented_in_catalog():
     for cid in done:
         assert cat[cid]["status"] == "implemented", \
             f"{cid}: {cat[cid]['status']}"
-    # PF-08/09 stay planned until P5.2
+    # PF-08/09 were planned at P4.4; they land at P5.2 (accept either state so
+    # this P4.4 test does not regress once P5.2 flips them).
     for cid in ("LG-PF-08", "LG-PF-09"):
-        assert cat[cid]["status"] == "planned"
+        assert cat[cid]["status"] in ("planned", "implemented")
 
 
 def test_poam_p4_qms_closed():
