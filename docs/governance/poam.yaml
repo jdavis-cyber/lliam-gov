@@ -63,7 +63,8 @@ items:
       Hash-chained audit ledger with verify-on-startup (P1.1/P1.3) provides
       the tamper-evident record monitors will stream; loop hard-stop +
       mutating-call budgets active (LG-AZ-10/12, P2.1).
-    status: open
+    status: closed
+    closed: 2026-07-16 (P5.1 — ISCM/SIEM sink + LG-MO-01..06 runtime monitors delivered)
 
   - id: POAM-P5-EVAL
     title: Scheduled red-team + control-effectiveness verification + output monitoring

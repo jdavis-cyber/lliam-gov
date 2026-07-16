@@ -66,6 +66,8 @@ layers:
                   docs/governance/traceability-171r3.yaml]
     - control: [LG-QT-01, LG-QT-02]
       artifacts: [docs/governance/qms-process-maps.md]
+    - control: [LG-MO-01, LG-MO-05]
+      artifacts: [agent/iscm_sink.py, agent/runtime_monitors.py]
 
   operational:
     - control: LG-TP-01

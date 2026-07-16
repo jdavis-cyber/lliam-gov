@@ -399,6 +399,29 @@ audit:
 
 
 # =============================================================================
+# [ACTIVE @ P5.1]  CONTINUOUS MONITORING — ISCM/SIEM + RUNTIME MONITORS
+#    Controls: LG-MO-01 (runaway/non-progress), LG-MO-02 (egress anomaly /
+#              first-seen domain / volume spike), LG-MO-03 (provider/MCP
+#              schema/permission drift), LG-MO-04 (goal-drift + policy-violation
+#              patterns), LG-MO-05 (ISCM/SIEM stream of the hash-chained
+#              ledger), LG-MO-06 (session risk-timeline + near-real-time notify)
+#    Consumed by: agent/iscm_sink.py (build_sink) + agent/runtime_monitors.py
+#              (MonitorHub), hooked fail-safe at agent/governance_audit.emit
+#              after the record seals. Complete no-op when absent (low side).
+# =============================================================================
+monitoring:
+  iscm_sink:
+    enabled: true                    # [additive @ P5.1] LG-MO-05 stream ON in the gov profile
+    kind: file                       # [additive] file | syslog — a syslog/OTel collector tails the file
+    path: "$HERMES_HOME/logs/iscm-events.log"   # [additive] SIEM-consumable JSONL of the sealed ledger
+    format: json                     # [additive] json (SIEM default) | cef
+  runaway_threshold: 8               # [additive @ P5.1] LG-MO-01 consecutive-identical-dispatch alert threshold
+  egress_volume_threshold: 50        # [additive @ P5.1] LG-MO-02 per-session egress-count spike threshold
+  notify: [jdavis@agency.mil]        # [additive @ P5.1] LG-MO-06 near-real-time notify list (role_bindings.isso)
+  notify_severity: warning           # [additive @ P5.1] LG-MO-06 min alert severity that pages named staff
+
+
+# =============================================================================
 # [ACTIVE @ P1.4]  AGENT IDENTITY + MANAGED CREDENTIALS  (LG-IA-01..05, IA-10)
 # -----------------------------------------------------------------------------
 # LG-IA-02 agent NPE identity is computed by the NEW additive module

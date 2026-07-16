@@ -667,43 +667,43 @@ controls:
   domain: MO
   title: Monitor for runaway tool loops and non-progress via guardrails loop-detection and iteration budgets
     (tool_guardrails)
-  status: planned
+  status: implemented
   realized_in: P5.1
-  poam_ref: POAM-P5-MON
+  evidence: docs/governance/verification/P5.1-report.md
 - id: LG-MO-02
   domain: MO
   title: Monitor egress anomalies (first-seen domains, provider switches, volume spikes) and denied-action/credential-access
     bursts
-  status: planned
+  status: implemented
   realized_in: P5.1
-  poam_ref: POAM-P5-MON
+  evidence: docs/governance/verification/P5.1-report.md
 - id: LG-MO-03
   domain: MO
   title: Monitor external provider/MCP activity for schema/permission drift and anomalous responses (mcp_security,
     schema_sanitizer)
-  status: planned
+  status: implemented
   realized_in: P5.1
-  poam_ref: POAM-P5-MON
+  evidence: docs/governance/verification/P5.1-report.md
 - id: LG-MO-04
   domain: MO
   title: Detect behavioral/goal drift and policy-violation patterns in agent tool-call sequences
-  status: planned
+  status: implemented
   realized_in: P5.1
-  poam_ref: POAM-P5-MON
+  evidence: docs/governance/verification/P5.1-report.md
 - id: LG-MO-05
   domain: MO
   title: Stream the hash-chained audit/telemetry as ISCM/SIEM-consumable events (syslog/OTel) for cATO
     continuous visibility
-  status: planned
+  status: implemented
   realized_in: P5.1
-  poam_ref: POAM-P5-MON
+  evidence: docs/governance/verification/P5.1-report.md
 - id: LG-MO-06
   domain: MO
   title: Correlate detections into session risk timelines (trajectory + background_review) and notify
     named staff in near-real-time
-  status: planned
+  status: implemented
   realized_in: P5.1
-  poam_ref: POAM-P5-MON
+  evidence: docs/governance/verification/P5.1-report.md
 - id: LG-MO-07
   domain: MO
   title: Conduct scheduled adversarial/red-team evaluation (prompt injection, jailbreak, tool abuse) with
