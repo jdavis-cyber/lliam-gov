@@ -37,7 +37,8 @@ items:
     interim_compensating: >-
       PII redaction to providers on (privacy.redact_pii, P0.2); CUI/secret
       redaction-on-write unconditional in the audit ledger (P1.1).
-    status: open
+    status: closed
+    closed: 2026-07-16 (P4.4 — QMS + privacy/bias registers + fairness gate delivered; LG-PF-08/09 continue on POAM-P5-EVAL)
 
   - id: POAM-P4-SDLC
     title: Secure-development governance, V&V gates, personnel/supplier registers

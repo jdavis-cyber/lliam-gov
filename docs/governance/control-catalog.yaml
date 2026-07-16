@@ -833,51 +833,51 @@ controls:
   domain: PF
   title: 'Establish a PII processing policy: authorized PII, authorized provider/region, minimization,
     retention, disposal'
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-PF-02
   domain: PF
   title: Bind PII processing to documented authority/lawful basis and purpose-limit it to the active task
     (no cross-session reuse)
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-PF-03
   domain: PF
   title: Enable PII redaction in provider context (privacy.redact_pii on) and apply sensitive-category
     handling for special PII
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-PF-04
   domain: PF
   title: Disclose AI-agent status and privacy notice on operator/messaging surfaces; mark PII-derived
     artifacts machine-readably
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-PF-05
   domain: PF
   title: Gate consent-requiring or rights-affecting actions and cross-source PII aggregation/re-identification
     through human approval
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-PF-06
   domain: PF
   title: Maintain a bias risk register (systemic/statistical/human incl. automation bias) and document
     named accountability
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-PF-07
   domain: PF
   title: Run fairness evaluation/recalibration as a CI gate on model/provider/prompt change for person-affecting
     use cases
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-PF-08
   domain: PF
   title: Monitor deployed outputs for bias, toxic content, and quality regressions; alert and provide
@@ -955,16 +955,16 @@ controls:
   domain: QT
   title: Treat each agent capability as a defined process with control points and a measured indicator
     (process map)
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-QT-02
   domain: QT
   title: Define measurable quality objectives (false-block rate, redaction recall, jailbreak-block rate,
     audit completeness, task success)
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-QT-03
   domain: QT
   title: Ensure identification and traceability of every output to model/provider/prompt/skill version
@@ -976,43 +976,43 @@ controls:
   domain: QT
   title: 'Control nonconforming outputs (CUI-leak attempt, guardrail bypass, jailbreak activation, unsafe
     tool call): block/quarantine + log'
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-QT-05
   domain: QT
   title: Verify grounding/citations for tool-driven decisions and re-review guardrails in novel contexts
     (confabulation/overreliance control)
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-QT-06
   domain: QT
   title: Validate agent-generated code before it drives downstream execution (MS-2.6-004)
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-QT-07
   domain: QT
   title: Stamp content provenance/watermark and synthetic-content disclosure labels on AI-generated artifacts
     (AI700-1)
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-QT-08
   domain: QT
   title: Run internal audit, management review, and continual-improvement cycles over governance metrics
     and audit output
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-QT-09
   domain: QT
   title: Maintain governance work products under configuration management (version control, baselines,
     configuration audits)
-  status: planned
+  status: implemented
   realized_in: P4.4
-  poam_ref: POAM-P4-QMS
+  evidence: docs/governance/verification/P4.4-report.md
 - id: LG-RM-01
   domain: RM
   title: Operate a repeatable AI/GenAI risk-assessment process producing comparable, prioritized results

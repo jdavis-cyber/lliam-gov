@@ -484,6 +484,12 @@ governance:
     ssp: docs/governance/SSP.md                                      # LG-IN-07
     boundary_scope: docs/governance/boundary-scope.md                # LG-IN-01/04/05/06
     traceability: docs/governance/traceability-171r3.yaml            # LG-IN-07
+    # [additive @ P4.4] QMS + privacy/fairness layer (LG-QT-*, LG-PF-01..07)
+    qms: docs/governance/qms-process-maps.md                         # LG-QT-01/02/04/08/09
+    privacy_policy: docs/governance/privacy-policy.md                # LG-PF-01/02/03/05
+    ai_disclosure: docs/governance/ai-disclosure-notice.md           # LG-PF-04
+    bias_risk: docs/governance/bias-risk-register.yaml               # LG-PF-06
+    fairness_evaluations: docs/governance/fairness-evaluations.yaml  # LG-PF-07
 # NOTE: LG-IA-01 managed-account inventory (security.accounts) and the
 # LG-IA-05 no-default-credential switch (security.no_default_credentials) live
 # in the EXISTING `security:` block at the top of this file — a SECOND top-level
