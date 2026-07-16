@@ -222,6 +222,18 @@ privacy:
 
 memory:
   write_approval: true        # config.py:2037  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-HO-04: stage memory writes for review)
+  # [ACTIVE @ P2.6]  MEMORY GOVERNANCE  (LG-MC-02/04/05/06/07)
+  # Consumed by the NEW agent/memory_governance.py. Partition per session/
+  # identity so cross-session memory does not leak (MC-02); critical writes
+  # route to HITL (MC-04); purpose-limited retention TTL + PII exclusion
+  # (MC-05); secure purge + between-task context reset (MC-06/07).
+  governance:
+    partition_per_session: true      # [additive] LG-MC-02: per-identity/session partition
+    critical_write_hitl: true        # [additive] LG-MC-04: critical memory writes -> HITL
+    retention_ttl_seconds: 604800    # [additive] LG-MC-05: 7-day purpose-limited retention
+    exclude_pii: true                # [additive] LG-MC-05: PII-tagged content not persisted
+    secure_purge: true               # [additive] LG-MC-06: overwrite-then-unlink on purge
+    reset_context_between_tasks: true # [additive] LG-MC-07: wipe partition between unrelated tasks
 
 skills:
   write_approval: true        # config.py:2176  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-HO-04: stage skill writes for review)
