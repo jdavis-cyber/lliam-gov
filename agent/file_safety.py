@@ -149,6 +149,18 @@ def is_write_denied(path: str) -> bool:
                 return True
         except Exception:
             pass
+        try:
+            # LG-DP-08 (P2.4): the at-rest encryption key store lives at
+            # <lliam_home>/keys and must be unreachable by the agent's own
+            # write tools — the key that protects CUI at rest cannot be
+            # rewritten by the subject it protects. Additive deny; case-folded
+            # for the same APFS reason as the logs entry above.
+            keys_real = os.path.realpath(os.path.join(base_real, "keys")).casefold()
+            resolved_cf = resolved.casefold()
+            if resolved_cf == keys_real or resolved_cf.startswith(keys_real + os.sep):
+                return True
+        except Exception:
+            pass
 
     safe_roots = get_safe_write_roots()
     if safe_roots:

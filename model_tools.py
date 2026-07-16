@@ -892,6 +892,15 @@ def _emit_post_tool_call_hook(
     except Exception:
         pass
 
+    # LG-DP-10 (additive @ P2.4): arm the DLP taint-gate when a tool result
+    # exposes CUI/PII in the session, so the model's NEXT egress action is
+    # escalated by the PDP. Post-facto, never gates this call, never raises.
+    try:
+        from agent.data_protection import note_cui_exposure
+        note_cui_exposure(function_name, result if isinstance(result, str) else str(result))
+    except Exception:
+        pass
+
     # LG-AU-02 (additive): the governance audit ledger records every
     # terminal tool outcome at this universal funnel — independent of, and
     # before, the plugin observer gate below (which no-ops without

@@ -124,6 +124,20 @@ security:
   max_mutating_calls:              # [additive @ P2.1] LG-AZ-10 mirror of policy budgets (PDP reads the policy file; this key is the one-artifact audit mirror)
     per_turn: 25
     per_session: 200
+
+  # [ACTIVE @ P2.4]  DATA PROTECTION + DLP TAINT-GATE  (LG-DP-01/02/04/07/08/10/11)
+  # Consumed by the NEW agent/data_protection.py. CUI/PII classification arms
+  # the session DLP taint at the tool-result funnel; once CUI is exposed the PDP
+  # escalates egress/external-send to HITL (LG-DP-10) so CUI is not freely
+  # exfiltrated. Redaction (LG-DP-03/05) and TLS (LG-DP-06) are the P0/P1
+  # surfaces (privacy.redact_pii above, security.require_tls). At-rest key store
+  # is <lliam_home>/keys, on the file_safety write-denylist (LG-DP-08).
+  data_protection:
+    cui_redaction: true            # [additive] LG-DP-04: CUI/PII pattern pack active on the high side
+    dlp_taint_gate: true           # [additive] LG-DP-10: CUI-exposed session escalates egress to HITL
+    at_rest_encryption: true       # [additive] LG-DP-07: Fernet at-rest wrapper for CUI/audit blobs
+    result_retention_ttl_seconds: 86400   # [additive] LG-DP-11: tool-result retention cap (24h)
+    egress_allowlist: []           # [additive] LG-DP-10 sink allowlist (destination policy of record = P2.5)
   tool_allowlist: []               # [additive] LG-AZ-02 (empty = no positive tool allowlist yet)
   tool_denylist:                   # [additive] LG-AZ-11/AZ-02: refuse these capabilities for CUI
     - computer_use

@@ -786,6 +786,25 @@ def evaluate_call(
     except Exception:
         logger.warning("injection taint check failed (non-blocking)", exc_info=True)
 
+    # LG-DP-10 (P2.4): once CUI is exposed in the session, egress/external-send
+    # classes escalate to HITL so CUI cannot be freely exfiltrated. Local exec
+    # and reads are unaffected (capability). P2.5 refines this to a
+    # destination-precise allow/deny via data_protection.dlp_egress_decision.
+    try:
+        from agent.data_protection import session_cui_tainted
+        if action_class in ("network.egress", "external_send") and session_cui_tainted():
+            if _TIER_ORDER.index("hitl_approve") > _TIER_ORDER.index(tier):
+                return PolicyDecision(
+                    disposition="hitl_approve", action_class=action_class,
+                    tool_name=name, origin="cui_taint",
+                    reason=(
+                        "CUI exposed in this session — egress routed to HITL "
+                        "so CUI is not freely exfiltrated (LG-DP-10)"
+                    ),
+                )
+    except Exception:
+        logger.warning("CUI taint check failed (non-blocking)", exc_info=True)
+
     # Privileged force-up (LG-AZ-06): members never resolve below hitl_approve.
     priv = policy.get("privileged_functions") or {}
     if action_class in _as_set(priv.get("members")):
