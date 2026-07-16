@@ -65,6 +65,14 @@ def test_strict_non_interactive_dangerous_command_is_denied(strict_cfg):
     assert "fail-closed" in (result.get("message") or "").lower()
 
 
+def test_terminal_dispatch_guard_denies_strict_noninteractive_command(strict_cfg):
+    from tools.approval import check_all_command_guards
+
+    result = check_all_command_guards("rm -rf ./build", "local")
+    assert result["approved"] is False
+    assert "fail-closed" in (result.get("message") or "").lower()
+
+
 def test_low_side_non_interactive_auto_approve_preserved(clean_env, monkeypatch):
     monkeypatch.setattr(
         "lliam_cli.config.load_config", lambda *a, **kw: {"security": {}}

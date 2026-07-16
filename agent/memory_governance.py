@@ -38,7 +38,11 @@ def _is_strict() -> bool:
         from lliam_cli import posture_resolver as _pr
         return _pr.is_strict(_cfg.load_config())
     except Exception:
-        return False
+        logger.warning(
+            "memory-governance posture resolution failed; enforcing strict controls",
+            exc_info=True,
+        )
+        return True
 
 
 # --------------------------------------------------------------------------- #
@@ -136,7 +140,8 @@ def pii_excluded(content: str) -> bool:
         from agent.data_protection import cui_pii_matches
         return bool(cui_pii_matches(content))
     except Exception:
-        return False
+        logger.warning("memory PII classifier unavailable; excluding content", exc_info=True)
+        return True
 
 
 # --------------------------------------------------------------------------- #

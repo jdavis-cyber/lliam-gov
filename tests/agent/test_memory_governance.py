@@ -120,6 +120,18 @@ def test_low_side_never_sweeps_or_excludes(monkeypatch):
     assert mg.pii_excluded("SSN 123-45-6789") is False
 
 
+def test_posture_resolution_failure_keeps_memory_partitioned(tmp_path, monkeypatch):
+    import agent.memory_governance as mg
+
+    def _broken_config(*_args, **_kwargs):
+        raise RuntimeError("bad config")
+
+    monkeypatch.setattr("lliam_cli.config.load_config", _broken_config)
+    path = mg.partition_path(tmp_path, session_id="session-a", identity="agent1")
+    assert path != tmp_path
+    assert path.parts[-3:] == ("partitions", "agent1", "session-a")
+
+
 # ---------------------------------------------------------------------------
 # 4. LG-MC-06 — secure purge
 # ---------------------------------------------------------------------------
@@ -148,3 +160,31 @@ def test_reset_context_purges_session_partition(strict_mem, tmp_path):
     (part / "note.md").write_text("session A working memory", encoding="utf-8")
     strict_mem.reset_session_context(tmp_path, session_id="sess-A", identity="agent1")
     assert not (part / "note.md").exists()
+
+
+def test_memory_store_uses_runtime_session_partition(strict_mem, tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setenv("LLIAM_HOME", str(tmp_path))
+    from tools.memory_tool import MemoryStore
+
+    a = MemoryStore(session_id="session-a", identity="agent1")
+    b = MemoryStore(session_id="session-b", identity="agent1")
+    a.load_from_disk()
+    b.load_from_disk()
+    assert a.add("memory", "session A note")["success"]
+    assert "session A note" not in a._metadata_path("memory").read_text()
+    b.load_from_disk()
+    assert "session A note" not in b.memory_entries
+    assert a._path_for("memory") != b._path_for("memory")
+
+
+def test_memory_store_rejects_pii_before_persistence(strict_mem, tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setenv("LLIAM_HOME", str(tmp_path))
+    from tools.memory_tool import MemoryStore
+
+    store = MemoryStore(session_id="session-a")
+    store.load_from_disk()
+    result = store.add("memory", "POC SSN 123-45-6789")
+    assert result["success"] is False
+    assert not store._path_for("memory").exists()

@@ -448,14 +448,19 @@ _POLICY_LOAD_ERROR = {"__policy_load_error__": True}
 # Per-process caches (cleared by reset_pdp_state()).
 _RISK_POLICY_CACHE: Dict[str, Tuple[int, int, Dict[str, Any]]] = {}
 
-# Per-session PDP state: JIT grants (LG-AZ-07) + mutating-call budget counters
-# (LG-AZ-10/12). Bound to the process/session; reset_pdp_state() (session reset
-# policy) clears it — grants do NOT survive a session (bind_to_session_reset).
-_PDP_SESSION: Dict[str, Any] = {
-    "grants": {},            # action_class -> {"expires": float|None, "approver": str}
-    "turn_mutating": 0,
-    "session_mutating": 0,
-}
+# JIT grants and mutation counters are keyed by the caller's runtime session.
+# A process-global singleton lets one gateway user spend another user's budget
+# or inherit their approval, so the default key exists only for legacy callers
+# that genuinely have no session identity.
+_PDP_SESSIONS: Dict[str, Dict[str, Any]] = {}
+
+
+def _pdp_session(session_id: Optional[str] = None) -> Dict[str, Any]:
+    key = str(session_id or "default")
+    return _PDP_SESSIONS.setdefault(
+        key,
+        {"grants": {}, "turn_mutating": 0, "session_mutating": 0},
+    )
 
 # File-mutating tools whose concrete target splits the file_write.* classes.
 _FILE_WRITE_TOOLS: Tuple[str, ...] = ("write_file", "patch")
@@ -480,17 +485,18 @@ class PolicyDecision:
         return self.disposition in ("allow", "detect_log")
 
 
-def reset_pdp_state() -> None:
+def reset_pdp_state(session_id: Optional[str] = None) -> None:
     """Clear PDP caches/session state (tests + session reset policy)."""
     _RISK_POLICY_CACHE.clear()
-    _PDP_SESSION["grants"] = {}
-    _PDP_SESSION["turn_mutating"] = 0
-    _PDP_SESSION["session_mutating"] = 0
+    if session_id is None:
+        _PDP_SESSIONS.clear()
+    else:
+        _PDP_SESSIONS.pop(str(session_id or "default"), None)
 
 
-def pdp_begin_turn() -> None:
+def pdp_begin_turn(session_id: Optional[str] = None) -> None:
     """Start a new turn: reset the per-turn mutating budget (LG-AZ-10)."""
-    _PDP_SESSION["turn_mutating"] = 0
+    _pdp_session(session_id)["turn_mutating"] = 0
 
 
 def grant_capability(
@@ -498,6 +504,7 @@ def grant_capability(
     *,
     approver: str,
     ttl_seconds: Optional[int] = None,
+    session_id: Optional[str] = None,
 ) -> None:
     """Record an approval-backed JIT grant for a default-off capability.
 
@@ -514,7 +521,7 @@ def grant_capability(
             ttl_seconds = int(((zsp or {}).get("grant") or {}).get("ttl_seconds") or 1800)
         except Exception:
             ttl_seconds = 1800
-    _PDP_SESSION["grants"][str(action_class).strip()] = {
+    _pdp_session(session_id)["grants"][str(action_class).strip()] = {
         "expires": time.time() + max(0, int(ttl_seconds)),
         "approver": str(approver),
     }
@@ -530,14 +537,15 @@ def grant_capability(
         logger.warning("JIT grant ledger record failed (non-blocking)", exc_info=True)
 
 
-def _active_grant(action_class: str) -> Optional[Dict[str, Any]]:
+def _active_grant(action_class: str, session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     import time
-    grant = _PDP_SESSION["grants"].get(action_class)
+    session = _pdp_session(session_id)
+    grant = session["grants"].get(action_class)
     if not grant:
         return None
     expires = grant.get("expires")
     if expires is not None and time.time() >= float(expires):
-        _PDP_SESSION["grants"].pop(action_class, None)   # expired → force re-approval
+        session["grants"].pop(action_class, None)   # expired → force re-approval
         return None
     return grant
 
@@ -724,6 +732,8 @@ def resolve_action_class(function_name: str, function_args: Optional[Dict[str, A
 def evaluate_call(
     function_name: str,
     function_args: Optional[Dict[str, Any]] = None,
+    *,
+    session_id: Optional[str] = None,
 ) -> PolicyDecision:
     """Resolve one tool call to its graduated disposition.
 
@@ -763,6 +773,37 @@ def evaluate_call(
             disposition="deny", action_class=action_class, tool_name=name, reason=reason,
         )
 
+    # LG-PI-09: validate the concrete payload at the last shared dispatch
+    # boundary. This closes the direct dataflow where injected tool output is
+    # copied into a command, URL, or external-send argument in the next call.
+    if action_class in {
+        "network.egress", "external_send", "shell.non_destructive",
+        "shell.destructive", "browser.unlisted_or_action",
+    }:
+        try:
+            import json
+            from tools.injection_defense import validate_output_sink
+            sink_check = validate_output_sink(
+                json.dumps(function_args or {}, ensure_ascii=False),
+                sink=action_class,
+            )
+            if sink_check.blocked:
+                return PolicyDecision(
+                    disposition="hitl_approve", action_class=action_class,
+                    tool_name=name, origin="injection",
+                    reason=(
+                        "tool payload contains indirect-injection markers "
+                        f"({sink_check.matched}) — routed to HITL (LG-PI-09)"
+                    ),
+                )
+        except Exception:
+            logger.warning("output-sink validation failed — routing to HITL", exc_info=True)
+            return PolicyDecision(
+                disposition="hitl_approve", action_class=action_class,
+                tool_name=name, origin="injection",
+                reason="output-sink validation unavailable — failing closed",
+            )
+
     # LG-PI-06 (P2.3): if this session has observed indirect-injection content,
     # escalate the dangerous side-effect classes (egress/exec/external send) to
     # hitl_approve so injected content cannot auto-trigger them. Reads/analysis
@@ -772,14 +813,14 @@ def evaluate_call(
             injection_taint_reason,
             should_escalate_for_injection,
         )
-        if should_escalate_for_injection(action_class):
+        if should_escalate_for_injection(action_class, session_id=session_id):
             if _TIER_ORDER.index("hitl_approve") > _TIER_ORDER.index(tier):
                 return PolicyDecision(
                     disposition="hitl_approve", action_class=action_class,
                     tool_name=name, origin="injection",
                     reason=(
                         "session tainted by observed indirect-injection content "
-                        f"({injection_taint_reason()}) — side-effect action "
+                        f"({injection_taint_reason(session_id=session_id)}) — side-effect action "
                         "routed to HITL, not auto-triggered (LG-PI-06)"
                     ),
                 )
@@ -792,7 +833,7 @@ def evaluate_call(
     # destination-precise allow/deny via data_protection.dlp_egress_decision.
     try:
         from agent.data_protection import session_cui_tainted
-        if action_class in ("network.egress", "external_send") and session_cui_tainted():
+        if action_class in ("network.egress", "external_send") and session_cui_tainted(session_id=session_id):
             if _TIER_ORDER.index("hitl_approve") > _TIER_ORDER.index(tier):
                 return PolicyDecision(
                     disposition="hitl_approve", action_class=action_class,
@@ -819,7 +860,7 @@ def evaluate_call(
     # active approval-backed grant; with one, the gated call proceeds recorded.
     zsp = policy.get("zero_standing_privilege") or {}
     if zsp.get("enabled", True) and action_class in _as_set(zsp.get("default_off_capabilities")):
-        grant = _active_grant(action_class)
+        grant = _active_grant(action_class, session_id=session_id)
         if grant is not None:
             tier = "detect_log"
             reason = (
@@ -842,7 +883,8 @@ def evaluate_call(
             per_session = int(budget.get("per_session") or 0)
         except Exception:
             per_turn = per_session = 0
-        if per_session and _PDP_SESSION["session_mutating"] >= per_session:
+        session = _pdp_session(session_id)
+        if per_session and session["session_mutating"] >= per_session:
             return PolicyDecision(
                 disposition=on_exceed, action_class=action_class, tool_name=name,
                 origin="budget",
@@ -851,7 +893,7 @@ def evaluate_call(
                     f"({per_session}) — pausing for approval (LG-AZ-12)"
                 ),
             )
-        if per_turn and _PDP_SESSION["turn_mutating"] >= per_turn:
+        if per_turn and session["turn_mutating"] >= per_turn:
             return PolicyDecision(
                 disposition=on_exceed, action_class=action_class, tool_name=name,
                 origin="budget",
@@ -860,8 +902,8 @@ def evaluate_call(
                     f"({per_turn}) — pausing for approval (LG-AZ-10)"
                 ),
             )
-        _PDP_SESSION["turn_mutating"] += 1
-        _PDP_SESSION["session_mutating"] += 1
+        session["turn_mutating"] += 1
+        session["session_mutating"] += 1
 
     return PolicyDecision(
         disposition=tier, action_class=action_class, tool_name=name, reason=reason,
@@ -926,7 +968,12 @@ def _emit_pdp_ledger_event(decision: PolicyDecision, function_args: Optional[Dic
         logger.warning("PDP ledger emit failed (non-blocking)", exc_info=True)
 
 
-def pdp_gate(function_name: str, function_args: Optional[Dict[str, Any]] = None):
+def pdp_gate(
+    function_name: str,
+    function_args: Optional[Dict[str, Any]] = None,
+    *,
+    session_id: Optional[str] = None,
+):
     """Enforce the PDP verdict at a dispatch seam.
 
     Returns None when the call may proceed (allow / detect_log, low-side, or a
@@ -938,7 +985,7 @@ def pdp_gate(function_name: str, function_args: Optional[Dict[str, Any]] = None)
     try:
         if not _is_strict():
             return None
-        decision = evaluate_call(function_name, function_args)
+        decision = evaluate_call(function_name, function_args, session_id=session_id)
         if decision.allows_execution:
             return None
         if (

@@ -10,8 +10,8 @@ think-scrub (LG-DP-09) surfaces:
   * LG-DP-04 — CUI/PII pattern pack (SSN, DOB, CUI banner lines).
   * LG-DP-10 — DLP taint-gate: once CUI is exposed in a session, block egress
     to a NON-allowlisted sink until the taint clears (the step's key control).
-  * LG-DP-07/08 — at-rest encryption wrapper (Fernet) keyed from a store OUTSIDE
-    the agent's writable reach (<lliam_home>/keys, on the write-denylist).
+  * LG-DP-07/08 — at-rest encryption wrapper (Fernet) keyed from a store denied
+    to first-party file tools (<lliam_home>/keys, on the write-denylist).
   * LG-DP-11 — output masking + retention-TTL accessor for tool results.
 
 Capability preservation: every classification is ``public`` and the taint-gate
@@ -23,11 +23,12 @@ an allowlisted sink, is never blocked.
 from __future__ import annotations
 
 import logging
+import json
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("hermes.governance.data_protection")
 
@@ -62,8 +63,14 @@ class Classification:
     hits: List[PatternHit] = field(default_factory=list)
 
 
-# Per-session DLP state (cleared by reset_dp_state()).
-_STATE = {"cui_tainted": False}
+# DLP state is keyed by runtime session. The default key preserves compatibility
+# for CLI callers without an explicit identity while gateway sessions remain
+# isolated from one another.
+_STATES: Dict[str, Dict[str, bool]] = {}
+
+
+def _state(session_id: Optional[str] = None) -> Dict[str, bool]:
+    return _STATES.setdefault(str(session_id or "default"), {"cui_tainted": False})
 
 
 def _is_strict() -> bool:
@@ -83,8 +90,35 @@ def _security_cfg() -> dict:
         return {}
 
 
-def reset_dp_state() -> None:
-    _STATE["cui_tainted"] = False
+def reset_dp_state(session_id: Optional[str] = None) -> None:
+    if session_id is None:
+        _STATES.clear()
+    else:
+        _STATES.pop(str(session_id or "default"), None)
+
+
+def _classification_text(value: Any) -> str:
+    """Flatten structured tool results before classification.
+
+    Tool dispatch returns JSON strings, so scanning only the serialized first
+    line misses a CUI banner nested in fields such as ``content``.
+    """
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except (TypeError, ValueError):
+            return value
+        if decoded == value:
+            return value
+        return _classification_text(decoded)
+    if isinstance(value, dict):
+        return "\n".join(
+            _classification_text(item) for item in value.values()
+            if item is not None
+        )
+    if isinstance(value, (list, tuple, set)):
+        return "\n".join(_classification_text(item) for item in value)
+    return str(value or "")
 
 
 def cui_pii_matches(text: str) -> List[PatternHit]:
@@ -99,12 +133,13 @@ def cui_pii_matches(text: str) -> List[PatternHit]:
     return hits
 
 
-def classify_content(text: str) -> Classification:
+def classify_content(text: Any) -> Classification:
     """LG-DP-01/02: classify content CUI vs public + capture markings.
 
     CUI when it carries a CUI banner/portion marking OR any PII pattern hit.
     No-op (public) on low-side postures.
     """
+    text = _classification_text(text)
     if not text or not _is_strict():
         return Classification(level="public")
     markings = [m.group(1) for m in _MARKING_RE.finditer(text)]
@@ -123,42 +158,53 @@ class DlpDecision:
     reason: str = ""
 
 
-def note_cui_exposure(source: str, text: str) -> bool:
+def note_cui_exposure(
+    source: str, text: Any, *, session_id: Optional[str] = None
+) -> bool:
     """Taint the session if ``text`` is CUI (LG-DP-10). Returns True if tainted."""
     if not _is_strict():
         return False
     if classify_content(text).level == "cui":
-        if not _STATE["cui_tainted"]:
+        state = _state(session_id)
+        if not state["cui_tainted"]:
             logger.warning(
                 "LG-DP-10: CUI exposed in session via '%s' — DLP egress gate armed",
                 source,
             )
-        _STATE["cui_tainted"] = True
+        state["cui_tainted"] = True
         return True
     return False
 
 
-def session_cui_tainted() -> bool:
-    return bool(_STATE["cui_tainted"])
+def session_cui_tainted(*, session_id: Optional[str] = None) -> bool:
+    return bool(_state(session_id)["cui_tainted"])
 
 
 def _host_allowlisted(destination: str, allowlist: List[str]) -> bool:
-    dest = (destination or "").lower()
+    from urllib.parse import urlparse
+
+    parsed = urlparse(destination if "://" in (destination or "") else f"//{destination}")
+    dest = (parsed.hostname or "").lower().rstrip(".")
     for entry in allowlist or []:
-        e = str(entry).strip().lower()
-        if e and e in dest:
+        e = str(entry).strip().lower().lstrip("*.").rstrip(".")
+        if e and (dest == e or dest.endswith("." + e)):
             return True
     return False
 
 
-def dlp_egress_decision(destination: str, *, allowlist: Optional[List[str]] = None) -> DlpDecision:
+def dlp_egress_decision(
+    destination: str,
+    *,
+    allowlist: Optional[List[str]] = None,
+    session_id: Optional[str] = None,
+) -> DlpDecision:
     """LG-DP-10: block a CUI-tainted session from a non-allowlisted egress sink.
 
     Untainted sessions and allowlisted sinks are never blocked (capability).
     ``allowlist`` defaults to security.data_protection.egress_allowlist; the
     full destination allowlist policy is P2.5 — this gate composes with it.
     """
-    if not _is_strict() or not session_cui_tainted():
+    if not _is_strict() or not session_cui_tainted(session_id=session_id):
         return DlpDecision(blocked=False)
     if allowlist is None:
         allowlist = list((_security_cfg().get("data_protection") or {}).get("egress_allowlist") or [])
@@ -222,8 +268,9 @@ def at_rest_keyfile_path() -> Path:
 def ensure_at_rest_key() -> bytes:
     """LG-DP-08: ensure a Fernet key exists in the write-denied key store.
 
-    The key is generated 0600 outside the agent's writable reach. In a real
-    deployment the store is the OS keychain; the keyfile is the portable floor.
+    The portable keyfile is generated mode 0600 and denied to first-party file
+    tools. It is defense in depth inside the process, not an OS isolation
+    boundary; deployments should supply an external secret manager/keychain.
     """
     from cryptography.fernet import Fernet
 

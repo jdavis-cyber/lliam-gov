@@ -297,7 +297,7 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
     # LG-AZ-10 (additive): new turn → reset the PDP's per-turn mutating budget.
     try:
         from tools.tool_policy import pdp_begin_turn
-        pdp_begin_turn()
+        pdp_begin_turn(getattr(agent, "session_id", None))
     except Exception:
         pass
 
@@ -452,7 +452,10 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
         if block_result is None:
             try:
                 from tools.tool_policy import pdp_gate
-                _pdp_decision = pdp_gate(function_name, function_args)
+                _pdp_decision = pdp_gate(
+                    function_name, function_args,
+                    session_id=getattr(agent, "session_id", None),
+                )
             except Exception:
                 _pdp_decision = None
             if _pdp_decision is not None:
@@ -930,7 +933,7 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
     # LG-AZ-10 (additive): new turn → reset the PDP's per-turn mutating budget.
     try:
         from tools.tool_policy import pdp_begin_turn
-        pdp_begin_turn()
+        pdp_begin_turn(getattr(agent, "session_id", None))
     except Exception:
         pass
     for i, tool_call in enumerate(assistant_message.tool_calls, 1):
@@ -1029,7 +1032,10 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
         if not _execution_blocked:
             try:
                 from tools.tool_policy import pdp_gate
-                _pdp_decision = pdp_gate(function_name, function_args)
+                _pdp_decision = pdp_gate(
+                    function_name, function_args,
+                    session_id=getattr(agent, "session_id", None),
+                )
             except Exception:
                 _pdp_decision = None
             if _pdp_decision is not None:

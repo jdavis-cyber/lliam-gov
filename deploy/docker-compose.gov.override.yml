@@ -46,7 +46,7 @@ services:
       - proxy_side
       - egress
     volumes:
-      - ./config/squid-allowlist.conf:/etc/squid/conf.d/allowlist.conf:ro
+      - ./deploy/config/squid-allowlist.conf:/etc/squid/conf.d/allowlist.conf:ro
     # No published ports — only reachable from proxy_side (the agent).
 
 networks:

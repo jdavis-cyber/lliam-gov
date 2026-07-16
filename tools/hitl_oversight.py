@@ -113,6 +113,7 @@ def operator_override(
     approver: str,
     justification: str,
     ttl_seconds: Optional[int] = None,
+    session_id: Optional[str] = None,
 ) -> None:
     """LG-HO-09 appeal/override: approval-backed JIT grant with justification.
 
@@ -132,7 +133,10 @@ def operator_override(
             f"deny-tier class '{action_class}' cannot be overridden — deny is "
             "terminal (LG-HO-03); no toggle, grant, or override re-enables it"
         )
-    tp.grant_capability(str(action_class).strip(), approver=approver, ttl_seconds=ttl_seconds)
+    tp.grant_capability(
+        str(action_class).strip(), approver=approver,
+        ttl_seconds=ttl_seconds, session_id=session_id,
+    )
     record_decision(
         decision="approve",
         gate=str(action_class).strip(),

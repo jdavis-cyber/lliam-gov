@@ -126,6 +126,25 @@ def test_taint_clears_on_reset(strict_dp):
     assert strict_dp.session_cui_tainted() is False
 
 
+def test_cui_taint_is_scoped_to_runtime_session(strict_dp):
+    strict_dp.note_cui_exposure("read_file", _CUI_DOC, session_id="session-a")
+    assert strict_dp.session_cui_tainted(session_id="session-a")
+    assert not strict_dp.session_cui_tainted(session_id="session-b")
+
+
+def test_serialized_tool_result_cannot_hide_cui_banner(strict_dp):
+    payload = '{"path":"doc.txt","content":"CUI\\nContract data\\nCUI"}'
+    assert strict_dp.note_cui_exposure("read_file", payload, session_id="session-a")
+
+
+def test_allowlist_matching_rejects_host_substring_suffix(strict_dp):
+    strict_dp.note_cui_exposure("read_file", _CUI_DOC)
+    decision = strict_dp.dlp_egress_decision(
+        "https://agency.mil.evil.test/send", allowlist=["agency.mil"]
+    )
+    assert decision.blocked is True
+
+
 # ---------------------------------------------------------------------------
 # 4. LG-DP-07/08 — at-rest encryption wrapper, key outside agent write reach
 # ---------------------------------------------------------------------------

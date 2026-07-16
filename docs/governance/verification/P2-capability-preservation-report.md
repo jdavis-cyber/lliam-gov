@@ -30,8 +30,8 @@ non-allowlisted sinks, hardline/sudo-stdin, and missing-approver high-risk.
 ## Findings
 - **Graduated ladder holds:** allow / detect_log tiers proceed unprompted;
   only the High tier pauses for a human; only categorically-unsafe classes are
-  hard-denied. Confirmed across the composed surfaces (105 Phase-2 unit tests +
-  the 8-item capability corpus).
+  hard-denied. The PR-review repair focused set passes 121/121, including the
+  composed capability corpus.
 - **No approval fatigue:** file reads, in-safe-root writes, and non-destructive
   shell are never gated under the strict overlay.
 - **Capability corpus green (§6):** safe-root coding, CUI-marked analysis with
@@ -46,8 +46,9 @@ non-allowlisted sinks, hardline/sudo-stdin, and missing-approver high-risk.
   (29 guarded paths, none renamed).
 
 ## Conclusion
-Phase 2 is hardened **and** still fully capable. The agent remains a useful
+Phase 2's repaired PR branch is hardened **and** still fully capable. The agent remains a useful
 coding / analysis / ops assistant; graduated enforcement gates only high-impact,
 irreversible, or CUI-exfiltrating actions, and hard-denies only the categorically
-unsafe. **No mission capability regressed.** Save point `gov-P2-good` tagged on
-the Phase 2 close-out merge.
+unsafe. **No mission capability regressed in the focused and adjacent repair
+verification.** Save point `gov-P2-good` remains intentionally untagged until
+the Phase 2 close-out merge passes its final verification.

@@ -1631,6 +1631,34 @@ def check_all_command_guards(command: str, env_type: str,
     # Preserve the existing non-interactive behavior: outside CLI/gateway/ask
     # flows, we do not block on approvals and we skip external guard work.
     if not is_cli and not is_gateway and not is_ask:
+        # LG-HO-02: this is the terminal dispatcher's real guard. Strict
+        # sessions must not inherit the shipped headless auto-approve behavior
+        # for a dangerous command when no authenticated approver is present.
+        is_dangerous, pattern_key, description = detect_dangerous_command(command)
+        try:
+            from tools.hitl_oversight import record_decision, strict_fail_closed
+            strict_no_approver = strict_fail_closed()
+        except Exception:
+            strict_no_approver = False
+        if is_dangerous and strict_no_approver:
+            try:
+                record_decision(
+                    decision="deny", gate="shell.dangerous", target=command,
+                    description=description, origin="non_interactive_fail_closed",
+                )
+            except Exception:
+                pass
+            return {
+                "approved": False,
+                "pattern_key": pattern_key,
+                "description": description,
+                "message": (
+                    f"BLOCKED (fail-closed): this command is potentially dangerous "
+                    f"({description}) and no approver is present in this "
+                    "non-interactive session (LG-HO-02). Run it from an "
+                    "interactive or gateway session with an authenticated approver."
+                ),
+            }
         # Cron sessions: respect cron_mode config
         if env_var_enabled("HERMES_CRON_SESSION"):
             if _get_cron_approval_mode() == "deny":

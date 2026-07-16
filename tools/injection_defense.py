@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional
 
 logger = logging.getLogger("hermes.governance.injection_defense")
 
@@ -37,8 +37,15 @@ _SIDE_EFFECT_CLASSES = frozenset({
     "browser.unlisted_or_action",
 })
 
-# Per-process/session injection state. Cleared by reset_injection_state().
-_STATE = {"tainted": False, "matched": None}
+# Runtime-session keyed taint. A gateway process can host many users, and an
+# indirect-injection finding in one session must neither gate nor clear another.
+_STATES: Dict[str, Dict[str, object]] = {}
+
+
+def _state(session_id: Optional[str] = None) -> Dict[str, object]:
+    return _STATES.setdefault(
+        str(session_id or "default"), {"tainted": False, "matched": None}
+    )
 
 
 def _is_strict() -> bool:
@@ -66,10 +73,12 @@ class SinkValidation:
     matched: Optional[str]
 
 
-def reset_injection_state() -> None:
+def reset_injection_state(session_id: Optional[str] = None) -> None:
     """Clear session injection taint (session-reset policy / tests)."""
-    _STATE["tainted"] = False
-    _STATE["matched"] = None
+    if session_id is None:
+        _STATES.clear()
+    else:
+        _STATES.pop(str(session_id or "default"), None)
 
 
 def _first_threat(content: str) -> Optional[str]:
@@ -101,7 +110,9 @@ def classify_tool_result(tool_name: str, result: str) -> ResultClassification:
     return ResultClassification(risk="low", matched=None)
 
 
-def note_tool_result(tool_name: str, result: str) -> ResultClassification:
+def note_tool_result(
+    tool_name: str, result: str, *, session_id: Optional[str] = None
+) -> ResultClassification:
     """Classify a result and taint the session on a high-risk finding (LG-PI-06).
 
     Returns the classification. Called at the tool-result seam so the taint is
@@ -109,27 +120,31 @@ def note_tool_result(tool_name: str, result: str) -> ResultClassification:
     """
     c = classify_tool_result(tool_name, result)
     if c.risk == "high":
-        _STATE["tainted"] = True
-        _STATE["matched"] = c.matched
+        state = _state(session_id)
+        state["tainted"] = True
+        state["matched"] = c.matched
     return c
 
 
-def session_injection_tainted() -> bool:
+def session_injection_tainted(*, session_id: Optional[str] = None) -> bool:
     """True when this session has observed indirect-injection content."""
-    return bool(_STATE["tainted"])
+    return bool(_state(session_id)["tainted"])
 
 
-def injection_taint_reason() -> Optional[str]:
-    return _STATE["matched"]
+def injection_taint_reason(*, session_id: Optional[str] = None) -> Optional[str]:
+    value = _state(session_id)["matched"]
+    return str(value) if value is not None else None
 
 
-def should_escalate_for_injection(action_class: str) -> bool:
+def should_escalate_for_injection(
+    action_class: str, *, session_id: Optional[str] = None
+) -> bool:
     """LG-PI-06: True when a tainted session must route this class to HITL.
 
     Only the dangerous side-effect classes escalate; reads/analysis proceed so
     the agent can keep working with the (now-suspect) content.
     """
-    if not _is_strict() or not session_injection_tainted():
+    if not _is_strict() or not session_injection_tainted(session_id=session_id):
         return False
     return str(action_class).strip() in _SIDE_EFFECT_CLASSES
 

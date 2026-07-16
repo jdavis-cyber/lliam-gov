@@ -152,6 +152,28 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _enforce_provider_egress(agent) -> None:
+    """Apply the strict egress record at the provider request boundary."""
+    candidates = [
+        getattr(agent, "_anthropic_base_url", None),
+        getattr(agent, "base_url", None),
+        getattr(getattr(agent, "client", None), "base_url", None),
+    ]
+    url = next((str(value) for value in candidates if value), "")
+    if not url or "://" not in url:
+        # Local/non-HTTP adapters have no URL for this policy surface.
+        return
+    from tools.egress_policy import check_egress
+
+    decision = check_egress(
+        url,
+        surface="provider",
+        session_id=getattr(agent, "session_id", None),
+    )
+    if decision.disposition != "allow":
+        raise PermissionError(f"Provider request blocked by egress policy: {decision.reason}")
+
+
 def interruptible_api_call(agent, api_kwargs: dict):
     """
     Run the API call in a background thread so the main conversation loop
@@ -166,6 +188,7 @@ def interruptible_api_call(agent, api_kwargs: dict):
     the main retry loop can try again with backoff / credential rotation /
     provider fallback.
     """
+    _enforce_provider_egress(agent)
     result = {"response": None, "error": None}
     request_client_holder = {"client": None, "owner_tid": None}
     request_client_lock = threading.Lock()
@@ -1687,6 +1710,7 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
     Falls back to _interruptible_api_call on provider errors indicating
     streaming is not supported.
     """
+    _enforce_provider_egress(agent)
     if agent._interrupt_requested:
         raise InterruptedError("Agent interrupted before streaming API call")
 

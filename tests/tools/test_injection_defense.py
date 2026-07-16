@@ -212,7 +212,7 @@ def test_fetched_injection_page_then_egress_blocked_e2e(tmp_path, monkeypatch):
 
     # 1) agent fetches the page — allowed, but taints the session.
     model_tools.handle_function_call(
-        "web_extract", {"url": "http://blog.test/post"}, task_id="t1",
+            "web_extract", {"url": "https://github.com/post"}, task_id="t1",
         skip_pre_tool_call_hook=True,
     )
     assert "web_extract" in dispatched
@@ -228,3 +228,11 @@ def test_fetched_injection_page_then_egress_blocked_e2e(tmp_path, monkeypatch):
     assert "error" in json.loads(result)
     idf.reset_injection_state()
     tp.reset_pdp_state()
+
+
+def test_injection_taint_is_scoped_to_runtime_session(strict_cfg):
+    strict_cfg.note_tool_result(
+        "web_extract", _INJECTION_PAGE, session_id="session-a"
+    )
+    assert strict_cfg.session_injection_tainted(session_id="session-a")
+    assert not strict_cfg.session_injection_tainted(session_id="session-b")

@@ -888,7 +888,11 @@ def _emit_post_tool_call_hook(
     # Never gates this call, never raises.
     try:
         from tools.injection_defense import note_tool_result
-        note_tool_result(function_name, result if isinstance(result, str) else str(result))
+        note_tool_result(
+            function_name,
+            result if isinstance(result, str) else str(result),
+            session_id=session_id,
+        )
     except Exception:
         pass
 
@@ -897,7 +901,11 @@ def _emit_post_tool_call_hook(
     # escalated by the PDP. Post-facto, never gates this call, never raises.
     try:
         from agent.data_protection import note_cui_exposure
-        note_cui_exposure(function_name, result if isinstance(result, str) else str(result))
+        note_cui_exposure(
+            function_name,
+            result if isinstance(result, str) else str(result),
+            session_id=session_id,
+        )
     except Exception:
         pass
 
@@ -999,6 +1007,55 @@ def handle_function_call(
     if not isinstance(function_args, dict):
         function_args = {}
     _tool_middleware_trace = list(tool_request_middleware_trace or [])
+
+    # P2.5 last shared application boundary: enforce URL destination policy for
+    # every URL-bearing tool before tool-specific code or third-party SDKs run.
+    _surface = None
+    if function_name == "web_extract":
+        _surface = "web"
+    elif function_name == "browser_navigate":
+        _surface = "browser"
+    elif function_name == "vision_analyze":
+        _surface = "web"
+    if _surface:
+        _raw_urls = function_args.get("urls")
+        if not isinstance(_raw_urls, list):
+            _raw_urls = [
+                function_args.get("url")
+                or function_args.get("image_url")
+                or function_args.get("image")
+            ]
+        for _url in [str(value) for value in _raw_urls if value and "://" in str(value)]:
+            try:
+                from tools.egress_policy import check_egress
+                _egress = check_egress(
+                    _url, surface=_surface, session_id=session_id,
+                )
+            except Exception as _egress_exc:
+                _egress = None
+                _egress_reason = f"egress policy unavailable ({_egress_exc})"
+            else:
+                _egress_reason = _egress.reason
+            if _egress is None or _egress.disposition != "allow":
+                _egress_result = json.dumps(
+                    {"error": f"Blocked by egress policy: {_egress_reason}"},
+                    ensure_ascii=False,
+                )
+                _emit_post_tool_call_hook(
+                    function_name=function_name,
+                    function_args=function_args,
+                    result=_egress_result,
+                    task_id=task_id,
+                    session_id=session_id,
+                    tool_call_id=tool_call_id,
+                    turn_id=turn_id,
+                    api_request_id=api_request_id,
+                    status="blocked",
+                    error_type="guardrail_block",
+                    error_message=_egress_reason,
+                    middleware_trace=list(_tool_middleware_trace),
+                )
+                return _egress_result
 
     # ── Tool Search bridge dispatch ──────────────────────────────────
     # tool_search and tool_describe are pure catalog reads — handle them
@@ -1235,7 +1292,9 @@ def handle_function_call(
             # mutating-budget counters are never double-consumed.
             try:
                 from tools.tool_policy import pdp_gate
-                _pdp_decision = pdp_gate(function_name, function_args)
+                _pdp_decision = pdp_gate(
+                    function_name, function_args, session_id=session_id,
+                )
             except Exception:
                 _pdp_decision = None
             if _pdp_decision is not None:

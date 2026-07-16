@@ -25,6 +25,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from lliam_cli.env_compat import getenv_compat
 
@@ -47,13 +48,18 @@ def reset_egress_cache() -> None:
     _POLICY_CACHE.clear()
 
 
-def _is_strict() -> bool:
+def _strict_status() -> Tuple[bool, bool]:
+    """Return ``(strict, config_error)`` so posture faults cannot fail open."""
     try:
         from lliam_cli import config as _cfg
         from lliam_cli import posture_resolver as _pr
-        return _pr.is_strict(_cfg.load_config())
+        return _pr.is_strict(_cfg.load_config()), False
     except Exception:
-        return False
+        return False, True
+
+
+def _is_strict() -> bool:
+    return _strict_status()[0]
 
 
 def _egress_cfg() -> Dict[str, Any]:
@@ -139,20 +145,41 @@ def _extract_host(url: str) -> str:
         return ""
 
 
-def check_egress(url: str, *, surface: str = "web") -> EgressDecision:
+def check_egress(
+    url: str,
+    *,
+    surface: str = "web",
+    session_id: Optional[str] = None,
+) -> EgressDecision:
     """Decide whether egress to ``url`` on ``surface`` is permitted.
 
     Order of authority:
       1. low-side posture → allow (no-op; shipped behavior).
-      2. SSRF/private/metadata floor (url_safety) → deny UNCONDITIONALLY.
-      3. air-gap (egress.mode == deny_all) → deny.
+      2. air-gap (egress.mode == deny_all) → deny without DNS/network work.
+      3. SSRF/private/metadata floor (url_safety) → deny UNCONDITIONALLY.
       4. allowlisted host for this surface → allow.
       5. otherwise → new_domain_disposition (default deny; fail-closed).
     """
-    if not _is_strict():
+    strict, posture_error = _strict_status()
+    if posture_error:
+        return EgressDecision(
+            disposition="deny",
+            reason="security posture unavailable — egress failing closed",
+        )
+    if not strict:
         return EgressDecision(disposition="allow", reason="low-side (posture not strict)")
 
     host = _extract_host(url)
+    parsed = urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+
+    cfg = _egress_cfg()
+    mode = str(cfg.get("mode") or "allowlist").strip().lower()
+    if mode == "deny_all":
+        return EgressDecision(
+            disposition="deny", host=host,
+            reason="air-gap profile: all egress denied (deny_all — LG-NE-06)",
+        )
 
     # 2. Unconditional SSRF/private/metadata floor — code is the authority.
     #    is_always_blocked_url covers the metadata/link-local sentinel set
@@ -172,22 +199,12 @@ def check_egress(url: str, *, surface: str = "web") -> EgressDecision:
         if _is_ip_literal(host) and not is_safe_url(url):
             return EgressDecision(
                 disposition="deny", host=host,
-                reason="private/SSRF IP destination — unconditional block (LG-NE-02)",
+                reason="private/unsafe destination — unconditional block (LG-NE-02)",
             )
     except Exception:
         return EgressDecision(
             disposition="deny", host=host,
             reason="egress safety check unavailable — failing closed",
-        )
-
-    cfg = _egress_cfg()
-    mode = str(cfg.get("mode") or "allowlist").strip().lower()
-
-    # 3. Air-gap / deny_all profile (LG-NE-06).
-    if mode == "deny_all":
-        return EgressDecision(
-            disposition="deny", host=host,
-            reason="air-gap profile: all egress denied (deny_all — LG-NE-06)",
         )
 
     policy = _load_policy()
@@ -197,6 +214,23 @@ def check_egress(url: str, *, surface: str = "web") -> EgressDecision:
             reason="egress allowlist unparseable — failing closed",
         )
 
+    # TLS is a property of the complete URL, not the host. Enforce the policy
+    # record before host matching so an allowlisted domain cannot downgrade to
+    # cleartext HTTP.
+    unconditional = policy.get("unconditional_denies") or {}
+    allowed_schemes = {
+        str(item).strip().lower()
+        for item in unconditional.get("allowed_schemes") or ["https"]
+    }
+    if scheme not in allowed_schemes:
+        return EgressDecision(
+            disposition="deny", host=host,
+            reason=(
+                f"URL scheme '{scheme or 'missing'}' is not permitted; "
+                f"allowed schemes: {sorted(allowed_schemes)} (LG-DP-06)"
+            ),
+        )
+
     # 4. Allowlist match, scoped to the surface (LG-NE-01/03).
     for entry in policy.get("approved_destinations") or []:
         if not isinstance(entry, dict):
@@ -204,6 +238,20 @@ def check_egress(url: str, *, surface: str = "web") -> EgressDecision:
         rule = str(entry.get("host") or "").strip()
         if not rule or not _host_matches(host, rule):
             continue
+        # Resolve allowlisted names too. Hostname approval must never override
+        # the private-address/SSRF floor after DNS resolution.
+        try:
+            from tools.url_safety import is_safe_url
+            if not is_safe_url(url):
+                return EgressDecision(
+                    disposition="deny", host=host,
+                    reason="allowlisted host resolved to an unsafe destination (LG-NE-02)",
+                )
+        except Exception:
+            return EgressDecision(
+                disposition="deny", host=host,
+                reason="egress DNS safety check unavailable — failing closed",
+            )
         surfaces = entry.get("surfaces") or []
         if surface and surfaces and surface not in surfaces:
             return EgressDecision(
@@ -211,6 +259,23 @@ def check_egress(url: str, *, surface: str = "web") -> EgressDecision:
                 reason=(
                     f"host '{host}' is allowlisted but not for surface "
                     f"'{surface}' (allowed: {list(surfaces)}) — LG-NE-03"
+                ),
+            )
+        ceiling = str(entry.get("classification_ceiling") or "PUBLIC").upper()
+        try:
+            from agent.data_protection import session_cui_tainted
+            cui_tainted = session_cui_tainted(session_id=session_id)
+        except Exception:
+            return EgressDecision(
+                disposition="deny", host=host,
+                reason="classification state unavailable — egress failing closed",
+            )
+        if cui_tainted and not ceiling.startswith("CUI"):
+            return EgressDecision(
+                disposition="deny", host=host,
+                reason=(
+                    f"destination classification ceiling '{ceiling}' does not "
+                    "permit CUI-tainted egress (LG-DP-10)"
                 ),
             )
         return EgressDecision(

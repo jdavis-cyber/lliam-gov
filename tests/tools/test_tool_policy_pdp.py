@@ -270,6 +270,19 @@ def test_active_grant_lets_capability_proceed_with_ledger_record(strict_pdp, tmp
     assert "grant" in d.reason.lower()
 
 
+def test_jit_grant_is_scoped_to_runtime_session(strict_pdp, tmp_path):
+    _use_jit_policy(strict_pdp, tmp_path)
+    strict_pdp.grant_capability(
+        "shell.destructive", approver="jerome@dashboard", session_id="session-a"
+    )
+    assert strict_pdp.evaluate_call(
+        "terminal", {"command": "rm -rf ./build"}, session_id="session-a"
+    ).allows_execution
+    assert strict_pdp.evaluate_call(
+        "terminal", {"command": "rm -rf ./build"}, session_id="session-b"
+    ).disposition == "hitl_approve"
+
+
 def test_expired_grant_forces_reapproval(strict_pdp, tmp_path):
     _use_jit_policy(strict_pdp, tmp_path)
     strict_pdp.grant_capability(
@@ -339,6 +352,21 @@ def test_new_turn_resets_per_turn_budget_but_session_cap_holds(strict_pdp, tmp_p
     d = _write_in_root(strict_pdp, tmp_path, 99)
     assert d.disposition == "hitl_approve"  # per-session cap (LG-AZ-12)
     assert "session" in d.reason.lower()
+
+
+def test_mutation_budgets_are_scoped_to_runtime_session(strict_pdp, tmp_path):
+    _use_budget_policy(strict_pdp, tmp_path)
+    for i in range(3):
+        assert strict_pdp.evaluate_call(
+            "write_file",
+            {"path": str(tmp_path / "workspace" / f"a{i}.txt"), "content": "x"},
+            session_id="session-a",
+        ).allows_execution
+    assert strict_pdp.evaluate_call(
+        "write_file",
+        {"path": str(tmp_path / "workspace" / "b.txt"), "content": "x"},
+        session_id="session-b",
+    ).allows_execution
 
 
 # ---------------------------------------------------------------------------
