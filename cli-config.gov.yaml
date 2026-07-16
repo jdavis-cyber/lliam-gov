@@ -137,7 +137,24 @@ security:
     dlp_taint_gate: true           # [additive] LG-DP-10: CUI-exposed session escalates egress to HITL
     at_rest_encryption: true       # [additive] LG-DP-07: Fernet at-rest wrapper for CUI/audit blobs
     result_retention_ttl_seconds: 86400   # [additive] LG-DP-11: tool-result retention cap (24h)
-    egress_allowlist: []           # [additive] LG-DP-10 sink allowlist (destination policy of record = P2.5)
+    egress_allowlist: []           # [additive] LG-DP-10 sink allowlist (destination policy of record = P2.5 egress.*)
+
+  # [ACTIVE @ P2.5]  NETWORK EGRESS BOUNDARY  (LG-NE-01..06)
+  # Consumed by the NEW tools/egress_policy.py (check_egress), layered OVER the
+  # existing url_safety SSRF floor + website_policy. Deny-by-default destination
+  # allowlist (policy/egress-allowlist.yaml); the metadata/private-IP floor is
+  # unconditional (is_always_blocked_url). The squid isolation enclave
+  # (deploy/docker-compose.gov.override.yml) is the connection-level mirror.
+  egress:
+    mode: allowlist                # [additive] allowlist | deny_all (air-gap, LG-NE-06)
+    policy_path: policy/egress-allowlist.yaml   # [additive] LG-NE-01 destination policy of record
+    new_domain_disposition: deny   # [additive] deny | hitl_approve — new hosts denied by default
+    proxy_required: true           # [additive] LG-NE-04/05 squid enclave is the gov default
+    fail_closed: true              # [additive] parse/eval error -> deny
+  website_policy:
+    mode: allowlist                # [additive] LG-NE-03 allowlist mode on web/browser tools
+    allow_domains_from: policy/egress-allowlist.yaml
+    fail_closed: true
   tool_allowlist: []               # [additive] LG-AZ-02 (empty = no positive tool allowlist yet)
   tool_denylist:                   # [additive] LG-AZ-11/AZ-02: refuse these capabilities for CUI
     - computer_use

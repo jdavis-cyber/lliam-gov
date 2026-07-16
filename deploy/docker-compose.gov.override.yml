@@ -1,0 +1,61 @@
+# =============================================================================
+# docker-compose.gov.override.yml — Lliam-GOV egress-isolation enclave  [P2.5]
+# =============================================================================
+# LG-NE-04/05 — the network-layer companion to the application-layer egress
+# allowlist (policy/egress-allowlist.yaml). Shipped as the gov DEFAULT profile:
+# the agent container has NO direct route to the internet; all HTTP(S) egress is
+# forced through a squid proxy that enforces a dstdomain allowlist mirroring the
+# approved_destinations in egress-allowlist.yaml. This is connection-level
+# enforcement (LG-NE-05) that a 3rd-party SDK cannot bypass — it does not honor
+# the app-layer check and still cannot open a socket to a non-allowlisted host.
+#
+# ADDITIVE — the shipped docker-compose.yml is NOT edited. Apply with:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.gov.override.yml up
+#
+# For a fully air-gapped deployment (LG-NE-06) omit the `egress` network and set
+# security.egress.mode: deny_all in cli-config.gov.yaml — the agent then reaches
+# only loopback/in-boundary inference.
+# =============================================================================
+
+services:
+  # The gateway (agent) container. The shipped base uses network_mode: host;
+  # the enclave REPLACES that with two internal (no-internet) networks so the
+  # container has no direct route out. HTTP_PROXY/HTTPS_PROXY force all egress
+  # through squid; NO_PROXY keeps loopback + the proxy itself direct.
+  # NOTE: network_mode and networks are mutually exclusive in compose — this
+  # override sets network_mode: "" to drop the base's host mode before
+  # attaching the enclave networks.
+  gateway:
+    network_mode: ""
+    networks:
+      - internal
+      - proxy_side
+    environment:
+      HTTP_PROXY: "http://egress-proxy:3128"
+      HTTPS_PROXY: "http://egress-proxy:3128"
+      NO_PROXY: "localhost,127.0.0.1,egress-proxy"
+      # Belt-and-suspenders with the app-layer allowlist:
+      HERMES_ALLOW_PRIVATE_URLS: "false"
+
+  # Squid egress proxy — the ONLY container with a route off the proxy network.
+  # Enforces config/squid-allowlist.conf (dstdomain ACLs = the allowlist mirror).
+  egress-proxy:
+    image: ubuntu/squid:6.10-24.04_edge
+    restart: unless-stopped
+    networks:
+      - proxy_side
+      - egress
+    volumes:
+      - ./config/squid-allowlist.conf:/etc/squid/conf.d/allowlist.conf:ro
+    # No published ports — only reachable from proxy_side (the agent).
+
+networks:
+  # internal: agent-only, no gateway to the internet (internal: true).
+  internal:
+    internal: true
+  # proxy_side: agent <-> squid. internal: true — no direct internet.
+  proxy_side:
+    internal: true
+  # egress: ONLY squid attaches here; this is the single controlled gateway out.
+  egress:
+    driver: bridge
