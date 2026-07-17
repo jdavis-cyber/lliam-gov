@@ -157,6 +157,26 @@ modal = ["modal==1.3.4", "cbor2==5.9.0"]
 daytona = ["daytona==0.155.0"]
 hindsight = ["hindsight-client==0.6.1"]
 dev = ["debugpy==1.8.20", "pytest==9.0.3", "pytest-asyncio==1.3.0", "mcp==1.26.0", "pydantic-settings==2.14.2", "starlette==1.3.1", "ty==0.0.21", "ruff==0.15.10", "setuptools==81.0.0"]  # setuptools: latest <82 (torch >=2.11 caps setuptools<82)
+# Optional provider backends that are normally lazy-installed at first use
+# (via tools/lazy_deps.py) and therefore deliberately kept OUT of `[all]` for
+# supply-chain reasons. Tests that exercise these backends hard-fail (rather
+# than skip) when the SDK is absent, which is what produced most of the
+# characterized test "noise floor". This extra is a TEST-ONLY convenience:
+# CI installs it so those tests RUN instead of contributing spurious failures.
+# It is never referenced by `[all]` or the runtime, so it does not widen the
+# blast radius of a fresh user install. Each pin matches the corresponding
+# single-backend extra above (exact-pinned, same versions).
+test-backends = [
+  "mistralai==2.4.8",
+  "fal-client==0.13.1",
+  "msgpack==1.2.1",
+  "edge-tts==7.2.7",
+  "elevenlabs==1.59.0",
+  "hindsight-client==0.6.1",
+  "honcho-ai==2.0.1",
+  "daytona==0.155.0",
+  "parallel-web==0.4.2",
+]
 messaging = ["python-telegram-bot[webhooks]==22.6", "discord.py==2.7.1", "aiohttp==3.14.1", "tornado==6.5.7", "brotlicffi==1.2.0.1", "slack-bolt==1.27.0", "slack-sdk==3.40.1", "qrcode==7.4.2"]
 cron = []  # croniter is now a core dependency; this extra kept for back-compat
 slack = ["slack-bolt==1.27.0", "slack-sdk==3.40.1", "aiohttp==3.14.1"]
