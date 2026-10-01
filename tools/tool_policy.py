@@ -743,7 +743,16 @@ def evaluate_call(
     to default_disposition (deny), and an unparseable policy fails closed.
     """
     name = (function_name or "").strip()
-    if not _is_strict():
+    try:
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
+        strict = _pr.is_strict(_cfg.load_config())
+    except Exception:
+        return PolicyDecision(
+            disposition="deny", action_class="unevaluated", tool_name=name,
+            reason="tool-risk configuration unavailable — failing closed",
+        )
+    if not strict:
         return PolicyDecision(
             disposition="allow", action_class="unevaluated", tool_name=name,
             reason="low-side (posture not strict) — PDP inactive",
@@ -983,8 +992,6 @@ def pdp_gate(
     Never raises.
     """
     try:
-        if not _is_strict():
-            return None
         decision = evaluate_call(function_name, function_args, session_id=session_id)
         if decision.allows_execution:
             return None
