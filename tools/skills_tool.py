@@ -804,6 +804,11 @@ def _serve_plugin_skill(
         )
 
     # Injection scan — log but still serve (matches local-skill behaviour)
+    from tools.tool_policy import skill_load_decision
+    decision, reason = skill_load_decision(f"{namespace}:{bare}", skill_md.parent, parsed_frontmatter)
+    if decision != "allow":
+        return json.dumps({"success": False, "error": f"Skill '{namespace}:{bare}' held or denied: {reason}"})
+
     if any(p in content.lower() for p in _INJECTION_PATTERNS):
         logger.warning(
             "Plugin skill '%s:%s' contains patterns that may indicate prompt injection",
@@ -1178,6 +1183,10 @@ def skill_view(
 
         # Check if the skill is disabled by the user
         resolved_name = parsed_frontmatter.get("name", skill_md.parent.name)
+        from tools.tool_policy import skill_load_decision
+        decision, reason = skill_load_decision(str(resolved_name), skill_dir, parsed_frontmatter)
+        if decision != "allow":
+            return json.dumps({"success": False, "error": f"Skill '{resolved_name}' held or denied: {reason}"})
         if _is_skill_disabled(resolved_name):
             return json.dumps(
                 {
