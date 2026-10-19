@@ -41,6 +41,8 @@ The repository's hardening reports describe the project's control work and scope
 
 ## Evaluation boundaries
 
+Repository CI checks security mechanisms and reference-profile behavior; it does not require renewal of example operator approvals. See the [repository maintenance scope](docs/governance/repository-maintenance.md) for the distinction from real-date deployment checks.
+
 Lliam-GOV is a reference implementation and engineering evaluation project. Each deployment requires validation of its selected tools, policies and integrations.
 
 **Whole-process OS or container isolation remains the containment boundary.** In-process checks do not contain arbitrary code with the agent's privileges. Review coverage and event capture depend on configuration and execution paths. The project provides no certification, deployment authorization or permission to process CUI. See [SECURITY.md](SECURITY.md).

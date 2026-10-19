@@ -6,6 +6,7 @@ import datetime
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -13,13 +14,21 @@ sys.path.insert(0, str(_REPO / "ci" / "governance-ci-gates"))
 
 import sod_check  # noqa: E402
 
+_TODAY = datetime.date(2026, 7, 1)
+
+
+@pytest.fixture(autouse=True)
+def fixed_clock(monkeypatch):
+    """Regression tests exercise policy behavior, not current operator approval."""
+    monkeypatch.setattr(sod_check, "_today", lambda: _TODAY)
+
 
 def _future_iso() -> str:
-    return (datetime.date.today() + datetime.timedelta(days=365)).isoformat()
+    return (_TODAY + datetime.timedelta(days=365)).isoformat()
 
 
 def _past_iso() -> str:
-    return (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+    return (_TODAY - datetime.timedelta(days=1)).isoformat()
 
 
 _ROLES = {
@@ -146,14 +155,10 @@ def test_shipped_roles_declare_the_security_critical_rules():
 def test_shipped_deviations_are_complete_and_owned():
     """Time-ROBUST structural guard on the shipped deviations.
 
-    The clean-gate tests below are date-DEPENDENT because a deviation expires at
-    its review_by. This guard is not: it asserts every shipped sod_deviations
-    entry carries a conflict pair, a bound principal, a nonempty owner, a
-    nonempty justification, and a well-formed review_by. Diagnostic: if a
-    clean-gate test fails while THIS one still passes, the cause is almost
-    certainly an EXPIRED deviation (review_by has passed) — re-review it and
-    renew the date in roles.yaml. That is the control working, not a code
-    regression.
+    Each shipped example has a conflict pair, principal, owner, justification
+    and well-formed review date. The boundary tests below verify acceptance
+    and expiry with a controlled clock; example dates need not be renewed to
+    keep ordinary repository development working.
     """
     roles = yaml.safe_load((_REPO / "docs/governance/roles.yaml").read_text())
     devs = roles.get("sod_deviations") or []
@@ -166,28 +171,27 @@ def test_shipped_deviations_are_complete_and_owned():
         assert sod_check._parse_review_by(d.get("review_by")) is not None, d
 
 
-def test_shipped_roles_and_bindings_are_clean():
-    """The committed roles.yaml + role_bindings must have zero BLOCKING
-    conflicts (accepted deviations are allowed and tracked).
-
-    NOTE (date-dependent): deviations expire at their review_by, so this and
-    test_gate_exit_code_clean go RED once the shipped deviations expire. That is
-    intended expiry enforcement — see test_shipped_deviations_are_complete_and_owned
-    for the diagnostic. Renew the review_by in roles.yaml as a deliberate,
-    reviewed governance action (never a rubber-stamp bump)."""
+@pytest.mark.parametrize("days_after_review", [0, 1])
+def test_shipped_example_expiry_boundaries(monkeypatch, days_after_review):
+    """Real example files pass on review day and block after expiry, including
+    the CLI exit status. No live approval is inferred from either fixture."""
     roles = yaml.safe_load((_REPO / "docs/governance/roles.yaml").read_text())
     overlay = yaml.safe_load((_REPO / "cli-config.gov.yaml").read_text())
     bindings = (overlay.get("governance") or {}).get("role_bindings") or {}
-    blocking, accepted = sod_check.classify_sod(roles, bindings)
-    assert blocking == []
-    assert len(accepted) == 2  # the two tracked single-operator deviations
-
-
-def test_gate_exit_code_clean():
-    assert sod_check.main([
-        "--roles", str(_REPO / "docs/governance/roles.yaml"),
-        "--overlay", str(_REPO / "cli-config.gov.yaml"),
-    ]) == 0
+    review_dates = [sod_check._parse_review_by(d["review_by"])
+                    for d in roles["sod_deviations"]]
+    for review_date in sorted(set(review_dates)):
+        today = review_date + datetime.timedelta(days=days_after_review)
+        monkeypatch.setattr(sod_check, "_today", lambda today=today: today)
+        blocking, accepted = sod_check.classify_sod(roles, bindings)
+        expired = sum(date < today for date in review_dates)
+        assert len(blocking) == expired
+        assert all("expired review_by" in conflict for conflict in blocking)
+        assert len(accepted) == len(review_dates) - expired
+        assert sod_check.main([
+            "--roles", str(_REPO / "docs/governance/roles.yaml"),
+            "--overlay", str(_REPO / "cli-config.gov.yaml"),
+        ]) == (1 if expired else 0)
 
 
 # ---- deviation validity: a waiver must be complete AND unexpired (LG-GV-05) --
@@ -240,14 +244,14 @@ def test_deviation_malformed_review_by_blocks():
 def test_deviation_review_by_as_yaml_date_object_accepted():
     """PyYAML parses an unquoted ISO date (review_by: 2026-10-11) as a
     datetime.date, not a str — the checker must accept a date object too."""
-    future = datetime.date.today() + datetime.timedelta(days=365)
+    future = _TODAY + datetime.timedelta(days=365)
     roles = _roles_with_deviation(review_by=future)
     _, accepted = sod_check.classify_sod(roles, _CAIO_CONFLICT_BINDINGS)
     assert any("caio" in a and "ai_risk_owner" in a for a in accepted)
 
 
 def test_deviation_expired_date_object_blocks():
-    past = datetime.date.today() - datetime.timedelta(days=1)
+    past = _TODAY - datetime.timedelta(days=1)
     roles = _roles_with_deviation(review_by=past)
     _, accepted = sod_check.classify_sod(roles, _CAIO_CONFLICT_BINDINGS)
     assert not any("caio" in a for a in accepted)

@@ -127,10 +127,10 @@ jobs:
     name: OSV scan
     uses: ./.github/workflows/osv-scanner.yml
 
-  # Lliam-GOV additive lane — runs the governance gates (godmode/drift/path-freeze/
-  # deps) and feeds all-checks-pass so they are required. (LG-CH-06/03, SD-01, SS-01)
+  # Security and reference-profile regression checks feed the aggregate result.
+  # Passing CI does not establish current deployment authorization.
   governance-gates:
-    name: Governance gates
+    name: Security and reference-profile checks
     needs: detect
     uses: ./.github/workflows/governance-gates.yml
     secrets: inherit
