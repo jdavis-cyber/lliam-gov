@@ -30,13 +30,13 @@ The code includes a tool-policy decision layer, network-egress checks, staged-wr
 
 The repository's hardening reports describe the project's control work and scoped capability checks. They provide an engineering record to examine, rather than a blanket guarantee that every tool, interface and deployment path behaves identically.
 
-Hermes supplies the agent platform, interfaces, provider support and much of the tool ecosystem. Lliam-GOV's contribution is the security and governance overlay, its configuration and the associated evaluation record.
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) supplies the agent platform, interfaces, provider support and much of the tool ecosystem. Lliam-GOV's contribution is the security and governance overlay, its configuration and the associated evaluation record.
 
 ## Explore or evaluate
 
 - **Start without installing:** compare the [tool policy](policy/tool-risk-policy.yaml), [decision layer](tools/tool_policy.py) and [regression tests](tests/tools/test_tool_policy_pdp.py).
 - **Inspect the mechanisms:** [tool-risk policy](policy/tool-risk-policy.yaml), [staged-write review](lliam_cli/write_approval_commands.py), [audit ledger](agent/governance_audit.py) and [runtime monitors](agent/runtime_monitors.py).
-- **Plan a bounded trial:** review the [strict profile](cli-config.gov.yaml), [network-isolation guidance](docs/security/network-egress-isolation.md) and [installation guide](website/docs/getting-started/installation.md). Use synthetic data and test the review and event-capture paths needed for your workflow.
+- **Plan a bounded trial:** review the [strict profile](cli-config.gov.yaml), [network-isolation guidance](docs/security/network-egress-isolation.md) and [installation guide](website/docs/getting-started/installation.md). Windows users can use the [PowerShell installer](scripts/install.ps1). Use synthetic data and test the review and event-capture paths needed for your workflow.
 - **Assess the evidence:** consult the [hardening reports](docs/governance/verification/) and [consolidated engineering record](docs/governance/verification/FINAL-hardening-completion-report.md) before drawing deployment conclusions.
 
 ## Evaluation boundaries
