@@ -21,7 +21,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
-from gateway.status import terminate_pid
+from lliam_cli.process_utils import terminate_pid
 from gateway.restart import (
     DEFAULT_GATEWAY_RESTART_DRAIN_TIMEOUT,
     GATEWAY_SERVICE_RESTART_EXIT_CODE,
@@ -277,7 +277,7 @@ def _graceful_restart_via_sigusr1(pid: int, drain_timeout: float) -> bool:
     # for sig=0, hard-killing the target. Use the cross-platform
     # ``_pid_exists`` helper in gateway.status which does OpenProcess +
     # WaitForSingleObject on Windows.
-    from gateway.status import _pid_exists
+    from lliam_cli.process_utils import _pid_exists
 
     while _time.monotonic() < deadline:
         if not _pid_exists(pid):
@@ -784,7 +784,7 @@ def _spawn_gateway_restart_watcher(old_pid: int, run_argv: list[str]) -> bool:
         while time.monotonic() < deadline:
             # ``os.kill(pid, 0)`` is not a no-op on Windows — use the
             # cross-platform existence check.
-            from gateway.status import _pid_exists
+            from lliam_cli.process_utils import _pid_exists
             if not _pid_exists(pid):
                 break
             time.sleep(0.2)
@@ -1550,7 +1550,7 @@ def stop_profile_gateway() -> bool:
     # Wait briefly for it to exit. On Windows, os.kill(pid, 0) is NOT
     # a no-op — route through the cross-platform existence check.
     import time as _time
-    from gateway.status import _pid_exists
+    from lliam_cli.process_utils import _pid_exists
 
     for _ in range(20):
         if not _pid_exists(pid):

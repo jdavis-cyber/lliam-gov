@@ -999,7 +999,7 @@ def test_reap_unsupervised_orphans_sigterms_then_sigkills_survivor(monkeypatch):
     monkeypatch.setattr("gateway.status.write_planned_stop_marker", lambda pid: True)
     # Orphan ignores SIGTERM (matches the field report) and stays alive, so the
     # follow-up SIGKILL must fire.
-    monkeypatch.setattr("gateway.status._pid_exists", lambda pid: True)
+    monkeypatch.setattr("lliam_cli.process_utils._pid_exists", lambda pid: True)
 
     sent = []
     monkeypatch.setattr(gateway.os, "kill", lambda pid, sig: sent.append((pid, sig)))
@@ -1150,7 +1150,7 @@ class TestStopProfileGateway:
             lambda pid, sig: calls.__setitem__("kill", calls["kill"] + 1),
         )
         monkeypatch.setattr(
-            "gateway.status._pid_exists",
+            "lliam_cli.process_utils._pid_exists",
             lambda pid: calls.__setitem__("alive_probes", calls["alive_probes"] + 1) or True,
         )
         monkeypatch.setattr("time.sleep", lambda _: None)

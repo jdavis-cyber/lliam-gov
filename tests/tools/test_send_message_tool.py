@@ -452,7 +452,7 @@ class TestSendMessageTool:
              patch("tools.interrupt.is_interrupted", return_value=False), \
              patch("model_tools._run_async", side_effect=_run_async_immediately), \
              patch("tools.send_message_tool._send_to_platform", new=AsyncMock(return_value={"success": True})), \
-             patch("gateway.session_context.get_session_env") as get_session_env_mock, \
+             patch("agent.session_context.get_session_env") as get_session_env_mock, \
              patch("gateway.mirror.mirror_to_session", return_value=True) as mirror_mock:
             get_session_env_mock.side_effect = lambda name, default="": {
                 "HERMES_SESSION_PLATFORM": "telegram",
@@ -3071,7 +3071,7 @@ class TestCheckSendMessage:
         monkeypatch.setenv("HERMES_KANBAN_TASK", "t_abc12345")
         monkeypatch.delenv("HERMES_SESSION_PLATFORM", raising=False)
 
-        with patch("gateway.session_context.get_session_env", return_value=""), \
+        with patch("agent.session_context.get_session_env", return_value=""), \
              patch("gateway.status.is_gateway_running", return_value=False):
             assert _check_send_message() is True
 
@@ -3083,7 +3083,7 @@ class TestCheckSendMessage:
 
         monkeypatch.setenv("HERMES_KANBAN_TASK", "t_abc12345")
 
-        with patch("gateway.session_context.get_session_env",
+        with patch("agent.session_context.get_session_env",
                    side_effect=AssertionError("session_context not consulted "
                                               "when HERMES_KANBAN_TASK is set")), \
              patch("gateway.status.is_gateway_running",
@@ -3098,7 +3098,7 @@ class TestCheckSendMessage:
 
         monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
 
-        with patch("gateway.session_context.get_session_env", return_value="telegram"), \
+        with patch("agent.session_context.get_session_env", return_value="telegram"), \
              patch("gateway.status.is_gateway_running", return_value=False):
             assert _check_send_message() is True
 
@@ -3109,7 +3109,7 @@ class TestCheckSendMessage:
 
         monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
 
-        with patch("gateway.session_context.get_session_env", return_value="local"), \
+        with patch("agent.session_context.get_session_env", return_value="local"), \
              patch("gateway.status.is_gateway_running", return_value=True) as gw_mock:
             assert _check_send_message() is True
             gw_mock.assert_called_once()
@@ -3121,7 +3121,7 @@ class TestCheckSendMessage:
 
         monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
 
-        with patch("gateway.session_context.get_session_env", return_value=""), \
+        with patch("agent.session_context.get_session_env", return_value=""), \
              patch("gateway.status.is_gateway_running", return_value=True):
             assert _check_send_message() is True
 
@@ -3131,7 +3131,7 @@ class TestCheckSendMessage:
 
         monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
 
-        with patch("gateway.session_context.get_session_env", return_value=""), \
+        with patch("agent.session_context.get_session_env", return_value=""), \
              patch("gateway.status.is_gateway_running", return_value=False):
             assert _check_send_message() is False
 
@@ -3142,7 +3142,7 @@ class TestCheckSendMessage:
 
         monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
 
-        with patch("gateway.session_context.get_session_env", return_value=""), \
+        with patch("agent.session_context.get_session_env", return_value=""), \
              patch("gateway.status.is_gateway_running",
                    side_effect=ImportError("simulated")):
             assert _check_send_message() is False

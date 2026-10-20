@@ -601,18 +601,12 @@ def _cache_mcp_image_block(block) -> str:
         return ""
 
     try:
-        from gateway.platforms.base import cache_image_from_bytes
+        from tools.media_cache import cache_image_from_bytes
 
         image_path = cache_image_from_bytes(
             raw_bytes,
             ext=_mcp_image_extension_for_mime_type(normalized_mime),
         )
-    except ImportError:
-        # gateway.platforms.base not importable in this process (e.g. cron
-        # without gateway deps). Fall back to silently dropping — callers
-        # get any text blocks that did parse.
-        logger.debug("MCP image caching skipped — gateway.platforms.base unavailable")
-        return ""
     except Exception as exc:
         logger.warning("MCP image block cache failed: %s", exc)
         return ""
@@ -1907,7 +1901,7 @@ class MCPServerTask:
             # on Linux, where setsid() children escape the parent cgroup).
             # Mark them as orphans so the next cleanup sweep can reap them.
             if new_pids:
-                from gateway.status import _pid_exists
+                from lliam_cli.process_utils import _pid_exists
                 _killpg = getattr(os, "killpg", None)
                 with _lock:
                     for _pid in new_pids:
@@ -4925,7 +4919,7 @@ def _kill_orphaned_mcp_children(include_active: bool = False) -> None:
     _sigkill = getattr(_signal, "SIGKILL", _signal.SIGTERM)
     # ``os.kill(pid, 0)`` is NOT a no-op on Windows. Use the cross-platform
     # existence check before escalating to SIGKILL.
-    from gateway.status import _pid_exists
+    from lliam_cli.process_utils import _pid_exists
     for pid, server_name in pids.items():
         if not _pid_exists(pid):
             continue  # Good — exited after SIGTERM

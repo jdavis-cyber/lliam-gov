@@ -605,7 +605,7 @@ def compress_context(
                 # Ordering contract: the agent thread updates the contextvar here;
                 # the gateway propagates to SessionEntry after run_in_executor returns.
                 try:
-                    from gateway.session_context import set_current_session_id
+                    from agent.session_context import set_current_session_id
 
                     set_current_session_id(agent.session_id)
                 except Exception:
@@ -651,7 +651,7 @@ def compress_context(
                     )
                     agent.session_id = old_session_id
                     try:
-                        from gateway.session_context import set_current_session_id
+                        from agent.session_context import set_current_session_id
                         set_current_session_id(agent.session_id)
                     except Exception:
                         os.environ["LLIAM_SESSION_ID"] = agent.session_id

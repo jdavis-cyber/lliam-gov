@@ -160,7 +160,7 @@ class TestStdioPidTracking:
         # ``gateway.status._pid_exists`` (so it's safe on Windows — see
         # bpo-14484). Return True so the SIGKILL escalation fires.
         with patch("tools.mcp_tool.os.kill") as mock_kill, \
-             patch("gateway.status._pid_exists", return_value=True), \
+             patch("lliam_cli.process_utils._pid_exists", return_value=True), \
              patch("tools.mcp_tool.time.sleep") as mock_sleep:
             _kill_orphaned_mcp_children()
 
@@ -246,7 +246,7 @@ class TestStdioPgroupReaping:
 
         with patch("tools.mcp_tool.os.killpg") as mock_killpg, \
              patch("tools.mcp_tool.os.kill") as mock_kill, \
-             patch("gateway.status._pid_exists", return_value=True), \
+             patch("lliam_cli.process_utils._pid_exists", return_value=True), \
              patch("time.sleep"):
             _kill_orphaned_mcp_children()
 
@@ -292,7 +292,7 @@ class TestStdioPgroupReaping:
         with patch("tools.mcp_tool.os.getpgrp", return_value=gateway_pgid), \
              patch("tools.mcp_tool.os.killpg") as mock_killpg, \
              patch("tools.mcp_tool.os.kill") as mock_kill, \
-             patch("gateway.status._pid_exists", return_value=True), \
+             patch("lliam_cli.process_utils._pid_exists", return_value=True), \
              patch("time.sleep"):
             _kill_orphaned_mcp_children()
 
@@ -334,7 +334,7 @@ class TestStdioPgroupReaping:
             side_effect=ProcessLookupError("no such process group"),
         ) as mock_killpg, \
              patch("tools.mcp_tool.os.kill") as mock_kill, \
-             patch("gateway.status._pid_exists", return_value=False), \
+             patch("lliam_cli.process_utils._pid_exists", return_value=False), \
              patch("time.sleep"):
             _kill_orphaned_mcp_children()
 
@@ -363,7 +363,7 @@ class TestStdioPgroupReaping:
             # No entry in _stdio_pgids.
 
         with patch("tools.mcp_tool.os.kill") as mock_kill, \
-             patch("gateway.status._pid_exists", return_value=False), \
+             patch("lliam_cli.process_utils._pid_exists", return_value=False), \
              patch("time.sleep"):
             # killpg may or may not exist; either way the no-pgid path skips it.
             _kill_orphaned_mcp_children()

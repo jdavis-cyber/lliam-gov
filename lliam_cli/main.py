@@ -6116,7 +6116,7 @@ def _kill_stale_dashboard_processes(
             still_pending = []
             # On Windows, os.kill(pid, 0) is NOT a no-op. Route through
             # the cross-platform existence check.
-            from gateway.status import _pid_exists
+            from lliam_cli.process_utils import _pid_exists
             for pid in pending:
                 if _pid_exists(pid):
                     still_pending.append(pid)
@@ -8622,7 +8622,7 @@ def _write_update_planned_stop_marker(profile_path: Path, pid: int) -> bool:
     try:
         from datetime import timezone
 
-        from gateway.status import _get_process_start_time
+        from lliam_cli.process_utils import _get_process_start_time
         from utils import atomic_json_write
 
         record = {
@@ -8649,7 +8649,7 @@ def _wait_for_windows_update_gateway_exit(
     if not pids:
         return set()
 
-    from gateway.status import _pid_exists
+    from lliam_cli.process_utils import _pid_exists
 
     remaining = set(pids)
     deadline = _time.monotonic() + max(timeout, 0.0)
@@ -8685,7 +8685,7 @@ def _pause_windows_gateways_for_update() -> dict | None:
         return None
 
     try:
-        from gateway.status import terminate_pid
+        from lliam_cli.process_utils import terminate_pid
         from lliam_cli.gateway import (
             _capture_gateway_argv,
             _get_restart_drain_timeout,
@@ -10537,7 +10537,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     print(
                         f"  ⚠ {len(_stuck)} gateway process(es) ignored SIGTERM — force-killing"
                     )
-                    from gateway.status import terminate_pid as _terminate_pid
+                    from lliam_cli.process_utils import terminate_pid as _terminate_pid
                     for pid in _stuck:
                         try:
                             # Routes through taskkill /T /F on Windows,

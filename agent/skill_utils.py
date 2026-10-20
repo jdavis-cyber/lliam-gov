@@ -365,7 +365,7 @@ def get_disabled_skill_names(platform: str | None = None) -> Set[str]:
     Reads the config file directly (no CLI config imports) to stay
     lightweight.
     """
-    from gateway.session_context import get_session_env
+    from agent.session_context import get_session_env
     resolved_platform = (
         platform
         or getenv_compat("PLATFORM")

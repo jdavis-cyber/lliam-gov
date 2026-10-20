@@ -990,14 +990,12 @@ def _emit_approval_request(sid: str, data: dict | None) -> None:
     """Emit an ``approval.request`` event to the TUI client with the command
     redacted. The approval payload is built from the RAW command string, so a
     credential-shaped value Tirith flagged would otherwise be echoed verbatim
-    to the TUI client (#48456 — third egress transport alongside the chat
-    platforms and the SSE/API stream fixed in #50767). Reuse the shared gateway
-    seam so all approval transports redact consistently."""
+    to the client (#48456). Uses the shared ``agent.redact`` seam."""
     payload = dict(data or {})
     if "command" in payload:
-        from gateway.run import _redact_approval_command
+        from agent.redact import redact_approval_command
 
-        payload["command"] = _redact_approval_command(payload.get("command"))
+        payload["command"] = redact_approval_command(payload.get("command"))
     _emit("approval.request", sid, payload)
 
 
@@ -1811,7 +1809,7 @@ def _cwd_for_session_key(session_key: str) -> str:
 
 def _set_session_context(session_key: str, cwd: str | None = None) -> list:
     try:
-        from gateway.session_context import set_session_vars
+        from agent.session_context import set_session_vars
 
         # Ephemeral task IDs (background, preview) aren't in `_sessions`, so the
         # reverse-map returns "" and would clear the cwd override. Callers that
@@ -1833,7 +1831,7 @@ def _clear_session_context(tokens: list) -> None:
     if not tokens:
         return
     try:
-        from gateway.session_context import clear_session_vars
+        from agent.session_context import clear_session_vars
 
         clear_session_vars(tokens)
     except Exception:

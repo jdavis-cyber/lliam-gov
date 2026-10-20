@@ -1,12 +1,10 @@
 """Regression test for TUI approval-prompt credential redaction (#48456).
 
-Follow-up to #50767, which redacted the chat-platform and SSE/API approval
-transports. The TUI JSON-RPC transport is the third egress: three
-`register_gateway_notify` callbacks in `tui_gateway/server.py` emit the raw
-`approval_data` (with an unredacted `command`) to the TUI client. They now
-route through the module-level `_emit_approval_request` helper, which redacts
-`payload["command"]` via the shared `gateway.run._redact_approval_command` seam
-before emitting.
+The desktop/TUI JSON-RPC transport: the `register_gateway_notify` callbacks in
+`tui_gateway/server.py` would otherwise emit the raw `approval_data` (with an
+unredacted `command`). They route through the module-level
+`_emit_approval_request` helper, which redacts `payload["command"]` via the
+shared `agent.redact.redact_approval_command` seam before emitting.
 """
 
 import inspect

@@ -1356,7 +1356,7 @@ def _print_deep_probes() -> None:
     candidate_pid = running_pid if running_pid is not None else pid_value
     if candidate_pid is not None:
         try:
-            from gateway.status import _pid_exists
+            from lliam_cli.process_utils import _pid_exists
 
             alive = bool(_pid_exists(candidate_pid))
             print(f"  [4] {_mark(alive):4s}  _pid_exists({candidate_pid}) => {alive}")
@@ -1543,7 +1543,7 @@ def _windows_stop_drain_timeout() -> float:
 def _force_terminate_known_gateway_pids(pids: list[int]) -> int:
     """Force-kill known gateway PIDs without a broad process sweep."""
     try:
-        from gateway.status import _pid_exists, terminate_pid
+        from lliam_cli.process_utils import _pid_exists, terminate_pid
     except ImportError:
         return 0
 

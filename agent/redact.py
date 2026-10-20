@@ -654,6 +654,19 @@ def redact_terminal_output(
     return redact_sensitive_text(output, force=force, code_file=code_file)
 
 
+def redact_approval_command(cmd: "str | None") -> str:
+    """Redact credentials from a command before it goes into an approval prompt.
+
+    Tirith's *findings* are already redacted, but the approval prompt is built
+    from the raw command string, so a credential-shaped value Tirith flagged
+    would otherwise be echoed verbatim to the approval UI (#48456). Uses
+    ``redact_sensitive_text(force=True)`` so the prompt honors redaction even
+    when ``security.redact_secrets`` is off. Used by the desktop chat
+    transport (``tui_gateway.server``) on every approval request.
+    """
+    return redact_sensitive_text(str(cmd or ""), force=True)
+
+
 # Substrings used to gate ``_PREFIX_RE`` execution. If none of these appear in
 # the input string, the prefix regex cannot match anything, so we skip it.
 # False positives are fine (they just run the regex, which then matches
