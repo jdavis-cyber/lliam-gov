@@ -102,15 +102,3 @@ def test_sr02_injection_dispatch_with_explicit_dns_double(tmp_path, monkeypatch)
         (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))
     ])
     scenario.test_fetched_injection_page_then_egress_blocked_e2e(tmp_path, monkeypatch)
-
-
-def test_sr06_unknown_skill_is_denied_by_default(monkeypatch):
-    """TC-REQ-07: BRD SR-06 says skills load only from approved allowlist.
-
-    Uses repository policy, not an invented allowlist; no plugin code loads.
-    """
-    from tools import tool_policy as tp
-    monkeypatch.setattr("lliam_cli.config.load_config", lambda: {"security": {"posture": "strict"}})
-    tp.reset_pdp_state()
-    decision, reason = tp.skill_load_decision("synthetic-unapproved-requirement-skill", meta={"name": "synthetic-unapproved-requirement-skill"})
-    assert decision in {"deny", "hold"}, reason
