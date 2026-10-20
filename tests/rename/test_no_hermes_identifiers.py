@@ -27,8 +27,11 @@ safe; the register documents it. NEVER allowlist-away a real product-name rename
 """
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
+
+from tests.rename import _hermes_scan
 
 # ---------------------------------------------------------------------------
 # Directory / glob EXCLUDES — mirror scripts/rename/exclude_globs.sh byte-for-byte.
@@ -784,20 +787,28 @@ def test_no_lliam_owned_hermes_refs():
     # rg must run with this as cwd so relative excludes keep matching.
     repo_root = Path(__file__).resolve().parents[2]
 
-    # -i case-insensitive, -n line numbers, --no-heading path:line:text per match.
-    result = subprocess.run(
-        ["rg", "-in", "--no-heading", "hermes", *EXCLUDES, "."],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-    )
-    # rg exit codes: 0 = matches found, 1 = no matches, 2+ = actual error.
-    assert result.returncode in (0, 1), (
-        f"rg failed to run (exit {result.returncode}): {result.stderr}"
-    )
+    if shutil.which("rg"):
+        # -i case-insensitive, -n line numbers, --no-heading path:line:text per match.
+        result = subprocess.run(
+            ["rg", "-in", "--no-heading", "hermes", *EXCLUDES, "."],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+        )
+        # rg exit codes: 0 = matches found, 1 = no matches, 2+ = actual error.
+        assert result.returncode in (0, 1), (
+            f"rg failed to run (exit {result.returncode}): {result.stderr}"
+        )
+        stdout = result.stdout
+    else:
+        # No ripgrep on PATH: the pure-Python scan prints the same lines rg
+        # would (same file set, excludes, encoding, binary and case rules —
+        # proven against rg in test_hermes_scan_fallback.py), so the guard is
+        # identical with or without rg installed.
+        stdout = _hermes_scan.scan(repo_root, EXCLUDES)
 
     offenders: list[str] = []
-    for raw in result.stdout.splitlines():
+    for raw in stdout.splitlines():
         # Split "path:linenum:content" — path may contain ':' only on Windows,
         # not here; split on the first two colons.
         parts = raw.split(":", 2)
