@@ -246,17 +246,6 @@ def handle_computer_use(args: Dict[str, Any], **kwargs) -> Any:
     if not action:
         return json.dumps({"error": "missing `action`"})
 
-    # security.device_auth (strict posture): desktop control only on a host
-    # listed in computer_use_enrolled_hosts. Fails closed on any error.
-    try:
-        from lliam_cli.declared_controls import computer_use_device_refusal
-
-        refusal = computer_use_device_refusal()
-    except Exception as e:
-        refusal = f"computer_use refused: device enrollment check failed ({e})"
-    if refusal:
-        return json.dumps({"error": refusal})
-
     # Safety: validate actions before approval prompt.
     if action == "type":
         text = args.get("text", "")

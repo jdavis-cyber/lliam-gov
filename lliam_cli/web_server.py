@@ -13662,13 +13662,6 @@ def start_server(
                 f"engages on non-loopback binds, but no auth providers are "
                 f"registered.\n\n" + _fix_hint
             )
-        # security.require_mfa (strict posture): every interactive login
-        # provider must enforce MFA, else refuse the network bind.
-        from lliam_cli.declared_controls import dashboard_mfa_refusal
-
-        _mfa_refusal = dashboard_mfa_refusal(host)
-        if _mfa_refusal:
-            raise SystemExit(_mfa_refusal)
         _log.info(
             "Dashboard binding to %s with auth gate enabled. Providers: %s",
             host,

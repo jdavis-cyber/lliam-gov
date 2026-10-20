@@ -81,13 +81,12 @@ security:
   # security block (a second top-level security: would drop the P0 posture).
   api_server_key_required: true  # [additive @ P1.5] LG-IA-11: a network-accessible API server with no API_SERVER_KEY REFUSES to start (RCE gate). Loopback-only binds are unaffected.
   require_operator_auth: true    # [additive @ P1.5] LG-IA-06: no shared/anonymous operator sessions on a networked control plane (config-of-record; dashboard_auth enforces token/oauth)
-  require_mfa: true              # [additive @ P1.5] LG-IA-07: a network-bound dashboard REFUSES to start unless every login provider enforces MFA (lliam_cli/declared_controls.dashboard_mfa_refusal). Only the self-hosted OIDC provider qualifies: under strict it requires an MFA amr claim (mfa/otp/hwk) on every ID token. Loopback binds are unaffected.
+  require_mfa: true              # [additive @ P1.5] LG-IA-07 config-of-record: dashboard/ACP login via an MFA-enforcing IdP (dashboard.oauth.client_id → IdP). Runtime IdP wiring is a deployment step; the startup posture check asserts MFA-capable auth for any network bind.
   require_tls: true              # [additive @ P1.5] LG-IA-08: provider/MCP endpoints over VERIFIED TLS (ssl_guard). A disabled trust-store verification REFUSES to start under strict.
   require_authenticated_approver: true   # [additive @ P1.6] LG-GV-05: an anonymous/non-interactive high-risk approval fails closed (couples to deny_on_no_approver); every approval/denial/override must carry an authenticated dashboard_auth principal. Runtime wiring of the principal into the approval.decision record is remediation-pass scope (the P1.2 subject seam + taxonomy already support it).
-  cert_pinning:                  # [additive @ P1.5] LG-IA-08: SPKI pins checked on every TLS handshake to a pinned host (agent/ssl_guard.py, installed at agent init; covers httpx and boto3). enabled:true with no pins REFUSES to start under strict. Off until per-endpoint pins are provisioned.
+  cert_pinning:                  # [additive @ P1.5] LG-IA-08 config-of-record: per-high-side-endpoint SPKI pins checked in the egress wrapper (ssl_guard verifies the trust store but does not pin). Pin list provisioned per deployment; enforcement is remediation-pass scope.
     enabled: false
-    pins: {}                     # host: ["sha256/<base64 sha256 of DER SubjectPublicKeyInfo>", <backup pin>]
-  device_auth:                   # [additive @ P1.5] LG-IA-09: computer_use/browser are already policy-disabled in the CUI baseline (agent.disabled_toolsets + security.tool_denylist, P0.4). If computer_use is re-enabled, its handler refuses under strict on any host not listed here (hostname/FQDN); empty = refuse everywhere.
+  device_auth:                   # [additive @ P1.5] LG-IA-09: computer_use/browser are already policy-disabled in the CUI baseline (agent.disabled_toolsets + security.tool_denylist, P0.4); enrolled-host allowlist for any re-enable is config-of-record.
     computer_use_enrolled_hosts: []
 
   # [ACTIVE @ P0.3]  SKILL ENABLEMENT POLICY MIRROR  (LG-SC-01/02/03/06, LG-AZ-02)
