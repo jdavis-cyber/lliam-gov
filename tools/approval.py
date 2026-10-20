@@ -749,12 +749,15 @@ _permanent_approved: set = set()
 
 class _ApprovalEntry:
     """One pending dangerous-command approval inside a gateway session."""
-    __slots__ = ("event", "data", "result")
+    __slots__ = ("event", "data", "result", "approver")
 
     def __init__(self, data: dict):
         self.event = threading.Event()
         self.data = data          # command, description, pattern_keys, …
         self.result: Optional[str] = None  # "once"|"session"|"always"|"deny"
+        # Authenticated dashboard_auth principal that resolved the entry
+        # (LG-GV-05), or None when resolved anonymously / not yet resolved.
+        self.approver: Optional[str] = None
 
 
 _gateway_queues: dict[str, list] = {}        # session_key → [_ApprovalEntry, …]
@@ -786,8 +789,14 @@ def unregister_gateway_notify(session_key: str) -> None:
         entry.event.set()
 
 
+class ApprovalRefused(PermissionError):
+    """An approval was refused because the resolver is not an authenticated
+    approver (``security.require_authenticated_approver`` — LG-GV-05)."""
+
+
 def resolve_gateway_approval(session_key: str, choice: str,
-                             resolve_all: bool = False) -> int:
+                             resolve_all: bool = False,
+                             *, raise_on_refusal: bool = False) -> int:
     """Called by the gateway's /approve or /deny handler to unblock
     waiting agent thread(s).
 
@@ -795,8 +804,38 @@ def resolve_gateway_approval(session_key: str, choice: str,
     resolved at once (``/approve all``).  Otherwise only the oldest one
     is resolved (FIFO).
 
+    LG-GV-05: when ``security.require_authenticated_approver`` is set, an
+    approving *choice* is refused unless the calling context carries an
+    authenticated dashboard_auth principal. A refused approval leaves the
+    entries pending (an authenticated approver can still rule, or it times
+    out to a deny) and returns 0 — or raises :class:`ApprovalRefused` when
+    *raise_on_refusal* is True. Denials are never refused.
+
     Returns the number of approvals resolved (0 means nothing was pending).
     """
+    approver: Optional[str] = None
+    try:
+        from tools.hitl_oversight import authorize_approval
+    except Exception:  # pragma: no cover - module ships with this one
+        authorize_approval = None
+    if authorize_approval is not None:
+        with _lock:
+            queue = _gateway_queues.get(session_key) or []
+            head = dict(queue[0].data) if queue else None
+        if head is None:
+            return 0
+        auth = authorize_approval(
+            choice, gate="gateway.approval",
+            target=str(head.get("command", "")),
+            description=str(head.get("description", "")),
+            origin="gateway",
+        )
+        if not auth.allowed:
+            if raise_on_refusal:
+                raise ApprovalRefused(auth.reason)
+            return 0
+        approver = auth.principal
+
     with _lock:
         queue = _gateway_queues.get(session_key)
         if not queue:
@@ -810,6 +849,7 @@ def resolve_gateway_approval(session_key: str, choice: str,
             _gateway_queues.pop(session_key, None)
 
     for entry in targets:
+        entry.approver = approver
         entry.result = choice
         entry.event.set()
     return len(targets)
@@ -979,6 +1019,41 @@ def save_permanent_allowlist(patterns: set):
 # Approval prompting + orchestration
 # =========================================================================
 
+def _unauthenticated_approver_reason(command: str, description: str,
+                                     *, origin: str) -> Optional[str]:
+    """Return the LG-GV-05 refusal reason when no authenticated approver can
+    rule on a prompt in this context, else None (always None on low-side)."""
+    try:
+        from tools.hitl_oversight import authorize_approval
+        auth = authorize_approval(
+            "once", gate="shell.dangerous", target=command,
+            description=description, origin=origin,
+        )
+    except Exception:
+        return None
+    return None if auth.allowed else auth.reason
+
+
+def _unauthenticated_approver_block(command: str, description: str,
+                                    pattern_key: str, *, origin: str) -> Optional[dict]:
+    """Blocked result for a prompt no authenticated approver can answer."""
+    reason = _unauthenticated_approver_reason(command, description, origin=origin)
+    if reason is None:
+        return None
+    return {
+        "approved": False,
+        "pattern_key": pattern_key,
+        "description": description,
+        "outcome": "denied",
+        "user_consent": False,
+        "message": (
+            f"BLOCKED (fail-closed): this command is potentially dangerous "
+            f"({description}) and needs an authenticated approver; {reason} "
+            "Do NOT retry this command or attempt the same outcome another way."
+        ),
+    }
+
+
 def prompt_dangerous_approval(command: str, description: str,
                               timeout_seconds: int | None = None,
                               allow_permanent: bool = True,
@@ -994,7 +1069,15 @@ def prompt_dangerous_approval(command: str, description: str,
             (command, description, *, allow_permanent=True) -> str.
 
     Returns: 'once', 'session', 'always', or 'deny'
+
+    LG-GV-05: when ``security.require_authenticated_approver`` is set and no
+    authenticated dashboard_auth principal is bound to this context, the
+    prompt is not shown and the result is 'deny' — an anonymous terminal / ACP
+    answer cannot approve a high-risk action.
     """
+    if _unauthenticated_approver_reason(command, description, origin="prompt"):
+        return "deny"
+
     if timeout_seconds is None:
         timeout_seconds = _get_approval_timeout()
 
@@ -1261,6 +1344,14 @@ def _smart_approve(command: str, description: str) -> str:
         answer = (response.choices[0].message.content or "").strip().upper()
 
         if answer == "APPROVE":
+            # LG-GV-05: the auxiliary LLM is not an authenticated approver;
+            # when one is required, an APPROVE verdict escalates to a human.
+            try:
+                from tools.hitl_oversight import require_authenticated_approver
+                if require_authenticated_approver():
+                    return "escalate"
+            except Exception:
+                return "escalate"
             return "approve"
         elif answer == "DENY":
             return "deny"
@@ -1388,6 +1479,13 @@ def check_dangerous_command(command: str, env_type: str,
                 f"Asking the user for approval.\n\n**Command:**\n```\n{command}\n```"
             ),
         }
+
+    # LG-GV-05: no authenticated approver in this context → don't prompt.
+    _gv05_block = _unauthenticated_approver_block(
+        command, description, pattern_key, origin="interactive_prompt",
+    )
+    if _gv05_block is not None:
+        return _gv05_block
 
     # LG-HO-07/10 (additive @ P2.2): count the prompt for fatigue tracking and
     # record the operator's verdict to the governance ledger. Never blocking.
@@ -1565,6 +1663,26 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict,
     _drop_entry()
 
     choice = entry.result
+    # LG-HO-10 / LG-GV-05: record the gateway verdict with the authenticated
+    # approver (if any) that resolved it. Never blocking.
+    try:
+        from tools.hitl_oversight import is_approval_choice, record_decision
+        if not resolved or not choice:
+            _verdict = "timeout"
+        elif is_approval_choice(choice):
+            _verdict = "approve"
+        else:
+            _verdict = "deny"
+        record_decision(
+            decision=_verdict, gate="gateway.approval", target=command,
+            description=description, approver=entry.approver,
+            # entry.approver is only ever set from an authenticated principal
+            # bound in the resolver's context (resolve_gateway_approval).
+            approver_authenticated=True if entry.approver else None,
+            origin=surface,
+        )
+    except Exception:
+        pass
     # Normalize outcome for the post hook. Unresolved (timeout) and None both
     # mean the user never responded; report that explicitly so plugins can
     # distinguish timeout from explicit deny.
@@ -1886,6 +2004,13 @@ def check_all_command_guards(command: str, env_type: str,
             ),
         }
 
+    # LG-GV-05: no authenticated approver in this context → don't prompt.
+    _gv05_block = _unauthenticated_approver_block(
+        command, combined_desc, primary_key, origin="interactive_prompt",
+    )
+    if _gv05_block is not None:
+        return _gv05_block
+
     # CLI interactive: single combined prompt
     # Hide [a]lways when any tirith warning is present
     _fire_approval_hook(
@@ -1910,6 +2035,17 @@ def check_all_command_guards(command: str, env_type: str,
         surface="cli",
         choice=choice,
     )
+
+    # LG-HO-10: record the operator's verdict (approver = bound principal).
+    try:
+        from tools.hitl_oversight import record_decision
+        record_decision(
+            decision="deny" if choice == "deny" else "approve",
+            gate="shell.dangerous", target=command, description=combined_desc,
+            origin="interactive_prompt",
+        )
+    except Exception:
+        pass
 
     if choice == "deny":
         return {

@@ -5,7 +5,10 @@
 Re-asserts the standing posture invariants on a schedule (the cATO
 control-effectiveness check the plan requires): godmode + obliteratus
 disabled, provider + MCP allowlists enforced, at-rest encryption on, audit
-ledger on with verify-on-startup, and continuous-monitoring enabled. FAILS
+ledger on with verify-on-startup, continuous-monitoring enabled, and the
+approval channel authenticated (require_authenticated_approver set AND
+enforced by the runtime; the MCP permissions_respond tool withheld under
+strict posture — JER-73). FAILS
 CLOSED (exit 1) on any broken invariant, and emits a `security.posture` event
 so the break is on the ISCM stream. Distinct from go_no_go_gate (a release
 precondition check): this runs recurring, post-deployment, as a detective
@@ -49,6 +52,46 @@ def _get(d: dict, dotted: str, default=None):
     return node
 
 
+def _approval_channel_probe(cfg: dict, repo_root: Path) -> dict:
+    """Exercise the runtime approval-channel controls against *cfg* (JER-73).
+
+    * ``authenticated_approver_enforced`` — the runtime reads
+      ``security.require_authenticated_approver`` from this overlay and
+      refuses an approval that carries no authenticated principal, while a
+      denial still passes.
+    * ``mcp_permissions_respond_withheld`` — the inbound MCP server's strict
+      tool surface does not include ``permissions_respond``.
+
+    Read-only: the probe runs with no subject bound and ``record=False``, so
+    nothing reaches the ledger. Any import/probe error reports False.
+    """
+    root = str(repo_root)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    out = {"authenticated_approver_enforced": False,
+           "mcp_permissions_respond_withheld": False}
+    try:
+        from tools import hitl_oversight as ho
+        refused = ho.authorize_approval(
+            "once", gate="ci.probe", origin="control_effectiveness",
+            config=cfg, record=False)
+        denied = ho.authorize_approval(
+            "deny", gate="ci.probe", origin="control_effectiveness",
+            config=cfg, record=False)
+        out["authenticated_approver_enforced"] = bool(
+            ho.require_authenticated_approver(cfg)
+            and not refused.allowed and denied.allowed)
+    except Exception as e:  # pragma: no cover - surfaced as INEFFECTIVE
+        _emit(f"approval-channel probe error: {e}")
+    try:
+        import mcp_serve
+        out["mcp_permissions_respond_withheld"] = (
+            "permissions_respond" not in mcp_serve.tool_surface(strict=True))
+    except Exception as e:  # pragma: no cover - surfaced as INEFFECTIVE
+        _emit(f"MCP tool-surface probe error: {e}")
+    return out
+
+
 def effectiveness_report(*, repo_root: Path = _REPO_ROOT,
                          overlay_path: Path | None = None) -> dict:
     overlay_path = overlay_path or (repo_root / "cli-config.gov.yaml")
@@ -67,6 +110,9 @@ def effectiveness_report(*, repo_root: Path = _REPO_ROOT,
         "audit_ledger_enabled": bool(_get(cfg, "audit.ledger_enabled")),
         "audit_verify_on_startup": bool(_get(cfg, "audit.verify_on_startup")),
         "monitoring_enabled": bool(_get(cfg, "monitoring.iscm_sink.enabled")),
+        "authenticated_approver_required": _get(
+            cfg, "security.require_authenticated_approver") is True,
+        **_approval_channel_probe(cfg, repo_root),
     }
 
 
@@ -83,6 +129,12 @@ def check_effectiveness(*, repo_root: Path = _REPO_ROOT,
         "audit_ledger_enabled": "audit ledger not enabled",
         "audit_verify_on_startup": "audit verify-on-startup off",
         "monitoring_enabled": "continuous monitoring (ISCM sink) not enabled",
+        "authenticated_approver_required":
+            "security.require_authenticated_approver is not true",
+        "authenticated_approver_enforced":
+            "an unauthenticated HITL approval is not refused at runtime",
+        "mcp_permissions_respond_withheld":
+            "MCP permissions_respond is exposed under strict posture",
     }
     return [f"[INEFFECTIVE] {msg} (LG-MO-08)"
             for key, msg in checks.items() if not r.get(key)]
@@ -104,7 +156,8 @@ def main(argv: list[str] | None = None) -> int:
             _emit(f"    - {f}", error=True)
         return 1
     _emit("[LG-MO-08] OK — posture invariants effective (godmode/obliteratus "
-          "disabled, allowlists enforced, encryption + audit + monitoring on).")
+          "disabled, allowlists enforced, encryption + audit + monitoring on, "
+          "approval channel authenticated).")
     return 0
 
 

@@ -180,6 +180,8 @@ def _build_provider_env_blocklist() -> frozenset:
         "EMAIL_HOME_ADDRESS_NAME",
         "LLIAM_DASHBOARD_SESSION_TOKEN",  # rename R.8a (new name)
         "HERMES_DASHBOARD_SESSION_TOKEN",  # legacy fallback
+        "LLIAM_TUI_GATEWAY_SECRET",  # JER-73 per-launch gateway WS secret
+        "HERMES_TUI_GATEWAY_SECRET",  # legacy fallback
         "GATEWAY_ALLOWED_USERS",
         "GH_TOKEN",
         "GITHUB_APP_ID",
@@ -279,6 +281,8 @@ _ALWAYS_STRIP_KEYS: frozenset[str] = frozenset({
     "EMAIL_PASSWORD",
     "LLIAM_DASHBOARD_SESSION_TOKEN",  # rename R.8a (new name)
     "HERMES_DASHBOARD_SESSION_TOKEN",  # legacy fallback
+    "LLIAM_TUI_GATEWAY_SECRET",  # JER-73 per-launch gateway WS secret
+    "HERMES_TUI_GATEWAY_SECRET",  # legacy fallback
     # Remote-compute / infrastructure secrets
     "MODAL_TOKEN_ID",
     "MODAL_TOKEN_SECRET",

@@ -28,7 +28,7 @@ import concurrent.futures
 import json
 import logging
 import socket
-from typing import Any
+from typing import Any, Optional
 
 from tui_gateway import server
 
@@ -170,8 +170,60 @@ def _disable_nagle(ws: Any) -> None:
         _log.debug("ws TCP_NODELAY skip: %s", exc)
 
 
-async def handle_ws(ws: Any) -> None:
-    """Run one WebSocket session. Wire-compatible with ``tui_gateway.entry``."""
+def _query_param(ws: Any, name: str) -> str:
+    params = getattr(ws, "query_params", None)
+    if params is None:
+        return ""
+    try:
+        return str(params.get(name) or "")
+    except Exception:
+        return ""
+
+
+def _bind_principal(principal: Optional[dict]):
+    """Bind an authenticated dashboard_auth principal as the operator subject.
+
+    The contextvar is set inside this connection's task, so it flows into the
+    dispatch threads of this connection only (``asyncio.to_thread`` and the
+    gateway pool both copy the context). Returns a reset token or None.
+    """
+    if not isinstance(principal, dict):
+        return None
+    user_id = str(principal.get("user_id") or "").strip()
+    if not user_id or user_id == "server-internal":
+        return None
+    try:
+        from agent import governance_audit_hooks as gah
+
+        subject = {
+            "principal": user_id,
+            "auth": f"dashboard_auth:{principal.get('provider') or 'unknown'}",
+        }
+        return gah._operator_subject.set(subject)
+    except Exception:
+        _log.warning("ws principal bind failed", exc_info=True)
+        return None
+
+
+async def handle_ws(
+    ws: Any,
+    *,
+    authenticated: bool = False,
+    principal: Optional[dict] = None,
+) -> None:
+    """Run one WebSocket session. Wire-compatible with ``tui_gateway.entry``.
+
+    *authenticated* — the mounting layer already verified a credential that
+    other local processes cannot read (a single-use dashboard_auth ticket or
+    an env-delivered internal credential). Otherwise, under strict posture,
+    the peer must present the per-launch gateway secret
+    (``?gw_secret=``, see :mod:`tui_gateway.transport`) or the upgrade is
+    refused with close code 4401 before any frame is dispatched.
+
+    *principal* — ``{"user_id", "provider"}`` of the dashboard_auth user that
+    authenticated this connection; bound as the operator subject so HITL
+    approvals resolved over this socket carry that identity (LG-GV-05).
+    """
     peer = _ws_peer_label(ws)
     transport: WSTransport | None = None
     messages = 0
@@ -179,6 +231,23 @@ async def handle_ws(ws: Any) -> None:
     dispatch_crashes = 0
     send_failures = 0
     disconnect_reason = "not_connected"
+
+    from tui_gateway import transport as _transport_mod
+
+    if not authenticated and _transport_mod.handshake_required():
+        presented = _query_param(ws, _transport_mod.GATEWAY_SECRET_PARAM)
+        if not _transport_mod.verify_gateway_secret(presented):
+            _log.warning(
+                "ws refused peer=%s reason=gateway_secret_%s",
+                peer, "invalid" if presented else "missing",
+            )
+            try:
+                await ws.close(code=4401)
+            except Exception as exc:
+                _log.debug("ws close failed peer=%s error=%s", peer, exc)
+            return
+
+    principal_token = _bind_principal(principal)
 
     try:
         await ws.accept()
@@ -342,6 +411,13 @@ async def handle_ws(ws: Any) -> None:
             await ws.close()
         except Exception as exc:
             _log.debug("ws close failed peer=%s error=%s", peer, exc)
+        if principal_token is not None:
+            try:
+                from agent import governance_audit_hooks as gah
+
+                gah._operator_subject.reset(principal_token)
+            except Exception:
+                pass
         _log.info(
             "ws closed peer=%s reason=%s messages=%d parse_errors=%d "
             "dispatch_crashes=%d send_failures=%d reaped_sessions=%d detached_sessions=%d",

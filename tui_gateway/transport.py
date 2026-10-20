@@ -24,9 +24,11 @@ from __future__ import annotations
 
 import contextvars
 import errno
+import hmac
 import json
 import logging
 import os
+import secrets
 from lliam_cli.env_compat import getenv_compat
 import threading
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
@@ -62,6 +64,91 @@ _DISABLE_FLUSH = (getenv_compat("TUI_GATEWAY_NO_FLUSH", "") or "").strip().lower
     "yes",
     "on",
 }
+
+
+# ── Caller authentication for socket transports (JER-73) ─────────────
+#
+# The stdio transport needs no handshake: ``tui_gateway.entry`` reads
+# requests from an anonymous pipe that only its spawning parent (the Ink
+# TUI) holds. The WebSocket transport (``tui_gateway.ws``) is a socket on
+# loopback, and the dashboard's loopback ``?token=`` credential is served to
+# any local process inside index.html — so under strict posture a socket
+# peer that authenticated only with that token must also present this
+# per-launch gateway secret.
+#
+# The secret never appears in HTML or on any HTTP endpoint. It is either
+# pinned by the parent that spawns the dashboard (the desktop shell sets
+# ``LLIAM_TUI_GATEWAY_SECRET`` in the child env and puts the same value in
+# its own renderer's WS URL), or minted here per process. The dashboard
+# hands it to the PTY children it spawns through their attach URL (env).
+# Comparison is constant time.
+
+#: WS-upgrade query parameter carrying the gateway secret.
+GATEWAY_SECRET_PARAM = "gw_secret"
+#: Env var a spawning parent uses to pin the secret (LLIAM_ first, HERMES_ legacy).
+GATEWAY_SECRET_ENV_SUFFIX = "TUI_GATEWAY_SECRET"
+GATEWAY_SECRET_ENV_NAMES = (
+    f"LLIAM_{GATEWAY_SECRET_ENV_SUFFIX}",
+    f"HERMES_{GATEWAY_SECRET_ENV_SUFFIX}",
+)
+
+_gateway_secret_lock = threading.Lock()
+_gateway_secret: Optional[str] = None
+
+
+def _adopt_pinned_gateway_secret() -> Optional[str]:
+    """Take the parent-pinned secret from the env and remove it.
+
+    Removing it keeps the value out of every subprocess this process spawns
+    later (terminal tools, PTY children) — those get it only when we hand it
+    to them deliberately.
+    """
+    pinned = getenv_compat(GATEWAY_SECRET_ENV_SUFFIX)
+    for name in GATEWAY_SECRET_ENV_NAMES:
+        os.environ.pop(name, None)
+    pinned = (pinned or "").strip()
+    return pinned or None
+
+
+_gateway_secret = _adopt_pinned_gateway_secret()
+
+
+def gateway_secret() -> str:
+    """Return the per-launch gateway secret, minting it on first use."""
+    global _gateway_secret
+    with _gateway_secret_lock:
+        if _gateway_secret is None:
+            _gateway_secret = secrets.token_urlsafe(32)
+        return _gateway_secret
+
+
+def verify_gateway_secret(presented: Optional[str]) -> bool:
+    """Constant-time check of *presented* against the per-launch secret."""
+    if not presented:
+        return False
+    return hmac.compare_digest(
+        str(presented).encode("utf-8"), gateway_secret().encode("utf-8")
+    )
+
+
+def handshake_required() -> bool:
+    """True when socket peers must prove the gateway secret (strict posture).
+
+    Low-side (non-strict) deployments keep the existing behaviour.
+    """
+    try:
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
+
+        return _pr.is_strict(_cfg.load_config())
+    except Exception:
+        return False
+
+
+def _reset_gateway_secret_for_tests(value: Optional[str] = None) -> None:
+    global _gateway_secret
+    with _gateway_secret_lock:
+        _gateway_secret = value
 
 
 @runtime_checkable
