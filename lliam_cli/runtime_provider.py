@@ -1853,6 +1853,16 @@ def _resolve_runtime_provider_unchecked(
     return runtime
 
 
+def _is_strict() -> bool:
+    try:
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
+        return _pr.is_strict(_cfg.load_config())
+    except Exception:
+        logger.warning("runtime-provider posture resolution failed; enforcing", exc_info=True)
+        return True
+
+
 def resolve_runtime_provider(
     *,
     requested: Optional[str] = None,
@@ -1879,6 +1889,14 @@ def resolve_runtime_provider(
     except Exception as _ks_exc:
         if _ks_exc.__class__.__name__ == "KillSwitchEngaged":
             raise
+        # Strict posture fails closed: inference never starts when the
+        # kill-switch could not be imported or evaluated. Low-side unchanged.
+        if _is_strict():
+            raise AuthError(
+                "Inference blocked by governance: the kill-switch could not be "
+                f"evaluated under strict posture ({_ks_exc})",
+                code="killswitch_unavailable",
+            ) from _ks_exc
 
     runtime = _resolve_runtime_provider_unchecked(
         requested=requested,
