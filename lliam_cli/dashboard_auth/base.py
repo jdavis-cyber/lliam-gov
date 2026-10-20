@@ -178,6 +178,14 @@ class DashboardAuthProvider(ABC):
     # supports_token.
     supports_session: bool = True
 
+    # True only when this provider REFUSES any session whose login did not
+    # include multi-factor authentication (e.g. the self-hosted OIDC provider
+    # with require_mfa on, which checks the ID token's ``amr`` claim). Under
+    # strict posture with ``security.require_mfa``, a network-bound dashboard
+    # refuses to start while any session provider leaves this False — a
+    # provider that merely *could* be MFA-backed does not count.
+    enforces_mfa: bool = False
+
     @abstractmethod
     def start_login(self, *, redirect_uri: str) -> LoginStart: ...
 

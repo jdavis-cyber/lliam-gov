@@ -495,7 +495,16 @@ def _get_max_spawn_depth() -> int:
     max_spawn_depth >= 2, enabling them to spawn their own workers.
     Like max_concurrent_children, there is no upper ceiling — but each
     extra level multiplies API cost, so raise it deliberately.
+
+    Under strict posture the governed (overlay) value is a ceiling — see
+    :func:`_resolve_spawn_depth_limit`.
     """
+    limit, _error = _resolve_spawn_depth_limit()
+    return limit
+
+
+def _configured_spawn_depth() -> int:
+    """delegation.max_spawn_depth from the runtime config, floored at 1."""
     cfg = _load_config()
     val = cfg.get("max_spawn_depth")
     if val is None:
@@ -518,6 +527,123 @@ def _get_max_spawn_depth() -> int:
             floored,
         )
     return floored
+
+
+def _depth_posture_strict() -> bool:
+    """Strict-posture check for the depth limit; an unresolvable posture is strict."""
+    try:
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
+
+        return bool(_pr.is_strict(_cfg.load_config()))
+    except Exception:
+        logger.warning(
+            "delegation depth: posture resolution failed; enforcing strict limits",
+            exc_info=True,
+        )
+        return True
+
+
+def _governed_spawn_depth() -> Optional[int]:
+    """delegation.max_spawn_depth from the merged, overlay-aware config.
+
+    ``_load_config`` prefers ``cli.CLI_CONFIG``, which is built from the home
+    config only and never sees the governance overlay. Under strict posture
+    the overlay's value is applied as a ceiling so a home config.yaml cannot
+    raise the governed depth. Returns None when no value is set; raises
+    ValueError when the value is malformed.
+    """
+    from lliam_cli import config as _cfg
+
+    deleg = _cfg.load_config().get("delegation") or {}
+    if not isinstance(deleg, dict):
+        raise ValueError(f"delegation section is not a mapping: {type(deleg).__name__}")
+    val = deleg.get("max_spawn_depth")
+    if val is None:
+        return None
+    if isinstance(val, bool):
+        raise ValueError(f"delegation.max_spawn_depth={val!r} is not an integer")
+    ival = int(val)
+    if ival < _MIN_SPAWN_DEPTH:
+        raise ValueError(
+            f"delegation.max_spawn_depth={ival} is below the floor {_MIN_SPAWN_DEPTH}"
+        )
+    return ival
+
+
+def _resolve_spawn_depth_limit() -> "tuple[int, Optional[str]]":
+    """Return ``(limit, error)`` for delegation.max_spawn_depth.
+
+    Low-side posture: the runtime config value (existing behaviour; error is
+    always None). Strict posture: the lower of the runtime value and the
+    governed (overlay) value. If the governed value cannot be read, ``error``
+    says why and callers must refuse to delegate (fail closed).
+    """
+    limit = _configured_spawn_depth()
+    if not _depth_posture_strict():
+        return limit, None
+    try:
+        governed = _governed_spawn_depth()
+    except Exception as exc:
+        return _MIN_SPAWN_DEPTH, (
+            f"delegation.max_spawn_depth could not be read from the governed "
+            f"config ({exc}); delegation refused under strict posture"
+        )
+    if governed is not None and governed < limit:
+        limit = governed
+    return limit, None
+
+
+def _inherited_depth_or_zero() -> int:
+    """Inherited process depth; 0 when absent or malformed (callers that
+    enforce the limit check malformed input themselves)."""
+    try:
+        from agent.delegation_depth import inherited_depth
+
+        return inherited_depth()
+    except Exception:
+        return 0
+
+
+def turn_admission_error(agent) -> Optional[str]:
+    """Refuse an agent turn whose process depth is already beyond the limit.
+
+    A process started by an agent (terminal ``lliam-gov chat``, ACP transport)
+    inherits ``LLIAM_DELEGATE_DEPTH``. Under strict posture an agent whose
+    effective depth is beyond ``max_spawn_depth``, or cannot be determined,
+    does not run; otherwise the limit could be bypassed by spawning processes
+    instead of calling delegate_task. Low-side posture: logged, never refused.
+    """
+    from agent.delegation_depth import DelegationDepthError, effective_depth
+
+    try:
+        depth = effective_depth(agent)
+    except DelegationDepthError as exc:
+        if _depth_posture_strict():
+            return (
+                f"Agent turn refused: delegation depth could not be determined "
+                f"({exc}). Failing closed under strict posture "
+                f"(delegation.max_spawn_depth)."
+            )
+        logger.warning("delegation depth could not be determined: %s", exc)
+        return None
+    limit, error = _resolve_spawn_depth_limit()
+    if error:
+        return f"Agent turn refused: {error}."
+    if depth > limit:
+        if _depth_posture_strict():
+            return (
+                f"Agent turn refused: this agent is at delegation depth {depth}, "
+                f"beyond max_spawn_depth={limit}. It was started by an agent at "
+                f"the depth floor, so nesting stops here."
+            )
+        logger.warning(
+            "agent at delegation depth %d exceeds max_spawn_depth=%d "
+            "(advisory, not strict)",
+            depth,
+            limit,
+        )
+    return None
 
 
 def _get_orchestrator_enabled() -> bool:
@@ -1068,7 +1194,9 @@ def _build_child_agent(
     # we only deal with 'leaf' or 'orchestrator' here.
     child_depth = getattr(parent_agent, "_delegate_depth", 0) + 1
     max_spawn = _get_max_spawn_depth()
-    orchestrator_ok = _get_orchestrator_enabled() and child_depth < max_spawn
+    # Depth inherited from a spawning process counts toward the limit too.
+    _inherited = _inherited_depth_or_zero()
+    orchestrator_ok = _get_orchestrator_enabled() and (_inherited + child_depth) < max_spawn
     effective_role = role if (role == "orchestrator" and orchestrator_ok) else "leaf"
 
     # ── Subagent identity (stable across events, 0-indexed for TUI) ─────
@@ -1133,7 +1261,7 @@ def _build_child_agent(
         workspace_path=workspace_hint,
         role=effective_role,
         max_spawn_depth=max_spawn,
-        child_depth=child_depth,
+        child_depth=_inherited + child_depth,
     )
     # Extract parent's API key so subagents inherit auth (e.g. Nous Portal).
     parent_api_key = getattr(parent_agent, "api_key", None)
@@ -1304,6 +1432,14 @@ def _build_child_agent(
     child_session_ref["session_id"] = getattr(child, "session_id", "") or ""
     # Set delegation depth so children can't spawn grandchildren
     child._delegate_depth = child_depth
+    # security.spend_ceiling: children spend from the parent's session
+    # allowance, so fan-out cannot multiply the per-session ceiling.
+    try:
+        from lliam_cli.model_cost_guard import ensure_spend_tracker
+
+        child._spend_tracker = ensure_spend_tracker(parent_agent)
+    except Exception:
+        logger.debug("delegate: could not share spend tracker", exc_info=True)
     # Stash the post-degrade role for introspection (leaf if the
     # kill switch or depth bounded the caller's requested role).
     child._delegate_role = effective_role
@@ -2171,8 +2307,30 @@ def delegate_task(
 
     # Depth limit — configurable via delegation.max_spawn_depth,
     # default 2 for parity with the original MAX_DEPTH constant.
-    depth = getattr(parent_agent, "_delegate_depth", 0)
-    max_spawn = _get_max_spawn_depth()
+    # The effective depth includes the depth inherited from a spawning
+    # process (LLIAM_DELEGATE_DEPTH, see agent/delegation_depth.py). Under
+    # strict posture an undeterminable depth or an unreadable governed limit
+    # refuses the delegation (fail closed).
+    from agent.delegation_depth import DelegationDepthError, effective_depth
+
+    try:
+        depth = effective_depth(parent_agent)
+    except DelegationDepthError as exc:
+        if _depth_posture_strict():
+            return json.dumps(
+                {
+                    "error": (
+                        f"Delegation refused: the delegation depth could not be "
+                        f"determined ({exc}). Failing closed under strict "
+                        f"posture (delegation.max_spawn_depth)."
+                    )
+                }
+            )
+        logger.warning("delegate_task: %s; using the in-process depth", exc)
+        depth = getattr(parent_agent, "_delegate_depth", 0)
+    max_spawn, depth_limit_error = _resolve_spawn_depth_limit()
+    if depth_limit_error:
+        return json.dumps({"error": f"Delegation refused: {depth_limit_error}."})
     if depth >= max_spawn:
         return json.dumps(
             {

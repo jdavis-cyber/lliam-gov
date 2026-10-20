@@ -50,11 +50,19 @@ same precedence convention as the ``nous`` plugin)::
           issuer: https://auth.example.com/application/o/hermes/   # required
           client_id: hermes-dashboard                              # required
           scopes: "openid profile email"                           # optional
+          require_mfa: true          # optional; refuse ID tokens without an MFA amr
+          mfa_amr_values: [mfa, otp, hwk]                          # optional
 
     # Environment overrides (Docker/Fly secret injection)
     HERMES_DASHBOARD_OIDC_ISSUER
     HERMES_DASHBOARD_OIDC_CLIENT_ID
     HERMES_DASHBOARD_OIDC_SCOPES        # optional; defaults to "openid profile email"
+    HERMES_DASHBOARD_OIDC_REQUIRE_MFA   # optional; truthy turns require_mfa on
+
+require_mfa is forced on under strict posture when ``security.require_mfa`` is
+set. With it on, every ID token (login, refresh, per-request re-verification)
+must carry an ``amr`` value from ``mfa_amr_values``; the provider then sets
+``enforces_mfa`` so the dashboard's MFA gate accepts it.
 
 Skip reasons: when the plugin loads but can't register (missing issuer /
 client_id), it writes a human-readable reason to the module-level
@@ -115,6 +123,11 @@ _DISCOVERY_CACHE_TTL_SEC = 3600
 # provider's 5-minute lifespan so key rotation is picked up promptly).
 _JWKS_CACHE_SECONDS = 300
 
+# RFC 8176 ``amr`` values accepted as proof of multi-factor login when
+# require_mfa is on: an explicit "mfa", a one-time password, or a hardware
+# key. Override with dashboard.oauth.self_hosted.mfa_amr_values.
+_DEFAULT_MFA_AMR_VALUES = ("mfa", "otp", "hwk")
+
 
 # ---------------------------------------------------------------------------
 # Skip-reason channel (mirrors the nous plugin)
@@ -172,6 +185,8 @@ class SelfHostedOIDCProvider(DashboardAuthProvider):
         issuer: str,
         client_id: str,
         scopes: str = _DEFAULT_SCOPES,
+        require_mfa: bool = False,
+        mfa_amr_values: Optional[tuple] = None,
     ) -> None:
         if not issuer:
             raise ValueError("issuer is required")
@@ -186,6 +201,17 @@ class SelfHostedOIDCProvider(DashboardAuthProvider):
         _require_https_or_loopback(self._issuer, field="issuer")
         self._client_id = client_id
         self._scopes = scopes.strip() or _DEFAULT_SCOPES
+        # require_mfa: every ID token (login, refresh and per-request
+        # re-verification) must carry an MFA ``amr`` value, else the session
+        # is refused. ``enforces_mfa`` advertises that to the dashboard's
+        # strict-posture security.require_mfa gate.
+        self._require_mfa = bool(require_mfa)
+        self._mfa_amr_values = frozenset(
+            str(v).strip().lower()
+            for v in (mfa_amr_values or _DEFAULT_MFA_AMR_VALUES)
+            if str(v).strip()
+        ) or frozenset(_DEFAULT_MFA_AMR_VALUES)
+        self.enforces_mfa = self._require_mfa
 
         # Discovery + JWKS are lazily resolved on first use so plugin
         # registration never makes a network call (the IDP may be down at
@@ -554,7 +580,28 @@ class SelfHostedOIDCProvider(DashboardAuthProvider):
                 f"ID token verification failed: {exc}{details}"
             ) from exc
 
+        if self._require_mfa:
+            self._assert_mfa(claims)
         return claims
+
+    def _assert_mfa(self, claims: Dict[str, Any]) -> None:
+        """Refuse an ID token whose ``amr`` shows no multi-factor login.
+
+        Raised as InvalidCodeError: a failed login is a 400, and
+        ``verify_session`` maps it to None (session dropped, re-login).
+        """
+        amr = claims.get("amr")
+        if isinstance(amr, str):
+            amr = [amr]
+        values = {str(v).strip().lower() for v in (amr or []) if str(v).strip()}
+        if values & self._mfa_amr_values:
+            return
+        raise InvalidCodeError(
+            "multi-factor login required: the ID token's amr claim "
+            f"({sorted(values) or 'absent'}) contains none of "
+            f"{sorted(self._mfa_amr_values)}. Enable MFA for this client at "
+            "the identity provider."
+        )
 
     # ---- internals: mapping + misc ----------------------------------------
 
@@ -689,6 +736,31 @@ def _resolve_setting(env_var: str, cfg_value: Any) -> str:
     return str(cfg_value or "").strip()
 
 
+def _governed_require_mfa() -> bool:
+    """True when strict posture and ``security.require_mfa`` are both on."""
+    try:
+        from lliam_cli import posture_resolver as _pr
+        from lliam_cli.config import load_config
+
+        cfg = load_config()
+        sec = cfg.get("security") if isinstance(cfg, dict) else None
+        return bool(
+            _pr.is_strict(cfg) and isinstance(sec, dict) and sec.get("require_mfa")
+        )
+    except Exception:
+        return False
+
+
+def _resolve_require_mfa(oidc_cfg: dict) -> bool:
+    """require_mfa from env / config, forced on by strict + security.require_mfa."""
+    env = os.environ.get("HERMES_DASHBOARD_OIDC_REQUIRE_MFA", "").strip().lower()
+    if env in ("1", "true", "yes", "on"):
+        return True
+    if bool(oidc_cfg.get("require_mfa")):
+        return True
+    return _governed_require_mfa()
+
+
 def register(ctx) -> None:
     """Plugin entry — called by the plugin loader at startup.
 
@@ -731,9 +803,19 @@ def register(ctx) -> None:
         logger.debug("dashboard-auth-self-hosted: %s", LAST_SKIP_REASON)
         return
 
+    require_mfa = _resolve_require_mfa(oidc_cfg)
+    amr_values = oidc_cfg.get("mfa_amr_values")
+    if isinstance(amr_values, str):
+        amr_values = [amr_values]
+    amr_values = tuple(amr_values) if isinstance(amr_values, (list, tuple)) else None
+
     try:
         provider = SelfHostedOIDCProvider(
-            issuer=issuer, client_id=client_id, scopes=scopes
+            issuer=issuer,
+            client_id=client_id,
+            scopes=scopes,
+            require_mfa=require_mfa,
+            mfa_amr_values=amr_values,
         )
     except (ValueError, ProviderError) as exc:
         LAST_SKIP_REASON = (
@@ -745,8 +827,9 @@ def register(ctx) -> None:
     ctx.register_dashboard_auth_provider(provider)
     logger.info(
         "dashboard-auth-self-hosted: registered provider "
-        "(issuer=%s, client_id=%s, scopes=%r)",
+        "(issuer=%s, client_id=%s, scopes=%r, require_mfa=%s)",
         issuer,
         client_id,
         scopes,
+        require_mfa,
     )

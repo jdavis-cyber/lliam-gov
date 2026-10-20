@@ -640,6 +640,14 @@ def init_agent(
     # Claude uses its own timeout path and is not covered here.
     _provider_timeout = get_provider_request_timeout(agent.provider, agent.model)
 
+    # security.cert_pinning: install the process-wide SPKI pin check before
+    # any provider client (OpenAI/httpx, Anthropic, boto3/Bedrock) connects.
+    # No-op unless enabled; enabled-with-no-pins under strict posture raises
+    # (CertPinningConfigError) instead of silently running unpinned.
+    from agent.ssl_guard import ensure_cert_pinning
+
+    ensure_cert_pinning()
+
     if agent.api_mode == "anthropic_messages":
         from agent.anthropic_adapter import build_anthropic_client, resolve_anthropic_token
         # Bedrock + Claude → use AnthropicBedrock SDK for full feature parity

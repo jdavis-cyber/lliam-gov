@@ -81,12 +81,13 @@ security:
   # security block (a second top-level security: would drop the P0 posture).
   api_server_key_required: true  # [additive @ P1.5] LG-IA-11: a network-accessible API server with no API_SERVER_KEY REFUSES to start (RCE gate). Loopback-only binds are unaffected.
   require_operator_auth: true    # [additive @ P1.5] LG-IA-06: no shared/anonymous operator sessions on a networked control plane (config-of-record; dashboard_auth enforces token/oauth)
-  require_mfa: true              # [additive @ P1.5] LG-IA-07 config-of-record: dashboard/ACP login via an MFA-enforcing IdP (dashboard.oauth.client_id → IdP). Runtime IdP wiring is a deployment step; the startup posture check asserts MFA-capable auth for any network bind.
+  require_mfa: true              # [additive @ P1.5] LG-IA-07: a network-bound dashboard REFUSES to start unless every login provider enforces MFA (lliam_cli/declared_controls.dashboard_mfa_refusal). Only the self-hosted OIDC provider qualifies: under strict it requires an MFA amr claim (mfa/otp/hwk) on every ID token. Loopback binds are unaffected.
   require_tls: true              # [additive @ P1.5] LG-IA-08: provider/MCP endpoints over VERIFIED TLS (ssl_guard). A disabled trust-store verification REFUSES to start under strict.
   require_authenticated_approver: true   # [additive @ P1.6] LG-GV-05: an anonymous/non-interactive high-risk approval fails closed (couples to deny_on_no_approver); every approval/denial/override must carry an authenticated dashboard_auth principal. Runtime wiring of the principal into the approval.decision record is remediation-pass scope (the P1.2 subject seam + taxonomy already support it).
-  cert_pinning:                  # [additive @ P1.5] LG-IA-08 config-of-record: per-high-side-endpoint SPKI pins checked in the egress wrapper (ssl_guard verifies the trust store but does not pin). Pin list provisioned per deployment; enforcement is remediation-pass scope.
+  cert_pinning:                  # [additive @ P1.5] LG-IA-08: SPKI pins checked on every TLS handshake to a pinned host (agent/ssl_guard.py, installed at agent init; covers httpx and boto3). enabled:true with no pins REFUSES to start under strict. Off until per-endpoint pins are provisioned.
     enabled: false
-  device_auth:                   # [additive @ P1.5] LG-IA-09: computer_use/browser are already policy-disabled in the CUI baseline (agent.disabled_toolsets + security.tool_denylist, P0.4); enrolled-host allowlist for any re-enable is config-of-record.
+    pins: {}                     # host: ["sha256/<base64 sha256 of DER SubjectPublicKeyInfo>", <backup pin>]
+  device_auth:                   # [additive @ P1.5] LG-IA-09: computer_use/browser are already policy-disabled in the CUI baseline (agent.disabled_toolsets + security.tool_denylist, P0.4). If computer_use is re-enabled, its handler refuses under strict on any host not listed here (hostname/FQDN); empty = refuse everywhere.
     computer_use_enrolled_hosts: []
 
   # [ACTIVE @ P0.3]  SKILL ENABLEMENT POLICY MIRROR  (LG-SC-01/02/03/06, LG-AZ-02)
@@ -124,6 +125,13 @@ security:
   max_mutating_calls:              # [additive @ P2.1] LG-AZ-10 mirror of policy budgets (PDP reads the policy file; this key is the one-artifact audit mirror)
     per_turn: 25
     per_session: 200
+  spend_ceiling:                   # inference spend ceiling (lliam_cli/model_cost_guard.py), checked before every model call. Breach -> HITL approval (gateway queue / CLI prompt); no approver, denial or timeout -> no further calls (fail closed). An approval buys one more increment.
+    enabled: true
+    per_session_tokens: 2000000    # input+output+cache tokens per session, shared with delegated subagents
+    per_day_tokens: 20000000       # all sessions started today (UTC), from the session DB
+    per_session_cost_usd: 10       # applied only when the provider price is known
+    per_day_cost_usd: 100
+    on_breach: hitl_approve        # hitl_approve | deny
 
   # [ACTIVE @ P2.4]  DATA PROTECTION + DLP TAINT-GATE  (LG-DP-01/02/04/07/08/10/11)
   # Consumed by the NEW agent/data_protection.py. CUI/PII classification arms
@@ -477,8 +485,8 @@ cato:
 # gateway.multiplex_profiles below. LG-IA-01/04/05 land as the managed-account
 # inventory + secret-source config-of-record + the no-default-credential startup
 # check; heavier runtime enforcement (live secrets-CLI reconcile, Bitwarden
-# migration, full delegation-context module + max_spawn_depth enforcement) is
-# flagged for the cross-phase remediation pass (see P1.4 report).
+# migration, full delegation-context module) is flagged for the cross-phase
+# remediation pass (see P1.4 report). max_spawn_depth is enforced (below).
 # =============================================================================
 identity:
   bind_instance: true                # [additive @ P1.4] LG-IA-02: derive + stamp the NPE instance_id into audit actor
@@ -494,7 +502,7 @@ secrets:
   #  security.no_default_credentials; a duplicate here would be unread.)
 
 delegation:
-  max_spawn_depth: 3                 # [additive @ P1.4] LG-IA-10 config-of-record: bound the operator→Lliam→sub-agent delegation chain; runtime enforcement in delegate_tool is remediation-pass scope
+  max_spawn_depth: 3                 # [additive @ P1.4] LG-IA-10: bound the operator→Lliam→sub-agent delegation chain. delegate_task refuses beyond it; under strict this value caps any home-config value, and depth carries into spawned processes (LLIAM_DELEGATE_DEPTH) so an agent started beyond it refuses to run
 
 # =============================================================================
 # [ACTIVE @ P1.6]  ROLES / RACI / SEPARATION-OF-DUTIES  (LG-GV-04/05)
