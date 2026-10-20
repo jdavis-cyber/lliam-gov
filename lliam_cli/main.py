@@ -281,6 +281,8 @@ from lliam_cli.subcommands.webhook import build_webhook_parser
 from lliam_cli.subcommands.hooks import build_hooks_parser
 from lliam_cli.subcommands.doctor import build_doctor_parser
 from lliam_cli.subcommands.security import build_security_parser
+from lliam_cli.subcommands.killswitch import build_killswitch_parser
+from lliam_cli.killswitch_cli import cmd_killswitch
 from lliam_cli.subcommands.dump import build_dump_parser
 from lliam_cli.subcommands.debug import build_debug_parser
 from lliam_cli.subcommands.backup import build_backup_parser
@@ -11819,6 +11821,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "acp", "auth", "backup", "bundles", "checkpoints", "claw", "completion",
         "computer-use",
         "config", "cron", "curator", "dashboard", "debug", "doctor",
+        "killswitch", "kill-switch",
         "dump", "fallback", "gateway", "hooks", "import", "insights",
         "gui", "desktop", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate", "moa",
         "model", "pairing", "pets", "plugins", "portal", "postinstall", "profile",
@@ -12617,6 +12620,13 @@ def main():
     # security command  (parser built in lliam_cli/subcommands/security.py)
     # =========================================================================
     build_security_parser(subparsers, cmd_security=cmd_security)
+
+    # =========================================================================
+    # killswitch command — operator engage / status / release (LG-IR-01/08)
+    # =========================================================================
+    # killswitch command  (parser built in lliam_cli/subcommands/killswitch.py)
+    # =========================================================================
+    build_killswitch_parser(subparsers, cmd_killswitch=cmd_killswitch)
 
     # =========================================================================
     # dump command  (parser built in lliam_cli/subcommands/dump.py)

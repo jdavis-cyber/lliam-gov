@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import contextvars
 import logging
+from types import SimpleNamespace
 from typing import Any, Optional
 
 _log = logging.getLogger(__name__)
@@ -236,6 +237,21 @@ def _correlation_id(agent=None, *, task_id: str = "", session_id: str = "") -> O
     return None  # ledger falls back to its process-level session id
 
 
+def _killswitch_guard_failure(function_name: str, err: BaseException):
+    """Blocking decision for a kill-switch guard that could not run."""
+    message = ("Blocked (fail-closed): the kill-switch guard could not run "
+               f"({type(err).__name__}); tool execution is denied (LG-IR-01).")
+    try:
+        from agent.tool_guardrails import ToolGuardrailDecision
+        return ToolGuardrailDecision(action="halt", code="killswitch_guard_error",
+                                     message=message, tool_name=function_name)
+    except Exception:
+        return SimpleNamespace(action="halt", code="killswitch_guard_error",
+                               message=message, tool_name=function_name, count=0,
+                               signature=None, allows_execution=False,
+                               should_halt=True)
+
+
 # ---------------------------------------------------------------------------
 # 1. Pre-dispatch gate (LG-AU-02 + LG-AU-09) — called from tool_executor
 # ---------------------------------------------------------------------------
@@ -259,14 +275,17 @@ def predispatch_gate(
     """
     # LG-IR-01 (additive @ P5.3): the kill-switch halts ALL tool execution
     # when engaged — checked before the audit/PDP path so a contained agent
-    # cannot act even if the ledger is disabled. Fail-safe (no-op unengaged).
+    # cannot act even if the ledger is disabled. No-op unengaged; fail-CLOSED
+    # when the check itself errors (JER-190): the call is denied.
     try:
         from agent import killswitch as _ks
         _halt = _ks.guard_tool_dispatch(function_name)
-        if _halt is not None:
-            return _halt
-    except Exception:
-        pass
+    except Exception as e:
+        _log.error("kill-switch guard unavailable — denying %s (fail-closed): %s",
+                   function_name, e)
+        return _killswitch_guard_failure(function_name, e)
+    if _halt is not None:
+        return _halt
 
     ledger = _enabled_ledger()
     if ledger is None:
@@ -346,11 +365,21 @@ def record_outcome(
     everything else is ``tool.result``. Tool result CONTENT is not
     persisted — only status/class/redacted error (spec §3.1 outcome shape).
     """
+    blocked = (status == "blocked") or (error_type in _BLOCK_ERROR_TYPES)
+    # LG-IR-03 (JER-190): governance circuit-breaker — a run of consecutive
+    # blocked calls in a session within a window trips the kill-switch. Fed
+    # whether or not the ledger is on; off unless the gov overlay enables it.
+    try:
+        from agent import governance_breaker as _gb
+        _gb.observe_outcome(blocked=blocked, session_id=session_id or "",
+                            tool=function_name, detail=error_message or "")
+    except Exception as e:
+        _log.error("governance circuit-breaker feed failed: %s", e)
+
     ledger = _enabled_ledger()
     if ledger is None:
         return
     try:
-        blocked = (status == "blocked") or (error_type in _BLOCK_ERROR_TYPES)
         if blocked:
             event, decision, severity = "policy.violation", "deny", "warning"
             out_status = "blocked"

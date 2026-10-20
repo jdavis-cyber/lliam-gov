@@ -47,6 +47,10 @@ def build_write_denied_paths(home: str) -> set[str]:
             # Top-level Anthropic PKCE credential store remains sensitive even
             # when a profile is active; default/non-profile sessions still read it.
             str(lliam_root / ".anthropic_oauth.json"),
+            # LG-IR-01: the durable kill-switch state (agent/killswitch.py) —
+            # the halted agent must not be able to release its own halt.
+            str(lliam_root / "killswitch.state"),
+            str(lliam_home / "killswitch.state"),
             os.path.join(home, ".netrc"),
             os.path.join(home, ".pgpass"),
             os.path.join(home, ".npmrc"),

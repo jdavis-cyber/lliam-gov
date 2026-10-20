@@ -442,6 +442,10 @@ incident_response:
     conditions: [egress_violation, cui_taint, loop_exhaustion, audit_break]   # LG-IR-03
     action: halt                     # [additive] halt | degrade
     notify_role: isso
+    policy_denials:                  # [additive] LG-IR-03 governance circuit-breaker (agent/governance_breaker.py)
+      enabled: true                  #   N consecutive blocked/denied tool calls in one session
+      threshold: 10                  #   ...within window_seconds engage the kill-switch;
+      window_seconds: 120            #   any allowed call resets the run
 
 
 # =============================================================================
