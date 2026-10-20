@@ -54,13 +54,9 @@ def reset_attestation_cache() -> None:
 
 
 def _is_strict() -> bool:
-    try:
-        from lliam_cli import config as _cfg
-        from lliam_cli import posture_resolver as _pr
-        return _pr.is_strict(_cfg.load_config())
-    except Exception:
-        logger.warning("attestation posture resolution failed; enforcing", exc_info=True)
-        return True
+    """Strict-posture predicate; a configuration fault enforces (fails closed)."""
+    from lliam_cli import posture_resolver as _pr
+    return _pr.enforce_strict_controls("attestation")
 
 
 def _security_cfg() -> Dict[str, Any]:

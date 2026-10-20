@@ -134,6 +134,34 @@ def is_strict(config: Optional[Dict[str, Any]]) -> bool:
     return get_posture(config) == STRICT
 
 
+def strict_status() -> Tuple[bool, bool]:
+    """Return ``(strict, config_error)`` for the effective configuration.
+
+    A configuration-read fault is reported separately instead of looking like
+    a low-side (non-strict) deployment, so callers can fail closed on it.
+    """
+    try:
+        from lliam_cli import config as _cfg
+        return is_strict(_cfg.load_config()), False
+    except Exception:
+        return False, True
+
+
+def enforce_strict_controls(component: str) -> bool:
+    """True when strict-posture controls must run: strict, or posture unknown.
+
+    Safety-relevant modules use this as their posture predicate so a
+    configuration fault enforces the control instead of silently disabling it.
+    """
+    strict, config_error = strict_status()
+    if config_error:
+        logger.warning(
+            "%s: security posture unavailable (configuration unreadable); "
+            "enforcing strict controls", component)
+        return True
+    return strict
+
+
 def resolve(config: Dict[str, Any]) -> PostureResolution:
     """Coerce fail-open guards to fail-closed when ``security.posture == strict``.
 

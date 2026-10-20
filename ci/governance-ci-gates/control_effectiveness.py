@@ -49,6 +49,44 @@ def _get(d: dict, dotted: str, default=None):
     return node
 
 
+# Safety modules whose posture predicate must enforce, not disable, when the
+# effective configuration cannot be read (JER-77).
+_FAIL_CLOSED_POSTURE_MODULES = (
+    "tools.tool_policy",
+    "tools.injection_defense",
+    "tools.input_integrity",
+    "agent.data_protection",
+    "tools.egress_policy",
+    "tools.mcp_allowlist",
+    "agent.attestation",
+)
+
+
+def posture_fault_fails_closed(*, repo_root: Path = _REPO_ROOT) -> bool:
+    """Probe each safety module with an unreadable configuration.
+
+    Returns True only if every module still reports strict enforcement. An
+    import failure counts as ineffective: the control could not be verified.
+    """
+    import importlib
+    from unittest import mock
+
+    root = str(repo_root)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+
+    def _unreadable():
+        raise OSError("control-effectiveness probe: configuration unreadable")
+
+    try:
+        modules = [importlib.import_module(m) for m in _FAIL_CLOSED_POSTURE_MODULES]
+        cfg = importlib.import_module("lliam_cli.config")
+        with mock.patch.object(cfg, "load_config", _unreadable):
+            return all(m._is_strict() for m in modules)
+    except Exception:
+        return False
+
+
 def effectiveness_report(*, repo_root: Path = _REPO_ROOT,
                          overlay_path: Path | None = None) -> dict:
     overlay_path = overlay_path or (repo_root / "cli-config.gov.yaml")
@@ -67,6 +105,7 @@ def effectiveness_report(*, repo_root: Path = _REPO_ROOT,
         "audit_ledger_enabled": bool(_get(cfg, "audit.ledger_enabled")),
         "audit_verify_on_startup": bool(_get(cfg, "audit.verify_on_startup")),
         "monitoring_enabled": bool(_get(cfg, "monitoring.iscm_sink.enabled")),
+        "posture_fault_fails_closed": posture_fault_fails_closed(repo_root=repo_root),
     }
 
 
@@ -83,6 +122,7 @@ def check_effectiveness(*, repo_root: Path = _REPO_ROOT,
         "audit_ledger_enabled": "audit ledger not enabled",
         "audit_verify_on_startup": "audit verify-on-startup off",
         "monitoring_enabled": "continuous monitoring (ISCM sink) not enabled",
+        "posture_fault_fails_closed": "a configuration fault disables a safety control",
     }
     return [f"[INEFFECTIVE] {msg} (LG-MO-08)"
             for key, msg in checks.items() if not r.get(key)]
