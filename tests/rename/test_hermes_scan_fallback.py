@@ -1,4 +1,4 @@
-"""TC-RC-01: the rename guard's pure-Python scan matches ripgrep exactly.
+"""TC-RC-01: the rename guard's pure-Python scan matches ripgrep.
 
 ``test_no_hermes_identifiers`` uses ``rg`` when it is on PATH and
 ``tests/rename/_hermes_scan.scan`` when it is not. This file builds a small git
@@ -10,8 +10,15 @@ against two references:
   also runs on machines with no rg installed;
 * a live ``rg`` run, whenever rg is on PATH.
 
-Both comparisons are line-for-line multisets. A drift in either direction fails
-the test, so the fallback can never quietly scan less than rg does.
+Text files (no NUL byte) must match line-for-line in both directions, because
+every rg version prints the same lines for them. Binary files are different:
+how much text before the first NUL rg shows depends on its read-buffer size and
+read() sizes, so ripgrep versions disagree (14.1.1 and 15.1.0 differ on a NUL
+at offset 65536). For those the fallback reports every match before the NUL,
+and the check is one-way: every binary-file line rg prints must also be in the
+fallback's output. A drift that would let the fallback scan less than rg fails
+the test either way. The exact 14.1.1 binary output is checked against the
+pinned reference only, and against live rg only when live rg is 14.1.1.
 """
 
 from __future__ import annotations
@@ -144,17 +151,84 @@ def fixture_repo(tmp_path, monkeypatch):
     return root
 
 
+# What the fallback reports for the binary fixtures: every match before the
+# first NUL, plus the WARNING line. Version-independent by construction.
+_FALLBACK_BINARY = [
+    "./bin_late.bin:1:hermes early",
+    "./bin_late.bin:3002:hermes late",
+    './bin_late.bin: WARNING: stopped searching binary file after match '
+    '(found "\\0" byte around offset 240025)',
+    "./bin_mid.bin:1:hermes before",
+    './bin_mid.bin: WARNING: stopped searching binary file after match '
+    '(found "\\0" byte around offset 114)',
+    "./late_match.bin:40001:hermes mid",
+    './late_match.bin: WARNING: stopped searching binary file after match '
+    '(found "\\0" byte around offset 160011)',
+    "./nul_65535.bin:1:hermes first",
+    './nul_65535.bin: WARNING: stopped searching binary file after match '
+    '(found "\\0" byte around offset 65535)',
+    "./nul_65536.bin:1:hermes first",
+    './nul_65536.bin: WARNING: stopped searching binary file after match '
+    '(found "\\0" byte around offset 65536)',
+    "./nul_70000.bin:1:hermes first",
+    './nul_70000.bin: WARNING: stopped searching binary file after match '
+    '(found "\\0" byte around offset 70000)',
+]
+
+
 def _lines(stdout: str) -> Counter:
     return Counter(line for line in stdout.split("\n") if line)
 
 
-def test_fallback_matches_pinned_ripgrep_output(fixture_repo):
-    got = _lines(_hermes_scan.scan(fixture_repo, EXCLUDES))
-    want = Counter(_RG_REFERENCE)
-    assert got == want, (
-        f"only fallback: {sorted((got - want).elements())}\n"
-        f"only rg: {sorted((want - got).elements())}"
+def _is_binary(root: Path, path: str) -> bool:
+    """rg's view: the file still holds a NUL after BOM handling/transcoding."""
+    assert path.startswith("./"), path
+    return b"\0" in _hermes_scan._transcode((root / path[2:]).read_bytes())
+
+
+def _split(root: Path, items: Counter, path_of) -> "tuple[Counter, Counter]":
+    text, binary = Counter(), Counter()
+    for item, n in items.items():
+        (binary if _is_binary(root, path_of(item)) else text)[item] += n
+    return text, binary
+
+
+def _line_path(line: str) -> str:
+    return line.split(":", 1)[0]
+
+
+def _assert_covers_rg(root: Path, py: Counter, rg: Counter, path_of=_line_path):
+    """Text files: exact. Binary files: the fallback holds every rg line."""
+    py_text, py_bin = _split(root, py, path_of)
+    rg_text, rg_bin = _split(root, rg, path_of)
+    assert py_text == rg_text, (
+        f"only fallback: {sorted((py_text - rg_text).elements())}\n"
+        f"only rg: {sorted((rg_text - py_text).elements())}"
     )
+    missed = rg_bin - py_bin
+    assert not missed, (
+        f"rg reports binary-file lines the fallback misses: {sorted(missed.elements())}"
+    )
+
+
+def _assert_pinned(root: Path, py: Counter) -> None:
+    _assert_covers_rg(root, py, Counter(_RG_REFERENCE))
+    _, py_bin = _split(root, py, _line_path)
+    assert py_bin == Counter(_FALLBACK_BINARY), (
+        f"only fallback: {sorted((py_bin - Counter(_FALLBACK_BINARY)).elements())}\n"
+        f"only expected: {sorted((Counter(_FALLBACK_BINARY) - py_bin).elements())}"
+    )
+
+
+def test_fallback_matches_pinned_ripgrep_output(fixture_repo):
+    _assert_pinned(fixture_repo, _lines(_hermes_scan.scan(fixture_repo, EXCLUDES)))
+
+
+def test_pinned_reference_hides_only_binary_lines_the_fallback_reports(fixture_repo):
+    # 14.1.1 drops some pre-NUL matches (its 64 KiB read holding the NUL is
+    # discarded); the fallback reports them. Nothing else may differ.
+    extra = Counter(_FALLBACK_BINARY) - Counter(_RG_REFERENCE)
+    assert extra and all(_is_binary(fixture_repo, _line_path(x)) for x in extra)
 
 
 def test_fallback_matches_live_ripgrep_when_installed(fixture_repo):
@@ -163,7 +237,7 @@ def test_fallback_matches_live_ripgrep_when_installed(fixture_repo):
     if rg is None:
         # Without rg the pinned reference above is the proof; the fallback
         # must at least be what the guard actually runs.
-        assert py == Counter(_RG_REFERENCE)
+        _assert_pinned(fixture_repo, py)
         return
     res = subprocess.run(
         [rg, "-in", "--no-heading", "hermes", *EXCLUDES, "."],
@@ -171,14 +245,18 @@ def test_fallback_matches_live_ripgrep_when_installed(fixture_repo):
     )
     assert res.returncode in (0, 1), res.stderr
     live = _lines(res.stdout.decode("utf-8", errors="replace"))
-    assert py == live, (
-        f"only fallback: {sorted((py - live).elements())}\n"
-        f"only rg: {sorted((live - py).elements())}"
-    )
+    _assert_covers_rg(fixture_repo, py, live)
+    version = subprocess.run([rg, "--version"], capture_output=True, text=True)
+    if version.stdout.startswith("ripgrep 14.1.1 "):
+        # The pinned reference must be what that rg really prints.
+        assert live == Counter(_RG_REFERENCE), (
+            f"only live: {sorted((live - Counter(_RG_REFERENCE)).elements())}\n"
+            f"only pinned: {sorted((Counter(_RG_REFERENCE) - live).elements())}"
+        )
 
 
 def test_guard_parse_path_sees_same_offenders_on_both_engines(fixture_repo):
-    """The guard's own line parser yields the same (path, text) records."""
+    """The guard's own line parser sees every rg offender on the fallback too."""
     def records(stdout):
         out = []
         for raw in stdout.splitlines():
@@ -189,7 +267,7 @@ def test_guard_parse_path_sees_same_offenders_on_both_engines(fixture_repo):
 
     py = records(_hermes_scan.scan(fixture_repo, EXCLUDES))
     ref = records("".join(line + "\n" for line in _RG_REFERENCE))
-    assert py == ref
+    _assert_covers_rg(fixture_repo, py, ref, path_of=lambda rec: rec[0])
 
 
 def test_guard_excludes_all_translate():

@@ -802,9 +802,10 @@ def test_no_lliam_owned_hermes_refs():
         stdout = result.stdout
     else:
         # No ripgrep on PATH: the pure-Python scan prints the same lines rg
-        # would (same file set, excludes, encoding, binary and case rules —
-        # proven against rg in test_hermes_scan_fallback.py), so the guard is
-        # identical with or without rg installed.
+        # would (same file set, excludes, encoding and case rules — proven
+        # against rg in test_hermes_scan_fallback.py). For binary files it
+        # prints every match before the first NUL, the most any rg version
+        # shows, so the guard without rg is never looser than with it.
         stdout = _hermes_scan.scan(repo_root, EXCLUDES)
 
     offenders: list[str] = []
