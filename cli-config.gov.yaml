@@ -313,6 +313,16 @@ skills:
 terminal:
   backend: docker             # config.py:1095  DEFAULT "local" -> OVERRIDE "docker" (sandboxed exec)
   timeout: 180                # config.py:1098  (confirm-pinned)
+  # Sandbox resource ceilings + network (JER-74). Single-workstation sizing:
+  # the sandbox can never take more than 2 CPUs / 4 GiB from the host. Under
+  # strict posture DockerEnvironment refuses to start with unbounded (<=0)
+  # values and refuses docker_extra_args that would lift these ceilings.
+  container_cpu: 2            # --cpus 2
+  container_memory: 4096      # MB -> --memory 4096m
+  # No sandbox network. The squid egress enclave fronts the gateway container
+  # only; a sandbox on Docker's default bridge would reach the internet
+  # directly and bypass the egress allowlist. --network=none removes that path.
+  docker_network: false       # --network=none
 
 
 # =============================================================================
