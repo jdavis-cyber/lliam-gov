@@ -50,9 +50,9 @@ metadata:
     cmmc_l2: ["SC.L2-3.13.1", "SC.L2-3.13.5", "SC.L2-3.13.6"]
     iso_27001: ["A.8.20", "A.8.22", "A.8.23", "A.8.26"]
   review:
-    cadence_days: 90
-    last_validated: "2026-07-15"
-    next_due: "2026-10-13"
+    cadence_days: 180
+    last_validated: "2026-10-20"   # owner renewal of all approved_destinations
+    next_due: "2027-04-10"
     register: "docs/governance/egress-allowlist-register.md"
 
 
