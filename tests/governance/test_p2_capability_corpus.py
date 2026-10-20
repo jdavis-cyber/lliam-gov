@@ -13,6 +13,7 @@ permitted capability.
 
 from __future__ import annotations
 
+import datetime
 import textwrap
 
 import pytest
@@ -49,7 +50,7 @@ def strict_overlay(tmp_path, monkeypatch):
         """
         metadata: {default_disposition: deny}
         approved_destinations:
-          - {host: "api.github.com", surfaces: [web, mcp]}
+          - {host: "api.github.com", surfaces: [web, mcp], expires: "2026-12-31"}
         """
     ), encoding="utf-8")
     safe_root = tmp_path / "ws"
@@ -67,6 +68,8 @@ def strict_overlay(tmp_path, monkeypatch):
     import tools.egress_policy as ep
     import tools.injection_defense as idf
     import tools.tool_policy as tp
+
+    monkeypatch.setattr(ep, "_today", lambda: datetime.date(2026, 7, 1))
 
     for m in (tp, idf, dp, ep):
         getattr(m, "reset_pdp_state", getattr(m, "reset_injection_state",
