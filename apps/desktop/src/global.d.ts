@@ -122,29 +122,6 @@ declare global {
         // Working-tree-vs-HEAD unified diff for one file (the preview's diff
         // view). Empty string when the file is unchanged or not in a repo.
         fileDiff: (repoPath: string, filePath: string) => Promise<string>
-        // Codex-style review pane: changed files per scope, per-file diff, and
-        // stage / unstage / revert.
-        review: {
-          list: (repoPath: string, scope: LliamReviewScope, baseRef?: null | string) => Promise<LliamReviewList>
-          diff: (
-            repoPath: string,
-            filePath: string,
-            scope: LliamReviewScope,
-            baseRef?: null | string,
-            staged?: boolean
-          ) => Promise<string>
-          stage: (repoPath: string, filePath?: null | string) => Promise<{ ok: boolean }>
-          unstage: (repoPath: string, filePath?: null | string) => Promise<{ ok: boolean }>
-          revert: (repoPath: string, filePath?: null | string) => Promise<{ ok: boolean }>
-          revParse: (repoPath: string, ref?: null | string) => Promise<null | string>
-          commit: (repoPath: string, message: string, push: boolean) => Promise<{ ok: boolean }>
-          // Diff (staged-or-all) + recent commit subjects for drafting a
-          // commit message. Reads only; empty strings off-repo.
-          commitContext: (repoPath: string) => Promise<{ diff: string; recent: string }>
-          push: (repoPath: string) => Promise<{ ok: boolean }>
-          shipInfo: (repoPath: string) => Promise<LliamReviewShipInfo>
-          createPr: (repoPath: string) => Promise<{ url: string }>
-        }
         // Repo-first discovery: scan bounded roots for git repos (depth-capped).
         scanRepos: (roots: string[], options?: { maxDepth?: number }) => Promise<{ root: string; label: string }[]>
       }
@@ -609,48 +586,12 @@ export interface LliamRepoStatus {
   conflicted: number
   // Total distinct changed paths (tracked modified + conflicts + untracked).
   changed: number
-  // +/- line counts of tracked changes vs HEAD (staged + unstaged). Untracked
-  // files aren't in the diff, so they don't contribute lines.
+  // +/- line counts of tracked changes vs HEAD (staged + unstaged), with the
+  // line counts of (bounded) untracked files folded into `added`.
   added: number
   removed: number
   // Capped changed-file list (REPO_STATUS_FILE_CAP) for the diff/open actions.
   files: LliamRepoStatusFile[]
-}
-
-// Diff scope for the review pane, mirroring Codex: uncommitted working-tree
-// changes, all changes vs the branch base, or everything since the current
-// turn began.
-export type LliamReviewScope = 'branch' | 'lastTurn' | 'uncommitted'
-
-// One changed file in the review pane (status letter, +/- lines, staged flag).
-export interface LliamReviewFile {
-  path: string
-  added: number
-  removed: number
-  // M(odified) A(dded) D(eleted) R(enamed) C(opied) U(nmerged) ?(untracked)
-  status: string
-  staged: boolean
-}
-
-export interface LliamReviewList {
-  files: LliamReviewFile[]
-  // The resolved base ref the scope diffed against (branch merge-base / turn
-  // baseline), or null for the uncommitted scope.
-  base: null | string
-}
-
-// The branch's PR (if any) as reported by `gh pr view`.
-export interface LliamReviewPr {
-  url: string
-  state: string
-  number: number
-}
-
-// gh availability/auth + the current branch's PR — drives the review pane's PR
-// button (disabled when gh isn't ready, "Open PR" vs "Create PR" otherwise).
-export interface LliamReviewShipInfo {
-  ghReady: boolean
-  pr: LliamReviewPr | null
 }
 
 export interface LliamReadDirEntry {
