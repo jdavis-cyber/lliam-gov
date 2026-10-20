@@ -1294,6 +1294,7 @@ def handle_function_call(
                 from tools.tool_policy import pdp_gate
                 _pdp_decision = pdp_gate(
                     function_name, function_args, session_id=session_id,
+                    task_id=task_id or "", tool_call_id=tool_call_id or "",
                 )
             except Exception:
                 _pdp_decision = None

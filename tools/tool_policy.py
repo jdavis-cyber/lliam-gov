@@ -940,13 +940,31 @@ def _hitl_delegated_to_backend(action_class: str) -> bool:
     return False
 
 
-def _emit_pdp_ledger_event(decision: PolicyDecision, function_args: Optional[Dict[str, Any]]) -> None:
-    """Record a blocking PDP verdict as ``policy.violation`` (LG-AZ-06/AU-02)."""
+def _emit_pdp_ledger_event(
+    decision: PolicyDecision,
+    function_args: Optional[Dict[str, Any]],
+    *,
+    session_id: Optional[str] = None,
+    task_id: str = "",
+    tool_call_id: str = "",
+) -> None:
+    """Record a blocking PDP verdict as ``policy.violation`` (LG-AZ-06/AU-02).
+
+    Correlated like the call's terminal outcome record (task id, else session
+    id) and stamped with the session's instance identity, so the denial is
+    attributed to the right session rather than the process-wide default.
+    """
     try:
-        from agent.governance_audit_hooks import _enabled_ledger, classify_risk
+        from agent.governance_audit_hooks import (
+            _enabled_ledger, classify_risk, denial_record_context,
+        )
         ledger = _enabled_ledger()
         if ledger is None:
             return
+        context = denial_record_context(
+            task_id=task_id or "", session_id=session_id or "",
+            tool_call_id=tool_call_id or "",
+        )
         ledger.emit(
             "policy.violation",
             action=f"tool.{decision.tool_name}",
@@ -961,6 +979,7 @@ def _emit_pdp_ledger_event(decision: PolicyDecision, function_args: Optional[Dic
                 "origin": decision.origin,
                 "reason": decision.reason,
             },
+            **context,
         )
     except Exception:
         # Observer safety: the PDP verdict stands regardless; the ledger's own
@@ -973,6 +992,8 @@ def pdp_gate(
     function_args: Optional[Dict[str, Any]] = None,
     *,
     session_id: Optional[str] = None,
+    task_id: str = "",
+    tool_call_id: str = "",
 ):
     """Enforce the PDP verdict at a dispatch seam.
 
@@ -994,7 +1015,10 @@ def pdp_gate(
             and _hitl_delegated_to_backend(decision.action_class)
         ):
             return None   # existing backend approval flow is the HITL gate
-        _emit_pdp_ledger_event(decision, function_args)
+        _emit_pdp_ledger_event(
+            decision, function_args, session_id=session_id,
+            task_id=task_id, tool_call_id=tool_call_id,
+        )
         from agent.tool_guardrails import ToolGuardrailDecision
         if decision.disposition == "deny":
             return ToolGuardrailDecision(

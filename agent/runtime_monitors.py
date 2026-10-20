@@ -76,6 +76,66 @@ def _host_of(record: dict) -> Optional[str]:
     return None
 
 
+def _dispatch_target(record: dict) -> Optional[str]:
+    """What a dispatch acted on: the non-secret args digest the dispatch
+    record carries (``resource.args_digest``), else an explicit target."""
+    res = record.get("resource")
+    if isinstance(res, dict):
+        for key in ("args_digest", "target"):
+            if res.get(key):
+                return str(res[key])
+    out = record.get("outcome")
+    if isinstance(out, dict) and out.get("target"):
+        return str(out["target"])
+    return None
+
+
+# The PDP records its own denial, then the terminal-outcome funnel records the
+# same blocked call again. Both are kept in the ledger; the monitor pairs them
+# so one denial raises one LG-MO-04 alert.
+_PDP_DENIAL_SOURCE = "tools/tool_policy.py"
+_OUTCOME_SOURCE = "model_tools.py:_emit_post_tool_call_hook"
+
+# Sealed-record fields forwarded to the ISCM sink (LG-MO-05). The record is
+# already redacted on write; ``parameters`` is reduced to its keys + content
+# hash so bulky tool arguments (file bodies, prompts) are not copied again.
+_LEDGER_FIELDS = (
+    "schema", "seq", "event_id", "correlation_id", "ts", "event",
+    "severity", "action", "decision", "outcome", "resource",
+    "source_module", "prev_hash", "record_hash",
+)
+_TRACE_FIELDS = ("tool_call_id", "task_id", "session_id", "turn_id",
+                 "api_request_id")
+
+
+def _ledger_summary(record: dict) -> dict:
+    out = {k: record[k] for k in _LEDGER_FIELDS if k in record}
+    actor = record.get("actor")
+    if isinstance(actor, dict):
+        out["actor"] = {k: actor.get(k) for k in ("type", "instance_id")}
+    subject = record.get("subject")
+    if isinstance(subject, dict):
+        out["subject"] = {"principal": subject.get("principal")}
+    trace = record.get("trace")
+    if isinstance(trace, dict):
+        kept = {k: trace[k] for k in _TRACE_FIELDS if k in trace}
+        if kept:
+            out["trace"] = kept
+    params = record.get("parameters")
+    if isinstance(params, dict):
+        out["parameter_keys"] = sorted(
+            str(k) for k in params if k != "content_hash")[:32]
+        if params.get("content_hash"):
+            out["parameters_content_hash"] = params["content_hash"]
+    return out
+
+
+def _denial_key(record: dict) -> tuple:
+    trace = record.get("trace")
+    call = trace.get("tool_call_id") if isinstance(trace, dict) else None
+    return (record.get("action"), call or "")
+
+
 class MonitorHub:
     """Stateful consumer of sealed audit records; raises graduated alerts."""
 
@@ -94,6 +154,9 @@ class MonitorHub:
         self._seen_hosts: dict[str, set] = defaultdict(set)
         self._egress_count: dict[str, int] = defaultdict(int)
         self._timeline: dict[str, list] = defaultdict(list)
+        # PDP denials awaiting their terminal-outcome echo (bounded)
+        self._pending_denials: dict[str, deque] = defaultdict(
+            lambda: deque(maxlen=32))
         # cross-session load signatures (drift is cross-session, LG-MO-03)
         self._load_sigs: dict[str, dict] = {}
         self._notifications: list[Notification] = []
@@ -123,6 +186,7 @@ class MonitorHub:
         session = str(record.get("correlation_id") or "default")
         event = record.get("event")
         alerts: list[Alert] = []
+        self._stream_record(record)
 
         alerts += self._check_runaway(session, record, event)
         alerts += self._check_egress(session, record, event)
@@ -138,9 +202,7 @@ class MonitorHub:
     def _check_runaway(self, session, record, event) -> list[Alert]:
         if event != "tool.dispatch":
             return []
-        out = record.get("outcome") if isinstance(record.get("outcome"),
-                                                  dict) else {}
-        sig = (record.get("action"), out.get("target"))
+        sig = (record.get("action"), _dispatch_target(record))
         buf = self._recent[session]
         buf.append(sig)
         # count consecutive identical signatures at the tail
@@ -203,10 +265,38 @@ class MonitorHub:
         decision = str(record.get("decision"))
         if (event in ("policy.violation", "security.error")
                 or decision == "deny"):
+            if event == "policy.violation" and self._is_denial_echo(
+                    session, record):
+                return []
             out_sev = "critical" if event == "security.error" else "warning"
             return [Alert("LG-MO-04", "policy_violation", out_sev, session,
                           f"{event} decision={decision} sev={sev}")]
         return []
+
+    def _is_denial_echo(self, session, record) -> bool:
+        """True for the outcome record of a denial the PDP already recorded."""
+        source = record.get("source_module")
+        pending = self._pending_denials[session]
+        key = _denial_key(record)
+        if source == _PDP_DENIAL_SOURCE:
+            pending.append(key)
+            return False
+        if source == _OUTCOME_SOURCE and key in pending:
+            pending.remove(key)
+            return True
+        return False
+
+    def _stream_record(self, record: dict) -> None:
+        """LG-MO-05: forward the sealed record (redacted summary) to ISCM.
+
+        Never raises: a sink fault must not affect monitoring or dispatch.
+        """
+        if self.sink is None:
+            return
+        try:
+            self.sink.forward(_ledger_summary(record))
+        except Exception as e:
+            _log.debug("iscm ledger forward failed (non-fatal): %s", e)
 
     def _stream(self, alert: Alert) -> None:
         if self.sink is None:
