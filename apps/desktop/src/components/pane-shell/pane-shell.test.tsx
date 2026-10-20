@@ -147,7 +147,23 @@ describe('PaneShell composition', () => {
     expect($paneStates.get().files?.open).toBe(true)
   })
 
-  it('uses widthOverride from the store when set', () => {
+  it('uses widthOverride from the store for a resizable pane', () => {
+    setPaneOpen('files', true)
+    setPaneWidthOverride('files', 320)
+
+    const rendered = render(
+      <PaneShell>
+        <Pane id="files" resizable side="left" width="240px">
+          files
+        </Pane>
+        <PaneMain>main</PaneMain>
+      </PaneShell>
+    )
+
+    expect(getColumnTemplate(gridContainer(rendered))).toEqual(['320px', 'minmax(0,1fr)'])
+  })
+
+  it('keeps a fixed pane at its configured width despite a stored resize override', () => {
     setPaneOpen('files', true)
     setPaneWidthOverride('files', 320)
 
@@ -160,7 +176,8 @@ describe('PaneShell composition', () => {
       </PaneShell>
     )
 
-    expect(getColumnTemplate(gridContainer(rendered))).toEqual(['320px', 'minmax(0,1fr)'])
+    expect(getColumnTemplate(gridContainer(rendered))).toEqual(['240px', 'minmax(0,1fr)'])
+    expect($paneStates.get().files?.widthOverride).toBe(320)
   })
 
   it('preserves CSS-string widths verbatim (clamp, var, etc.)', () => {

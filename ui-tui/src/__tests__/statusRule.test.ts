@@ -68,8 +68,7 @@ describe('statusBarSegments', () => {
       compressions: true,
       voice: true,
       bg: true,
-      subagents: true,
-      cost: true
+      subagents: true
     })
   })
 
@@ -79,29 +78,39 @@ describe('statusBarSegments', () => {
     expect(s.compactCtx).toBe(true)
     expect(s.bar).toBe(false)
     expect(s.duration).toBe(false)
-    expect(s.cost).toBe(false)
+    expect(s.compressions).toBe(false)
+    expect(s.voice).toBe(false)
+    expect(s.bg).toBe(false)
+    expect(s.subagents).toBe(false)
   })
 
   it('sheds tail segments in priority order as the terminal narrows', () => {
-    // cost is the first to go, the context bar the last of the tail.
+    // Subagents are the first to go, the context bar the last of the tail.
     const order: (keyof ReturnType<typeof statusBarSegments>)[] = [
       'bar',
       'duration',
       'compressions',
       'voice',
       'bg',
-      'subagents',
-      'cost'
+      'subagents'
     ]
 
-    let prevCount = Infinity
+    let previous = statusBarSegments(120)
 
-    for (const cols of [120, 95, 87, 83, 79, 75, 71]) {
+    for (let cols = 119; cols >= 1; cols--) {
       const s = statusBarSegments(cols)
-      const visible = order.filter(k => s[k]).length
 
-      expect(visible).toBeLessThanOrEqual(prevCount)
-      prevCount = visible
+      for (const [index, key] of order.entries()) {
+        // Narrowing cannot restore a hidden segment, and a lower-priority
+        // segment cannot be visible after a higher-priority one is hidden.
+        if (s[key]) {
+          expect(previous[key]).toBe(true)
+          expect(order.slice(0, index).every(higher => s[higher])).toBe(true)
+        }
+      }
+
+      expect(s.compactCtx).toBe(!s.bar)
+      previous = s
     }
   })
 })

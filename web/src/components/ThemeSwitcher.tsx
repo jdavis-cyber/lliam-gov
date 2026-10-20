@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Palette, Check, Type } from "lucide-react";
 import { Button } from "@nous-research/ui/ui/components/button";
@@ -55,6 +55,24 @@ export function ThemeSwitcher({ collapsed = false, dropUp = false }: ThemeSwitch
     document.addEventListener("mousedown", onMouseDown);
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, [open, close, useMobileSheet]);
+
+  useLayoutEffect(() => {
+    if (!open || !dropUp || useMobileSheet) return;
+    const reposition = () => {
+      const rect = wrapperRef.current?.getBoundingClientRect();
+      const dropdown = dropdownRef.current;
+      if (!rect || !dropdown) return;
+      dropdown.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+      dropdown.style.left = `${rect.left}px`;
+    };
+    reposition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [open, dropUp, useMobileSheet]);
 
   const current = availableThemes.find((th) => th.name === themeName);
   const label = current?.label ?? themeName;
@@ -114,7 +132,6 @@ export function ThemeSwitcher({ collapsed = false, dropUp = false }: ThemeSwitch
       )}
 
       {open && !useMobileSheet && (() => {
-        const rect = wrapperRef.current?.getBoundingClientRect();
         const dropdown = (
           <div
             ref={dropdownRef}
@@ -126,11 +143,6 @@ export function ThemeSwitcher({ collapsed = false, dropUp = false }: ThemeSwitch
               dropUp ? "fixed z-[100]" : "absolute z-50 right-0 top-full mt-1",
             )}
             role="listbox"
-            style={
-              dropUp && rect
-                ? { bottom: window.innerHeight - rect.top + 4, left: rect.left }
-                : undefined
-            }
           >
             <div className="border-b border-current/20 px-3 py-2">
               <Typography

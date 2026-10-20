@@ -5,7 +5,7 @@
 # Uses uv for fast Python provisioning and package management.
 #
 # Usage:
-#   iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+#   iex (irm https://raw.githubusercontent.com/jdavis-cyber/lliam-gov/main/scripts/install.ps1)
 #
 # Or download and run with options:
 #   .\install.ps1 -NoVenv -SkipSetup
@@ -23,8 +23,9 @@ param(
     # exact ref.  Precedence: Commit > Tag > Branch.
     [string]$Commit = "",
     [string]$Tag = "",
-    [string]$LliamHome = $(if ($env:HERMES_HOME) { $env:HERMES_HOME } else { "$env:LOCALAPPDATA\hermes" }),
-    [string]$InstallDir = $(if ($env:HERMES_HOME) { "$env:HERMES_HOME\hermes-agent" } else { "$env:LOCALAPPDATA\hermes\hermes-agent" }),
+    [Alias("HermesHome")]
+    [string]$LliamHome = $(if ($env:LLIAM_HOME) { $env:LLIAM_HOME } elseif ($env:HERMES_HOME) { $env:HERMES_HOME } elseif (Test-Path "$env:LOCALAPPDATA\hermes") { "$env:LOCALAPPDATA\hermes" } elseif (Test-Path "$HOME\.hermes") { "$HOME\.hermes" } else { "$env:LOCALAPPDATA\lliam" }),
+    [string]$InstallDir = "",
 
     # --- Stage protocol (additive; default invocation behaves as before) ----
     # See the "Stage protocol" section near the bottom of the file for the
@@ -135,6 +136,10 @@ foreach ($tmpVar in @('TEMP', 'TMP')) {
 # ============================================================================
 # Configuration
 # ============================================================================
+
+if (-not $InstallDir) { $InstallDir = Join-Path $LliamHome "hermes-agent" }
+$env:HERMES_HOME = $LliamHome
+$env:LLIAM_HOME = $LliamHome
 
 $RepoUrlSsh = "git@github.com:jdavis-cyber/lliam-gov.git"
 $RepoUrlHttps = "https://github.com/jdavis-cyber/lliam-gov.git"
@@ -897,11 +902,8 @@ function Set-GitBashEnvVar {
     Write-Info "If needed, set HERMES_GIT_BASH_PATH manually to your bash.exe path."
 }
 
-# The desktop build runs Vite ^8, which refuses to start on Node outside
-# `^20.19 || >=22.12` -- older Node lacks node:util.styleText, so `vite build`
-# crashes with a SyntaxError that surfaces only as the opaque "Build desktop
-# app ... exit code 1" install failure. Returns $true when a `node --version`
-# string clears that floor.
+# Desktop dependencies, including sanitize-html, require Node >=22.12.
+# Accept supported runtimes before installing or building the workspaces.
 function Test-NodeVersionOk {
     param([string]$Version)
     try {
@@ -909,7 +911,6 @@ function Test-NodeVersionOk {
     } catch {
         return $false
     }
-    if ($v.Major -eq 20 -and $v.Minor -ge 19) { return $true }
     if ($v.Major -ge 22 -and ($v.Major -gt 22 -or $v.Minor -ge 12)) { return $true }
     return $false
 }
@@ -924,7 +925,7 @@ function Test-Node {
             $script:HasNode = $true
             return $true
         }
-        Write-Warn "Node.js $version is too old for the desktop build (need ^20.19 or >=22.12)"
+        Write-Warn "Node.js $version is too old for the desktop build (need >=22.12)"
     }
 
     # Prefer a Lliam-managed Node from a previous run over a too-old system one.
@@ -1483,13 +1484,13 @@ function Install-Repository {
                 # for.  GitHub supports archive URLs for commits, tags, and
                 # branches; we honour Commit > Tag > Branch.
                 if ($Commit) {
-                    $zipUrl = "https://github.com/NousResearch/hermes-agent/archive/$Commit.zip"
+                    $zipUrl = "https://github.com/jdavis-cyber/lliam-gov/archive/$Commit.zip"
                     $zipLabel = $Commit
                 } elseif ($Tag) {
-                    $zipUrl = "https://github.com/NousResearch/hermes-agent/archive/refs/tags/$Tag.zip"
+                    $zipUrl = "https://github.com/jdavis-cyber/lliam-gov/archive/refs/tags/$Tag.zip"
                     $zipLabel = $Tag
                 } else {
-                    $zipUrl = "https://github.com/NousResearch/hermes-agent/archive/refs/heads/$Branch.zip"
+                    $zipUrl = "https://github.com/jdavis-cyber/lliam-gov/archive/refs/heads/$Branch.zip"
                     $zipLabel = $Branch
                 }
                 $zipPath = "$env:TEMP\hermes-agent-$zipLabel.zip"
@@ -1923,6 +1924,8 @@ function Set-PathVariable {
         Write-Success "Set HERMES_HOME=$LliamHome"
     }
     $env:HERMES_HOME = $LliamHome
+    $env:LLIAM_HOME = $LliamHome
+    [Environment]::SetEnvironmentVariable("LLIAM_HOME", $LliamHome, "User")
     
     # Update current session
     $env:Path = "$lliamBin;$env:Path"
@@ -1982,7 +1985,7 @@ function Write-BootstrapMarker {
         $pinnedBranch = "main"  # install.ps1's own default for -Branch
     }
 
-    $markerPath = Join-Path $InstallDir ".n"
+    $markerPath = Join-Path $InstallDir ".hermes-bootstrap-complete"
     $marker = [ordered]@{
         schemaVersion = 1
         pinnedCommit  = $pinnedCommit
@@ -2455,7 +2458,7 @@ function Install-Desktop {
 
     # Always re-resolve Node here. Stages run in separate PowerShell processes,
     # so $script:HasNode from Stage-Node isn't visible; more importantly Test-Node
-    # enforces the build floor (^20.19 || >=22.12) and prepends the Lliam-managed
+    # enforces the build floor (>=22.12) and prepends the Lliam-managed
     # Node to PATH, so the build never runs on a too-old system Node -- the cause
     # of the opaque "Build desktop app ... exit code 1" failure (Vite crashes on
     # old Node).
@@ -3389,7 +3392,7 @@ try {
     Write-Err "Installation failed: $_"
     Write-Host ""
     Write-Info "If the error is unclear, try downloading and running the script directly:"
-    Write-Host "  Invoke-WebRequest -Uri 'https://hermes-agent.nousresearch.com/install.ps1' -OutFile install.ps1" -ForegroundColor Yellow
+    Write-Host "  Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/jdavis-cyber/lliam-gov/main/scripts/install.ps1' -OutFile install.ps1" -ForegroundColor Yellow
     Write-Host "  .\install.ps1" -ForegroundColor Yellow
     Write-Host ""
 }

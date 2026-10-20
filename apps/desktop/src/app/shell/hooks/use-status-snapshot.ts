@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
-import { getLogs, getStatus } from '@/lliam'
 import { evaluateRuntimeReadiness, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
+import { getLogs, getStatus } from '@/lliam'
 import type { StatusResponse } from '@/types/lliam'
 
 const REFRESH_MS = 15_000
