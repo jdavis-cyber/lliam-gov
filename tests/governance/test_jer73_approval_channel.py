@@ -3,11 +3,14 @@
 ``security.require_authenticated_approver: true`` (cli-config.gov.yaml) must
 be enforced, not just declared:
 
-  * an approval resolved with no authenticated dashboard_auth principal bound
-    is REFUSED (gateway queue, CLI/ACP prompt, smart-approval LLM, MCP bridge,
-    JIT grants / operator override) and the refusal is recorded;
-  * the same approval with an authenticated principal bound is ACCEPTED and
-    the ``approval.decision`` record names that principal;
+  * an approval resolved with no authenticated approver bound is REFUSED
+    (gateway queue, CLI/ACP prompt, smart-approval LLM, MCP bridge, JIT
+    grants / operator override) and the refusal is recorded;
+  * the same approval with an authenticated approver bound — a dashboard_auth
+    user, or the desktop app's local operator — is ACCEPTED and the
+    ``approval.decision`` record names that principal and how it
+    authenticated;
+  * a bound subject without a recognised auth method is not an approver;
   * denials are never refused;
   * the MCP ``permissions_respond`` tool is withheld under strict posture;
   * low-side configs (key unset) behave exactly as before;
@@ -158,6 +161,47 @@ def test_connection_only_identity_is_not_an_approver(gov_cfg, clean_queues):
     assert resolve_gateway_approval("s-internal", "once") == 0
 
 
+def test_local_operator_subject_can_approve_and_is_recorded(
+    gov_cfg, gov_ledger, clean_queues
+):
+    """The subject the gateway binds to the desktop app's connection (it
+    presented the per-launch gateway secret) is an authenticated approver."""
+    import agent.governance_audit_hooks as gah
+    from tools.approval import resolve_gateway_approval
+    from tui_gateway import transport as gw
+
+    entry = _queue_entry("s-desktop")
+    gah._operator_subject.set(gw.local_operator_subject())
+    assert resolve_gateway_approval("s-desktop", "once") == 1
+    assert entry.result == "once"
+    assert entry.approver == gw.local_operator_principal()
+    assert entry.approver.startswith("local-operator:") and "@" in entry.approver
+    assert entry.approver_method == "desktop-launch-secret"
+
+
+def test_subject_without_approver_auth_method_is_refused(gov_cfg, clean_queues):
+    """Only the gateway WS layer's auth methods make a subject an approver;
+    a bare principal (or an unknown method) does not."""
+    import agent.governance_audit_hooks as gah
+    from tools.approval import resolve_gateway_approval
+
+    entry = _queue_entry("s-bare")
+    gah.set_operator_subject("local-operator:rome@mac")
+    assert resolve_gateway_approval("s-bare", "once") == 0
+    gah.set_operator_subject("local-operator:rome@mac", auth="stdio")
+    assert resolve_gateway_approval("s-bare", "once") == 0
+    gah.set_operator_subject("someone", auth="dashboard_auth:")
+    assert resolve_gateway_approval("s-bare", "once") == 0
+    assert not entry.event.is_set()
+
+
+def test_local_operator_auth_constant_matches_transport():
+    from tools import hitl_oversight as ho
+    from tui_gateway import transport as gw
+
+    assert ho.LOCAL_OPERATOR_AUTH == gw.LOCAL_OPERATOR_AUTH
+
+
 def test_low_side_anonymous_gateway_approval_unchanged(low_cfg, clean_queues):
     from tools.approval import resolve_gateway_approval
 
@@ -188,7 +232,9 @@ def test_gateway_wait_records_the_resolving_principal(gov_cfg, gov_ledger, clean
     assert decision == {"resolved": True, "choice": "once"}
     recs = [r for r in _decisions(gov_ledger) if r.get("outcome", {}).get("origin") == "gateway"]
     assert recs[-1]["decision"] == "approve"
-    assert recs[-1]["approver"] == {"id": "bob@agency.mil", "authenticated": True}
+    assert recs[-1]["approver"] == {
+        "id": "bob@agency.mil", "authenticated": True, "method": "dashboard_auth:oauth",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -250,7 +296,9 @@ def test_cli_prompt_with_authenticated_approver_still_prompts(gov_cfg, gov_ledge
     assert result["approved"] is True
     rec = _decisions(gov_ledger)[-1]
     assert rec["decision"] == "approve"
-    assert rec["approver"] == {"id": "carol@agency.mil", "authenticated": True}
+    assert rec["approver"] == {
+        "id": "carol@agency.mil", "authenticated": True, "method": "dashboard_auth:oauth",
+    }
 
 
 def test_low_side_cli_prompt_unchanged(low_cfg, monkeypatch):
@@ -386,7 +434,25 @@ def test_control_effectiveness_reports_approval_channel_invariants():
     r = ce.effectiveness_report(repo_root=_REPO)
     assert r["authenticated_approver_required"] is True
     assert r["authenticated_approver_enforced"] is True
+    assert r["local_operator_approval_accepted"] is True
     assert r["mcp_permissions_respond_withheld"] is True
+
+
+def test_control_effectiveness_probe_ignores_caller_subject():
+    """The refusal probe runs in a fresh context: a subject bound in the
+    calling context cannot make the unauthenticated probe pass."""
+    _authenticate("alice@agency.mil")
+    r = ce.effectiveness_report(repo_root=_REPO)
+    assert r["authenticated_approver_enforced"] is True
+
+
+def test_control_effectiveness_fails_when_desktop_operator_cannot_approve(monkeypatch):
+    from tui_gateway import transport as gw
+
+    monkeypatch.setattr(gw, "local_operator_subject",
+                        lambda: {"principal": "local-operator:x@y", "auth": "unrecognised"})
+    failures = ce.check_effectiveness(repo_root=_REPO)
+    assert any("local operator cannot approve" in f for f in failures)
 
 
 def test_control_effectiveness_fails_without_authenticated_approver(tmp_path):

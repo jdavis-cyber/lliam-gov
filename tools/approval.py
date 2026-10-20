@@ -749,15 +749,17 @@ _permanent_approved: set = set()
 
 class _ApprovalEntry:
     """One pending dangerous-command approval inside a gateway session."""
-    __slots__ = ("event", "data", "result", "approver")
+    __slots__ = ("event", "data", "result", "approver", "approver_method")
 
     def __init__(self, data: dict):
         self.event = threading.Event()
         self.data = data          # command, description, pattern_keys, …
         self.result: Optional[str] = None  # "once"|"session"|"always"|"deny"
-        # Authenticated dashboard_auth principal that resolved the entry
-        # (LG-GV-05), or None when resolved anonymously / not yet resolved.
+        # Authenticated approver that resolved the entry (LG-GV-05) — a
+        # dashboard_auth user or the desktop app's local operator — and how
+        # it authenticated; None when resolved anonymously / not yet resolved.
         self.approver: Optional[str] = None
+        self.approver_method: Optional[str] = None
 
 
 _gateway_queues: dict[str, list] = {}        # session_key → [_ApprovalEntry, …]
@@ -806,7 +808,8 @@ def resolve_gateway_approval(session_key: str, choice: str,
 
     LG-GV-05: when ``security.require_authenticated_approver`` is set, an
     approving *choice* is refused unless the calling context carries an
-    authenticated dashboard_auth principal. A refused approval leaves the
+    authenticated approver (a dashboard_auth user, or the local operator on
+    the desktop app's gateway-secret connection). A refused approval leaves the
     entries pending (an authenticated approver can still rule, or it times
     out to a deny) and returns 0 — or raises :class:`ApprovalRefused` when
     *raise_on_refusal* is True. Denials are never refused.
@@ -814,6 +817,7 @@ def resolve_gateway_approval(session_key: str, choice: str,
     Returns the number of approvals resolved (0 means nothing was pending).
     """
     approver: Optional[str] = None
+    approver_method: Optional[str] = None
     try:
         from tools.hitl_oversight import authorize_approval
     except Exception:  # pragma: no cover - module ships with this one
@@ -835,6 +839,7 @@ def resolve_gateway_approval(session_key: str, choice: str,
                 raise ApprovalRefused(auth.reason)
             return 0
         approver = auth.principal
+        approver_method = auth.method
 
     with _lock:
         queue = _gateway_queues.get(session_key)
@@ -850,6 +855,7 @@ def resolve_gateway_approval(session_key: str, choice: str,
 
     for entry in targets:
         entry.approver = approver
+        entry.approver_method = approver_method
         entry.result = choice
         entry.event.set()
     return len(targets)
@@ -1071,9 +1077,9 @@ def prompt_dangerous_approval(command: str, description: str,
     Returns: 'once', 'session', 'always', or 'deny'
 
     LG-GV-05: when ``security.require_authenticated_approver`` is set and no
-    authenticated dashboard_auth principal is bound to this context, the
-    prompt is not shown and the result is 'deny' — an anonymous terminal / ACP
-    answer cannot approve a high-risk action.
+    authenticated approver is bound to this context, the prompt is not shown
+    and the result is 'deny' — an anonymous terminal / ACP answer cannot
+    approve a high-risk action.
     """
     if _unauthenticated_approver_reason(command, description, origin="prompt"):
         return "deny"
@@ -1679,6 +1685,7 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict,
             # entry.approver is only ever set from an authenticated principal
             # bound in the resolver's context (resolve_gateway_approval).
             approver_authenticated=True if entry.approver else None,
+            approver_method=entry.approver_method,
             origin=surface,
         )
     except Exception:

@@ -79,12 +79,25 @@ _DISABLE_FLUSH = (getenv_compat("TUI_GATEWAY_NO_FLUSH", "") or "").strip().lower
 # The secret never appears in HTML or on any HTTP endpoint. It is either
 # pinned by the parent that spawns the dashboard (the desktop shell sets
 # ``LLIAM_TUI_GATEWAY_SECRET`` in the child env and puts the same value in
-# its own renderer's WS URL), or minted here per process. The dashboard
-# hands it to the PTY children it spawns through their attach URL (env).
-# Comparison is constant time.
+# its own renderer's WS URL), or minted here per process. Comparison is
+# constant time.
+#
+# Holding the secret is also what identifies the local operator: only the
+# process that spawned this backend (the desktop shell) knows it, so a
+# connection that presents it is bound as the ``local-operator`` principal
+# and may approve HITL requests (LG-GV-05, see :func:`local_operator_subject`).
+#
+# PTY children the dashboard spawns get a *different* per-process secret,
+# the child secret (``?gw_child=``). It passes the strict handshake but does
+# not identify the operator: ``/api/pty`` itself accepts the loopback token
+# from index.html, so whoever opened the PTY is not known to be the operator.
 
 #: WS-upgrade query parameter carrying the gateway secret.
 GATEWAY_SECRET_PARAM = "gw_secret"
+#: WS-upgrade query parameter carrying the handshake-only PTY child secret.
+GATEWAY_CHILD_SECRET_PARAM = "gw_child"
+#: Authentication method recorded for the local operator principal.
+LOCAL_OPERATOR_AUTH = "desktop-launch-secret"
 #: Env var a spawning parent uses to pin the secret (LLIAM_ first, HERMES_ legacy).
 GATEWAY_SECRET_ENV_SUFFIX = "TUI_GATEWAY_SECRET"
 GATEWAY_SECRET_ENV_NAMES = (
@@ -94,6 +107,7 @@ GATEWAY_SECRET_ENV_NAMES = (
 
 _gateway_secret_lock = threading.Lock()
 _gateway_secret: Optional[str] = None
+_gateway_child_secret: Optional[str] = None
 
 
 def _adopt_pinned_gateway_secret() -> Optional[str]:
@@ -131,6 +145,53 @@ def verify_gateway_secret(presented: Optional[str]) -> bool:
     )
 
 
+def gateway_child_secret() -> str:
+    """Return the per-process PTY child secret, minting it on first use.
+
+    Never pinned from the env and never equal to :func:`gateway_secret`.
+    """
+    global _gateway_child_secret
+    with _gateway_secret_lock:
+        if _gateway_child_secret is None:
+            _gateway_child_secret = secrets.token_urlsafe(32)
+        return _gateway_child_secret
+
+
+def verify_gateway_child_secret(presented: Optional[str]) -> bool:
+    """Constant-time check of *presented* against the PTY child secret."""
+    if not presented:
+        return False
+    return hmac.compare_digest(
+        str(presented).encode("utf-8"), gateway_child_secret().encode("utf-8")
+    )
+
+
+def local_operator_principal() -> str:
+    """``local-operator:<os-user>@<host>`` for the account running this backend."""
+    import getpass
+    import socket
+
+    try:
+        user = getpass.getuser()
+    except Exception:
+        user = ""
+    try:
+        host = socket.gethostname()
+    except Exception:
+        host = ""
+    return f"local-operator:{user or 'unknown'}@{host or 'localhost'}"
+
+
+def local_operator_subject() -> dict:
+    """Operator subject bound to a connection that presented the gateway secret.
+
+    The desktop shell is the only holder of the secret, so the connection is
+    the local operator's own desktop app (LG-GV-05). Approvals made over it
+    are recorded with this principal.
+    """
+    return {"principal": local_operator_principal(), "auth": LOCAL_OPERATOR_AUTH}
+
+
 def handshake_required() -> bool:
     """True when socket peers must prove the gateway secret (strict posture).
 
@@ -145,10 +206,13 @@ def handshake_required() -> bool:
         return False
 
 
-def _reset_gateway_secret_for_tests(value: Optional[str] = None) -> None:
-    global _gateway_secret
+def _reset_gateway_secret_for_tests(
+    value: Optional[str] = None, child: Optional[str] = None
+) -> None:
+    global _gateway_secret, _gateway_child_secret
     with _gateway_secret_lock:
         _gateway_secret = value
+        _gateway_child_secret = child
 
 
 @runtime_checkable

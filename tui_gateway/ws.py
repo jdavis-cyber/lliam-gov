@@ -180,25 +180,31 @@ def _query_param(ws: Any, name: str) -> str:
         return ""
 
 
-def _bind_principal(principal: Optional[dict]):
-    """Bind an authenticated dashboard_auth principal as the operator subject.
-
-    The contextvar is set inside this connection's task, so it flows into the
-    dispatch threads of this connection only (``asyncio.to_thread`` and the
-    gateway pool both copy the context). Returns a reset token or None.
-    """
+def _dashboard_subject(principal: Optional[dict]) -> Optional[dict]:
+    """Operator subject for an authenticated dashboard_auth principal, if any."""
     if not isinstance(principal, dict):
         return None
     user_id = str(principal.get("user_id") or "").strip()
     if not user_id or user_id == "server-internal":
         return None
+    return {
+        "principal": user_id,
+        "auth": f"dashboard_auth:{principal.get('provider') or 'unknown'}",
+    }
+
+
+def _bind_subject(subject: Optional[dict]):
+    """Bind *subject* as the operator subject for this connection.
+
+    The contextvar is set inside this connection's task, so it flows into the
+    dispatch threads of this connection only (``asyncio.to_thread`` and the
+    gateway pool both copy the context). Returns a reset token or None.
+    """
+    if not subject:
+        return None
     try:
         from agent import governance_audit_hooks as gah
 
-        subject = {
-            "principal": user_id,
-            "auth": f"dashboard_auth:{principal.get('provider') or 'unknown'}",
-        }
         return gah._operator_subject.set(subject)
     except Exception:
         _log.warning("ws principal bind failed", exc_info=True)
@@ -223,6 +229,14 @@ async def handle_ws(
     *principal* — ``{"user_id", "provider"}`` of the dashboard_auth user that
     authenticated this connection; bound as the operator subject so HITL
     approvals resolved over this socket carry that identity (LG-GV-05).
+
+    A peer that presents the correct per-launch gateway secret is the local
+    desktop app (only the spawning desktop shell holds it). With no
+    dashboard_auth principal, it is bound as the local operator
+    (``local-operator:<os-user>@<host>``, auth ``desktop-launch-secret``), so
+    it can approve. A peer with only the loopback token or the PTY child
+    secret gets no subject and can only deny when an authenticated approver
+    is required.
     """
     peer = _ws_peer_label(ws)
     transport: WSTransport | None = None
@@ -234,12 +248,15 @@ async def handle_ws(
 
     from tui_gateway import transport as _transport_mod
 
-    if not authenticated and _transport_mod.handshake_required():
-        presented = _query_param(ws, _transport_mod.GATEWAY_SECRET_PARAM)
-        if not _transport_mod.verify_gateway_secret(presented):
+    presented = _query_param(ws, _transport_mod.GATEWAY_SECRET_PARAM)
+    local_operator = bool(presented) and _transport_mod.verify_gateway_secret(presented)
+
+    if not authenticated and not local_operator and _transport_mod.handshake_required():
+        child = _query_param(ws, _transport_mod.GATEWAY_CHILD_SECRET_PARAM)
+        if not _transport_mod.verify_gateway_child_secret(child):
             _log.warning(
                 "ws refused peer=%s reason=gateway_secret_%s",
-                peer, "invalid" if presented else "missing",
+                peer, "invalid" if (presented or child) else "missing",
             )
             try:
                 await ws.close(code=4401)
@@ -247,7 +264,12 @@ async def handle_ws(
                 _log.debug("ws close failed peer=%s error=%s", peer, exc)
             return
 
-    principal_token = _bind_principal(principal)
+    subject = _dashboard_subject(principal)
+    if subject is None and local_operator:
+        subject = _transport_mod.local_operator_subject()
+    principal_token = _bind_subject(subject)
+    if principal_token is not None:
+        _log.info("ws operator bound peer=%s auth=%s", peer, subject.get("auth"))
 
     try:
         await ws.accept()

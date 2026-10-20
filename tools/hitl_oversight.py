@@ -21,9 +21,12 @@ real, recorded human decisions. Realizes:
   * LG-GV-05 — ``authorize_approval()``: when
     ``security.require_authenticated_approver`` is true, an approval (any
     non-deny choice) is refused unless the resolving context carries an
-    authenticated dashboard_auth principal (the operator-subject contextvar
-    stamped by the dashboard WS layer). Denials are always accepted — refusing
-    a deny would only leave the action pending until it times out to a deny.
+    authenticated approver: the operator-subject contextvar stamped by the
+    gateway WS layer, either for a dashboard_auth user or for the local
+    operator's desktop app (the connection that presented the desktop
+    shell's per-launch gateway secret). Denials are always accepted —
+    refusing a deny would only leave the action pending until it times out
+    to a deny.
 
 Low-side postures: ``strict_fail_closed()`` and
 ``require_authenticated_approver()`` are False and nothing here changes
@@ -33,7 +36,7 @@ shipped behavior (capability preserving).
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, NamedTuple, Optional
+from typing import Any, Dict, NamedTuple, Optional, Tuple
 
 logger = logging.getLogger("hermes.governance.hitl_oversight")
 
@@ -41,6 +44,14 @@ logger = logging.getLogger("hermes.governance.hitl_oversight")
 #: (the dashboard's process-lifetime internal WS credential). An approval made
 #: under one of these is not an authenticated approval.
 _NON_HUMAN_PRINCIPALS = frozenset({"server-internal"})
+
+#: Subject ``auth`` methods that authenticate a human approver (LG-GV-05):
+#: a dashboard_auth login (``dashboard_auth:<provider>``, stamped from a
+#: consumed WS ticket or a principal-bound child credential), or the desktop
+#: app's per-launch gateway secret, held only by the desktop shell that
+#: spawned the backend. Must match ``tui_gateway.transport.LOCAL_OPERATOR_AUTH``.
+_DASHBOARD_AUTH_PREFIX = "dashboard_auth:"
+LOCAL_OPERATOR_AUTH = "desktop-launch-secret"
 
 #: Choices that do not approve anything. Every other choice ("once",
 #: "session", "always", "approve", "allow-once", ...) is an approval.
@@ -112,25 +123,42 @@ def require_authenticated_approver(config: Optional[Dict[str, Any]] = None) -> b
         return False
 
 
-def authenticated_principal() -> Optional[str]:
-    """Return the authenticated human principal bound to this context, if any.
+def _is_approver_auth(method: Any) -> bool:
+    method = str(method or "").strip()
+    return method == LOCAL_OPERATOR_AUTH or (
+        method.startswith(_DASHBOARD_AUTH_PREFIX) and len(method) > len(_DASHBOARD_AUTH_PREFIX)
+    )
 
-    The principal comes from the LG-AU-10 operator-subject contextvar, which
-    only the dashboard auth layer stamps (from a consumed dashboard_auth WS
-    ticket or a principal-bound child credential). Connection-only identities
-    such as ``server-internal`` do not count.
+
+def bound_approver() -> Optional[Tuple[str, str]]:
+    """Return ``(principal, method)`` of the authenticated approver bound here.
+
+    The subject comes from the LG-AU-10 operator-subject contextvar, which
+    only the gateway WS layer stamps: for a dashboard_auth user (from a
+    consumed WS ticket or a principal-bound child credential) or for the
+    local operator's desktop app (``local-operator:<os-user>@<host>``, from
+    the desktop shell's per-launch gateway secret). A subject without one of
+    those auth methods, or a connection-only identity such as
+    ``server-internal``, does not count.
     """
     try:
         from agent.governance_audit_hooks import _current_subject
-        principal = (_current_subject() or {}).get("principal")
+        subject = _current_subject() or {}
     except Exception:
         return None
-    if not principal:
-        return None
-    principal = str(principal).strip()
+    principal = str(subject.get("principal") or "").strip()
     if not principal or principal in _NON_HUMAN_PRINCIPALS:
         return None
-    return principal
+    method = str(subject.get("auth") or "").strip()
+    if not _is_approver_auth(method):
+        return None
+    return principal, method
+
+
+def authenticated_principal() -> Optional[str]:
+    """Return the authenticated approver principal bound to this context, if any."""
+    bound = bound_approver()
+    return bound[0] if bound else None
 
 
 def is_approval_choice(choice: Any) -> bool:
@@ -142,12 +170,15 @@ class ApprovalAuthorization(NamedTuple):
     allowed: bool
     principal: Optional[str]
     reason: str
+    #: How *principal* authenticated (``dashboard_auth:<provider>`` or
+    #: ``desktop-launch-secret``), when one is bound.
+    method: Optional[str] = None
 
 
 UNAUTHENTICATED_APPROVER_REASON = (
     "approval refused: security.require_authenticated_approver is set and no "
-    "authenticated dashboard_auth principal is bound to this approval "
-    "(LG-GV-05). Approve from an authenticated dashboard session, or deny."
+    "authenticated approver is bound to this approval (LG-GV-05). Approve "
+    "from the desktop app or an authenticated dashboard session, or deny."
 )
 
 
@@ -168,11 +199,12 @@ def authorize_approval(
     recorded to the ledger (unless *record* is False — read-only probes) and
     ``allowed`` is False. Never raises.
     """
-    principal = authenticated_principal()
+    bound = bound_approver()
+    principal, method = bound if bound else (None, None)
     if not is_approval_choice(choice):
-        return ApprovalAuthorization(True, principal, "")
+        return ApprovalAuthorization(True, principal, "", method)
     if principal or not require_authenticated_approver(config):
-        return ApprovalAuthorization(True, principal, "")
+        return ApprovalAuthorization(True, principal, "", method)
     if not record:
         return ApprovalAuthorization(False, None, UNAUTHENTICATED_APPROVER_REASON)
     logger.warning(
@@ -197,30 +229,38 @@ def record_decision(
     origin: str = "",                 # non_interactive_fail_closed | interactive_prompt | gateway | jit_grant | operator_override
     justification: str = "",
     approver_authenticated: Optional[bool] = None,
+    approver_method: Optional[str] = None,
 ) -> None:
     """Emit one ``approval.decision`` record (LG-HO-10). Never raises.
 
-    The approver defaults to the authenticated dashboard_auth principal bound
-    to this context (LG-GV-05); ``approver.authenticated`` says whether the
-    recorded identity is that bound principal rather than a caller-supplied
-    label. A caller that captured the principal in another context (the
-    gateway resolver thread) passes ``approver_authenticated=True``.
+    The approver defaults to the authenticated approver bound to this
+    context (LG-GV-05); ``approver.authenticated`` says whether the recorded
+    identity is that bound principal rather than a caller-supplied label, and
+    ``approver.method`` how it authenticated. A caller that captured the
+    principal in another context (the gateway resolver thread) passes
+    ``approver_authenticated=True`` and ``approver_method``.
     """
     try:
         from agent.governance_audit_hooks import _current_subject, _enabled_ledger
         ledger = _enabled_ledger()
         if ledger is None:
             return
-        bound = authenticated_principal()
-        approver_id = approver or bound
+        bound = bound_approver()
+        bound_id, bound_method = bound if bound else (None, None)
+        approver_id = approver or bound_id
         approver_rec: Dict[str, Any] = {}
         if approver_id:
+            is_bound = bool(bound_id) and str(approver_id) == bound_id
             if approver_authenticated is None:
-                approver_authenticated = bool(bound) and str(approver_id) == bound
+                approver_authenticated = is_bound
+            if approver_method is None and is_bound:
+                approver_method = bound_method
             approver_rec = {
                 "id": approver_id,
                 "authenticated": bool(approver_authenticated),
             }
+            if approver_authenticated and approver_method:
+                approver_rec["method"] = approver_method
         ledger.emit(
             "approval.decision",
             action=f"approval.{gate}",

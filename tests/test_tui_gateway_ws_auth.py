@@ -5,7 +5,9 @@ non-scrapeable credential must present the per-launch gateway secret
 (``?gw_secret=``); otherwise the upgrade is refused before any frame is
 dispatched. Low-side behaviour is unchanged. An authenticated dashboard_auth
 principal passed by the mounting layer is bound as the operator subject for
-that connection's dispatches only.
+that connection's dispatches only. A connection that presents the gateway
+secret (the desktop app) is bound as the local operator; the PTY child
+secret passes the handshake but binds no one.
 """
 
 from __future__ import annotations
@@ -53,7 +55,7 @@ class FakeWS:
 def _isolate(monkeypatch):
     monkeypatch.setattr(mcp_startup, "start_background_mcp_discovery", lambda **kw: None)
     monkeypatch.setattr(server, "_WS_ORPHAN_REAP_GRACE_S", 0)
-    gw_transport._reset_gateway_secret_for_tests("launch-secret")
+    gw_transport._reset_gateway_secret_for_tests("launch-secret", child="pty-child")
     server._sessions.clear()
     yield
     server._sessions.clear()
@@ -135,6 +137,67 @@ def test_principal_bound_for_this_connection_only(low_side, monkeypatch):
     assert gah._current_subject() == {"principal": None}
 
 
+def _subjects_seen(monkeypatch):
+    import agent.governance_audit_hooks as gah
+
+    seen = []
+
+    def fake_dispatch(req, transport=None):
+        seen.append(gah._current_subject())
+        return {"jsonrpc": "2.0", "id": req.get("id"), "result": {}}
+
+    monkeypatch.setattr(server, "dispatch", fake_dispatch)
+    return seen
+
+
+_FRAME = '{"jsonrpc":"2.0","id":1,"method":"approval.respond","params":{}}'
+
+
+@pytest.mark.parametrize("posture", ["strict", "low_side"])
+def test_gateway_secret_binds_local_operator(posture, request, monkeypatch):
+    import agent.governance_audit_hooks as gah
+
+    request.getfixturevalue(posture)
+    seen = _subjects_seen(monkeypatch)
+    asyncio.run(ws_mod.handle_ws(FakeWS(query={"gw_secret": "launch-secret"}, frames=[_FRAME])))
+    assert seen == [{
+        "principal": gw_transport.local_operator_principal(),
+        "auth": "desktop-launch-secret",
+    }]
+    assert seen[0]["principal"].startswith("local-operator:")
+    assert gah._current_subject() == {"principal": None}
+
+
+def test_child_secret_passes_strict_handshake_but_binds_no_one(strict, monkeypatch):
+    seen = _subjects_seen(monkeypatch)
+    fake = FakeWS(query={"gw_child": "pty-child"}, frames=[_FRAME])
+    asyncio.run(ws_mod.handle_ws(fake))
+    assert fake.accepted is True
+    assert seen == [{"principal": None}]
+
+
+def test_wrong_secrets_bind_no_one_on_low_side(low_side, monkeypatch):
+    seen = _subjects_seen(monkeypatch)
+    asyncio.run(ws_mod.handle_ws(FakeWS(query={"gw_secret": "guess"}, frames=[_FRAME])))
+    asyncio.run(ws_mod.handle_ws(FakeWS(query={"gw_secret": "pty-child"}, frames=[_FRAME])))
+    assert seen == [{"principal": None}, {"principal": None}]
+
+
+def test_strict_refuses_child_secret_presented_as_gateway_secret(strict):
+    fake = FakeWS(query={"gw_secret": "pty-child"})
+    asyncio.run(ws_mod.handle_ws(fake))
+    assert fake.accepted is False and fake.closed_with == [4401]
+
+
+def test_dashboard_principal_wins_over_gateway_secret(low_side, monkeypatch):
+    seen = _subjects_seen(monkeypatch)
+    asyncio.run(ws_mod.handle_ws(
+        FakeWS(query={"gw_secret": "launch-secret"}, frames=[_FRAME]), authenticated=True,
+        principal={"user_id": "alice@agency.mil", "provider": "oauth"},
+    ))
+    assert seen == [{"principal": "alice@agency.mil", "auth": "dashboard_auth:oauth"}]
+
+
 # ---------------------------------------------------------------------------
 # transport-level secret primitives
 # ---------------------------------------------------------------------------
@@ -144,6 +207,28 @@ def test_verify_gateway_secret_is_exact():
     assert gw_transport.verify_gateway_secret("launch-secre") is False
     assert gw_transport.verify_gateway_secret("") is False
     assert gw_transport.verify_gateway_secret(None) is False
+
+
+def test_child_secret_is_distinct_from_gateway_secret():
+    gw_transport._reset_gateway_secret_for_tests("launch-secret", child=None)
+    child = gw_transport.gateway_child_secret()
+    assert len(child) >= 40 and child != gw_transport.gateway_secret()
+    assert gw_transport.verify_gateway_child_secret(child) is True
+    assert gw_transport.verify_gateway_child_secret("launch-secret") is False
+    assert gw_transport.verify_gateway_secret(child) is False
+    assert gw_transport.verify_gateway_child_secret(None) is False
+
+
+def test_local_operator_principal_names_os_user_and_host(monkeypatch):
+    import getpass
+    import socket
+
+    monkeypatch.setattr(getpass, "getuser", lambda: "rome")
+    monkeypatch.setattr(socket, "gethostname", lambda: "romes-mac")
+    assert gw_transport.local_operator_principal() == "local-operator:rome@romes-mac"
+    assert gw_transport.local_operator_subject() == {
+        "principal": "local-operator:rome@romes-mac", "auth": "desktop-launch-secret",
+    }
 
 
 def test_gateway_secret_minted_per_launch_when_not_pinned():

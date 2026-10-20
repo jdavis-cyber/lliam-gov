@@ -44,7 +44,11 @@ const { adoptServedDashboardToken } = require('./dashboard-token.cjs')
 // any local process can read that token from the served index.html. The secret
 // is minted here per backend spawn, pinned in the child's env (the backend
 // removes it from its own env on adoption), and handed to our renderer only
-// inside the ws URL — it is never served over HTTP. Low-side backends ignore it.
+// inside the ws URL — it is never served over HTTP. Because only this process
+// holds it, the backend binds the connection that presents it as the local
+// operator (local-operator:<os-user>@<host>), so HITL approvals made in the
+// renderer are accepted under require_authenticated_approver and recorded with
+// that principal. Low-side backends need no handshake but still bind it.
 function mintGatewaySecret() {
   return crypto.randomBytes(32).toString('base64url')
 }

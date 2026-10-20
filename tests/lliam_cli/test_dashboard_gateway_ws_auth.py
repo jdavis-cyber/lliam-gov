@@ -1,7 +1,9 @@
 """JER-73 — dashboard wiring for gateway caller authentication.
 
-* The PTY child's ``/api/ws`` attach URL carries the per-launch gateway
-  secret under strict posture (loopback mode), and nothing new on low-side.
+* The PTY child's ``/api/ws`` attach URL carries the handshake-only PTY
+  child secret under strict posture (loopback mode) — never the desktop's
+  gateway secret, which would make the PTY's opener the local operator — and
+  nothing new on low-side.
 * In gated mode a PTY opened by an authenticated user attaches with a
   credential bound to that user, so ``/api/ws`` binds their principal.
 * ``gateway_ws`` tells ``handle_ws`` whether the credential was
@@ -42,7 +44,7 @@ def _fake_ws(query):
 @pytest.fixture
 def app_state():
     ws_tickets._reset_for_tests()
-    gw_transport._reset_gateway_secret_for_tests("launch-secret")
+    gw_transport._reset_gateway_secret_for_tests("launch-secret", child="pty-child")
     keys = ("bound_host", "bound_port", "auth_required")
     prev = {k: getattr(web_server.app.state, k, None) for k in keys}
     yield web_server.app.state
@@ -56,11 +58,12 @@ def _query(url):
     return dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
 
 
-def test_loopback_attach_url_carries_secret_under_strict(app_state, monkeypatch):
+def test_loopback_attach_url_carries_child_secret_under_strict(app_state, monkeypatch):
     app_state.bound_host, app_state.bound_port, app_state.auth_required = "127.0.0.1", 9119, False
     monkeypatch.setattr(gw_transport, "handshake_required", lambda: True)
     q = _query(web_server._build_gateway_ws_url())
-    assert q == {"token": web_server._SESSION_TOKEN, "gw_secret": "launch-secret"}
+    assert q == {"token": web_server._SESSION_TOKEN, "gw_child": "pty-child"}
+    assert "launch-secret" not in web_server._build_gateway_ws_url()
 
 
 def test_loopback_attach_url_unchanged_on_low_side(app_state, monkeypatch):
@@ -151,4 +154,7 @@ def test_pty_env_never_inherits_raw_gateway_secret(app_state, monkeypatch):
     _argv, _cwd, env = web_server._resolve_chat_argv()
     assert "LLIAM_TUI_GATEWAY_SECRET" not in env
     assert "HERMES_TUI_GATEWAY_SECRET" not in env
-    assert _query(env["LLIAM_TUI_GATEWAY_URL"])["gw_secret"] == "launch-secret"
+    q = _query(env["LLIAM_TUI_GATEWAY_URL"])
+    assert q["gw_child"] == "pty-child"
+    assert "gw_secret" not in q
+    assert "launch-secret" not in env["LLIAM_TUI_GATEWAY_URL"]

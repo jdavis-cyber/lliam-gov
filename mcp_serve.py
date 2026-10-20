@@ -22,9 +22,10 @@ running as the operator can launch its own ``lliam-gov mcp serve``. A
 per-launch secret would be minted by that same launcher and proves nothing,
 so the controls sit where the authority is instead: under strict posture
 ``permissions_respond`` is not on the tool surface at all, and any approval
-resolution must carry an authenticated dashboard_auth principal
-(``tools.hitl_oversight.authorize_approval`` — LG-GV-05), which an MCP stdio
-client never has.
+resolution must carry an authenticated approver
+(``tools.hitl_oversight.authorize_approval`` — LG-GV-05): a dashboard_auth
+user or the desktop app's local operator, neither of which an MCP stdio
+client ever is.
 
 MCP client config (e.g. claude_desktop_config.json):
     {
@@ -352,7 +353,7 @@ class EventBridge:
         """Resolve a pending approval (best-effort without gateway IPC).
 
         LG-GV-05: an approving decision is refused unless an authenticated
-        dashboard_auth principal is bound (when the config requires one).
+        approver is bound (when the config requires one).
         """
         with self._lock:
             approval = self._pending_approvals.get(approval_id)

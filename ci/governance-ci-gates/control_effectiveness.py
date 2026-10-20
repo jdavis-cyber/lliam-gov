@@ -7,8 +7,9 @@ control-effectiveness check the plan requires): godmode + obliteratus
 disabled, provider + MCP allowlists enforced, at-rest encryption on, audit
 ledger on with verify-on-startup, continuous-monitoring enabled, and the
 approval channel authenticated (require_authenticated_approver set AND
-enforced by the runtime; the MCP permissions_respond tool withheld under
-strict posture — JER-73). FAILS
+enforced by the runtime: an approval with no authenticated subject is
+refused, while the desktop app's local-operator subject can still approve;
+the MCP permissions_respond tool withheld under strict posture — JER-73). FAILS
 CLOSED (exit 1) on any broken invariant, and emits a `security.posture` event
 so the break is on the ISCM stream. Distinct from go_no_go_gate (a release
 precondition check): this runs recurring, post-deployment, as a detective
@@ -57,32 +58,60 @@ def _approval_channel_probe(cfg: dict, repo_root: Path) -> dict:
 
     * ``authenticated_approver_enforced`` — the runtime reads
       ``security.require_authenticated_approver`` from this overlay and
-      refuses an approval that carries no authenticated principal, while a
+      refuses an approval that carries no authenticated subject, while a
       denial still passes.
+    * ``local_operator_approval_accepted`` — the subject the gateway binds to
+      the desktop app's connection (the one that presented the per-launch
+      gateway secret) is accepted as an authenticated approver, so the
+      operator's own desktop app can still approve.
     * ``mcp_permissions_respond_withheld`` — the inbound MCP server's strict
       tool surface does not include ``permissions_respond``.
 
-    Read-only: the probe runs with no subject bound and ``record=False``, so
-    nothing reaches the ledger. Any import/probe error reports False.
+    Read-only: each probe runs in a fresh context (nothing bound unless the
+    probe binds it) with ``record=False``, so nothing reaches the ledger. Any
+    import/probe error reports False.
     """
+    import contextvars
+
     root = str(repo_root)
     if root not in sys.path:
         sys.path.insert(0, root)
     out = {"authenticated_approver_enforced": False,
+           "local_operator_approval_accepted": False,
            "mcp_permissions_respond_withheld": False}
     try:
         from tools import hitl_oversight as ho
-        refused = ho.authorize_approval(
-            "once", gate="ci.probe", origin="control_effectiveness",
-            config=cfg, record=False)
-        denied = ho.authorize_approval(
-            "deny", gate="ci.probe", origin="control_effectiveness",
-            config=cfg, record=False)
+
+        def _probe(choice):
+            return ho.authorize_approval(
+                choice, gate="ci.probe", origin="control_effectiveness",
+                config=cfg, record=False)
+
+        refused = contextvars.Context().run(_probe, "once")
+        denied = contextvars.Context().run(_probe, "deny")
         out["authenticated_approver_enforced"] = bool(
             ho.require_authenticated_approver(cfg)
             and not refused.allowed and denied.allowed)
     except Exception as e:  # pragma: no cover - surfaced as INEFFECTIVE
         _emit(f"approval-channel probe error: {e}")
+    try:
+        from agent import governance_audit_hooks as gah
+        from tools import hitl_oversight as ho
+        from tui_gateway import transport as gw
+
+        def _desktop_probe():
+            gah._operator_subject.set(gw.local_operator_subject())
+            return ho.authorize_approval(
+                "once", gate="ci.probe", origin="control_effectiveness",
+                config=cfg, record=False)
+
+        accepted = contextvars.Context().run(_desktop_probe)
+        out["local_operator_approval_accepted"] = bool(
+            accepted.allowed
+            and str(accepted.principal or "").startswith("local-operator:")
+            and accepted.method == gw.LOCAL_OPERATOR_AUTH)
+    except Exception as e:  # pragma: no cover - surfaced as INEFFECTIVE
+        _emit(f"desktop-approver probe error: {e}")
     try:
         import mcp_serve
         out["mcp_permissions_respond_withheld"] = (
@@ -133,6 +162,8 @@ def check_effectiveness(*, repo_root: Path = _REPO_ROOT,
             "security.require_authenticated_approver is not true",
         "authenticated_approver_enforced":
             "an unauthenticated HITL approval is not refused at runtime",
+        "local_operator_approval_accepted":
+            "the desktop app's local operator cannot approve HITL requests",
         "mcp_permissions_respond_withheld":
             "MCP permissions_respond is exposed under strict posture",
     }

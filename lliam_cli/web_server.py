@@ -11968,9 +11968,13 @@ def _build_gateway_ws_url(child_credential: Optional[str] = None) -> Optional[st
     """ws:// URL the PTY child should attach to for JSON-RPC gateway traffic.
 
     Loopback / ``--insecure``: ``?token=<_SESSION_TOKEN>``. Under strict
-    posture the URL also carries the per-launch gateway secret
-    (``gw_secret``), because the loopback token alone is readable by any
-    local process from index.html (JER-73; see ``tui_gateway.transport``).
+    posture the URL also carries the PTY child secret (``gw_child``),
+    because the loopback token alone is readable by any local process from
+    index.html (JER-73; see ``tui_gateway.transport``). The child secret
+    passes the gateway handshake but, unlike the desktop's ``gw_secret``, does
+    not bind the local operator: ``/api/pty`` accepts the loopback token, so
+    the PTY's opener is not known to be the operator and its embedded TUI can
+    deny but not approve when an authenticated approver is required.
 
     Gated mode with ``child_credential``: the principal-bound child credential
     minted for the authenticated user who opened the PTY (``?internal=``).
@@ -12004,7 +12008,9 @@ def _build_gateway_ws_url(child_credential: Optional[str] = None) -> Optional[st
         from tui_gateway import transport as _gw_transport
 
         if _gw_transport.handshake_required():
-            params[_gw_transport.GATEWAY_SECRET_PARAM] = _gw_transport.gateway_secret()
+            params[_gw_transport.GATEWAY_CHILD_SECRET_PARAM] = (
+                _gw_transport.gateway_child_secret()
+            )
         qs = urllib.parse.urlencode(params)
 
     return f"ws://{netloc}/api/ws?{qs}"
