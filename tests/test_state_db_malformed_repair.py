@@ -333,26 +333,3 @@ def test_repair_noop_db_uses_already_healthy_shortcut(tmp_path):
     assert report["strategy"] == "already_healthy"
 
 
-def test_select_cached_agent_history_prefers_longer_live_transcript():
-    """Gateway guard keeps the live transcript when persisted history lags."""
-    from gateway.run import _select_cached_agent_history
-
-    persisted = [{"role": "user", "content": "only one"}]
-    live = [
-        {"role": "user", "content": "one"},
-        {"role": "assistant", "content": "two"},
-        {"role": "user", "content": "three"},
-    ]
-    # Persisted lags (FTS write failed) → keep the longer live copy.
-    out = _select_cached_agent_history(persisted, live)
-    assert out == live
-    assert out is not live  # returns a copy, not the live list
-
-    # Persisted is current/longer → leave it untouched (identity preserved).
-    longer_persisted = live + [{"role": "assistant", "content": "four"}]
-    out2 = _select_cached_agent_history(longer_persisted, live)
-    assert out2 is longer_persisted
-
-    # No live transcript / not a list → no-op.
-    assert _select_cached_agent_history(persisted, None) is persisted
-    assert _select_cached_agent_history(persisted, "nope") is persisted

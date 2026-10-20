@@ -80,14 +80,6 @@ class TestSourceLinesAreClamped:
         with open(os.path.join(base, rel_path)) as f:
             return f.read()
 
-    def test_gateway_run_clamped(self):
-        # The /usage stats handler was extracted from gateway/run.py into
-        # gateway/slash_commands.py (god-file decomposition Phase 3b).
-        src = self._read_file("gateway/slash_commands.py")
-        # Check that the stats handler has min(100, ...)
-        assert "min(100, ctx.last_prompt_tokens" in src, (
-            "gateway/slash_commands.py stats pct is not clamped with min(100, ...)"
-        )
 
     def test_cli_clamped(self):
         src = self._read_file("cli.py")

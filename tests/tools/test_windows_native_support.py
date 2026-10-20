@@ -491,11 +491,11 @@ class TestWebServerPtyBridgeGuard:
 
 
 class TestEntryPointsConfigureStdio:
-    """cli.py, lliam_cli/main.py, gateway/run.py must call configure_windows_stdio."""
+    """cli.py and lliam_cli/main.py must call configure_windows_stdio."""
 
     @pytest.mark.parametrize(
         "relpath",
-        ["cli.py", "lliam_cli/main.py", "gateway/run.py"],
+        ["cli.py", "lliam_cli/main.py"],
     )
     def test_entry_point_calls_configure_stdio(self, relpath):
         root = Path(__file__).resolve().parents[2]
@@ -766,7 +766,6 @@ class TestNpmBareSpawnsResolved:
         [
             "lliam_cli/tools_config.py",
             "lliam_cli/doctor.py",
-            "plugins/platforms/whatsapp/adapter.py",
             "tools/browser_tool.py",
         ],
     )

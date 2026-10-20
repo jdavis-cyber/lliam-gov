@@ -338,7 +338,3 @@ def test_partial_obligation_requires_poam_ref(tmp_path):
 # Live wiring — the gate is invoked on the production startup path
 # ---------------------------------------------------------------------------
 
-def test_gateway_startup_wires_governance_artifacts_gate():
-    src = (_REPO / "gateway" / "run.py").read_text()
-    assert "enforce_governance_artifacts_at_startup" in src
-    assert "GovernanceArtifactError" in src

@@ -296,29 +296,35 @@ def test_login_unknown_provider_returns_404(gated_app):
 
 
 def test_login_non_interactive_provider_returns_404_not_500(gated_app):
-    """Regression: a token-only provider (drain) has no login flow, so
-    /auth/login?provider=drain-secret must 404 (not 500 on start_login) and it
+    """Regression: a token-only provider has no login flow, so
+    /auth/login?provider=<it> must 404 (not 500 on start_login) and it
     must not appear in the /api/auth/providers bootstrap.
     """
-    import secrets
+    class _TokenOnlyProvider(StubAuthProvider):
+        name = "token-only"
+        display_name = "Token-only (test)"
+        supports_token = True
+        supports_session = False
 
-    import plugins.dashboard_auth.drain as drain_plugin
+        def start_login(self, *, redirect_uri):
+            raise NotImplementedError("token-only provider has no login")
 
-    register_provider(
-        drain_plugin.DrainSecretProvider(secret=secrets.token_urlsafe(48))
-    )
+        def verify_token(self, token):  # pragma: no cover - not exercised
+            return None
+
+    register_provider(_TokenOnlyProvider())
 
     r = gated_app.get(
-        "/auth/login?provider=drain-secret&next=%2F", follow_redirects=False
+        "/auth/login?provider=token-only&next=%2F", follow_redirects=False
     )
     assert r.status_code == 404, (
-        f"drain-secret login should 404, not 500: {r.status_code} {r.text}"
+        f"token-only login should 404, not 500: {r.status_code} {r.text}"
     )
 
     bootstrap = gated_app.get("/api/auth/providers")
     assert bootstrap.status_code == 200
     names = {p["name"] for p in bootstrap.json()["providers"]}
-    assert "drain-secret" not in names
+    assert "token-only" not in names
     assert "stub" in names
 
 

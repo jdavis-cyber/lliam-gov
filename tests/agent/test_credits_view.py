@@ -149,47 +149,6 @@ def _make_gateway_stub():
     return _Stub()
 
 
-def test_gateway_credits_renders_block_and_url(monkeypatch):
-    view = CreditsView(
-        logged_in=True,
-        balance_lines=("📈 Nous credits", "Total usable: $52.50"),
-        identity_line="Topping up as alice@example.test / org Acme",
-        topup_url="https://portal.example.test/orgs/acme/billing?topup=open",
-        depleted=False,
-    )
-    monkeypatch.setattr(account_usage, "build_credits_view", lambda *a, **kw: view)
-
-    stub = _make_gateway_stub()
-    out = asyncio.run(stub._handle_credits_command(_FakeEvent()))
-
-    assert "💳" in out
-    assert "Total usable: $52.50" in out
-    assert "Topping up as alice@example.test / org Acme" in out
-    assert "https://portal.example.test/orgs/acme/billing?topup=open" in out
-    assert "credits will appear in /credits shortly" in out
-    # The helper's own 📈 header line is dropped (we render our own 💳 header).
-    assert "📈 Nous credits" not in out
-
-
-def test_gateway_credits_not_logged_in(monkeypatch):
-    monkeypatch.setattr(
-        account_usage, "build_credits_view", lambda *a, **kw: CreditsView(logged_in=False)
-    )
-    stub = _make_gateway_stub()
-    out = asyncio.run(stub._handle_credits_command(_FakeEvent()))
-    assert "Not logged into Nous Portal" in out
-
-
-def test_gateway_credits_fetch_exception_is_not_logged_in(monkeypatch):
-    def _boom(*a, **kw):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(account_usage, "build_credits_view", _boom)
-    stub = _make_gateway_stub()
-    out = asyncio.run(stub._handle_credits_command(_FakeEvent()))
-    assert "Not logged into Nous Portal" in out
-
-
 # ── command registry ────────────────────────────────────────────────────────
 
 

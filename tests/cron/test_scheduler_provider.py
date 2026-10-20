@@ -39,38 +39,6 @@ def _wait_until(predicate, timeout=10.0, interval=0.005):
     return predicate()
 
 
-def test_ticker_calls_tick_at_least_once_then_stops():
-    """The gateway in-process ticker loop calls cron.scheduler.tick repeatedly
-    and exits promptly once the stop_event is set."""
-    from gateway.run import _start_cron_ticker
-
-    calls = []
-    stop = threading.Event()
-
-    def fake_tick(*args, **kwargs):
-        calls.append(kwargs)
-        return 0
-
-    with patch("cron.scheduler.tick", side_effect=fake_tick):
-        # interval=0 keeps the loop tight; stop after the first observed tick.
-        t = threading.Thread(
-            target=_start_cron_ticker,
-            args=(stop,),
-            kwargs={"interval": 0},
-            daemon=True,
-        )
-        t.start()
-        assert _wait_until(lambda: len(calls) >= 1), "ticker never called tick()"
-        stop.set()
-        t.join(timeout=5)
-
-    assert not t.is_alive(), "ticker did not exit after stop_event was set"
-    assert len(calls) >= 1, "ticker never called tick()"
-    # Contract: the ticker invokes tick with sync=False (fire-and-forget from
-    # the background thread, never the synchronous CLI path).
-    assert calls[0].get("sync") is False
-
-
 def test_desktop_ticker_calls_tick_then_stops():
     """The desktop dashboard ticker loop calls cron.scheduler.tick and exits
     once the stop_event is set. Desktop has no live adapters, so it ticks with
