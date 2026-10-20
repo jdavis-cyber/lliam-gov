@@ -1746,18 +1746,19 @@ def _resolve_runtime_provider_unchecked(
         # Region priority: config.yaml bedrock.region → env var → us-east-1
         region = (_bedrock_cfg.get("region") or "").strip() or resolve_bedrock_region()
         auth_source = resolve_aws_auth_env_var() or "aws-sdk-default-chain"
-        # Build guardrail config if configured
-        _gr = _bedrock_cfg.get("guardrail", {})
-        guardrail_config = None
-        if _gr.get("guardrail_identifier") and _gr.get("guardrail_version"):
-            guardrail_config = {
-                "guardrailIdentifier": _gr["guardrail_identifier"],
-                "guardrailVersion": _gr["guardrail_version"],
-            }
-            if _gr.get("stream_processing_mode"):
-                guardrail_config["streamProcessingMode"] = _gr["stream_processing_mode"]
-            if _gr.get("trace"):
-                guardrail_config["trace"] = _gr["trace"]
+        # Build guardrail config if configured. Under strict posture a
+        # template / partial / DRAFT binding is refused, never sent to Bedrock.
+        from lliam_cli.provisioning import (
+            UnprovisionedValueError,
+            bedrock_guardrail_config,
+            strict_posture,
+        )
+        try:
+            guardrail_config = bedrock_guardrail_config(
+                _bedrock_cfg.get("guardrail", {}), strict=strict_posture(load_config())
+            )
+        except UnprovisionedValueError as exc:
+            raise AuthError(str(exc), provider="bedrock", code="guardrail_not_provisioned") from exc
         # Dual-path routing: Claude models use AnthropicBedrock SDK for full
         # feature parity (prompt caching, thinking budgets, adaptive thinking).
         # Non-Claude models use the Converse API for multi-model support.

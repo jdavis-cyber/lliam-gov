@@ -12,11 +12,19 @@ Produces two supply-chain evidence artifacts per build/release:
 
 Deterministic + dependency-light: SBOM reads installed dist metadata via
 importlib.metadata; the AI-BOM reads the repo's policy YAMLs. Renames nothing.
+
+Hashes are never copied forward as if real (JER-78): each skill's
+``content_hash`` is the sha256 computed from its directory in this checkout,
+and the manifest's ``signed_hash`` / ``signature`` are carried only when
+provisioned. Anything absent or still a template is emitted as an explicit
+``UNPROVISIONED: <reason>`` marker, never a hash-shaped placeholder.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -77,6 +85,91 @@ def _load_yaml(path: Path, *, required: bool = True) -> Dict[str, Any]:
         return {}
 
 
+# Explicit marker for a value this build cannot attest (absent or template).
+UNPROVISIONED = "UNPROVISIONED"
+
+# Template shapes — mirrors lliam_cli/provisioning.py (this script runs in CI
+# with only PyYAML installed, so it does not import the application package).
+_TEMPLATE_TOKENS = (
+    "REPLACE", "PLACEHOLDER", "RECOMPUTE", "UNPROVISIONED", "CHANGEME", "EXAMPLE",
+)
+_ANGLE_SLOT = re.compile(r"<[^<>]*>")
+_SKILL_ROOTS = ("skills", "optional-skills")
+
+
+def _is_template(value: Any) -> bool:
+    if value is None:
+        return True
+    text = str(value).strip()
+    if not text or text.lower() in {"none", "null"} or "${" in text:
+        return True
+    if _ANGLE_SLOT.search(text):
+        return True
+    upper = text.upper()
+    return any(token in upper for token in _TEMPLATE_TOKENS)
+
+
+def _unprovisioned(reason: str) -> str:
+    return f"{UNPROVISIONED}: {reason}"
+
+
+def is_unprovisioned_marker(value: Any) -> bool:
+    return str(value or "").startswith(UNPROVISIONED)
+
+
+def skill_content_sha256(skill_dir: Path) -> str:
+    """Full sha256 over a skill directory: relative path, NUL, bytes per file.
+
+    Same shape as tools/skills_guard.content_hash (which truncates its digest
+    for display); bytecode caches are skipped so the digest is checkout-stable.
+    """
+    h = hashlib.sha256()
+    for f in sorted(Path(skill_dir).rglob("*")):
+        if not f.is_file() or "__pycache__" in f.parts or f.suffix == ".pyc":
+            continue
+        h.update(f.relative_to(skill_dir).as_posix().encode("utf-8"))
+        h.update(b"\x00")
+        h.update(f.read_bytes())
+    return f"sha256:{h.hexdigest()}"
+
+
+def _skill_content_hash(repo: Path, name: Any) -> str:
+    skill = str(name or "").strip()
+    if not skill:
+        return _unprovisioned("skill entry has no name")
+    dirs = sorted(
+        md.parent
+        for root in _SKILL_ROOTS
+        if (repo / root).is_dir()
+        for md in (repo / root).rglob("SKILL.md")
+        if md.parent.name == skill
+    )
+    if not dirs:
+        return _unprovisioned(f"no skill directory named '{skill}' in the repository")
+    if len(dirs) > 1:
+        rels = ", ".join(d.relative_to(repo).as_posix() for d in dirs)
+        return _unprovisioned(f"skill name '{skill}' is ambiguous ({rels})")
+    return skill_content_sha256(dirs[0])
+
+
+def _signed_skill_hash(manifest: Dict[str, Any], name: Any) -> str:
+    hashes = manifest.get("skill_hashes")
+    value = hashes.get(name) if isinstance(hashes, dict) else None
+    if value is None:
+        return _unprovisioned(f"model_manifest.yaml has no skill_hashes.{name}")
+    if _is_template(value):
+        return _unprovisioned(f"model_manifest.yaml skill_hashes.{name} is a template value")
+    return str(value).strip()
+
+
+def _manifest_signature(manifest: Dict[str, Any]) -> str:
+    signature = manifest.get("signature")
+    if _is_template(signature):
+        return _unprovisioned(
+            "model_manifest.yaml signature is a template value; re-sign with the provisioned key")
+    return str(signature).strip()
+
+
 def build_ai_bom(repo: Path) -> Dict[str, Any]:
     """Machine-readable AI inventory reconciled from the P3 policy artifacts."""
     repo = Path(repo)
@@ -106,7 +199,8 @@ def build_ai_bom(repo: Path) -> Dict[str, Any]:
         {"name": s.get("name"), "source": s.get("source"),
          "ast_audit": s.get("ast_audit"), "provenance": s.get("provenance"),
          "attestation": s.get("attestation"),
-         "signed_hash": (manifest.get("skill_hashes") or {}).get(s.get("name"))}
+         "content_hash": _skill_content_hash(repo, s.get("name")),
+         "signed_hash": _signed_skill_hash(manifest, s.get("name"))}
         for s in (((skills_doc.get("security") or {}).get("skill_allowlist")) or [])
         if isinstance(s, dict)
     ]
@@ -121,7 +215,7 @@ def build_ai_bom(repo: Path) -> Dict[str, Any]:
         "mcp_servers": mcp_servers,
         "skills": skills,
         "attestations": {
-            "manifest_signature": manifest.get("signature"),
+            "manifest_signature": _manifest_signature(manifest),
             "model_primary": (manifest.get("models") or {}).get("primary"),
             "model_fallback": (manifest.get("models") or {}).get("fallback"),
         },

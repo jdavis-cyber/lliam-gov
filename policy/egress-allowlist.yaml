@@ -53,7 +53,8 @@ metadata:
     cadence_days: 90
     last_validated: "2026-07-15"
     next_due: "2026-10-13"
-    register: "docs/governance/egress-allowlist-register.md"
+    # No separate egress register file exists: approved_destinations below
+    # (rationale / added / expires per entry) is the record.
 
 
 # -----------------------------------------------------------------------------
