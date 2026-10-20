@@ -79,3 +79,20 @@ def test_control_effectiveness_flags_fail_open_module(monkeypatch):
     from tools import injection_defense as inj
     monkeypatch.setattr(inj, "_is_strict", lambda: False)
     assert ce.posture_fault_fails_closed() is False
+
+
+def test_enforcement_flags_fail_closed_on_config_fault(unreadable_config):
+    from agent import attestation
+    from tools import input_integrity, mcp_allowlist
+    assert mcp_allowlist.mcp_enforcement_enabled() is True
+    assert attestation.require_model_card() is True
+    assert input_integrity.schema_validation_cfg()[0] == "reject"
+    assert input_integrity.memory_defense_cfg() == (True, "block", "strict")
+    assert input_integrity.path_traversal_enabled() is True
+
+
+def test_enforcement_flags_follow_readable_config(monkeypatch):
+    monkeypatch.setattr("lliam_cli.config.load_config",
+                        lambda: {"security": {"posture": "strict", "mcp_allowlist_enforce": False}})
+    from tools import mcp_allowlist
+    assert mcp_allowlist.mcp_enforcement_enabled() is False

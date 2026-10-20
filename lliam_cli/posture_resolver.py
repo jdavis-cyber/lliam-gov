@@ -147,6 +147,24 @@ def strict_status() -> Tuple[bool, bool]:
         return False, True
 
 
+def security_config() -> Tuple[Dict[str, Any], bool]:
+    """Return ``(security_section, config_error)`` of the effective config."""
+    try:
+        from lliam_cli import config as _cfg
+        return (_cfg.load_config().get("security") or {}), False
+    except Exception:
+        return {}, True
+
+
+def security_flag(key: str, component: str) -> bool:
+    """A boolean ``security.<key>`` enforcement flag; a read fault enforces it."""
+    section, config_error = security_config()
+    if config_error:
+        logger.warning("%s: security config unreadable; enforcing %s", component, key)
+        return True
+    return bool(section.get(key))
+
+
 def enforce_strict_controls(component: str) -> bool:
     """True when strict-posture controls must run: strict, or posture unknown.
 

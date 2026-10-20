@@ -108,7 +108,11 @@ def load_input_policy() -> Dict[str, Any]:
 
 def schema_validation_cfg() -> Tuple[str, int]:
     """Return (mode, max_schema_bytes). mode ∈ {reject, coerce}."""
-    sv = _security_cfg().get("schema_validation") or {}
+    from lliam_cli import posture_resolver as _pr
+    section, config_error = _pr.security_config()
+    if config_error:
+        return "reject", _DEFAULT_MAX_SCHEMA_BYTES
+    sv = section.get("schema_validation") or {}
     mode = str(sv.get("mode") or "coerce").strip().lower()
     try:
         max_bytes = int(sv.get("max_schema_bytes") or _DEFAULT_MAX_SCHEMA_BYTES)
@@ -189,7 +193,11 @@ def validate_tool_schemas(tools: List[Dict[str, Any]]) -> Tuple[List[Dict[str, A
 
 def memory_defense_cfg() -> Tuple[bool, str, str]:
     """Return (enabled, mode, scope). mode ∈ {block, placeholder, log}."""
-    mc = _security_cfg().get("memory_poisoning_defense") or {}
+    from lliam_cli import posture_resolver as _pr
+    section, config_error = _pr.security_config()
+    if config_error:
+        return True, "block", "strict"
+    mc = section.get("memory_poisoning_defense") or {}
     enabled = bool(mc.get("enabled"))
     mode = str(mc.get("mode") or "log").strip().lower()
     scope = str(mc.get("scope") or "strict").strip().lower()
