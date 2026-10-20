@@ -77,7 +77,8 @@ security:
 
   # [ACTIVE @ P1.5 — LG-IA]  OPERATOR + ENDPOINT AUTHENTICATION
   # Consumed by the NEW fail-closed enforce_control_plane_auth_at_startup gate
-  # (lliam_cli/security_audit_startup.py), wired at gateway startup. Kept in THIS
+  # (lliam_cli/security_audit_startup.py), run on every entrypoint via
+  # lliam_cli.startup_posture.enforce_startup_posture. Kept in THIS
   # security block (a second top-level security: would drop the P0 posture).
   api_server_key_required: true  # [additive @ P1.5] LG-IA-11: a network-accessible API server with no API_SERVER_KEY REFUSES to start (RCE gate). Loopback-only binds are unaffected.
   require_operator_auth: true    # [additive @ P1.5] LG-IA-06: no shared/anonymous operator sessions on a networked control plane (config-of-record; dashboard_auth enforces token/oauth)
@@ -158,8 +159,9 @@ security:
 
   # [ACTIVE @ P3.1]  APPROVED-PROVIDER ALLOWLIST  (LG-MP-01/02/03/04/08)
   # Consumed by the NEW lliam_cli/provider_allowlist.py validator + the
-  # fail-closed startup gate enforce_provider_allowlist_at_startup (wired at
-  # gateway startup next to the control-plane gate). Restricts CUI inference
+  # fail-closed startup gate enforce_provider_allowlist_at_startup (run by
+  # lliam_cli.startup_posture.enforce_startup_posture on every entrypoint,
+  # next to the control-plane gate). Restricts CUI inference
   # routing to vetted US/FedRAMP/local endpoints on every routing path; a
   # non-allowlisted provider/host refuses to start. No-op unless strict + the
   # enforce flag (capability-preserving on low-side).

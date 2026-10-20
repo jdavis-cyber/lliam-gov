@@ -18419,11 +18419,19 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     except Exception as _audit_exc:
         logger.debug("Startup security audit failed (non-fatal): %s", _audit_exc)
 
-    # Raw home config for the LG-IA-02 identity emit below and as the
-    # last-resort fallback for the control-plane / audit-chain gates (each
+    # Fail-closed startup posture gates (LG-IA-02 identity emit, then
+    # control-plane auth, provider allowlist, model integrity, governance
+    # artifacts, audit-chain verify — in that order). Shared with every other
+    # entrypoint via lliam_cli.startup_posture.enforce_startup_posture; each
+    # gate re-loads the MERGED config so the gov overlay's strict posture is
+    # visible. A blocking gate error propagates (fail-closed — the gateway
+    # refuses to start) rather than being swallowed like the advisory posture
+    # warnings above; on the low-side posture every gate is a no-op/advisory.
+    #
+    # Raw home config for the LG-IA-02 identity emit and as the last-resort
+    # fallback for each gate when the merged config cannot be loaded (each gate
     # independently re-loads the MERGED config; _audit_cfg deliberately lacks
-    # the overlay keys). Bound here in start_gateway's own scope — the startup
-    # audit itself now loads the merged config internally via the helper above.
+    # the overlay keys). Bound here in start_gateway's own scope.
     try:
         from lliam_cli.config import read_raw_config
 
@@ -18431,128 +18439,9 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
     except Exception:
         _audit_cfg = None
 
-    # LG-AU-08 (additive): verify the governance audit chain at startup.
-    # No-op when the ledger is disabled; on a break under strict posture
-    # with verify_fail_action=block this raises AuditChainVerificationError
-    # (fail-closed — refuse to rely on a tampered ledger), which propagates
-    # rather than being swallowed like the advisory posture warnings above.
-    # LG-IA-02 (additive): record the agent NPE instance identity for this
-    # process (no-op when the ledger is disabled). Emitted before the chain
-    # verify so the identity binding is on record for the session.
-    try:
-        from lliam_cli.security_audit_startup import emit_agent_identity_at_startup
+    from lliam_cli.startup_posture import enforce_startup_posture
 
-        emit_agent_identity_at_startup(config=_audit_cfg)
-    except Exception as _ident_exc:
-        logger.debug("Agent identity emit failed (non-fatal): %s", _ident_exc)
-
-    # LG-IA-11/06/08 (additive): fail-closed control-plane auth gate. Refuses to
-    # start a network-accessible API server with no API_SERVER_KEY (RCE gate) or
-    # with TLS verification disabled, under strict posture. Pass the merged
-    # config so the overlay require-* switches + strict posture are visible.
-    from lliam_cli.security_audit_startup import (
-        enforce_control_plane_auth_at_startup,
-        ControlPlaneAuthError,
-    )
-    try:
-        try:
-            from lliam_cli.config import load_config as _load_merged_cp
-
-            _cp_cfg = _load_merged_cp()
-        except Exception:
-            _cp_cfg = _audit_cfg
-        enforce_control_plane_auth_at_startup(config=_cp_cfg)
-    except ControlPlaneAuthError:
-        raise
-    except Exception as _cp_exc:
-        logger.debug("Control-plane auth check failed (non-fatal): %s", _cp_exc)
-
-    # LG-MP-01/02 (additive @ P3.1): fail-closed provider-allowlist gate.
-    # Refuses to start when any configured routing path (primary/fallback/MoA/
-    # auxiliary/delegation) names a non-allowlisted inference provider or host,
-    # under strict posture + security.provider_allowlist_enforce — no silent
-    # off-boundary CUI route.
-    from lliam_cli.security_audit_startup import (
-        enforce_provider_allowlist_at_startup,
-        ProviderAllowlistError,
-    )
-    try:
-        try:
-            from lliam_cli.config import load_config as _load_merged_pa
-
-            _pa_cfg = _load_merged_pa()
-        except Exception:
-            _pa_cfg = _audit_cfg
-        enforce_provider_allowlist_at_startup(config=_pa_cfg)
-    except ProviderAllowlistError:
-        raise
-    except Exception as _pa_exc:
-        logger.debug("Provider-allowlist check failed (non-fatal): %s", _pa_exc)
-
-    # LG-MP-05/06 (additive @ P3.2): fail-closed model-integrity gate. Refuses
-    # to start when the signed model manifest is invalid/untrusted or the
-    # configured primary model lacks a required model card, under strict posture.
-    from lliam_cli.security_audit_startup import (
-        enforce_model_integrity_at_startup,
-        ModelIntegrityError,
-    )
-    try:
-        try:
-            from lliam_cli.config import load_config as _load_merged_mi
-
-            _mi_cfg = _load_merged_mi()
-        except Exception:
-            _mi_cfg = _audit_cfg
-        enforce_model_integrity_at_startup(config=_mi_cfg)
-    except ModelIntegrityError:
-        raise
-    except Exception as _mi_exc:
-        logger.debug("Model-integrity check failed (non-fatal): %s", _mi_exc)
-
-    # LG-GV-01/06/10 (additive @ P4.1): fail-closed governance-artifacts gate.
-    # Refuses to serve work under strict posture when the top-management layer
-    # is absent or stale — AI-policy identity missing/placeholder or past its
-    # review date, go/no-go authorization record absent/expired/mismatched, or
-    # a baseline-denied high-risk skill re-enabled without a valid CAIO waiver.
-    # Complete no-op on the low-side posture.
-    from lliam_cli.security_audit_startup import (
-        enforce_governance_artifacts_at_startup,
-        GovernanceArtifactError,
-    )
-    try:
-        try:
-            from lliam_cli.config import load_config as _load_merged_ga
-
-            _ga_cfg = _load_merged_ga()
-        except Exception:
-            _ga_cfg = _audit_cfg
-        enforce_governance_artifacts_at_startup(config=_ga_cfg)
-    except GovernanceArtifactError:
-        raise
-    except Exception as _ga_exc:
-        logger.debug("Governance-artifacts check failed (non-fatal): %s", _ga_exc)
-
-    from lliam_cli.security_audit_startup import (
-        verify_audit_chain_at_startup,
-        AuditChainVerificationError,
-    )
-    try:
-        # Pass the MERGED config so the strict-posture / audit block injected
-        # by the gov overlay is visible to the fail-closed decision — the raw
-        # _audit_cfg above lacks the overlay keys. The hook also independently
-        # re-resolves posture, but supplying the merged config is the primary
-        # fix (P1.3 review).
-        try:
-            from lliam_cli.config import load_config as _load_merged_config
-
-            _merged_cfg = _load_merged_config()
-        except Exception:
-            _merged_cfg = _audit_cfg
-        verify_audit_chain_at_startup(config=_merged_cfg)
-    except AuditChainVerificationError:
-        raise
-    except Exception as _verify_exc:
-        logger.debug("Audit-chain startup verify failed (non-fatal): %s", _verify_exc)
+    enforce_startup_posture(raw_config=_audit_cfg)
 
     # Optional stderr handler — level driven by -v/-q flags on the CLI.
     # verbosity=None (-q/--quiet): no stderr output

@@ -15686,4 +15686,9 @@ def main(
 if __name__ == "__main__":
     import fire
 
+    # Direct `python cli.py` launch bypasses lliam_cli.main — run the same
+    # fail-closed strict-posture startup gates (JER-80).
+    from lliam_cli.startup_posture import enforce_startup_posture_or_exit
+
+    enforce_startup_posture_or_exit("cli.py")
     fire.Fire(main)

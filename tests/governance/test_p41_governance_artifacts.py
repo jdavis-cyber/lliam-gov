@@ -339,6 +339,11 @@ def test_partial_obligation_requires_poam_ref(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_gateway_startup_wires_governance_artifacts_gate():
+    # The gate lives in the shared startup-posture sequence (JER-80), which the
+    # gateway startup path calls; every other entrypoint is covered by
+    # tests/governance/test_startup_posture_entrypoints.py.
+    shared = (_REPO / "lliam_cli" / "startup_posture.py").read_text()
+    assert "enforce_governance_artifacts_at_startup" in shared
+    assert "GovernanceArtifactError" in shared
     src = (_REPO / "gateway" / "run.py").read_text()
-    assert "enforce_governance_artifacts_at_startup" in src
-    assert "GovernanceArtifactError" in src
+    assert "enforce_startup_posture(raw_config=_audit_cfg)" in src
