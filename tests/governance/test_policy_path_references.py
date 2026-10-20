@@ -18,7 +18,6 @@ import re
 from pathlib import Path
 from typing import Iterator, Tuple
 
-import pytest
 import yaml
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -30,21 +29,6 @@ _SCANNED = (
     "evidence/bom/ai-bom.yaml",
     "docs/governance/model-cards/model-cards.yaml",
 )
-
-# A dangling pointer that cannot be repointed in this repository alone.
-# policy/provider-allowlist.yaml is a fairness-tracked artifact
-# (ci/governance-ci-gates/fairness_gate.py hashes it byte-for-byte), so even a
-# one-line repoint needs a new fairness-evaluation record from the AI risk
-# owner. The entry names the exact dangling value and the existing record it
-# must point to; once the file is corrected the stale entry fails below and
-# has to be deleted, so this list can only shrink.
-#   (file, key path) -> (dangling value, existing record to point at)
-_PENDING_OWNER_REPOINT = {
-    ("policy/provider-allowlist.yaml", "metadata.review.register"): (
-        "docs/governance/provider-vetting-register.md",
-        "docs/governance/supplier-vetting-register.md",
-    ),
-}
 
 _TOKEN = re.compile(r"[^\s\"'`(),;\[\]{}<>]+")
 _FILE_EXT = re.compile(r"\.[A-Za-z0-9]{1,5}$")
@@ -102,22 +86,8 @@ def test_every_policy_path_reference_exists():
     for rel, where, path in _all_references():
         if (_REPO / path).exists():
             continue
-        if _PENDING_OWNER_REPOINT.get((rel, where), (None,))[0] == path:
-            continue
         dangling.append(f"{rel}: {where} -> {path}")
     assert not dangling, "dangling repo path references:\n  " + "\n  ".join(dangling)
-
-
-@pytest.mark.parametrize("key, entry", sorted(_PENDING_OWNER_REPOINT.items()))
-def test_pending_owner_repoints_are_still_needed(key, entry):
-    rel, where = key
-    dangling, replacement = entry
-    doc = yaml.safe_load((_REPO / rel).read_text(encoding="utf-8"))
-    current = dict(_string_values(doc)).get(where)
-    assert current == dangling, (
-        f"{rel}: {where} is now {current!r}; delete its _PENDING_OWNER_REPOINT entry")
-    assert not (_REPO / dangling).exists(), f"{dangling} now exists; delete the entry"
-    assert (_REPO / replacement).is_file(), f"replacement record {replacement} is missing"
 
 
 def test_scan_finds_the_known_pointers():

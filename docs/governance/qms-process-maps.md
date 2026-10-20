@@ -63,7 +63,7 @@ A **nonconforming output** is: a CUI/PII-leak attempt, a guardrail bypass, a jai
 Every governance work product is version-controlled in this repo and guarded by real CM gates:
 
 - **Baselines:** signed phase tags (`gov-P<N>-good`); the approved baseline pin in `docs/governance/authorization-record.yaml`.
-- **Configuration audits (automated):** `ci/governance-ci-gates/baseline_drift_gate.py` (overlay vs critical-key baseline), `ci/governance-ci-gates/path_freeze_gate.py` (frozen paths), `ci/governance-ci-gates/soa_gate.py` (SoA ↔ catalog ↔ POA&M), `ci/governance-ci-gates/ssp_reconciliation_gate.py` (SSP ↔ repo), `ci/governance-ci-gates/regulatory_reconciliation_gate.py` (obligations ↔ enforcement), `ci/governance-ci-gates/fairness_gate.py` (fairness state ↔ evaluations).
+- **Configuration audits (automated):** `ci/governance-ci-gates/baseline_drift_gate.py` (overlay vs critical-key baseline), `ci/governance-ci-gates/path_freeze_gate.py` (frozen paths), `ci/governance-ci-gates/soa_gate.py` (SoA ↔ catalog ↔ POA&M), `ci/governance-ci-gates/ssp_reconciliation_gate.py` (SSP ↔ repo), `ci/governance-ci-gates/regulatory_reconciliation_gate.py` (obligations ↔ enforcement).
 - **Change control:** deviations via `docs/governance/deviation-register.yaml` (LG-CH-08); dependency changes via `docs/governance/change-record.md`.
 
 ---
