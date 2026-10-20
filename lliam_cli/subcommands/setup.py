@@ -23,7 +23,7 @@ def build_setup_parser(subparsers, *, cmd_setup: Callable) -> None:
     setup_parser.add_argument(
         "section",
         nargs="?",
-        choices=["model", "tts", "terminal", "gateway", "tools", "agent"],
+        choices=["model", "tts", "terminal", "tools", "agent"],
         default=None,
         help="Run a specific setup section instead of the full wizard",
     )

@@ -865,7 +865,6 @@ def create_job(
     enabled_toolsets: Optional[List[str]] = None,
     workdir: Optional[str] = None,
     no_agent: bool = False,
-    attach_to_session: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
     Create a new cron job.
@@ -876,8 +875,10 @@ def create_job(
         schedule: Schedule string (see parse_schedule)
         name: Optional friendly name
         repeat: How many times to run (None = forever, 1 = once)
-        deliver: Where to deliver output ("origin", "local", "telegram", etc.)
-        origin: Source info where job was created (for "origin" delivery)
+        deliver: Accepted for caller compatibility; always stored as "local".
+                 Output is saved under the cron output directory; there are no
+                 chat-platform delivery targets (JER-198).
+        origin: Optional provenance of where the job was created (logging only)
         skill: Optional legacy single skill name to load before running the prompt
         skills: Optional ordered list of skills to load before running the prompt
         model: Optional per-job model override
@@ -924,9 +925,8 @@ def create_job(
     if parsed_schedule["kind"] == "once" and repeat is None:
         repeat = 1
 
-    # Default delivery to origin if available, otherwise local
-    if deliver is None:
-        deliver = "origin" if origin else "local"
+    # Cron output is delivered locally only.
+    deliver = "local"
 
     job_id = uuid.uuid4().hex[:12]
     now = _lliam_now().isoformat()
@@ -941,7 +941,6 @@ def create_job(
     normalized_toolsets = normalized_toolsets or None
     normalized_workdir = _normalize_workdir(workdir)
     normalized_no_agent = bool(no_agent)
-    normalized_attach = attach_to_session if isinstance(attach_to_session, bool) else None
 
     # no_agent jobs are meaningless without a script — the script IS the job.
     # Surface this as a clear ValueError at create time so bad configs never
@@ -1003,17 +1002,12 @@ def create_job(
         "last_status": None,
         "last_error": None,
         "last_delivery_error": None,
-        # Delivery configuration
+        # Delivery configuration (always local)
         "deliver": deliver,
-        "origin": origin,  # Tracks where job was created for "origin" delivery
+        "origin": origin,  # Provenance only (logging)
         "enabled_toolsets": normalized_toolsets,
         "workdir": normalized_workdir,
     }
-    # Only persist attach_to_session when explicitly set, so existing jobs and
-    # the common case stay byte-identical (absent key => fall back to the
-    # global cron.mirror_delivery config, default off).
-    if normalized_attach is not None:
-        job["attach_to_session"] = normalized_attach
 
     with _jobs_lock():
         jobs = load_jobs()
@@ -1094,6 +1088,11 @@ def update_job(job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]
         for i, job in enumerate(jobs):
             if job["id"] != job_id:
                 continue
+
+            # Cron output is delivered locally only; ignore any other target.
+            if "deliver" in updates:
+                updates["deliver"] = "local"
+            updates.pop("attach_to_session", None)
 
             # Validate / normalize workdir if present in updates.  Empty string
             # or None both mean "clear the field" (restore old behaviour).

@@ -78,12 +78,6 @@ class TestLearnRegistryWiring:
 
         assert resolve_command("learn").category == "Tools & Skills"
 
-    def test_learn_works_on_the_gateway(self):
-        # /learn must reach the gateway runner (it's a both-surfaces command),
-        # not be CLI-only.
-        from lliam_cli.commands import GATEWAY_KNOWN_COMMANDS
-
-        assert "learn" in GATEWAY_KNOWN_COMMANDS
 
     def test_learn_is_not_cli_only(self):
         from lliam_cli.commands import resolve_command

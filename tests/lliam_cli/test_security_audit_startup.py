@@ -99,13 +99,6 @@ def test_not_in_container_silent(monkeypatch, tmp_path):
 # ── network listener without auth ──────────────────────────────────────────
 
 
-def test_api_server_network_no_key_flags(monkeypatch):
-    monkeypatch.delenv("API_SERVER_KEY", raising=False)
-    cfg = {"platforms": {"api_server": {"enabled": True, "extra": {"host": "0.0.0.0", "key": ""}}}}
-    findings = audit._network_listener_without_auth(cfg)
-    assert any("NO API_SERVER_KEY" in f for f in findings)
-
-
 def test_api_server_loopback_silent(monkeypatch):
     cfg = {"platforms": {"api_server": {"enabled": True, "extra": {"host": "127.0.0.1", "key": ""}}}}
     assert audit._network_listener_without_auth(cfg) == []

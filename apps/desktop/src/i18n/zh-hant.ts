@@ -1081,13 +1081,6 @@ export const zhHant = defineLocale({
       error: '錯誤',
       completed: '已完成'
     },
-    deliveryLabels: {
-      local: '此桌面',
-      telegram: 'Telegram',
-      discord: 'Discord',
-      slack: 'Slack',
-      email: '電子郵件'
-    },
     scheduleLabels: {
       daily: '每天',
       weekdays: '工作日',
@@ -1167,7 +1160,6 @@ export const zhHant = defineLocale({
     promptLabel: '提示詞',
     promptPlaceholder: '代理每次執行時應做什麼？',
     frequencyLabel: '頻率',
-    deliverLabel: '傳遞至',
     customScheduleLabel: '自訂排程',
     customPlaceholder: '0 9 * * * 或 weekdays at 9am',
     customHint: 'Cron 表達式，或類似「每小時」「工作日上午 9 點」的短語。',

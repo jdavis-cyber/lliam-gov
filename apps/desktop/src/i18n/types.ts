@@ -874,7 +874,6 @@ export interface Translations {
     search: string
     loading: string
     states: Record<string, string>
-    deliveryLabels: Record<string, string>
     scheduleLabels: Record<string, string>
     scheduleHints: Record<string, string>
     days: Record<string, string>
@@ -929,7 +928,6 @@ export interface Translations {
     promptLabel: string
     promptPlaceholder: string
     frequencyLabel: string
-    deliverLabel: string
     customScheduleLabel: string
     customPlaceholder: string
     customHint: string

@@ -3,7 +3,7 @@
 from unittest.mock import patch
 
 from cli import LliamCLI
-from lliam_cli.commands import GATEWAY_KNOWN_COMMANDS, resolve_command
+from lliam_cli.commands import resolve_command
 
 
 def test_version_command_is_registered():
@@ -12,11 +12,6 @@ def test_version_command_is_registered():
     assert cmd.name == "version"
     assert cmd.category == "Info"
     assert resolve_command("v") is cmd
-
-
-def test_version_is_gateway_known():
-    assert "version" in GATEWAY_KNOWN_COMMANDS
-    assert "v" in GATEWAY_KNOWN_COMMANDS
 
 
 def test_process_command_version_prints_version_info():

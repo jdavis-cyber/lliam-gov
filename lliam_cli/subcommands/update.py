@@ -6,6 +6,7 @@ Handler injected to avoid importing ``main``.
 
 from __future__ import annotations
 
+import argparse
 from typing import Callable
 
 
@@ -19,11 +20,15 @@ def build_update_parser(subparsers, *, cmd_update: Callable) -> None:
         help="Update Lliam-GOV to the latest version",
         description="Pull the latest changes from git and reinstall dependencies",
     )
+    # Accepted and ignored: the messaging gateway that used this flag for
+    # file-based prompt IPC was removed (JER-198), but the Windows bootstrap
+    # installer (apps/bootstrap-installer/src-tauri/src/update.rs) still
+    # passes it alongside --yes.
     update_parser.add_argument(
         "--gateway",
         action="store_true",
         default=False,
-        help="Gateway mode: use file-based IPC for prompts instead of stdin (used internally by /update)",
+        help=argparse.SUPPRESS,
     )
     update_parser.add_argument(
         "--check",

@@ -36,18 +36,18 @@ def test_project_env_is_sanitized_before_loading(tmp_path, monkeypatch):
     home = tmp_path / "hermes"
     project_env = tmp_path / ".env"
     project_env.write_text(
-        "TELEGRAM_BOT_TOKEN=0123456789:test"
+        "FIRECRAWL_API_KEY=0123456789:test"
         "ANTHROPIC_API_KEY=sk-ant-test123\n",
         encoding="utf-8",
     )
 
-    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     loaded = load_lliam_dotenv(lliam_home=home, project_env=project_env)
 
     assert loaded == [project_env]
-    assert os.getenv("TELEGRAM_BOT_TOKEN") == "0123456789:test"
+    assert os.getenv("FIRECRAWL_API_KEY") == "0123456789:test"
     assert os.getenv("ANTHROPIC_API_KEY") == "sk-ant-test123"
 
 

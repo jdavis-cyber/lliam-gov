@@ -314,5 +314,5 @@ def handle_blueprint_command(
     return BlueprintCommandResult(
         f"Scheduled '{blueprint.title}'"
         + (f" ({sched})" if sched else "")
-        + f", delivering to {spec.get('deliver', 'origin')}. {_manage_hint(surface)}"
+        + f"; output is saved locally. {_manage_hint(surface)}"
     )

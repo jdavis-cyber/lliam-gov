@@ -2935,7 +2935,6 @@ def test_build_worker_context_includes_runtime_timeout_budget(kanban_home, monke
     assert "Terminal timeout: 3570s" in ctx
 
 
-
 # ---------------------------------------------------------------------------
 # Per-task force-loaded skills
 # ---------------------------------------------------------------------------
@@ -3436,55 +3435,6 @@ def test_config_default_dispatch_in_gateway_is_true():
     )
 
 
-def test_check_dispatcher_presence_silent_when_gateway_running(monkeypatch):
-    from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: 12345)
-    monkeypatch.setattr(
-        "lliam_cli.config.load_config",
-        lambda: {"kanban": {"dispatch_in_gateway": True}},
-    )
-    running, msg = kb_cli._check_dispatcher_presence()
-    assert running is True
-    # Either empty (if import failed defensively) or includes the pid.
-    assert msg == "" or "12345" in msg
-
-
-def test_check_dispatcher_presence_warns_when_no_gateway(monkeypatch):
-    from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: None)
-    monkeypatch.setattr(
-        "lliam_cli.config.load_config",
-        lambda: {"kanban": {"dispatch_in_gateway": True}},
-    )
-    running, msg = kb_cli._check_dispatcher_presence()
-    assert running is False
-    assert "lliam-gov gateway start" in msg
-
-
-def test_check_dispatcher_presence_warns_when_flag_off(monkeypatch):
-    """Gateway is up but dispatch_in_gateway=false -> warning."""
-    from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: 999)
-    monkeypatch.setattr(
-        "lliam_cli.config.load_config",
-        lambda: {"kanban": {"dispatch_in_gateway": False}},
-    )
-    running, msg = kb_cli._check_dispatcher_presence()
-    assert running is False
-    assert "dispatch_in_gateway" in msg
-
-
-def test_check_dispatcher_presence_silent_on_probe_error(monkeypatch):
-    """If the probe itself errors, we stay silent."""
-    from lliam_cli import kanban as kb_cli
-    def _raise():
-        raise RuntimeError("boom")
-    monkeypatch.setattr("gateway.status.get_running_pid", _raise)
-    running, msg = kb_cli._check_dispatcher_presence()
-    assert running is True
-    assert msg == ""
-
-
 def _make_create_ns(**overrides):
     """Build a Namespace suitable for kb_cli._cmd_create()."""
     ns = argparse.Namespace(
@@ -3499,10 +3449,9 @@ def _make_create_ns(**overrides):
     return ns
 
 
-def test_cli_create_warns_when_no_gateway(kanban_home, monkeypatch, capsys):
-    """ready+assigned task + no gateway -> warning on stderr."""
+def test_cli_create_warns_when_no_dispatcher(kanban_home, monkeypatch, capsys):
+    """ready+assigned task + no dispatcher -> warning on stderr."""
     from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: None)
     monkeypatch.setattr(
         "lliam_cli.config.load_config",
         lambda: {"kanban": {"dispatch_in_gateway": True}},
@@ -3511,27 +3460,12 @@ def test_cli_create_warns_when_no_gateway(kanban_home, monkeypatch, capsys):
     assert kb_cli._cmd_create(ns) == 0
     captured = capsys.readouterr()
     # Stderr has the warning prefix + guidance.
-    assert "lliam-gov gateway start" in captured.err
-
-
-def test_cli_create_silent_when_gateway_up(kanban_home, monkeypatch, capsys):
-    """gateway running + dispatch enabled -> no warning."""
-    from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: 4242)
-    monkeypatch.setattr(
-        "lliam_cli.config.load_config",
-        lambda: {"kanban": {"dispatch_in_gateway": True}},
-    )
-    ns = _make_create_ns(title="silent", assignee="worker")
-    assert kb_cli._cmd_create(ns) == 0
-    captured = capsys.readouterr()
-    assert "lliam-gov gateway start" not in captured.err
+    assert "lliam-gov kanban daemon" in captured.err
 
 
 def test_cli_create_no_warn_on_triage(kanban_home, monkeypatch, capsys):
     """Triage tasks can't be dispatched -> no warning."""
     from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: None)
     monkeypatch.setattr(
         "lliam_cli.config.load_config",
         lambda: {"kanban": {"dispatch_in_gateway": True}},
@@ -3539,13 +3473,12 @@ def test_cli_create_no_warn_on_triage(kanban_home, monkeypatch, capsys):
     ns = _make_create_ns(title="triage-task", assignee=None, triage=True)
     assert kb_cli._cmd_create(ns) == 0
     err = capsys.readouterr().err
-    assert "lliam-gov gateway start" not in err
+    assert "lliam-gov kanban daemon" not in err
 
 
 def test_cli_create_no_warn_unassigned(kanban_home, monkeypatch, capsys):
     """Unassigned tasks can't be dispatched -> no warning."""
     from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: None)
     monkeypatch.setattr(
         "lliam_cli.config.load_config",
         lambda: {"kanban": {"dispatch_in_gateway": True}},
@@ -3553,7 +3486,7 @@ def test_cli_create_no_warn_unassigned(kanban_home, monkeypatch, capsys):
     ns = _make_create_ns(title="nobody", assignee=None)
     assert kb_cli._cmd_create(ns) == 0
     err = capsys.readouterr().err
-    assert "lliam-gov gateway start" not in err
+    assert "lliam-gov kanban daemon" not in err
 
 
 def test_cli_daemon_without_force_prints_deprecation_exits_2(kanban_home, capsys):

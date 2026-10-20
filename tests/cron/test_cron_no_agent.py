@@ -102,7 +102,7 @@ def test_cronjob_tool_create_no_agent_without_script_errors(lliam_env):
     from tools.cronjob_tools import cronjob
 
     result = json.loads(
-        cronjob(action="create", schedule="every 5m", no_agent=True, deliver="local")
+        cronjob(action="create", schedule="every 5m", no_agent=True)
     )
     assert result.get("success") is False
     assert "no_agent=True requires a script" in result.get("error", "")
@@ -120,7 +120,6 @@ def test_cronjob_tool_create_no_agent_with_script_succeeds(lliam_env):
             schedule="every 5m",
             script="alert.sh",
             no_agent=True,
-            deliver="local",
         )
     )
     assert result.get("success") is True
@@ -140,7 +139,6 @@ def test_cronjob_tool_update_toggles_no_agent(lliam_env):
             schedule="every 5m",
             script="w.sh",
             no_agent=True,
-            deliver="local",
         )
     )
     job_id = created["job_id"]
@@ -159,7 +157,7 @@ def test_cronjob_tool_update_no_agent_without_script_errors(lliam_env):
     from tools.cronjob_tools import cronjob
 
     created = json.loads(
-        cronjob(action="create", schedule="every 5m", prompt="do a thing", deliver="local")
+        cronjob(action="create", schedule="every 5m", prompt="do a thing")
     )
     job_id = created["job_id"]
 
@@ -181,7 +179,6 @@ def test_cronjob_tool_create_does_not_require_prompt_when_no_agent(lliam_env):
             schedule="every 5m",
             script="w.sh",
             no_agent=True,
-            deliver="local",
         )
     )
     assert result.get("success") is True

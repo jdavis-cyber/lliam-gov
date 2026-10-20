@@ -241,7 +241,6 @@ def test_run_uninstall_yes_keep_data_is_non_interactive(tmp_path, monkeypatch):
     # flow + the real GUI sweep (which is safe inside tmp_path).
     monkeypatch.setattr(uninstall, "get_lliam_home", lambda: lliam_home)
     monkeypatch.setattr(uninstall, "get_project_root", lambda: fake_code)
-    monkeypatch.setattr(uninstall, "uninstall_gateway_service", lambda: False)
     monkeypatch.setattr(uninstall, "remove_path_from_shell_configs", lambda: [])
     monkeypatch.setattr(uninstall, "remove_wrapper_script", lambda: [])
     monkeypatch.setattr(uninstall, "remove_node_symlinks", lambda h: [])
@@ -275,7 +274,6 @@ def test_run_uninstall_yes_full_wipes_home(tmp_path, monkeypatch):
 
     monkeypatch.setattr(uninstall, "get_lliam_home", lambda: lliam_home)
     monkeypatch.setattr(uninstall, "get_project_root", lambda: fake_code)
-    monkeypatch.setattr(uninstall, "uninstall_gateway_service", lambda: False)
     monkeypatch.setattr(uninstall, "remove_path_from_shell_configs", lambda: [])
     monkeypatch.setattr(uninstall, "remove_wrapper_script", lambda: [])
     monkeypatch.setattr(uninstall, "remove_node_symlinks", lambda h: [])

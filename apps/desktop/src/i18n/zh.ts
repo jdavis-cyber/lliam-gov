@@ -1180,13 +1180,6 @@ export const zh: Translations = {
       error: '错误',
       completed: '已完成'
     },
-    deliveryLabels: {
-      local: '此桌面',
-      telegram: 'Telegram',
-      discord: 'Discord',
-      slack: 'Slack',
-      email: '电子邮件'
-    },
     scheduleLabels: {
       daily: '每天',
       weekdays: '工作日',
@@ -1266,7 +1259,6 @@ export const zh: Translations = {
     promptLabel: '提示词',
     promptPlaceholder: '总结我未读的 Slack 话题，并把前 5 条邮件发给我…',
     frequencyLabel: '频率',
-    deliverLabel: '投递至',
     customScheduleLabel: '自定义排程',
     customPlaceholder: '0 9 * * * 或 weekdays at 9am',
     customHint: 'Cron 表达式，或类似"每小时""工作日上午 9 点"的短语。',

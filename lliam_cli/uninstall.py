@@ -8,7 +8,6 @@ Provides options for:
 
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
@@ -176,117 +175,6 @@ def remove_node_symlinks(lliam_home: Path) -> list:
     return removed
 
 
-def uninstall_gateway_service():
-    """Stop and uninstall the gateway service (systemd, launchd, Windows
-    Scheduled Task / Startup folder) and kill any standalone gateway processes.
-
-    Delegates to the gateway module which handles:
-    - Linux: user + system systemd services (with proper DBUS env setup)
-    - macOS: launchd plists
-    - Windows: Scheduled Task + Startup-folder fallback, via ``gateway_windows``
-    - All platforms: standalone ``lliam-gov gateway run`` processes
-    - Termux/Android: skips systemd (no systemd on Android), still kills standalone processes
-    """
-    import platform
-    stopped_something = False
-
-    # 1. Kill any standalone gateway processes (all platforms, including Termux)
-    try:
-        from lliam_cli.gateway import kill_gateway_processes, find_gateway_pids
-        pids = find_gateway_pids()
-        if pids:
-            killed = kill_gateway_processes()
-            if killed:
-                log_success(f"Killed {killed} running gateway process(es)")
-                stopped_something = True
-    except Exception as e:
-        log_warn(f"Could not check for gateway processes: {e}")
-
-    system = platform.system()
-
-    # Termux/Android has no systemd and no launchd — nothing left to do.
-    prefix = os.getenv("PREFIX", "")
-    is_termux = bool(os.getenv("TERMUX_VERSION") or "com.termux/files/usr" in prefix)
-    if is_termux:
-        return stopped_something
-
-    # 2. Linux: uninstall systemd services (both user and system scopes)
-    if system == "Linux":
-        try:
-            from lliam_cli.gateway import (
-                get_systemd_unit_path,
-                get_service_name,
-                _systemctl_cmd,
-            )
-            svc_name = get_service_name()
-
-            for is_system in (False, True):
-                unit_path = get_systemd_unit_path(system=is_system)
-                if not unit_path.exists():
-                    continue
-
-                scope = "system" if is_system else "user"
-                try:
-                    if is_system and os.geteuid() != 0:  # windows-footgun: ok — Linux systemd uninstall path, guarded by `if system == "Linux"` above
-                        log_warn(f"System gateway service exists at {unit_path} "
-                                 f"but needs sudo to remove")
-                        continue
-
-                    cmd = _systemctl_cmd(is_system)
-                    subprocess.run(cmd + ["stop", svc_name],
-                                   capture_output=True, check=False)
-                    subprocess.run(cmd + ["disable", svc_name],
-                                   capture_output=True, check=False)
-                    unit_path.unlink()
-                    subprocess.run(cmd + ["daemon-reload"],
-                                   capture_output=True, check=False)
-                    log_success(f"Removed {scope} gateway service ({unit_path})")
-                    stopped_something = True
-                except Exception as e:
-                    log_warn(f"Could not remove {scope} gateway service: {e}")
-        except Exception as e:
-            log_warn(f"Could not check systemd gateway services: {e}")
-
-    # 3. macOS: uninstall launchd plist
-    elif system == "Darwin":
-        try:
-            from lliam_cli.gateway import get_launchd_plist_path
-            plist_path = get_launchd_plist_path()
-            if plist_path.exists():
-                subprocess.run(["launchctl", "unload", str(plist_path)],
-                               capture_output=True, check=False)
-                plist_path.unlink()
-                log_success(f"Removed macOS gateway service ({plist_path})")
-                stopped_something = True
-        except Exception as e:
-            log_warn(f"Could not remove launchd gateway service: {e}")
-
-    # 4. Windows: uninstall Scheduled Task + Startup-folder entry.  The
-    #    gateway_windows module already knows how to locate and remove both
-    #    code paths (schtasks /Delete + .cmd unlink) and how to stop any
-    #    running detached pythonw gateway process.  We call into it so the
-    #    uninstall logic stays in exactly one place.
-    elif system == "Windows":
-        try:
-            from lliam_cli import gateway_windows
-            if gateway_windows.is_installed() or gateway_windows.is_task_registered() \
-                    or gateway_windows.is_startup_entry_installed():
-                try:
-                    gateway_windows.stop()
-                except Exception as e:
-                    log_warn(f"Could not stop Windows gateway cleanly: {e}")
-                try:
-                    gateway_windows.uninstall()
-                    log_success("Removed Windows gateway (Scheduled Task + Startup entry)")
-                    stopped_something = True
-                except Exception as e:
-                    log_warn(f"Could not fully uninstall Windows gateway: {e}")
-        except Exception as e:
-            log_warn(f"Could not check Windows gateway service: {e}")
-
-    return stopped_something
-
-
 # ============================================================================
 # Windows-specific uninstall helpers
 # ============================================================================
@@ -443,36 +331,13 @@ def _discover_named_profiles():
 
 
 def _uninstall_profile(profile) -> None:
-    """Fully uninstall a single named profile: stop its gateway service,
-    remove its alias wrapper, and wipe its HERMES_HOME directory.
-
-    We shell out to ``lliam-gov -p <name> gateway stop|uninstall`` because
-    service names, unit paths, and plist paths are all derived from the
-    current HERMES_HOME and can't be easily switched in-process.
+    """Fully uninstall a single named profile: remove its alias wrapper and
+    wipe its HERMES_HOME directory.
     """
-    import sys as _sys
     name = profile.name
     profile_home = profile.path
 
     log_info(f"Uninstalling profile '{name}'...")
-
-    # 1. Stop and remove this profile's gateway service.
-    #    Use `python -m lliam_cli.main` so we don't depend on a `lliam-gov`
-    #    wrapper that may be half-removed mid-uninstall.
-    lliam_invocation = [_sys.executable, "-m", "lliam_cli.main", "--profile", name]
-    for subcmd in ("stop", "uninstall"):
-        try:
-            subprocess.run(
-                lliam_invocation + ["gateway", subcmd],
-                capture_output=True,
-                text=True,
-                timeout=60,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            log_warn(f"  Gateway {subcmd} timed out for '{name}'")
-        except Exception as e:
-            log_warn(f"  Could not run gateway {subcmd} for '{name}': {e}")
 
     # 2. Remove the wrapper alias script at ~/.local/bin/<name> (if any).
     alias_path = getattr(profile, "alias_path", None)
@@ -616,8 +481,7 @@ def run_uninstall(args):
     if named_profiles:
         print(color("Other profiles detected:", Colors.CYAN, Colors.BOLD))
         for p in named_profiles:
-            running = " (gateway running)" if getattr(p, "gateway_running", False) else ""
-            print(f"  • {p.name}{running}: {p.path}")
+            print(f"  • {p.name}: {p.path}")
         print()
     
     # Ask for confirmation
@@ -647,9 +511,8 @@ def run_uninstall(args):
     full_uninstall = (choice == "2")
 
     # When doing a full uninstall from the default profile, also offer to
-    # remove any named profiles — stopping their gateway services, unlinking
-    # their alias wrappers, and wiping their HERMES_HOME dirs. Otherwise
-    # those leave zombie services and data behind.
+    # remove any named profiles — unlinking their alias wrappers and wiping
+    # their HERMES_HOME dirs. Otherwise those leave data behind.
     remove_profiles = False
     if full_uninstall and named_profiles:
         print()
@@ -715,7 +578,7 @@ def _perform_uninstall(
     """Execute the uninstall steps. Shared by the interactive and ``--yes``
     paths so the destructive sequence lives in exactly one place.
 
-    Steps: stop gateway → strip PATH (rc files + Windows registry) → remove the
+    Steps: strip PATH (rc files + Windows registry) → remove the
     ``lliam-gov`` wrapper + node symlinks → remove the desktop Chat GUI artifacts →
     delete the code checkout → (Windows) remove PortableGit/Node → optionally
     wipe ``$HERMES_HOME`` data and named profiles on full uninstall.
@@ -723,11 +586,6 @@ def _perform_uninstall(
     print()
     print(color("Uninstalling...", Colors.CYAN, Colors.BOLD))
     print()
-    
-    # 1. Stop and uninstall gateway service + kill standalone processes
-    log_info("Checking for running gateway...")
-    if not uninstall_gateway_service():
-        log_info("No gateway service or processes found")
     
     # 2. Remove PATH entries from shell configs (POSIX) AND from the Windows
     #    User-scope registry.  Both helpers no-op on the wrong platform so we
@@ -834,11 +692,10 @@ def _perform_uninstall(
     
     # 5. Optionally remove ~/.hermes/ data directory (and named profiles)
     if full_uninstall:
-        # 5a. Stop and remove each named profile's gateway service and
-        #     alias wrapper. The profile HERMES_HOME dirs live under
-        #     ``<default>/profiles/<name>/`` and will be swept away by the
-        #     rmtree below, but services + alias scripts live OUTSIDE the
-        #     default root and have to be cleaned up explicitly.
+        # 5a. Remove each named profile's alias wrapper. The profile
+        #     HERMES_HOME dirs live under ``<default>/profiles/<name>/`` and
+        #     will be swept away by the rmtree below, but alias scripts live
+        #     OUTSIDE the default root and have to be cleaned up explicitly.
         if remove_profiles and named_profiles:
             for prof in named_profiles:
                 _uninstall_profile(prof)

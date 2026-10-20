@@ -1111,13 +1111,6 @@ export const ja = defineLocale({
       error: 'エラー',
       completed: '完了'
     },
-    deliveryLabels: {
-      local: 'このデスクトップ',
-      telegram: 'Telegram',
-      discord: 'Discord',
-      slack: 'Slack',
-      email: 'メール'
-    },
     scheduleLabels: {
       daily: '毎日',
       weekdays: '平日',
@@ -1199,7 +1192,6 @@ export const ja = defineLocale({
     promptLabel: 'プロンプト',
     promptPlaceholder: '実行ごとにエージェントが行う内容は？',
     frequencyLabel: '頻度',
-    deliverLabel: '配信先',
     customScheduleLabel: 'カスタムスケジュール',
     customPlaceholder: '0 9 * * * または weekdays at 9am',
     customHint: 'Cron 式、または「every hour」「weekdays at 9am」のようなフレーズ。',
