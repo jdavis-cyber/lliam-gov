@@ -104,14 +104,14 @@ approved_destinations:
     squid_dstdomain: "bedrock-runtime.us-gov-west-1.amazonaws.com"
     rationale: "AWS Bedrock GovCloud inference endpoint (in-boundary)."
     added: "2026-07-15"
-    expires: "2026-10-13"
+    expires: "2027-04-10"
   - host: "api.anthropic.com"
     surfaces: [provider]
     classification_ceiling: "PUBLIC"          # raise only under authorized no-train terms
     squid_dstdomain: "api.anthropic.com"
     rationale: "Commercial Anthropic API — low-side / PUBLIC tasks only."
     added: "2026-07-15"
-    expires: "2026-10-13"
+    expires: "2027-04-10"
 
   # --- Code / package / docs hosts (read-oriented research) -----------------
   - host: "api.github.com"
@@ -120,14 +120,14 @@ approved_destinations:
     squid_dstdomain: "api.github.com"
     rationale: "GitHub API for code/issue research (read)."
     added: "2026-07-15"
-    expires: "2026-10-13"
+    expires: "2027-04-10"
   - host: "github.com"
     surfaces: [web, browser]
     classification_ceiling: "PUBLIC"
     squid_dstdomain: "github.com"
     rationale: "Public source/documentation browsing."
     added: "2026-07-15"
-    expires: "2026-10-13"
+    expires: "2027-04-10"
 
   # --- Authoritative gov / standards references -----------------------------
   - host: "*.nist.gov"
@@ -136,14 +136,14 @@ approved_destinations:
     squid_dstdomain: ".nist.gov"
     rationale: "NIST publications (800-53/171/172, AI RMF, CSF) reference."
     added: "2026-07-15"
-    expires: "2026-10-13"
+    expires: "2027-04-10"
   - host: "*.cisa.gov"
     surfaces: [web, browser]
     classification_ceiling: "PUBLIC"
     squid_dstdomain: ".cisa.gov"
     rationale: "CISA advisories / KEV reference."
     added: "2026-07-15"
-    expires: "2026-10-13"
+    expires: "2027-04-10"
 
 
 # -----------------------------------------------------------------------------
