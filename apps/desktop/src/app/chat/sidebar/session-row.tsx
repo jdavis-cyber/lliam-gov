@@ -2,7 +2,7 @@ import { useStore } from '@nanostores/react'
 import type * as React from 'react'
 
 import { writeSessionDrag } from '@/app/chat/composer/inline-refs'
-import { PlatformAvatar } from '@/app/messaging/platform-icon'
+import { PlatformAvatar } from '@/app/chat/sidebar/platform-icon'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'

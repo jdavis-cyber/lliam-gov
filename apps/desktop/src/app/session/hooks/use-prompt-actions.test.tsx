@@ -303,39 +303,6 @@ describe('usePromptActions desktop slash pickers', () => {
     expect(resumeStoredSession).toHaveBeenCalledWith('20260610_130000_123abc')
     expect(requestGateway).not.toHaveBeenCalledWith('slash.exec', expect.anything())
   })
-
-  it('marks a timed-out handoff as failed so the next attempt can retry', async () => {
-    vi.useFakeTimers()
-    const calls: { method: string; params?: Record<string, unknown> }[] = []
-
-    const requestGateway = vi.fn(async (method: string, params?: Record<string, unknown>) => {
-      calls.push({ method, params })
-
-      if (method === 'handoff.state') {
-        return { state: 'pending' } as never
-      }
-
-      return {} as never
-    })
-
-    let handle: HarnessHandle | null = null
-    render(
-      <Harness onReady={h => (handle = h)} refreshSessions={async () => undefined} requestGateway={requestGateway} />
-    )
-
-    const result = handle!.submitText('/handoff telegram')
-    await vi.advanceTimersByTimeAsync(61_000)
-    await result
-
-    expect(calls.some(call => call.method === 'handoff.request')).toBe(true)
-    expect(calls).toContainEqual({
-      method: 'handoff.fail',
-      params: {
-        error: expect.stringContaining('Timed out'),
-        session_id: RUNTIME_SESSION_ID
-      }
-    })
-  })
 })
 
 describe('usePromptActions submit / queue drain semantics', () => {

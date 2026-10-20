@@ -57,7 +57,7 @@ def test_gated_status_is_public(gated_app):
     (``fly-provider.ts`` ``getInstanceRuntimeStatus``) hits
     ``/api/status`` without a cookie as its sole liveness probe. A 401
     here surfaces every healthy agent as STARTING/down in the portal
-    UI. The endpoint returns only version + gateway/auth-gate metadata
+    UI. The endpoint returns only version + session/auth-gate metadata
     (no user data, no session content), so it stays in the shared
     ``PUBLIC_API_PATHS`` allowlist under both the legacy ``_SESSION_TOKEN``
     gate and the OAuth gate.
@@ -74,7 +74,7 @@ def test_gated_status_is_public(gated_app):
     body = r.json()
     assert body["auth_required"] is True
     assert "version" in body
-    assert "gateway_state" in body
+    assert "active_sessions" in body
 
 
 @pytest.mark.parametrize("path", [

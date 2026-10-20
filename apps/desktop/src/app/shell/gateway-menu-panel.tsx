@@ -1,27 +1,16 @@
-import { StatusDot, type StatusTone } from '@/components/status-dot'
+import { StatusDot } from '@/components/status-dot'
 import { Button } from '@/components/ui/button'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { Activity, AlertCircle, LayoutDashboard } from '@/lib/icons'
 import type { RuntimeReadinessResult } from '@/lib/runtime-readiness'
 import { cn } from '@/lib/utils'
-import type { StatusResponse } from '@/types/lliam'
 
 interface GatewayMenuPanelProps {
   gatewayState: string
   inferenceStatus: RuntimeReadinessResult | null
   logLines: readonly string[]
   onOpenSystem: () => void
-  statusSnapshot: StatusResponse | null
-}
-
-const PLATFORM_TONE: Record<string, StatusTone> = {
-  connected: 'good',
-  connecting: 'warn',
-  retrying: 'warn',
-  pending_restart: 'warn',
-  startup_failed: 'bad',
-  fatal: 'bad'
 }
 
 const prettyState = (state: string) => state.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
@@ -36,8 +25,7 @@ export function GatewayMenuPanel({
   gatewayState,
   inferenceStatus,
   logLines,
-  onOpenSystem,
-  statusSnapshot
+  onOpenSystem
 }: GatewayMenuPanelProps) {
   const { t } = useI18n()
   const copy = t.shell.gatewayMenu
@@ -59,7 +47,6 @@ export function GatewayMenuPanel({
         : copy.checkingInference
     : copy.disconnected
 
-  const platforms = Object.entries(statusSnapshot?.gateway_platforms || {}).sort(([l], [r]) => l.localeCompare(r))
   const recentLogs = logLines.slice(-5)
 
   return (
@@ -118,23 +105,6 @@ export function GatewayMenuPanel({
           >
             {copy.viewAllLogs}
           </Button>
-        </div>
-      )}
-
-      {platforms.length > 0 && (
-        <div className="border-t border-border/50 px-3 py-2">
-          <SectionLabel>{copy.messagingPlatforms}</SectionLabel>
-          <ul className="mt-1.5 space-y-1">
-            {platforms.map(([name, platform]) => (
-              <li className="flex items-center justify-between gap-2 text-xs" key={name}>
-                <span className="truncate capitalize">{name}</span>
-                <span className="flex items-center gap-1.5 text-[0.66rem] text-muted-foreground">
-                  <StatusDot tone={PLATFORM_TONE[platform.state] || 'muted'} />
-                  {prettyState(platform.state)}
-                </span>
-              </li>
-            ))}
-          </ul>
         </div>
       )}
     </div>

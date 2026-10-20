@@ -5,7 +5,6 @@ import type { CommandCenterSection } from '@/app/command-center'
 import { $terminalTakeover, setTerminalTakeover } from '@/app/right-sidebar/store'
 import { GatewayMenuPanel } from '@/app/shell/gateway-menu-panel'
 import { Codicon } from '@/components/ui/codicon'
-import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { useI18n } from '@/i18n'
 import { Activity, AlertCircle, Clock, Command, Hash, Loader2, Terminal, Zap, ZapFilled } from '@/lib/icons'
 import type { RuntimeReadinessResult } from '@/lib/runtime-readiness'
@@ -23,7 +22,6 @@ import {
   setYoloActive
 } from '@/store/session'
 import { $subagentsBySession, activeSubagentCount, failedSubagentCount } from '@/store/subagents'
-import { $gatewayRestarting } from '@/store/system-actions'
 import {
   $backendUpdateApply,
   $backendUpdateStatus,
@@ -77,7 +75,6 @@ export function useStatusbarItems({
   const yoloActive = useStore($yoloActive)
   const busy = useStore($busy)
   const currentUsage = useStore($currentUsage)
-  const gatewayRestarting = useStore($gatewayRestarting)
   const sessionStartedAt = useStore($sessionStartedAt)
   const turnStartedAt = useStore($turnStartedAt)
   const subagentsBySession = useStore($subagentsBySession)
@@ -137,10 +134,9 @@ export function useStatusbarItems({
         inferenceStatus={inferenceStatus}
         logLines={gatewayLogLines}
         onOpenSystem={() => openCommandCenterSection('system')}
-        statusSnapshot={statusSnapshot}
       />
     ),
-    [gatewayLogLines, gatewayState, inferenceStatus, openCommandCenterSection, statusSnapshot]
+    [gatewayLogLines, gatewayState, inferenceStatus, openCommandCenterSection]
   )
 
   // The indicator must speak the same scope as the Spawn-tree panel it opens:
@@ -283,11 +279,9 @@ export function useStatusbarItems({
         variant: 'action'
       },
       {
-        className: gatewayRestarting ? undefined : gatewayClassName,
-        detail: gatewayRestarting ? copy.gatewayRestarting : gatewayDetail,
-        icon: gatewayRestarting ? (
-          <GlyphSpinner ariaLabel={copy.gatewayRestarting} className="size-3" />
-        ) : inferenceReady ? (
+        className: gatewayClassName,
+        detail: gatewayDetail,
+        icon: inferenceReady ? (
           <Activity className="size-3" />
         ) : (
           <AlertCircle className="size-3" />
@@ -340,7 +334,6 @@ export function useStatusbarItems({
       gatewayMenuContent,
       gatewayClassName,
       gatewayDetail,
-      gatewayRestarting,
       inferenceReady,
       inferenceStatus?.reason,
       openAgents,
