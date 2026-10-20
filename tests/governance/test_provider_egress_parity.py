@@ -83,9 +83,18 @@ def test_every_provider_egress_host_belongs_to_an_allowlisted_provider():
         assert remote[host] in allowed, f"{host!r} belongs to non-allowed provider {remote[host]!r}"
 
 
-def test_every_allowlisted_remote_provider_host_has_an_egress_entry():
+# Provider-allowlist hosts the owner has not approved for egress. They have no
+# egress or squid entry, so provider calls to them are denied (fail closed).
+# us-gov-east-1: owner decision 2026-10-20 — only us-gov-west-1 is approved.
+_PROVIDER_HOSTS_DENIED_AT_EGRESS = {"bedrock-runtime.us-gov-east-1.amazonaws.com"}
+
+
+def test_every_allowlisted_remote_provider_host_has_an_egress_entry_or_is_known_denied():
     missing = set(_remote_provider_hosts()) - _provider_egress_hosts()
-    assert not missing, f"provider-allowlist hosts with no provider egress entry: {sorted(missing)}"
+    assert missing == _PROVIDER_HOSTS_DENIED_AT_EGRESS, (
+        f"provider-allowlist hosts with no provider egress entry: {sorted(missing)}; "
+        "add an egress entry or record the host as deliberately denied")
+    assert not (_PROVIDER_HOSTS_DENIED_AT_EGRESS & _squid_dstdomains())
 
 
 def test_squid_acl_mirrors_egress_allowlist():
