@@ -98,6 +98,10 @@ always_blocked:
 approved_destinations:
 
   # --- Inference providers (US / FedRAMP / authorized) ----------------------
+  # Provider-surface entries MUST be exact hosts that appear in an allowlisted
+  # provider's base_url_hosts in policy/provider-allowlist.yaml (and its id in
+  # security.allowed_providers). tests/governance/test_provider_egress_parity.py
+  # fails on any drift between the two registers.
   - host: "bedrock-runtime.us-gov-west-1.amazonaws.com"
     surfaces: [provider]
     classification_ceiling: "CUI//SP-PRIV"
@@ -105,13 +109,13 @@ approved_destinations:
     rationale: "AWS Bedrock GovCloud inference endpoint (in-boundary)."
     added: "2026-07-15"
     expires: "2026-10-13"
-  - host: "api.anthropic.com"
+  - host: "bedrock-runtime.us-gov-east-1.amazonaws.com"
     surfaces: [provider]
-    classification_ceiling: "PUBLIC"          # raise only under authorized no-train terms
-    squid_dstdomain: "api.anthropic.com"
-    rationale: "Commercial Anthropic API — low-side / PUBLIC tasks only."
-    added: "2026-07-15"
-    expires: "2026-10-13"
+    classification_ceiling: "CUI//SP-PRIV"
+    squid_dstdomain: "bedrock-runtime.us-gov-east-1.amazonaws.com"
+    rationale: "AWS Bedrock GovCloud inference endpoint (in-boundary); mirrors provider-allowlist bedrock."
+    added: "2026-10-19"
+    expires: "2027-01-17"
 
   # --- Code / package / docs hosts (read-oriented research) -----------------
   - host: "api.github.com"
