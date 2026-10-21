@@ -314,17 +314,17 @@ class TestActiveFeatures:
         assert "memory.honcho" in active
         # Backends the user never enabled stay quiet.
         assert "memory.hindsight" not in active
-        assert "platform.slack" not in active
+        assert "stt.faster_whisper" not in active
 
     def test_multi_package_feature_active_if_any_present(self, monkeypatch):
-        # platform.slack has 3 packages; only one needs to be present
+        # stt.faster_whisper has 3 packages; only one needs to be present
         # for the feature to count as active (user activated it before,
         # one transitive may have been uninstalled separately).
         monkeypatch.setattr(
             ld, "_is_present",
-            lambda spec: ld._pkg_name_from_spec(spec) == "slack-bolt",
+            lambda spec: ld._pkg_name_from_spec(spec) == "sounddevice",
         )
-        assert "platform.slack" in ld.active_features()
+        assert "stt.faster_whisper" in ld.active_features()
 
 
 class TestRefreshActiveFeatures:

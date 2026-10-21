@@ -67,23 +67,11 @@ import type {
   BrowserManageResponse,
   ClientSessionState,
   FileAttachResponse,
-  HandoffFailResponse,
-  HandoffRequestResponse,
-  HandoffStateResponse,
   ImageAttachResponse,
   SessionSteerResponse,
   SessionTitleResponse,
   SlashExecResponse
 } from '../../types'
-
-interface HandoffResult {
-  ok: boolean
-  error?: string
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
 
 function isSessionIdCandidate(value: string): boolean {
   const trimmed = value.trim()
@@ -862,87 +850,6 @@ export function usePromptActions({
     ]
   )
 
-  // Queue a handoff of this session to a messaging platform and watch it to
-  // a terminal state. We only write the request through the gateway; the
-  // separate `lliam-gov gateway` process performs the actual transfer, so we
-  // poll `handoff.state` (mirror of the CLI's block-poll) for the result.
-  const handoffSession = useCallback(
-    async (
-      platform: string,
-      options?: { onProgress?: (state: string) => void; sessionId?: string }
-    ): Promise<HandoffResult> => {
-      const sid = options?.sessionId || activeSessionIdRef.current
-
-      if (!sid) {
-        return { error: copy.sessionUnavailable, ok: false }
-      }
-
-      const target = platform.trim().toLowerCase()
-
-      if (!target) {
-        return { error: copy.handoff.failed(''), ok: false }
-      }
-
-      try {
-        options?.onProgress?.('pending')
-        await requestGateway<HandoffRequestResponse>('handoff.request', {
-          platform: target,
-          session_id: sid
-        })
-      } catch (err) {
-        return { error: inlineErrorMessage(err, copy.handoff.failed(target)), ok: false }
-      }
-
-      const deadline = Date.now() + 60_000
-      let lastState = 'pending'
-
-      while (Date.now() < deadline) {
-        await delay(800)
-
-        let record: HandoffStateResponse
-
-        try {
-          record = await requestGateway<HandoffStateResponse>('handoff.state', { session_id: sid })
-        } catch {
-          continue
-        }
-
-        const state = record.state || 'pending'
-
-        if (state !== lastState) {
-          options?.onProgress?.(state)
-          lastState = state
-        }
-
-        if (state === 'completed') {
-          appendSessionTextMessage(sid, 'system', copy.handoff.systemNote(target))
-          notify({ kind: 'success', message: copy.handoff.success(target) })
-
-          return { ok: true }
-        }
-
-        if (state === 'failed') {
-          return { error: record.error || copy.handoff.failed(target), ok: false }
-        }
-      }
-
-      const cleanup = await requestGateway<HandoffFailResponse>('handoff.fail', {
-        error: copy.handoff.timedOut,
-        session_id: sid
-      }).catch(() => null)
-
-      if (cleanup?.state === 'completed') {
-        appendSessionTextMessage(sid, 'system', copy.handoff.systemNote(target))
-        notify({ kind: 'success', message: copy.handoff.success(target) })
-
-        return { ok: true }
-      }
-
-      return { error: copy.handoff.timedOut, ok: false }
-    },
-    [activeSessionIdRef, appendSessionTextMessage, copy, requestGateway]
-  )
-
   const executeSlashCommand = useCallback(
     async (rawCommand: string, options?: { sessionId?: string; recordInput?: boolean }) => {
       const ensureSessionId = async (sessionHint?: string) =>
@@ -1112,33 +1019,6 @@ export function usePromptActions({
             appendSessionTextMessage(sid, 'system', copy.yoloSystem(active))
           } catch {
             notify({ kind: 'error', title: copy.yoloTitle, message: copy.yoloToggleFailed })
-          }
-        },
-        // /handoff hands this session to a messaging platform. The platform is
-        // completed inline in the slash popover (backend _handoff_completions),
-        // so there is no overlay: `/handoff <platform>` runs the desktop's own
-        // handoff RPC. cli_only on the backend, so it must not reach slash.exec.
-        handoff: async ({ arg, command, recordInput, sessionHint }) => {
-          const platform = arg.trim()
-
-          if (!platform) {
-            notify({ kind: 'success', message: copy.handoff.pickPlatform })
-
-            return
-          }
-
-          const sid = sessionHint || activeSessionIdRef.current
-
-          if (!sid) {
-            notify({ kind: 'error', title: copy.sessionUnavailable, message: copy.createSessionFailed })
-
-            return
-          }
-
-          const result = await handoffSession(platform, { sessionId: sid })
-
-          if (!result.ok && result.error) {
-            appendSessionTextMessage(sid, 'system', recordInput ? slashStatusText(command, result.error) : result.error)
           }
         },
         // /profile selects which profile new chats open in — no app relaunch.
@@ -1464,7 +1344,6 @@ export function usePromptActions({
       copy,
       createBackendSessionForSend,
       handleSkinCommand,
-      handoffSession,
       refreshSessions,
       requestGateway,
       resumeStoredSession,
@@ -1946,7 +1825,6 @@ export function usePromptActions({
     cancelRun,
     editMessage,
     handleThreadMessagesChange,
-    handoffSession,
     reloadFromMessage,
     restoreToMessage,
     steerPrompt,

@@ -31,7 +31,6 @@ export interface DesktopThemeCommandOption {
 export type DesktopActionId =
   | 'branch'
   | 'browser'
-  | 'handoff'
   | 'hatch'
   | 'help'
   | 'new'
@@ -106,12 +105,6 @@ const DESKTOP_COMMAND_SPECS: readonly DesktopCommandSpec[] = [
     surface: action('branch')
   },
   { name: '/yolo', description: 'Toggle YOLO — auto-approve dangerous commands', surface: action('yolo') },
-  {
-    name: '/handoff',
-    description: 'Hand off this session to a messaging platform',
-    surface: action('handoff'),
-    args: true
-  },
   { name: '/profile', description: 'Switch the active LLIAM-GOV profile', surface: action('profile') },
   { name: '/skin', description: 'Switch desktop theme or cycle to the next one', surface: action('skin'), args: true },
   { name: '/title', description: 'Rename the current session', surface: action('title') },

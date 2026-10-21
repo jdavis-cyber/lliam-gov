@@ -399,11 +399,9 @@ def _gateway_platforms() -> list[str] | None:
     must not hard-depend on the gateway package, so the import is lazy and
     guarded (matching the idiom lliam_cli already uses for gateway refs).
     """
-    try:
-        from gateway.config import load_gateway_config
-        return [p.value for p in load_gateway_config().get_connected_platforms()]
-    except Exception:
-        return None
+    # Chat-platform integrations were removed (JER-198): no gateway runtime
+    # users exist, so identity mapping is never needed.
+    return None
 
 
 def _collect_operator_aliases(existing: dict, peer_target: str) -> dict:

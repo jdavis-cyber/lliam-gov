@@ -282,69 +282,6 @@ def _scan_cron_skill_assembled(assembled: str) -> tuple[str, str]:
     return cleaned, ""
 
 
-def _origin_from_env() -> Optional[Dict[str, str]]:
-    from gateway.session_context import get_session_env
-    origin_platform = get_session_env("HERMES_SESSION_PLATFORM")
-    origin_chat_id = get_session_env("HERMES_SESSION_CHAT_ID")
-    if origin_platform and origin_chat_id:
-        thread_id = get_session_env("HERMES_SESSION_THREAD_ID") or None
-        if thread_id:
-            logger.debug(
-                "Cron origin captured thread_id=%s for %s:%s",
-                thread_id, origin_platform, origin_chat_id,
-            )
-        return {
-            "platform": origin_platform,
-            "chat_id": origin_chat_id,
-            "chat_name": get_session_env("HERMES_SESSION_CHAT_NAME") or None,
-            "thread_id": thread_id,
-            # Captured so an opt-in delivery mirror (cron.mirror_delivery /
-            # attach_to_session) can resolve the exact participant's session in
-            # per-user-isolated group chats — parity with interactive
-            # send_message, which passes HERMES_SESSION_USER_ID to
-            # gateway.mirror.mirror_to_session. Harmless for DMs/shared sessions.
-            "user_id": get_session_env("HERMES_SESSION_USER_ID") or None,
-        }
-    return None
-
-
-def _local_delivery_notice(job: Dict[str, Any], user_deliver: Optional[str]) -> Optional[str]:
-    """Return an informational notice when a created job won't deliver anywhere.
-
-    TUI/CLI sessions cannot be captured as a cron ``origin`` (no
-    ``HERMES_SESSION_PLATFORM``/``CHAT_ID`` is set for them), so a
-    ``deliver="origin"`` request — or an omitted ``deliver`` that defaults to
-    origin-or-local — produces a job that runs and saves output to
-    ``last_output`` but is never delivered back into the session. This is by
-    design (there is no live-delivery channel for local sessions), but silently
-    dropping the user's "tell me when it runs" intent is the trap reported in
-    #51568. Surface it at create time so the agent can relay it instead of
-    promising a delivery that never happens.
-
-    Returns ``None`` when the user explicitly asked for ``local`` (no surprise),
-    or when the job resolves to a real delivery target.
-    """
-    # An explicit local request is exactly what the user asked for — no notice.
-    if (user_deliver or "").strip().lower() == "local":
-        return None
-    try:
-        from cron.scheduler import _resolve_delivery_targets
-
-        if _resolve_delivery_targets(job):
-            return None  # Will actually deliver somewhere — nothing to flag.
-    except Exception:
-        # If resolution can't be evaluated, fall back to the origin signal.
-        if job.get("origin"):
-            return None
-    return (
-        "This is a local-only cron job: its output is saved (view it with "
-        "cronjob(action='list')) but will NOT be delivered back into this "
-        "session — CLI/TUI sessions have no live-delivery channel. To be "
-        "notified when it runs, recreate or update the job with deliver set to "
-        "a gateway-connected platform, e.g. deliver='telegram' or deliver='all'."
-    )
-
-
 def _repeat_display(job: Dict[str, Any]) -> str:
     times = (job.get("repeat") or {}).get("times")
     completed = (job.get("repeat") or {}).get("completed", 0)
@@ -369,8 +306,6 @@ def _canonical_skills(skill: Optional[str] = None, skills: Optional[Any] = None)
         if text and text not in normalized:
             normalized.append(text)
     return normalized
-
-
 
 
 def _resolve_model_override(model_obj: Optional[Dict[str, Any]]) -> tuple:
@@ -421,27 +356,6 @@ def _normalize_optional_job_value(value: Optional[Any], *, strip_trailing_slash:
     text = str(value).strip()
     if strip_trailing_slash:
         text = text.rstrip("/")
-    return text or None
-
-
-def _normalize_deliver_param(value: Any) -> Optional[str]:
-    """Normalize a user-supplied ``deliver`` value to the canonical string form.
-
-    The cron schema documents ``deliver`` as a string (``"local"``, ``"origin"``,
-    ``"telegram"``, ``"telegram:chat_id[:thread_id]"``, or comma-separated combos).
-    Some callers — MCP clients passing arrays, scripts building the payload as a
-    list — supply ``["telegram"]``.  ``create_job``/``update_job`` store it as-is,
-    and the scheduler's ``str(deliver).split(",")`` then serializes the list to
-    the literal ``"['telegram']"`` which is not a known platform.  Flatten lists
-    / tuples at the API boundary so storage is always a string.  Returns ``None``
-    for ``None``/empty so callers can treat it as "not supplied".
-    """
-    if value is None:
-        return None
-    if isinstance(value, (list, tuple)):
-        parts = [str(p).strip() for p in value if str(p).strip()]
-        return ",".join(parts) if parts else None
-    text = str(value).strip()
     return text or None
 
 
@@ -526,14 +440,13 @@ def _execute_job_now(job: Dict[str, Any]) -> Dict[str, Any]:
 
     Atomically claims the job first via ``claim_job_for_fire`` — the same
     at-most-once CAS the scheduler/external-provider fire path uses — so a
-    concurrently-running gateway ticker cannot also fire it (the claim both
+    concurrently-running scheduler ticker cannot also fire it (the claim both
     blocks a duplicate fire and advances ``next_run_at`` for recurring jobs).
     If the claim is lost (another fire is in flight), this is a no-op.
 
     The actual firing is delegated to ``run_one_job`` — the single shared
-    execute→save→deliver→mark body the ticker and external providers use — so
-    failure delivery, ``[SILENT]`` handling, and live-adapter delivery stay
-    identical across paths and can't drift.
+    execute→save→mark body the ticker and external providers use — so the
+    behaviour stays identical across paths and can't drift.
 
     Returns {"claimed": bool, "success": bool, "error": str|None}.
     """
@@ -573,7 +486,6 @@ def cronjob(
     schedule: Optional[str] = None,
     name: Optional[str] = None,
     repeat: Optional[int] = None,
-    deliver: Optional[str] = None,
     include_disabled: bool = False,
     skill: Optional[str] = None,
     skills: Optional[List[str]] = None,
@@ -586,7 +498,6 @@ def cronjob(
     enabled_toolsets: Optional[List[str]] = None,
     workdir: Optional[str] = None,
     no_agent: Optional[bool] = None,
-    attach_to_session: Optional[bool] = None,
     task_id: str = None,
 ) -> str:
     """Unified cron job management tool."""
@@ -642,8 +553,6 @@ def cronjob(
                 schedule=schedule,
                 name=name,
                 repeat=repeat,
-                deliver=_normalize_deliver_param(deliver),
-                origin=_origin_from_env(),
                 skills=canonical_skills,
                 model=_normalize_optional_job_value(model),
                 provider=_normalize_optional_job_value(provider),
@@ -653,13 +562,13 @@ def cronjob(
                 enabled_toolsets=enabled_toolsets or None,
                 workdir=_normalize_optional_job_value(workdir),
                 no_agent=_no_agent,
-                attach_to_session=attach_to_session,
             )
             _notify_provider_jobs_changed_safe()
-            _create_message = f"Cron job '{job['name']}' created."
-            _local_notice = _local_delivery_notice(job, _normalize_deliver_param(deliver))
-            if _local_notice:
-                _create_message = f"{_create_message} {_local_notice}"
+            _create_message = (
+                f"Cron job '{job['name']}' created. Its output is saved locally "
+                "(view it with cronjob(action='list') or the desktop Cron screen); "
+                "it is not sent anywhere."
+            )
             return json.dumps(
                 {
                     "success": True,
@@ -767,8 +676,6 @@ def cronjob(
                 updates["prompt"] = prompt
             if name is not None:
                 updates["name"] = name
-            if deliver is not None:
-                updates["deliver"] = _normalize_deliver_param(deliver)
             if skills is not None or skill is not None:
                 canonical_skills = _canonical_skills(skill, skills)
                 updates["skills"] = canonical_skills
@@ -806,8 +713,6 @@ def cronjob(
                 updates["context_from"] = refs or None
             if enabled_toolsets is not None:
                 updates["enabled_toolsets"] = enabled_toolsets or None
-            if attach_to_session is not None:
-                updates["attach_to_session"] = bool(attach_to_session)
             if workdir is not None:
                 # Empty string clears the field (restores old behaviour);
                 # otherwise pass raw — update_job() validates / normalizes.
@@ -851,7 +756,6 @@ def cronjob(
         return tool_error(str(e), success=False)
 
 
-
 CRONJOB_SCHEMA = {
     "name": "cronjob",
     "description": """Manage scheduled cron jobs with a single compressed tool.
@@ -866,8 +770,9 @@ Jobs run in a fresh session with no current-chat context, so prompts must be sel
 If skills are provided on create, the future cron run loads those skills in order, then follows the prompt as the task instruction.
 On update, passing skills=[] clears attached skills.
 
-NOTE: The agent's final response is auto-delivered to the target. Put the primary
-user-facing content in the final response. Cron jobs run autonomously with no user
+NOTE: The agent's final response is saved as the job's output (local only — it is
+not sent to any chat or phone). Put the primary user-facing content in the final
+response. Cron jobs run autonomously with no user
 present — they cannot ask questions or request clarification.
 
 Important safety rule: cron-run sessions should not recursively schedule more cron jobs.""",
@@ -898,10 +803,6 @@ Important safety rule: cron-run sessions should not recursively schedule more cr
                 "type": "integer",
                 "description": "Optional repeat count. Omit for defaults (once for one-shot, forever for recurring)."
             },
-            "deliver": {
-                "type": "string",
-                "description": "Omit this parameter to auto-deliver back to the current chat and topic (recommended). Auto-detection preserves thread/topic context. Only set explicitly when the user asks to deliver somewhere OTHER than the current conversation. Values: 'origin' (same as omitting), 'local' (no delivery, save only), 'all' (fan out to every connected home channel), or platform:chat_id:thread_id for a specific destination. Combine with comma: 'origin,all' delivers to the origin plus every other connected channel. Examples: 'telegram:-1001234567890:17585', 'discord:#engineering', 'sms:+15551234567', 'all'. WARNING: 'platform:chat_id' without :thread_id loses topic targeting. 'all' resolves at fire time, so a job created before a channel was wired up will pick it up automatically once connected."
-            },
             "skills": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -924,23 +825,23 @@ Important safety rule: cron-run sessions should not recursively schedule more cr
             },
             "script": {
                 "type": "string",
-                "description": f"Optional path to a script that runs each tick. In the default mode its stdout is injected into the agent's prompt as context (data-collection / change-detection pattern). With no_agent=True, the script IS the job and its stdout is delivered verbatim (classic watchdog pattern). Relative paths resolve under {display_lliam_home()}/scripts/. ``.sh``/``.bash`` extensions run via bash, everything else via Python. On update, pass empty string to clear."
+                "description": f"Optional path to a script that runs each tick. In the default mode its stdout is injected into the agent's prompt as context (data-collection / change-detection pattern). With no_agent=True, the script IS the job and its stdout is saved verbatim as the job output (classic watchdog pattern). Relative paths resolve under {display_lliam_home()}/scripts/. ``.sh``/``.bash`` extensions run via bash, everything else via Python. On update, pass empty string to clear."
             },
             "no_agent": {
                 "type": "boolean",
                 "default": False,
                 "description": (
                     "Default: False (LLM-driven job — the agent runs the prompt each tick). "
-                    "Set True to skip the LLM entirely: the scheduler just runs ``script`` on schedule and delivers its stdout verbatim. No tokens, no agent loop, no model override honoured. "
+                    "Set True to skip the LLM entirely: the scheduler just runs ``script`` on schedule and saves its stdout verbatim as the job output. No tokens, no agent loop, no model override honoured. "
                     "\n\n"
                     "REQUIREMENTS when True: ``script`` MUST be set (``prompt`` and ``skills`` are ignored). "
                     "\n\n"
-                    "DELIVERY SEMANTICS when True: "
-                    "(a) non-empty stdout is sent verbatim as the message; "
-                    "(b) EMPTY stdout means SILENT — nothing is sent to the user and they won't see anything happened, so design your script to stay quiet when there's nothing to report (the watchdog pattern); "
-                    "(c) non-zero exit / timeout sends an error alert so a broken watchdog can't fail silently. "
+                    "OUTPUT SEMANTICS when True: "
+                    "(a) non-empty stdout is saved verbatim as the output; "
+                    "(b) EMPTY stdout means a silent run; "
+                    "(c) non-zero exit / timeout records an error so a broken script can't fail silently. "
                     "\n\n"
-                    "WHEN TO USE True: recurring script-only pings where the script itself produces the exact message text (memory/disk/GPU watchdogs, threshold alerts, heartbeats, CI notifications, API pollers with a fixed output shape). "
+                    "WHEN TO USE True: recurring script-only checks where the script itself produces the exact output text (disk/GPU watchdogs, threshold checks, API pollers with a fixed output shape). "
                     "WHEN TO USE False (default): anything that needs reasoning — summarize a feed, draft a daily briefing, pick interesting items, rephrase data for a human, follow conditional logic based on content."
                 ),
             },
@@ -966,10 +867,6 @@ Important safety rule: cron-run sessions should not recursively schedule more cr
                 "type": "string",
                 "description": "Optional absolute path to run the job from. When set, AGENTS.md / CLAUDE.md / .cursorrules from that directory are injected into the system prompt, and the terminal/file/code_exec tools use it as their working directory — useful for running a job inside a specific project repo. Must be an absolute path that exists. When unset (default), preserves the original behaviour: no project context files, tools use the scheduler's cwd. On update, pass an empty string to clear. Jobs with workdir run sequentially (not parallel) to keep per-job directories isolated."
             },
-            "attach_to_session": {
-                "type": "boolean",
-                "description": "When True, this job becomes CONTINUABLE: the user can reply to its delivery and the agent has the brief in context instead of asking 'what is that?'. On thread-capable platforms (Telegram topics, Discord/Slack threads) a dedicated thread is opened for the job and its replies; on DM-only platforms (WhatsApp/Signal) the brief is mirrored into the origin DM session. Use this for conversational recurring jobs the user will reply to — daily briefings, reminders that kick off follow-up work. Leave unset for fire-and-forget alerts/watchdogs. Overrides the global cron.mirror_delivery config for this one job. Only the origin chat is touched (never fan-out targets); no effect when deliver='local'."
-            },
         },
         "required": ["action"]
     }
@@ -980,9 +877,9 @@ def check_cronjob_requirements() -> bool:
     """
     Check if cronjob tools can be used.
 
-    Available in interactive CLI mode and gateway/messaging platforms.
-    The cron system is internal (JSON file-based scheduler ticked by the gateway),
-    so no external crontab executable is required.
+    Available in the desktop app and interactive CLI. The cron system is
+    internal (JSON file-based scheduler ticked by the desktop backend), so no
+    external crontab executable is required.
 
     Session env vars must hold an explicit truthy string (``1``, ``true``,
     ``yes``, ``on``) — false-like values (``0``, ``false``, ``no``, ``off``)
@@ -1012,7 +909,6 @@ registry.register(
         schedule=args.get("schedule"),
         name=args.get("name"),
         repeat=args.get("repeat"),
-        deliver=args.get("deliver"),
         include_disabled=args.get("include_disabled", True),
         skill=args.get("skill"),
         skills=args.get("skills"),

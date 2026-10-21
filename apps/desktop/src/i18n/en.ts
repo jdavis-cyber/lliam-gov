@@ -207,7 +207,6 @@ export const en: Translations = {
       'nav.settings': 'Open settings',
       'nav.profiles': 'Open profiles',
       'nav.skills': 'Open skills',
-      'nav.messaging': 'Open messaging',
       'nav.artifacts': 'Open artifacts',
       'nav.cron': 'Open scheduled jobs',
       'nav.agents': 'Open agents',
@@ -860,7 +859,6 @@ export const en: Translations = {
       newChat: { title: 'New session', detail: 'Start a fresh session' },
       settings: { title: 'Settings', detail: 'Configure LLIAM-GOV desktop' },
       skills: { title: 'Skills & Tools', detail: 'Enable skills, toolsets, and providers' },
-      messaging: { title: 'Messaging', detail: 'Set up Telegram, Slack, Discord, and more' },
       artifacts: { title: 'Artifacts', detail: 'Browse generated outputs' }
     },
     sectionEntries: {
@@ -878,11 +876,7 @@ export const en: Translations = {
     exportSession: 'Export session',
     deleteSession: 'Delete session',
     noSessions: 'No sessions yet.',
-    gatewayRunning: 'Messaging gateway running',
-    gatewayStopped: 'Messaging gateway stopped',
     lliamActiveSessions: (version, count) => `LLIAM-GOV ${version} · Active sessions ${count}`,
-    restartGateway: 'Restart gateway',
-    gatewayRestartFailed: 'Gateway restart failed.',
     updateLliam: 'Update LLIAM-GOV',
     actionRunning: 'running',
     actionDone: 'done',
@@ -911,138 +905,6 @@ export const en: Translations = {
     actions: count => `${count} actions`
   },
 
-  messaging: {
-    search: 'Search messaging...',
-    loading: 'Loading messaging platforms...',
-    loadFailed: 'Messaging platforms failed to load',
-    states: {
-      connected: 'Connected',
-      connecting: 'Connecting',
-      disabled: 'Disabled',
-      fatal: 'Error',
-      gateway_stopped: 'Messaging gateway stopped',
-      not_configured: 'Needs setup',
-      pending_restart: 'Restart needed',
-      retrying: 'Retrying',
-      startup_failed: 'Startup failed'
-    },
-    unknown: 'Unknown',
-    hintPendingRestart: 'Restart the gateway from the status bar to apply this change.',
-    hintGatewayStopped: 'Start the gateway from the status bar to connect.',
-    credentialsSet: 'Credentials set',
-    needsSetup: 'Needs setup',
-    gatewayStopped: 'Messaging gateway stopped',
-    getCredentials: 'Get your credentials',
-    openSetupGuide: 'Open setup guide',
-    required: 'Required',
-    recommended: 'Recommended',
-    advanced: count => `Advanced (${count})`,
-    noTokenNeeded: 'This platform does not need a token here. Use the setup guide above, then enable it below.',
-    enabled: 'Enabled',
-    disabled: 'Disabled',
-    unsavedChanges: 'Unsaved changes',
-    saving: 'Saving...',
-    saveChanges: 'Save changes',
-    saved: 'Saved',
-    replaceValue: 'Replace current value',
-    openDocs: 'Open docs',
-    clearField: key => `Clear ${key}`,
-    enableAria: name => `Enable ${name}`,
-    disableAria: name => `Disable ${name}`,
-    platformEnabled: name => `${name} enabled`,
-    platformDisabled: name => `${name} disabled`,
-    restartToApply: 'This change takes effect after a gateway restart.',
-    setupSaved: name => `${name} setup saved`,
-    restartToReconnect: 'New credentials take effect after a gateway restart.',
-    keyCleared: key => `${key} cleared`,
-    setupUpdated: name => `${name} setup was updated.`,
-    failedUpdate: name => `Failed to update ${name}`,
-    failedSave: name => `Failed to save ${name}`,
-    failedClear: key => `Failed to clear ${key}`,
-    fieldCopy: {
-      TELEGRAM_BOT_TOKEN: {
-        label: 'Bot token',
-        help: 'Create a bot with @BotFather, then paste the token it gives you.',
-        placeholder: 'Paste Telegram bot token'
-      },
-      TELEGRAM_ALLOWED_USERS: {
-        label: 'Allowed Telegram user IDs',
-        help: 'Recommended. Comma-separated numeric IDs from @userinfobot. Without this, anyone can DM your bot.'
-      },
-      TELEGRAM_PROXY: { label: 'Proxy URL', help: 'Only needed on networks where Telegram is blocked.' },
-      DISCORD_BOT_TOKEN: {
-        label: 'Bot token',
-        help: 'Create an application in the Discord Developer Portal, add a bot, then paste its token.'
-      },
-      DISCORD_ALLOWED_USERS: {
-        label: 'Allowed Discord user IDs',
-        help: 'Recommended. Comma-separated Discord user IDs.'
-      },
-      DISCORD_REPLY_TO_MODE: { label: 'Reply style', help: 'first, all, or off.' },
-      DISCORD_ALLOW_ALL_USERS: {
-        label: 'Allow all Discord users',
-        help: 'Development only. When true, anyone can DM the bot without an allowlist.'
-      },
-      DISCORD_HOME_CHANNEL: {
-        label: 'Home channel ID',
-        help: 'Channel where the bot sends proactive messages (cron output, reminders).'
-      },
-      DISCORD_HOME_CHANNEL_NAME: {
-        label: 'Home channel name',
-        help: 'Display name for the home channel in logs and status output.'
-      },
-      BLUEBUBBLES_ALLOW_ALL_USERS: {
-        label: 'Allow all iMessage users',
-        help: 'When true, skip the BlueBubbles allowlist.'
-      },
-      MATTERMOST_ALLOW_ALL_USERS: { label: 'Allow all Mattermost users' },
-      MATTERMOST_HOME_CHANNEL: { label: 'Home channel' },
-      QQ_ALLOW_ALL_USERS: { label: 'Allow all QQ users' },
-      QQBOT_HOME_CHANNEL: { label: 'QQ home channel', help: 'Default channel or group for cron delivery.' },
-      QQBOT_HOME_CHANNEL_NAME: { label: 'QQ home channel name' },
-      SLACK_BOT_TOKEN: {
-        label: 'Slack bot token',
-        help: 'Use the bot token from OAuth & Permissions after installing your Slack app.',
-        placeholder: 'Paste Slack bot token'
-      },
-      SLACK_APP_TOKEN: {
-        label: 'Slack app token',
-        help: 'Use the app-level token required for Socket Mode.',
-        placeholder: 'Paste Slack app token'
-      },
-      SLACK_ALLOWED_USERS: { label: 'Allowed Slack user IDs', help: 'Recommended. Comma-separated Slack user IDs.' },
-      MATTERMOST_URL: { label: 'Server URL', placeholder: 'https://mattermost.example.com' },
-      MATTERMOST_TOKEN: { label: 'Bot token' },
-      MATTERMOST_ALLOWED_USERS: {
-        label: 'Allowed user IDs',
-        help: 'Recommended. Comma-separated Mattermost user IDs.'
-      },
-      MATRIX_HOMESERVER: { label: 'Homeserver URL', placeholder: 'https://matrix.org' },
-      MATRIX_ACCESS_TOKEN: { label: 'Access token' },
-      MATRIX_USER_ID: { label: 'Bot user ID', placeholder: '@hermes:example.org' },
-      MATRIX_ALLOWED_USERS: {
-        label: 'Allowed Matrix user IDs',
-        help: 'Recommended. Comma-separated user IDs in @user:server format.'
-      },
-      SIGNAL_HTTP_URL: {
-        label: 'Signal bridge URL',
-        placeholder: 'http://127.0.0.1:8080',
-        help: 'URL of a running signal-cli REST bridge.'
-      },
-      SIGNAL_ACCOUNT: { label: 'Phone number', help: 'The number registered with your signal-cli bridge.' },
-      SIGNAL_ALLOWED_USERS: { label: 'Allowed Signal users', help: 'Recommended. Comma-separated Signal identifiers.' },
-      WHATSAPP_ENABLED: {
-        label: 'Enable WhatsApp bridge',
-        help: 'Set automatically by the toggle below. Leave alone unless you know you need it.'
-      },
-      WHATSAPP_MODE: { label: 'Bridge mode' },
-      WHATSAPP_ALLOWED_USERS: {
-        label: 'Allowed WhatsApp users',
-        help: 'Recommended. Comma-separated phone numbers or WhatsApp IDs.'
-      }
-    },
-    platformIntro: {}
-  },
 
   profiles: {
     close: 'Close profiles',
@@ -1132,13 +994,6 @@ export const en: Translations = {
       error: 'error',
       completed: 'completed'
     },
-    deliveryLabels: {
-      local: 'This desktop',
-      telegram: 'Telegram',
-      discord: 'Discord',
-      slack: 'Slack',
-      email: 'Email'
-    },
     scheduleLabels: {
       daily: 'Daily',
       weekdays: 'Weekdays',
@@ -1176,7 +1031,7 @@ export const en: Translations = {
     everyHourAt: minute => `Every hour at :${minute}`,
     newCron: 'New cron',
     emptyDescNew:
-      'Schedule a prompt to run on a cron expression. LLIAM-GOV will run it and deliver results to the destination you pick.',
+      'Schedule a prompt to run on a cron expression. LLIAM-GOV will run it and save the results here.',
     emptyDescSearch: 'Try a broader search query.',
     emptyTitleNew: 'No scheduled jobs yet',
     emptyTitleSearch: 'No matches',
@@ -1212,14 +1067,13 @@ export const en: Translations = {
     failedSave: 'Failed to save cron job',
     editTitle: 'Edit cron job',
     createTitle: 'New cron job',
-    editDesc: 'Update the schedule, prompt, or delivery target. Changes apply on next run.',
+    editDesc: 'Update the schedule or prompt. Changes apply on next run.',
     createDesc: 'Schedule a prompt to run automatically. Use cron syntax or a natural phrase like "every 15 minutes".',
     nameLabel: 'Name',
     namePlaceholder: 'Morning briefing',
     promptLabel: 'Prompt',
     promptPlaceholder: 'Summarize my unread Slack threads and email me the top 5...',
     frequencyLabel: 'Frequency',
-    deliverLabel: 'Deliver to',
     customScheduleLabel: 'Custom schedule',
     customPlaceholder: '0 9 * * * or weekdays at 9am',
     customHint: 'Cron expression, or phrases like "every hour" or "weekdays at 9am".',
@@ -1268,7 +1122,6 @@ export const en: Translations = {
     nav: {
       'new-session': 'New session',
       skills: 'Skills & Tools',
-      messaging: 'Messaging',
       artifacts: 'Artifacts'
     },
     searchAria: 'Search sessions',
@@ -1800,7 +1653,6 @@ export const en: Translations = {
       connection: label => `Connection: ${label}`,
       recentActivity: 'Recent activity',
       viewAllLogs: 'View all logs →',
-      messagingPlatforms: 'Messaging platforms'
     },
     statusbar: {
       unknown: 'unknown',
@@ -1824,7 +1676,6 @@ export const en: Translations = {
       gatewayChecking: 'checking',
       gatewayConnecting: 'connecting',
       gatewayOffline: 'offline',
-      gatewayRestarting: 'restarting…',
       gatewayTitle: 'LLIAM-GOV inference gateway status',
       agents: 'Agents',
       closeAgents: 'Close agents',
@@ -2199,13 +2050,6 @@ export const en: Translations = {
     noClipboardImage: 'No image found in clipboard',
     clipboardPasteFailed: 'Clipboard paste failed',
     dropFiles: 'Drop files',
-    handoff: {
-      pickPlatform: 'Choose a destination',
-      success: platform => `Handed off to ${platform}. Resume here anytime.`,
-      systemNote: platform => `↻ Handed off to ${platform} — resume here anytime.`,
-      failed: error => `Handoff failed: ${error}`,
-      timedOut: 'Timed out waiting for the gateway. Is `lliam-gov gateway` running?'
-    }
   },
 
   errors: {

@@ -258,7 +258,6 @@ class TestSetupWizardOpenclawIntegration:
             patch.object(setup_mod, "setup_model_provider"),
             patch.object(setup_mod, "setup_terminal_backend"),
             patch.object(setup_mod, "setup_agent_settings"),
-            patch.object(setup_mod, "setup_gateway"),
             patch.object(setup_mod, "setup_tools"),
             patch.object(setup_mod, "save_config"),
             patch.object(setup_mod, "_print_setup_summary"),
@@ -289,7 +288,6 @@ class TestSetupWizardOpenclawIntegration:
             patch.object(setup_mod, "setup_model_provider"),
             patch.object(setup_mod, "setup_terminal_backend"),
             patch.object(setup_mod, "setup_agent_settings"),
-            patch.object(setup_mod, "setup_gateway"),
             patch.object(setup_mod, "setup_tools"),
             patch.object(setup_mod, "save_config"),
             patch.object(setup_mod, "_print_setup_summary"),
@@ -321,7 +319,6 @@ class TestSetupWizardOpenclawIntegration:
             patch.object(setup_mod, "setup_model_provider") as setup_model_provider,
             patch.object(setup_mod, "setup_terminal_backend"),
             patch.object(setup_mod, "setup_agent_settings"),
-            patch.object(setup_mod, "setup_gateway"),
             patch.object(setup_mod, "setup_tools"),
             patch.object(setup_mod, "save_config"),
             patch.object(setup_mod, "_print_setup_summary"),
@@ -403,36 +400,6 @@ class TestGetSectionConfigSummary:
             )
         assert result == "max turns: 120"
 
-    def test_gateway_returns_none_without_tokens(self):
-        # _platform_status reads via lliam_cli.gateway.get_env_value, not
-        # setup_mod.get_env_value, so patch BOTH. Without the second patch,
-        # any environment-variable token (or one leaked in by a sibling
-        # test on the same xdist worker) makes the gateway section report
-        # platforms-configured and the test sees a non-None summary.
-        import lliam_cli.gateway as gateway_mod
-        with patch.object(setup_mod, "get_env_value", return_value=""), \
-             patch.object(gateway_mod, "get_env_value", return_value=""):
-            result = setup_mod._get_section_config_summary({}, "gateway")
-        assert result is None
-
-    def test_gateway_lists_platforms(self):
-        def env_side(key):
-            if key == "TELEGRAM_BOT_TOKEN":
-                return "tok123"
-            if key == "DISCORD_BOT_TOKEN":
-                return "disc456"
-            return ""
-
-        # Also patch gateway module's binding since _platform_status()
-        # reads from lliam_cli.gateway.get_env_value after the setup
-        # flows were unified via platform_registry.
-        import lliam_cli.gateway as gateway_mod
-        with patch.object(setup_mod, "get_env_value", side_effect=env_side), \
-             patch.object(gateway_mod, "get_env_value", side_effect=env_side):
-            result = setup_mod._get_section_config_summary({}, "gateway")
-        assert "Telegram" in result
-        assert "Discord" in result
-
     def test_tools_returns_none_without_keys(self):
         with patch.object(setup_mod, "get_env_value", return_value=""):
             result = setup_mod._get_section_config_summary({}, "tools")
@@ -475,30 +442,6 @@ class TestGetSectionConfigSummary:
             )
         assert result == "MiniMax-M1"
 
-    def test_gateway_recognises_whatsapp_enabled(self):
-        """WhatsApp uses WHATSAPP_ENABLED (not WHATSAPP_PHONE_NUMBER_ID)."""
-        def env_side(key):
-            return "true" if key == "WHATSAPP_ENABLED" else ""
-
-        import lliam_cli.gateway as gateway_mod
-        with patch.object(setup_mod, "get_env_value", side_effect=env_side), \
-             patch.object(gateway_mod, "get_env_value", side_effect=env_side):
-            result = setup_mod._get_section_config_summary({}, "gateway")
-        assert result is not None
-        assert "WhatsApp" in result
-
-    def test_gateway_recognises_signal_http_url(self):
-        """Signal uses SIGNAL_HTTP_URL (not SIGNAL_ACCOUNT)."""
-        def env_side(key):
-            return "http://signal.local" if key == "SIGNAL_HTTP_URL" else ""
-
-        import lliam_cli.gateway as gateway_mod
-        with patch.object(setup_mod, "get_env_value", side_effect=env_side), \
-             patch.object(gateway_mod, "get_env_value", side_effect=env_side):
-            result = setup_mod._get_section_config_summary({}, "gateway")
-        assert result is not None
-        assert "Signal" in result
-
     def test_model_ignores_bare_gh_token(self):
         """GH_TOKEN is commonly set for `gh` / git and must NOT count as a
         configured inference provider on its own — mirrors the copilot
@@ -540,37 +483,6 @@ class TestGetSectionConfigSummary:
         with patch.object(setup_mod, "get_env_value", side_effect=env_side):
             result = setup_mod._get_section_config_summary(cfg, "model")
         assert result == "gpt-5"
-
-    def test_gateway_matches_platform_registry(self):
-        """Every built-in platform should be recognised by its primary
-        env-var sentinel — i.e. the summary must not drift from the
-        registry used by the setup checklist."""
-        from lliam_cli.gateway import _PLATFORMS
-
-        for plat in _PLATFORMS:
-            label = plat["label"]
-            env_var = plat.get("token_var")
-            if not env_var:
-                continue
-            # Some platforms require a specific value shape (e.g. WhatsApp
-            # needs the literal "true"). Use a sentinel that satisfies every
-            # real validator _platform_status() currently checks.
-            def env_side(key, _target=env_var):
-                if key != _target:
-                    return ""
-                if _target == "WHATSAPP_ENABLED":
-                    return "true"
-                return "x"
-            import lliam_cli.gateway as gateway_mod
-            with patch.object(setup_mod, "get_env_value", side_effect=env_side), \
-                 patch.object(gateway_mod, "get_env_value", side_effect=env_side):
-                result = setup_mod._get_section_config_summary({}, "gateway")
-            expected = setup_mod._gateway_platform_short_label(label)
-            assert result is not None, f"{label} ({env_var}) not recognised"
-            assert expected in result, (
-                f"{label} ({env_var}) recognised but label missing from summary: {result!r}"
-            )
-
 
 class TestSkipConfiguredSection:
     """Test the _skip_configured_section helper."""
@@ -632,13 +544,6 @@ class TestSetupWizardSkipsConfiguredSections:
 
         reloaded_config = {"model": "openai/gpt-4"}
 
-        # _platform_status (called by the gateway summary path) reads env
-        # vars via lliam_cli.gateway.get_env_value, NOT setup_mod's. Patch
-        # both so xdist sibling tests can't leak a TELEGRAM_BOT_TOKEN /
-        # WHATSAPP_* / etc. through and trick the wizard into thinking the
-        # gateway section is already configured (which would skip it).
-        import lliam_cli.gateway as gateway_mod
-
         with (
             patch.object(setup_mod, "ensure_lliam_home"),
             patch.object(
@@ -647,7 +552,6 @@ class TestSetupWizardSkipsConfiguredSections:
             ),
             patch.object(setup_mod, "get_lliam_home", return_value=tmp_path),
             patch.object(setup_mod, "get_env_value", side_effect=env_side),
-            patch.object(gateway_mod, "get_env_value", side_effect=env_side),
             patch.object(setup_mod, "is_interactive_stdin", return_value=True),
             patch("lliam_cli.auth.get_active_provider", return_value=None),
             patch("builtins.input", return_value=""),
@@ -662,7 +566,6 @@ class TestSetupWizardSkipsConfiguredSections:
             patch.object(setup_mod, "setup_model_provider") as mock_model,
             patch.object(setup_mod, "setup_terminal_backend") as mock_terminal,
             patch.object(setup_mod, "setup_agent_settings") as mock_agent,
-            patch.object(setup_mod, "setup_gateway") as mock_gateway,
             patch.object(setup_mod, "setup_tools") as mock_tools,
             patch.object(setup_mod, "save_config"),
             patch.object(setup_mod, "_print_setup_summary"),
@@ -674,7 +577,5 @@ class TestSetupWizardSkipsConfiguredSections:
         # Terminal/agent always have a summary → skip offered, user said No
         mock_terminal.assert_not_called()
         mock_agent.assert_not_called()
-        # Gateway has no tokens (env_side returns "" for gateway keys) → section runs
-        mock_gateway.assert_called_once()
         # Tools have no keys → section runs
         mock_tools.assert_called_once()

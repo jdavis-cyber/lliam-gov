@@ -1108,7 +1108,7 @@ def init_agent(
     # coordination, and logging. Keep the ContextVar and os.environ
     # fallback synchronized because different tool paths still read both.
     try:
-        from gateway.session_context import set_current_session_id
+        from agent.session_context import set_current_session_id
 
         set_current_session_id(agent.session_id)
     except Exception:

@@ -473,8 +473,9 @@ cato:
 # stamped into every audit record's `actor` (agent/governance_audit_hooks.py).
 # The binding inputs + algorithm + review-by are recorded in
 # docs/governance/agent_identity.yaml. LG-IA-03 per-profile credential isolation
-# is the EXISTING agent/secret_scope.py, activated fail-closed by
-# gateway.multiplex_profiles below. LG-IA-01/04/05 land as the managed-account
+# is the EXISTING agent/secret_scope.py (its multi-profile gateway activation
+# switch, gateway.multiplex_profiles, was removed with the messaging gateway
+# in JER-198). LG-IA-01/04/05 land as the managed-account
 # inventory + secret-source config-of-record + the no-default-credential startup
 # check; heavier runtime enforcement (live secrets-CLI reconcile, Bitwarden
 # migration, full delegation-context module + max_spawn_depth enforcement) is
@@ -483,9 +484,6 @@ cato:
 identity:
   bind_instance: true                # [additive @ P1.4] LG-IA-02: derive + stamp the NPE instance_id into audit actor
   record: docs/governance/agent_identity.yaml   # [additive @ P1.4] the identity binding record (evidence)
-
-gateway:
-  multiplex_profiles: true           # [additive @ P1.4] LG-IA-03: set_multiplex_active(True) at gateway startup → get_secret() FAILS CLOSED on unscoped reads (no process-global credential union)
 
 secrets:
   bitwarden:

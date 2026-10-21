@@ -94,7 +94,8 @@ class AutomationBlueprint:
     # Seed instruction for the agent / the cron job prompt; may contain {slot}s.
     prompt_template: str
     slots: List[BlueprintSlot] = field(default_factory=list)
-    deliver_default: str = "origin"
+    # Cron output is saved locally; there are no chat delivery targets.
+    deliver_default: str = "local"
     skills: tuple = ()        # skills the job loads before running
     tags: tuple = ()
 
@@ -106,14 +107,6 @@ class AutomationBlueprint:
 _TIME = lambda default="08:00": BlueprintSlot(  # noqa: E731 - concise factory
     name="time", type="time", label="What time?", default=default,
     help="24h local time, e.g. 08:00",
-)
-_DELIVER = BlueprintSlot(
-    name="deliver", type="enum", label="Where to deliver?",
-    default="origin", options=("origin", "local", "telegram", "discord", "email"),
-    optional=False, strict=False,
-    help="origin = the chat you set this up from (or your configured home "
-    "channel when created from the dashboard); local = save only, no message; "
-    "or any connected platform name",
 )
 
 
@@ -131,7 +124,7 @@ CATALOG: List[AutomationBlueprint] = [
             "scannable. If no data sources are connected, give a brief "
             "good-morning with the date and offer to connect calendar/email."
         ),
-        slots=[_TIME("08:00"), _DELIVER],
+        slots=[_TIME("08:00")],
         tags=("daily", "briefing"),
     ),
     AutomationBlueprint(
@@ -160,7 +153,6 @@ CATALOG: List[AutomationBlueprint] = [
                 default="needs a reply today, is from my manager or family, "
                 "or mentions a deadline",
             ),
-            _DELIVER,
         ],
         tags=("email", "monitor"),
     ),
@@ -183,7 +175,6 @@ CATALOG: List[AutomationBlueprint] = [
                 default="sunday",
                 options=("sunday", "monday", "friday", "saturday"),
             ),
-            _DELIVER,
         ],
         tags=("weekly", "review"),
     ),
@@ -198,7 +189,7 @@ CATALOG: List[AutomationBlueprint] = [
             "and the 1-3 highest-priority things to focus on, inferred from "
             "recent context and any task tools. Encouraging, short, one message."
         ),
-        slots=[_TIME("09:00"), _DELIVER],
+        slots=[_TIME("09:00")],
         tags=("daily", "focus"),
     ),
     AutomationBlueprint(
@@ -217,7 +208,6 @@ CATALOG: List[AutomationBlueprint] = [
                 default="everyday",
                 options=tuple(WEEKDAY_PRESETS.keys()),
             ),
-            _DELIVER,
         ],
         tags=("reminder",),
     ),
@@ -235,7 +225,7 @@ CATALOG: List[AutomationBlueprint] = [
             "calendar is connected, just offer a friendly sign-off and the "
             "weather for tomorrow."
         ),
-        slots=[_TIME("21:00"), _DELIVER],
+        slots=[_TIME("21:00")],
         tags=("daily", "evening"),
     ),
     AutomationBlueprint(
@@ -268,7 +258,6 @@ CATALOG: List[AutomationBlueprint] = [
                 name="count", type="enum", label="How many bullets?",
                 default="5", options=("3", "5", "8"),
             ),
-            _DELIVER,
         ],
         tags=("digest", "research"),
     ),
@@ -295,7 +284,6 @@ CATALOG: List[AutomationBlueprint] = [
                 default="everyday",
                 options=tuple(WEEKDAY_PRESETS.keys()),
             ),
-            _DELIVER,
         ],
         tags=("reminder", "finance"),
     ),
@@ -322,7 +310,6 @@ CATALOG: List[AutomationBlueprint] = [
                 default="everyday",
                 options=tuple(WEEKDAY_PRESETS.keys()),
             ),
-            _DELIVER,
         ],
         tags=("habit", "wellbeing"),
     ),
@@ -357,7 +344,6 @@ CATALOG: List[AutomationBlueprint] = [
                 default="17", options=("16", "17", "18", "19"),
                 help="last hour of the active window (24h)",
             ),
-            _DELIVER,
         ],
         tags=("wellbeing", "focus"),
     ),
@@ -396,7 +382,6 @@ CATALOG: List[AutomationBlueprint] = [
                 default="sunday",
                 options=("sunday", "monday", "friday", "saturday"),
             ),
-            _DELIVER,
         ],
         tags=("weekly", "food"),
     ),
@@ -424,7 +409,6 @@ CATALOG: List[AutomationBlueprint] = [
                 default="weekdays",
                 options=tuple(WEEKDAY_PRESETS.keys()),
             ),
-            _DELIVER,
         ],
         tags=("learning", "daily"),
     ),
@@ -448,7 +432,6 @@ CATALOG: List[AutomationBlueprint] = [
                 default="everyday",
                 options=tuple(WEEKDAY_PRESETS.keys()),
             ),
-            _DELIVER,
         ],
         tags=("wellbeing", "reflection"),
     ),
@@ -472,7 +455,6 @@ CATALOG: List[AutomationBlueprint] = [
                          "science fact", "quote of the day"),
             ),
             _TIME("07:30"),
-            _DELIVER,
         ],
         tags=("daily", "curiosity"),
     ),

@@ -16,7 +16,7 @@ def test_load_env_sanitizes_concatenated_lines():
 
     token = "0123456789:test"
     # Simulate concatenated line: TOKEN=xxx followed immediately by another key
-    corrupted = f"TELEGRAM_BOT_TOKEN={token}ANTHROPIC_API_KEY=sk-ant-test123\n"
+    corrupted = f"FIRECRAWL_API_KEY={token}ANTHROPIC_API_KEY=sk-ant-test123\n"
 
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".env", delete=False, encoding="utf-8"
@@ -27,8 +27,8 @@ def test_load_env_sanitizes_concatenated_lines():
     try:
         with patch("lliam_cli.config.get_env_path", return_value=env_path):
             result = load_env()
-        assert result.get("TELEGRAM_BOT_TOKEN") == token, (
-            f"Token should be exactly '{token}', got '{result.get('TELEGRAM_BOT_TOKEN')}'"
+        assert result.get("FIRECRAWL_API_KEY") == token, (
+            f"Token should be exactly '{token}', got '{result.get('FIRECRAWL_API_KEY')}'"
         )
         assert result.get("ANTHROPIC_API_KEY") == "sk-ant-test123"
     finally:
@@ -40,7 +40,7 @@ def test_load_env_normal_file_unchanged():
     from lliam_cli.config import load_env
 
     content = (
-        "TELEGRAM_BOT_TOKEN=mytoken123\n"
+        "FIRECRAWL_API_KEY=mytoken123\n"
         "ANTHROPIC_API_KEY=sk-ant-key\n"
         "# comment\n"
         "\n"
@@ -56,7 +56,7 @@ def test_load_env_normal_file_unchanged():
     try:
         with patch("lliam_cli.config.get_env_path", return_value=env_path):
             result = load_env()
-        assert result["TELEGRAM_BOT_TOKEN"] == "mytoken123"
+        assert result["FIRECRAWL_API_KEY"] == "mytoken123"
         assert result["ANTHROPIC_API_KEY"] == "sk-ant-key"
         assert result["OPENAI_API_KEY"] == "sk-openai"
     finally:
@@ -68,7 +68,7 @@ def test_env_loader_sanitizes_before_dotenv():
     from lliam_cli.env_loader import _sanitize_env_file_if_needed
 
     token = "0123456789:test"
-    corrupted = f"TELEGRAM_BOT_TOKEN={token}ANTHROPIC_API_KEY=sk-ant-test\n"
+    corrupted = f"FIRECRAWL_API_KEY={token}ANTHROPIC_API_KEY=sk-ant-test\n"
 
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".env", delete=False, encoding="utf-8"
@@ -82,7 +82,7 @@ def test_env_loader_sanitizes_before_dotenv():
             lines = f.readlines()
         # Should be split into two separate lines
         assert len(lines) == 2, f"Expected 2 lines, got {len(lines)}: {lines}"
-        assert lines[0].startswith("TELEGRAM_BOT_TOKEN=")
+        assert lines[0].startswith("FIRECRAWL_API_KEY=")
         assert lines[1].startswith("ANTHROPIC_API_KEY=")
         # Token should not contain the second key
         parsed_token = lines[0].strip().split("=", 1)[1]

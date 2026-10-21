@@ -50,21 +50,21 @@ class TestScheduleResolution:
     def test_interval_schedule(self):
         spec = fill_blueprint(
             get_blueprint("important-mail"),
-            {"interval_min": "15", "criteria": "x", "deliver": "origin"},
+            {"interval_min": "15", "criteria": "x"},
         )
         assert spec["schedule"] == "*/15 * * * *"
 
     def test_day_to_dow(self):
         spec = fill_blueprint(
             get_blueprint("weekly-review"),
-            {"time": "18:00", "day": "sunday", "deliver": "origin"},
+            {"time": "18:00", "day": "sunday"},
         )
         assert spec["schedule"] == "0 18 * * 0"
 
     def test_weekday_preset_to_dow(self):
         spec = fill_blueprint(
             get_blueprint("custom-reminder"),
-            {"what": "stretch", "time": "14:00", "recurrence": "weekdays", "deliver": "origin"},
+            {"what": "stretch", "time": "14:00", "recurrence": "weekdays"},
         )
         assert spec["schedule"] == "0 14 * * 1-5"
 
@@ -82,12 +82,13 @@ class TestValidation:
         with pytest.raises(BlueprintFillError, match="not allowed"):
             fill_blueprint(get_blueprint("news-digest"), {"count": "42"})
 
-    def test_deliver_slot_accepts_any_platform(self):
-        # deliver is a non-strict enum: its options are suggestions, the real
-        # set of valid platforms depends on the user's configured gateways and
-        # is validated downstream by the cron scheduler.
-        spec = fill_blueprint(get_blueprint("morning-brief"), {"time": "08:00", "deliver": "slack"})
-        assert spec["deliver"] == "slack"
+    def test_deliver_slot_removed(self):
+        # Cron output is local-only (JER-198): no blueprint offers a deliver
+        # slot and filled specs always deliver locally.
+        with pytest.raises(BlueprintFillError, match="unknown slot"):
+            fill_blueprint(get_blueprint("morning-brief"), {"time": "08:00", "deliver": "slack"})
+        spec = fill_blueprint(get_blueprint("morning-brief"), {"time": "08:00"})
+        assert spec["deliver"] == "local"
 
     def test_unknown_slot_name_rejected(self):
         # A typo'd slot must NOT silently create a job with the default value.
@@ -112,7 +113,7 @@ class TestValidation:
     def test_text_slot_renders_into_prompt(self):
         spec = fill_blueprint(
             get_blueprint("important-mail"),
-            {"interval_min": "30", "criteria": "from my CEO", "deliver": "origin"},
+            {"interval_min": "30", "criteria": "from my CEO"},
         )
         assert "from my CEO" in spec["prompt"]
 
@@ -127,7 +128,7 @@ class TestRenderers:
     def test_form_schema_fields(self):
         schema = blueprint_form_schema(get_blueprint("morning-brief"))
         names = [f["name"] for f in schema["fields"]]
-        assert names == ["time", "deliver"]
+        assert names == ["time"]
         assert schema["key"] == "morning-brief"
 
     def test_slash_command_defaults(self):
@@ -202,13 +203,13 @@ class TestCommandHandler:
     def test_fill_creates_job(self, isolated_home):
         from lliam_cli.blueprint_cmd import handle_blueprint_command
 
-        res = handle_blueprint_command("morning-brief time=07:30 deliver=telegram")
+        res = handle_blueprint_command("morning-brief time=07:30")
         assert "Scheduled" in res.text
         assert res.agent_seed is None
         jobs = isolated_home.load_jobs()
         assert len(jobs) == 1
         assert (jobs[0].get("schedule_display") or jobs[0].get("schedule")) == "30 7 * * *"
-        assert jobs[0].get("deliver") == "telegram"
+        assert jobs[0].get("deliver") == "local"
 
     def test_unknown_blueprint(self, isolated_home):
         from lliam_cli.blueprint_cmd import handle_blueprint_command

@@ -229,9 +229,6 @@ class TestTickWorkdirPartition:
         monkeypatch.setattr(sched, "run_job", fake_run_job)
         monkeypatch.setattr(sched, "save_job_output", lambda _jid, _o: None)
         monkeypatch.setattr(sched, "mark_job_run", lambda *_a, **_kw: None)
-        monkeypatch.setattr(
-            sched, "_deliver_result", lambda *_a, **_kw: None
-        )
 
         n = sched.tick(verbose=False)
         assert n == 3
@@ -306,8 +303,6 @@ class TestRunJobTerminalCwd:
 
         # Stub scheduler helpers that would otherwise hit the filesystem / config.
         monkeypatch.setattr(sched, "_build_job_prompt", lambda job, prerun_script=None: "hi")
-        monkeypatch.setattr(sched, "_resolve_origin", lambda job: None)
-        monkeypatch.setattr(sched, "_resolve_delivery_target", lambda job: None)
         monkeypatch.setattr(sched, "_resolve_cron_enabled_toolsets", lambda job, cfg: None)
         # Unlimited inactivity so the poll loop returns immediately.
         monkeypatch.setenv("HERMES_CRON_TIMEOUT", "0")

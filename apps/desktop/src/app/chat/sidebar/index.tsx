@@ -18,7 +18,7 @@ import { useStore } from '@nanostores/react'
 import type * as React from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { PlatformAvatar } from '@/app/messaging/platform-icon'
+import { PlatformAvatar } from '@/app/chat/sidebar/platform-icon'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { DisclosureCaret } from '@/components/ui/disclosure-caret'
@@ -113,7 +113,7 @@ import {
   setCurrentCwd
 } from '@/store/session'
 
-import { type AppView, ARTIFACTS_ROUTE, MESSAGING_ROUTE, SKILLS_ROUTE } from '../../routes'
+import { type AppView, ARTIFACTS_ROUTE, SKILLS_ROUTE } from '../../routes'
 import { SidebarPanelLabel } from '../../shell/sidebar-label'
 import type { SidebarNavItem } from '../../types'
 
@@ -167,7 +167,6 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     icon: props => <Codicon name="symbol-misc" {...props} />,
     route: SKILLS_ROUTE
   },
-  { id: 'messaging', label: '', icon: props => <Codicon name="comment" {...props} />, route: MESSAGING_ROUTE },
   { id: 'artifacts', label: '', icon: props => <Codicon name="files" {...props} />, route: ARTIFACTS_ROUTE }
 ]
 
@@ -1197,7 +1196,6 @@ export function ChatSidebar({
 
                 const active =
                   (item.id === 'skills' && currentView === 'skills') ||
-                  (item.id === 'messaging' && currentView === 'messaging') ||
                   (item.id === 'artifacts' && currentView === 'artifacts')
 
                 const isNewSession = item.id === 'new-session'

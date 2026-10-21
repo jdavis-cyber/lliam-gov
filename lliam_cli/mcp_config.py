@@ -916,11 +916,6 @@ def mcp_command(args):
     """Main dispatcher for ``lliam-gov mcp`` subcommands."""
     action = getattr(args, "mcp_action", None)
 
-    if action == "serve":
-        from mcp_serve import run_mcp_server
-        run_mcp_server(verbose=getattr(args, "verbose", False))
-        return
-
     # Catalog subcommands live in mcp_picker / mcp_catalog. Import lazily so
     # the original `mcp_config` module stays import-cheap.
     if action == "picker":

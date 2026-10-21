@@ -254,54 +254,6 @@ def _check_version_consistency(issues: list[str]) -> None:
         )
 
 
-def _check_s6_supervision(issues: list[str]) -> None:
-    """Inside a container under our s6 /init, surface what s6 sees.
-
-    Runs as a counterpart to :func:`_check_gateway_service_linger` for
-    the systemd-on-host case. No-op everywhere except in the s6
-    container so host runs aren't cluttered with irrelevant output.
-
-    Reports:
-      - Whether the main-lliam and dashboard static services are up
-      - How many per-profile gateway slots are registered (via
-        ``S6ServiceManager.list_profile_gateways()``) and how many are
-        currently supervised as ``up``
-    """
-    try:
-        from lliam_cli.service_manager import (
-            S6ServiceManager,
-            detect_service_manager,
-        )
-    except Exception:
-        return
-
-    if detect_service_manager() != "s6":
-        return
-
-    _section("s6 Supervision")
-
-    mgr = S6ServiceManager()
-
-    # Static services. They live under /run/service/ via s6-rc symlinks,
-    # so the same s6-svstat probe works.
-    for static in ("main-lliam", "dashboard"):
-        if mgr.is_running(static):
-            check_ok(f"{static}: up")
-        else:
-            check_info(f"{static}: down (expected if not enabled via env)")
-
-    profiles = mgr.list_profile_gateways()
-    if not profiles:
-        check_info("No per-profile gateways registered yet — create one with `lliam-gov profile create <name>`")
-        return
-
-    up_count = sum(1 for p in profiles if mgr.is_running(f"gateway-{p}"))
-    check_ok(
-        f"Per-profile gateways: {up_count}/{len(profiles)} supervised up"
-        + (f" ({', '.join(sorted(profiles))})" if len(profiles) <= 8 else "")
-    )
-
-
 def check_certificates() -> None:
     """Verify the certifi CA bundle is loadable.
 
@@ -317,50 +269,6 @@ def check_certificates() -> None:
         check_fail("SSL CA certificate bundle is broken", str(e))
     except Exception as e:
         check_warn("SSL certificate check skipped", str(e))
-
-
-def _check_gateway_service_linger(issues: list[str]) -> None:
-    """Warn when a systemd user gateway service will stop after logout.
-
-    Skipped inside a container running under s6 — the linger concept
-    (user-systemd surviving SSH logout) doesn't apply there, and the
-    s6 supervision state is surfaced separately by
-    ``_check_s6_supervision``.
-    """
-    try:
-        from lliam_cli.gateway import (
-            get_systemd_linger_status,
-            get_systemd_unit_path,
-            is_linux,
-        )
-        from lliam_cli.service_manager import detect_service_manager
-    except Exception as e:
-        check_warn("Gateway service linger", f"(could not import gateway helpers: {e})")
-        return
-
-    if not is_linux():
-        return
-
-    # Inside a container under our s6 /init, _check_s6_supervision
-    # reports the live supervision state; the linger warning would be
-    # confusing here (no systemd, no logout, no "lingering" concept).
-    if detect_service_manager() == "s6":
-        return
-
-    unit_path = get_systemd_unit_path()
-    if not unit_path.exists():
-        return
-
-    _section("Gateway Service")
-    linger_enabled, linger_detail = get_systemd_linger_status()
-    if linger_enabled is True:
-        check_ok("Systemd linger enabled", "(gateway service survives logout)")
-    elif linger_enabled is False:
-        check_warn("Systemd linger disabled", "(gateway may stop after logout)")
-        check_info("Run: sudo loginctl enable-linger $USER")
-        issues.append("Enable linger for the gateway user service: sudo loginctl enable-linger $USER")
-    else:
-        check_warn("Could not verify systemd linger", f"({linger_detail})")
 
 
 _APIKEY_PROVIDERS_CACHE: list | None = None
@@ -647,8 +555,6 @@ def run_doctor(args):
     
     optional_packages = [
         ("croniter", "Croniter (cron expressions)"),
-        ("telegram", "python-telegram-bot"),
-        ("discord", "discord.py"),
     ]
     
     for module, name in required_packages:
@@ -1322,9 +1228,6 @@ def run_doctor(args):
         except Exception:
             pass
 
-    _check_gateway_service_linger(issues)
-    _check_s6_supervision(issues)
-
     if sys.platform != "win32":
         _section("Command Installation")
         # Determine the venv entry point location
@@ -1618,25 +1521,14 @@ def run_doctor(args):
         # glob (which pulls in Electron, node-pty, etc.) is never resolved
         # for a routine security check. The web and ui-tui workspaces are
         # audited separately via --workspace flags. See #38772.
-        # The WhatsApp bridge may live under a writable HERMES_HOME mirror
-        # instead of the (possibly read-only) install tree in Docker — resolve
-        # it through the shared helper so we audit the dir that actually holds
-        # node_modules. See #49561.
-        try:
-            from gateway.platforms.whatsapp_common import resolve_whatsapp_bridge_dir
-            _whatsapp_bridge_dir = resolve_whatsapp_bridge_dir()
-        except Exception:
-            _whatsapp_bridge_dir = PROJECT_ROOT / "scripts" / "whatsapp-bridge"
         npm_audit_targets = [
             (PROJECT_ROOT, "Browser tools (agent-browser)", ["--workspaces=false"]),
             (PROJECT_ROOT, "web workspace", ["--workspace", "web"]),
             (PROJECT_ROOT, "ui-tui workspace", ["--workspace", "ui-tui"]),
-            (_whatsapp_bridge_dir, "WhatsApp bridge", []),
         ]
         for npm_dir, label, audit_extra in npm_audit_targets:
             # For workspace-scoped audits run from PROJECT_ROOT the
-            # node_modules check must use the workspace root; standalone dirs
-            # (whatsapp-bridge) check their own node_modules.
+            # node_modules check must use the workspace root.
             check_dir = PROJECT_ROOT if audit_extra else npm_dir
             if not (check_dir / "node_modules").exists():
                 continue
@@ -2326,8 +2218,6 @@ def run_doctor(args):
             wrapper_dir = _get_wrapper_dir()
             for p in named_profiles:
                 parts = []
-                if p.gateway_running:
-                    parts.append("gateway running")
                 if p.model:
                     parts.append(p.model[:30])
                 if not (p.path / "config.yaml").exists():

@@ -191,47 +191,6 @@ class TestAuxiliaryConfigBridge:
 # ── Gateway bridge parity test ───────────────────────────────────────────────
 
 
-class TestGatewayBridgeCodeParity:
-    """Verify the gateway/run.py config bridge contains the auxiliary section."""
-
-    def test_gateway_has_auxiliary_bridge(self):
-        """The gateway config bridge must include auxiliary.* bridging.
-
-        After the plugin-aux-task API refactor (2026-05), gateway env-var
-        names are derived dynamically (``AUXILIARY_<KEY_UPPER>_*``) so the
-        literal strings ``AUXILIARY_VISION_PROVIDER`` etc. no longer appear
-        in source. Assert the dynamic shape and the canonical built-in keys
-        bridged set instead.
-        """
-        gateway_path = Path(__file__).parent.parent.parent / "gateway" / "run.py"
-        # Pin encoding to UTF-8: source files in this repo are UTF-8, but
-        # Path.read_text() defaults to the system locale — which is cp1252
-        # on most Western Windows installs and crashes as soon as the file
-        # contains any non-ASCII byte (e.g. an em-dash in a comment).
-        content = gateway_path.read_text(encoding="utf-8")
-        # Dynamic env-var derivation present
-        assert 'f"AUXILIARY_{_upper}_PROVIDER"' in content
-        assert 'f"AUXILIARY_{_upper}_MODEL"' in content
-        assert 'f"AUXILIARY_{_upper}_BASE_URL"' in content
-        assert 'f"AUXILIARY_{_upper}_API_KEY"' in content
-        # Built-in bridged keys present
-        assert "_aux_bridged_keys" in content
-        assert '"vision"' in content
-        assert '"web_extract"' in content
-        assert '"approval"' in content
-        # Plugin-aux-task discovery hooked into bridging
-        assert "get_plugin_auxiliary_tasks" in content
-
-    def test_gateway_no_compression_env_bridge(self):
-        """Gateway should NOT bridge compression config to env vars (config-only)."""
-        gateway_path = Path(__file__).parent.parent.parent / "gateway" / "run.py"
-        # See note in test_gateway_has_auxiliary_bridge — pin UTF-8 so the
-        # test runs on Windows where the default locale is cp1252.
-        content = gateway_path.read_text(encoding="utf-8")
-        assert "CONTEXT_COMPRESSION_PROVIDER" not in content
-        assert "CONTEXT_COMPRESSION_MODEL" not in content
-
-
 # ── Vision model override tests ──────────────────────────────────────────────
 
 

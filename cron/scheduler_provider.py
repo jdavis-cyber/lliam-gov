@@ -8,9 +8,12 @@ stable. Any growth MUST be additive (new optional method with a default), never
 a changed signature on start() or a new abstractmethod.
 
 A CronScheduler decides *when* a due job fires. It does NOT decide what firing
-means: execution + delivery stay in cron.scheduler.run_job / _deliver_result,
-shared by all providers. Providers must never reimplement agent construction or
-delivery.
+means: execution + local output stay in cron.scheduler.run_one_job, shared by
+all providers. Providers must never reimplement agent construction.
+
+The ``adapters`` / ``loop`` keyword arguments on ``start()`` and ``fire_due()``
+are accepted for interface stability but ignored: there are no live chat
+adapters to deliver through (JER-198).
 
 The built-in InProcessCronScheduler runs the historical 60s daemon-thread
 ticker. Alternative providers (e.g. Chronos, a NAS-mediated managed-cron
@@ -102,7 +105,7 @@ class CronScheduler(ABC):
         job = get_job(job_id)
         if job is None:
             return False  # job removed (e.g. repeat-N exhausted) between arm and fire
-        return run_one_job(job, adapters=adapters, loop=loop)
+        return run_one_job(job)
 
     def reconcile(self) -> None:
         """Converge the external registry toward jobs.json (the desired state):
@@ -176,7 +179,7 @@ class InProcessCronScheduler(CronScheduler):
         while not stop_event.is_set():
             ok = False
             try:
-                cron_tick(verbose=False, adapters=adapters, loop=loop, sync=False)
+                cron_tick(verbose=False, sync=False)
                 ok = True
             except BaseException as e:
                 # Catch BaseException (not just Exception) so a SystemExit from

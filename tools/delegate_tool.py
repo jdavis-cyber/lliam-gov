@@ -2558,7 +2558,7 @@ def delegate_task(
         # strictly better than a handle that never resolves. Mirrors the
         # pool-at-capacity inline fallback below.
         try:
-            from gateway.session_context import async_delivery_supported
+            from agent.session_context import async_delivery_supported
             _async_ok = async_delivery_supported()
         except Exception:
             _async_ok = True

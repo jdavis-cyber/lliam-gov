@@ -115,7 +115,6 @@ def test_first_positional_argv(argv, expected):
         ["hermes", "-h"],
         ["hermes", "version"],               # known built-in
         ["hermes", "logs"],
-        ["hermes", "gateway", "run"],
         ["hermes", "--tui"],
         ["hermes", "-w", "--tui"],
         ["hermes", "chat", "hi"],

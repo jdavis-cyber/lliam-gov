@@ -69,7 +69,8 @@ class TestParseBlueprint:
         assert spec is not None
         assert spec.skill_name == "morning-brief"
         assert spec.schedule == "0 8 * * *"
-        assert spec.deliver == "telegram"
+        # Cron output is local-only (JER-198); a deliver key is ignored.
+        assert spec.deliver == "local"
         assert spec.prompt is not None and spec.prompt.startswith("Summarize")
 
     def test_plain_skill_is_not_a_blueprint(self):
@@ -87,14 +88,14 @@ class TestParseBlueprint:
         with pytest.raises(BlueprintError):
             parse_blueprint(bad)
 
-    def test_deliver_defaults_to_origin(self):
+    def test_deliver_is_always_local(self):
         skill = (
             "---\nname: r\ndescription: d\nmetadata:\n  hermes:\n"
             '    blueprint:\n      schedule: "every 1h"\n---\n\nbody'
         )
         spec = parse_blueprint(skill)
         assert spec is not None
-        assert spec.deliver == "origin"
+        assert spec.deliver == "local"
 
 
 class TestBlueprintSpecForInstalled:
@@ -139,7 +140,7 @@ class TestCreateBlueprintJob:
 
         assert captured["schedule"] == "0 8 * * *"
         assert captured["skills"] == ["morning-brief"]
-        assert captured["deliver"] == "telegram"
+        assert captured["deliver"] == "local"
         assert captured["prompt"].startswith("Summarize")
         assert job["id"] == "abc123"
 
@@ -158,7 +159,7 @@ class TestExportBlueprint:
         spec = parse_blueprint(md)
         assert spec is not None
         assert spec.schedule == "0 8 * * *"
-        assert spec.deliver == "telegram"
+        assert spec.deliver == "local"
         # Name is sanitized to a valid skill identifier.
         assert spec.skill_name == "my-morning-brief"
 

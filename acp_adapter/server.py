@@ -1468,7 +1468,7 @@ class LliamACPAgent(acp.Agent):
             # inside a contextvars.copy_context() below, so the ContextVar
             # write is isolated from other concurrent ACP sessions.
             try:
-                from gateway.session_context import (
+                from agent.session_context import (
                     clear_session_vars,
                     set_session_vars,
                 )

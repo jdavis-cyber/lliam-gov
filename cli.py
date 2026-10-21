@@ -634,15 +634,10 @@ def load_cli_config() -> Dict[str, Any]:
         "sudo_password": "SUDO_PASSWORD",
     }
     
-    # Bridge config → env vars for terminal_tool. TERMINAL_CWD is force-exported
-    # UNLESS we're inside a gateway process (detected by _HERMES_GATEWAY marker)
-    # where it was already set correctly by gateway/run.py's config bridge.
-    _is_gateway = os.environ.get("_HERMES_GATEWAY") == "1"
+    # Bridge config → env vars for terminal_tool. TERMINAL_CWD is force-exported.
     for config_key, env_var in env_mappings.items():
         if config_key in terminal_config:
             if env_var == "TERMINAL_CWD":
-                if _is_gateway:
-                    continue
                 # CLI: always export (overrides stale .env or inherited values)
                 os.environ[env_var] = str(terminal_config[config_key])
                 continue
@@ -864,11 +859,11 @@ def validate_toolset(*args, **kwargs):
 
 def _sync_process_session_id(session_id: str) -> None:
     """Keep process-local session-id consumers aligned after CLI switches."""
-    from gateway.session_context import set_current_session_id
+    from agent.session_context import set_current_session_id
 
     set_current_session_id(session_id)
 
-# Cron job system for scheduled tasks (execution is handled by the gateway)
+# Cron job system for scheduled tasks (execution is handled by the desktop backend)
 def get_job(*args, **kwargs):
     from cron import get_job as _get_job
 
@@ -8020,63 +8015,6 @@ class LliamCLI(CLIAgentSetupMixin, CLICommandsMixin):
 
 
 
-    def _show_gateway_status(self):
-        """Show status of the gateway and connected messaging platforms."""
-        from gateway.config import load_gateway_config, Platform
-        
-        print()
-        print("+" + "-" * 60 + "+")
-        print("|" + " " * 15 + "(✿◠‿◠) Gateway Status" + " " * 17 + "|")
-        print("+" + "-" * 60 + "+")
-        print()
-        
-        try:
-            config = load_gateway_config()
-            
-            print("  Messaging Platform Configuration:")
-            print("  " + "-" * 55)
-            
-            platform_status = {
-                Platform.TELEGRAM: ("Telegram", "TELEGRAM_BOT_TOKEN"),
-                Platform.DISCORD: ("Discord", "DISCORD_BOT_TOKEN"),
-                Platform.SLACK: ("Slack", "SLACK_BOT_TOKEN"),
-                Platform.WHATSAPP: ("WhatsApp", "WHATSAPP_ENABLED"),
-            }
-            
-            for platform, (name, env_var) in platform_status.items():
-                pconfig = config.platforms.get(platform)
-                if pconfig and pconfig.enabled:
-                    home = config.get_home_channel(platform)
-                    home_str = f" → {home.name}" if home else ""
-                    print(f"    ✓ {name:<12} Enabled{home_str}")
-                else:
-                    print(f"    ○ {name:<12} Not configured ({env_var})")
-            
-            print()
-            print("  Session Reset Policy:")
-            print("  " + "-" * 55)
-            policy = config.default_reset_policy
-            print(f"    Mode: {policy.mode}")
-            print(f"    Daily reset at: {policy.at_hour}:00")
-            print(f"    Idle timeout: {policy.idle_minutes} minutes")
-            
-            print()
-            print("  To start the gateway:")
-            print("    python cli.py --gateway")
-            print()
-            print(f"  Configuration file: {display_lliam_home()}/config.yaml")
-            print()
-            
-        except Exception as e:
-            print(f"  Error loading gateway config: {e}")
-            print()
-            print("  To configure the gateway:")
-            print("    1. Set environment variables:")
-            print("       TELEGRAM_BOT_TOKEN=your_token")
-            print("       DISCORD_BOT_TOKEN=your_token")
-            print(f"    2. Or configure settings in {display_lliam_home()}/config.yaml")
-            print()
-    
     def process_command(self, command: str) -> bool:
         """
         Process a slash command.
@@ -8260,9 +8198,6 @@ class LliamCLI(CLIAgentSetupMixin, CLICommandsMixin):
             else:
                 from lliam_state import format_session_db_unavailable
                 _cprint(f"  {format_session_db_unavailable()}")
-        elif canonical == "handoff":
-            if not self._handle_handoff_command(cmd_original):
-                return False
         elif canonical == "new":
             # Strip inline-skip tokens (now/--yes/-y) before deriving the title
             # so "/new now My Session" yields title="My Session" instead of
@@ -8346,8 +8281,6 @@ class LliamCLI(CLIAgentSetupMixin, CLICommandsMixin):
             self._handle_learn_command(cmd_original)
         elif canonical == "memory":
             self._handle_memory_command(cmd_original)
-        elif canonical == "platforms":
-            self._show_gateway_status()
         elif canonical == "status":
             self._show_session_status()
         elif canonical == "statusbar":
@@ -8358,8 +8291,6 @@ class LliamCLI(CLIAgentSetupMixin, CLICommandsMixin):
             self._handle_timestamps_command(cmd_original)
         elif canonical == "verbose":
             self._toggle_verbose()
-        elif canonical == "footer":
-            self._handle_footer_command(cmd_original)
         elif canonical == "yolo":
             self._toggle_yolo()
         elif canonical == "reasoning":
@@ -15201,7 +15132,6 @@ def main(
     compact: bool = False,
     list_tools: bool = False,
     list_toolsets: bool = False,
-    gateway: bool = False,
     resume: str = None,
     worktree: bool = False,
     w: bool = False,
@@ -15258,14 +15188,6 @@ def main(
     # This enables interactive sudo password prompts with timeout
     os.environ["LLIAM_INTERACTIVE"] = "1"
     
-    # Handle gateway mode (messaging + cron)
-    if gateway:
-        import asyncio
-        from gateway.run import start_gateway
-        print("Starting Lliam-GOV Gateway (messaging platforms)...")
-        asyncio.run(start_gateway())
-        return
-
     # Skip worktree for list commands (they exit immediately)
     if not list_tools and not list_toolsets:
         # ── Git worktree isolation (#652) ──

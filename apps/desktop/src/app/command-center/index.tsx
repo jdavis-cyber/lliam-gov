@@ -5,7 +5,7 @@ import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
 import { SearchField } from '@/components/ui/search-field'
 import { SegmentedControl } from '@/components/ui/segmented-control'
-import { getActionStatus, getLogs, getStatus, getUsageAnalytics, restartGateway, updateLliam } from '@/lliam'
+import { getActionStatus, getLogs, getStatus, getUsageAnalytics, updateLliam } from '@/lliam'
 import type { ActionStatusResponse, AnalyticsResponse, StatusResponse } from '@/lliam'
 import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
@@ -216,11 +216,11 @@ export function CommandCenterView({ initialSection, onClose, onDeleteSession, on
   const sessionListHasResults = filteredSessions.length > 0
 
   const runSystemAction = useCallback(
-    async (kind: 'restart' | 'update') => {
+    async () => {
       setSystemError('')
 
       try {
-        const started = kind === 'restart' ? await restartGateway() : await updateLliam()
+        const started = await updateLliam()
         let nextStatus: ActionStatusResponse | null = null
 
         for (let attempt = 0; attempt < 18; attempt += 1) {
@@ -366,26 +366,12 @@ export function CommandCenterView({ initialSection, onClose, onDeleteSession, on
                   <div className="grid gap-2">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={cn(
-                              'size-2 rounded-full',
-                              status.gateway_running ? 'bg-emerald-500' : 'bg-amber-500'
-                            )}
-                          />
-                          <span className="text-[length:var(--conversation-text-font-size)] font-medium text-foreground">
-                            {status.gateway_running ? cc.gatewayRunning : cc.gatewayStopped}
-                          </span>
-                        </div>
-                        <div className="mt-1 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
+                        <div className="text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
                           {cc.lliamActiveSessions(status.version, status.active_sessions)}
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-                        <Button onClick={() => void runSystemAction('restart')} size="xs" variant="text">
-                          {cc.restartGateway}
-                        </Button>
-                        <Button onClick={() => void runSystemAction('update')} size="xs" variant="textStrong">
+                        <Button onClick={() => void runSystemAction()} size="xs" variant="textStrong">
                           {cc.updateLliam}
                         </Button>
                       </div>

@@ -136,54 +136,16 @@ def _parse_branch_flag(value: Optional[str]) -> Optional[str]:
 def _check_dispatcher_presence() -> tuple[bool, str]:
     """Return ``(running, message)``.
 
-    - ``running=True``: a gateway is alive for this HERMES_HOME and its
-      config has ``kanban.dispatch_in_gateway`` on (default). Message
-      is a short status line.
-    - ``running=False``: either no gateway is running, or the gateway
-      is running but the config flag is off. Message is human guidance
-      explaining the next step.
-
-    Used by ``lliam-gov kanban create`` (and callers) to warn when a task
-    will sit in ``ready`` because nothing is there to pick it up.
-    Defensive against import failures and config-read errors — if the
-    probe itself errors, we return ``(True, "")`` so we don't spam
-    false warnings (better to miss a warning than to cry wolf).
+    The kanban dispatcher used to run embedded in the messaging gateway,
+    which was removed (JER-198). There is no embedded dispatcher any more,
+    so this always reports ``running=False`` with guidance to use the
+    standalone daemon.
     """
-    try:
-        from gateway.status import get_running_pid  # type: ignore
-    except Exception:
-        return (True, "")  # can't probe — silent
-    try:
-        pid = get_running_pid()
-    except Exception:
-        return (True, "")  # probe errored — silent
-
-    # Even if the gateway is up, dispatch_in_gateway may be off.
-    try:
-        from lliam_cli.config import load_config
-        cfg = load_config()
-        dispatch_on = bool(cfg.get("kanban", {}).get("dispatch_in_gateway", True))
-    except Exception:
-        dispatch_on = True  # can't tell — assume default
-
-    if pid and dispatch_on:
-        return (True, f"gateway pid={pid}, dispatch enabled")
-    if pid and not dispatch_on:
-        return (
-            False,
-            "Gateway is running but kanban.dispatch_in_gateway=false in "
-            "config.yaml — the task will sit in 'ready' until you flip it "
-            "back on and restart the gateway, OR run the legacy "
-            "standalone daemon (`lliam-gov kanban daemon --force`)."
-        )
     return (
         False,
-        "No gateway is running — the task will sit in 'ready' until you "
-        "start it. Run:\n"
-        "    lliam-gov gateway start\n"
-        "The gateway hosts an embedded dispatcher (tick interval 60s by "
-        "default); your task will be picked up on the next tick after "
-        "the gateway comes up."
+        "No kanban dispatcher is running — the task will sit in 'ready' "
+        "until one picks it up. Run the standalone daemon:\n"
+        "    lliam-gov kanban daemon --force"
     )
 
 
