@@ -39,6 +39,19 @@ class TestUserSystemdPrivateSocketPreflight:
 
 
 class TestSystemdServiceRefresh:
+    @pytest.fixture(autouse=True)
+    def _neutralize_user_systemd_preflight(self, monkeypatch):
+        # These tests exercise unit refresh/start/restart *logic* with systemctl
+        # fully mocked; the real user-scope systemd/D-Bus preflight is an
+        # environmental gate (no user session in headless containers/CI) that
+        # would otherwise raise UserSystemdUnavailableError before the logic
+        # under test runs. No-op it so the logic assertions are deterministic
+        # everywhere. (The preflight behavior itself is covered by
+        # TestUserSystemdPrivateSocketPreflight, which is untouched.)
+        monkeypatch.setattr(
+            gateway_cli, "_preflight_user_systemd", lambda *a, **k: None, raising=False
+        )
+
     def test_systemd_install_repairs_outdated_unit_without_force(self, tmp_path, monkeypatch):
         unit_path = tmp_path / "hermes-gateway.service"
         unit_path.write_text("old unit\n", encoding="utf-8")
@@ -1481,6 +1494,16 @@ class TestGatewayServiceDetection:
         assert gateway_cli._is_service_running() is False
 
 class TestGatewaySystemServiceRouting:
+    @pytest.fixture(autouse=True)
+    def _neutralize_user_systemd_preflight(self, monkeypatch):
+        # See TestSystemdServiceRefresh._neutralize_user_systemd_preflight:
+        # these routing tests mock systemctl and only assert the dispatch
+        # sequence, so the real user-systemd/D-Bus preflight (absent on
+        # headless CI/containers) is neutralized to keep them hermetic.
+        monkeypatch.setattr(
+            gateway_cli, "_preflight_user_systemd", lambda *a, **k: None, raising=False
+        )
+
     def test_systemd_restart_gracefully_restarts_running_service_and_waits(self, monkeypatch, capsys):
         calls = []
 

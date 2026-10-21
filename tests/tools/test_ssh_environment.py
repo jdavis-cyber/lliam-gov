@@ -44,6 +44,12 @@ class TestBuildSSHCommand:
                                                       stderr=iter([]),
                                                       stdin=MagicMock()))
         monkeypatch.setattr("tools.environments.base.time.sleep", lambda _: None)
+        # The command-builder / socket-path logic under test does not shell
+        # out, but SSHEnvironment.__init__ calls _ensure_ssh_available(), which
+        # requires the `ssh` client on PATH. Stub shutil.which so these pure
+        # logic tests run on minimal images (containers/CI without openssh);
+        # mirrors TestSSHPreflight's own which() patching.
+        monkeypatch.setattr(ssh_env.shutil, "which", lambda _name: "/usr/bin/ssh")
 
     def test_base_flags(self):
         env = SSHEnvironment(host="h", user="u")
@@ -86,6 +92,12 @@ class TestControlSocketPath:
                                                       stderr=iter([]),
                                                       stdin=MagicMock()))
         monkeypatch.setattr("tools.environments.base.time.sleep", lambda _: None)
+        # The command-builder / socket-path logic under test does not shell
+        # out, but SSHEnvironment.__init__ calls _ensure_ssh_available(), which
+        # requires the `ssh` client on PATH. Stub shutil.which so these pure
+        # logic tests run on minimal images (containers/CI without openssh);
+        # mirrors TestSSHPreflight's own which() patching.
+        monkeypatch.setattr(ssh_env.shutil, "which", lambda _name: "/usr/bin/ssh")
 
     # SSH appends ``.XXXXXXXXXXXXXXXX`` (17 bytes) to the ControlPath in
     # ControlMaster mode; the macOS sun_path field is 104 bytes including
