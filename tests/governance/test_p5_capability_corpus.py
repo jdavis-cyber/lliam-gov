@@ -20,7 +20,11 @@ the Phase 5 acceptance boundary:
 
 from __future__ import annotations
 
+import datetime
+import json
+import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -59,6 +63,13 @@ def _session(ws):
 def p5(tmp_path, monkeypatch):
     gp = enter_governed_profile(tmp_path, monkeypatch)
     handled = stub_tool_handlers(monkeypatch)
+    # The governed home holds a ledger, so it counts as a deployed host and
+    # the cATO check requires a recent scheduled-assurance run (JER-76).
+    home = Path(os.environ.get("LLIAM_HOME") or os.environ["HERMES_HOME"])
+    hb = home / "logs" / "assurance" / "last-run.json"
+    hb.parent.mkdir(parents=True, exist_ok=True)
+    hb.write_text(json.dumps({"completed_at": datetime.datetime.now(
+        datetime.timezone.utc).isoformat()}))
     return gp, handled
 
 
@@ -110,7 +121,7 @@ def test_metrics_computed_from_live_ledger(p5):
     assert m["deny_count"] == 0 and m["critical_count"] == 0
 
 
-def test_killswitch_drill_halts_then_verified_recovery_restores(p5):
+def test_killswitch_drill_halts_then_verified_recovery_restores(p5, baseline_repo):
     from agent import killswitch as ks
     from agent.governance_audit import verify_chain
 
@@ -121,9 +132,11 @@ def test_killswitch_drill_halts_then_verified_recovery_restores(p5):
     assert "kill-switch" in out.get("error", "").lower(), out
     assert [n for n, _ in handled] == ["read_file"]   # halted call never ran
 
-    check = verify_chain(gp.ledger_path)
-    assert ks.recover_and_reenable(baseline_tag="gov-P0-good", actor="isso@agency.mil",
-                                   verify_ok=check.ok, verify_reason=str(check.reason))
+    assert verify_chain(gp.ledger_path).ok
+    # Recovery verifies the chain and restores the pinned baseline itself.
+    assert ks.recover_and_reenable(actor="isso@agency.mil", reason="drill",
+                                   repo_root=baseline_repo.root,
+                                   ledger_path=gp.ledger_path)
     assert ks.is_engaged() is False
     session = _session(gp.safe_root)
     assert all(r == {"output": "ok"} for r in _run(session))

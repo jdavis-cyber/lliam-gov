@@ -23,10 +23,10 @@ _POLICY = textwrap.dedent(
       default_disposition: deny
     approved_destinations:
       - {host: "bedrock-runtime.us-gov-west-1.amazonaws.com", surfaces: [provider],
-         classification_ceiling: "CUI//SP-PRIV"}
+         classification_ceiling: "CUI//SP-PRIV", expires: "2099-12-31"}
       - {host: "public-only.provider.test", surfaces: [provider],
-         classification_ceiling: "PUBLIC"}
-      - {host: "api.github.com", surfaces: [web]}
+         classification_ceiling: "PUBLIC", expires: "2099-12-31"}
+      - {host: "api.github.com", surfaces: [web], expires: "2099-12-31"}
     """
 )
 

@@ -149,7 +149,14 @@ def test_browser_navigate_refused_even_to_allowlisted_host(governed, monkeypatch
 ])
 def test_jit_grant_cannot_reenable(governed, action_class, name, args):
     import tools.tool_policy as tp
+    from agent import governance_audit_hooks as gah
 
-    tp.grant_capability(action_class, approver="isso@dashboard")
+    # The governed overlay requires an authenticated approver (JER-73), so
+    # the grant is made by a bound principal; it still must not re-enable.
+    gah.set_operator_subject("isso@dashboard", auth="dashboard_auth:oauth")
+    try:
+        tp.grant_capability(action_class, approver="isso@dashboard")
+    finally:
+        gah.set_operator_subject(None)
     assert tp.evaluate_call(name, args).disposition == "deny"
     assert tp.pdp_gate(name, args).code == "pdp_deny"
