@@ -11967,6 +11967,10 @@ _STARTUP_POSTURE_EXEMPT_COMMANDS = frozenset(
         "update", "uninstall", "backup", "import",
         "gateway", "acp",
         "cron", "mcp",
+        # Operator controls (owner decision 2026-10-22): the kill-switch must
+        # stay usable while a gate blocks, since it is how the operator halts
+        # and recovers; assurance only installs or runs the control checks.
+        "killswitch", "kill-switch", "assurance",
     }
 )
 _STARTUP_POSTURE_GATED_SUBCOMMANDS = {
