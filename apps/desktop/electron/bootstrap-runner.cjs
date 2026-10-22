@@ -109,7 +109,7 @@ function downloadInstallScript(commit, destPath) {
   // is immutable (unlike a branch ref), so we don't need integrity
   // verification beyond "did the file we wrote pass a syntax probe."
   const scriptName = installScriptName()
-  const url = `https://raw.githubusercontent.com/NousResearch/hermes-agent/${commit}/scripts/${scriptName}`
+  const url = `https://raw.githubusercontent.com/jdavis-cyber/lliam-gov/${commit}/scripts/${scriptName}`
   return new Promise((resolve, reject) => {
     fs.mkdirSync(path.dirname(destPath), { recursive: true })
     const tmpPath = destPath + '.tmp'
@@ -308,7 +308,8 @@ function spawnPowerShell(scriptPath, args, { emit, stageName, abortSignal, lliam
           ...process.env,
           // Pass HERMES_HOME through so install.ps1 respects the caller's
           // choice rather than re-computing the default.
-          HERMES_HOME: lliamHome || process.env.HERMES_HOME || ''
+          HERMES_HOME: lliamHome || process.env.HERMES_HOME || '',
+          LLIAM_HOME: lliamHome || process.env.LLIAM_HOME || process.env.HERMES_HOME || ''
         }
       })
     )
@@ -382,7 +383,8 @@ function spawnBash(scriptPath, args, { emit, stageName, abortSignal, lliamHome }
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        HERMES_HOME: lliamHome || process.env.HERMES_HOME || ''
+        HERMES_HOME: lliamHome || process.env.HERMES_HOME || '',
+          LLIAM_HOME: lliamHome || process.env.LLIAM_HOME || process.env.HERMES_HOME || ''
       }
     })
 

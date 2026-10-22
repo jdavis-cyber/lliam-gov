@@ -1,7 +1,6 @@
 import type { Unstable_TriggerAdapter, Unstable_TriggerItem } from '@assistant-ui/core'
 import { useCallback } from 'react'
 
-import type { LliamGateway } from '@/lliam'
 import { sessionTitle } from '@/lib/chat-runtime'
 import {
   type CommandsCatalogLike,
@@ -12,6 +11,7 @@ import {
   isDesktopSlashExtensionCommand,
   isDesktopSlashSuggestion
 } from '@/lib/desktop-slash-commands'
+import type { LliamGateway } from '@/lliam'
 import { $sessions } from '@/store/session'
 
 import type { CompletionEntry, CompletionPayload } from './use-live-completion-adapter'

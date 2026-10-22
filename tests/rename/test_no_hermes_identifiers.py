@@ -568,6 +568,7 @@ KEEP_PATTERNS += [
      "internal Nix package pname / Rust crate name / build-derivation name — build-time identifier, "
      "not the shipped display name (the shipped artifacts are Lliam-GOV*)"),
     (r"-HermesHome\b", "PowerShell -HermesHome install param — back-compat with install.ps1"),
+    (r'\[Alias\("HermesHome"\)\]', "install.ps1 parameter alias so legacy -HermesHome callers reach -LliamHome"),
     # --- Env-compat rebrand shims (migrate-from) ---
     (r"rebrandEnv|rebrand.*hermes|hermes -> lliam|hermes \*|legacy .hermes\*|hermes\* localStorage|"
      r"Migrate legacy .hermes",

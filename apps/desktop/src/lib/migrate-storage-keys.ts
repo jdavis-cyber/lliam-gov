@@ -25,7 +25,7 @@ const PREFIX_MAP: ReadonlyArray<readonly [string, string]> = [
   ['hermes.desktop.', 'lliam-gov.desktop.'],
   ['hermes-desktop-', 'lliam-gov-desktop-'],
   ['hermes-onboarding-', 'lliam-gov-onboarding-'],
-  ['hermes-boot-', 'lliam-gov-boot-'],
+  ['hermes-boot-', 'lliam-gov-boot-']
 ]
 
 function newKeyFor(oldKey: string): string | null {
@@ -34,6 +34,7 @@ function newKeyFor(oldKey: string): string | null {
       return newPrefix + oldKey.slice(oldPrefix.length)
     }
   }
+
   return null
 }
 
@@ -47,19 +48,33 @@ export function migrateLegacyStorageKeys(storage: Storage = window.localStorage)
     // Snapshot keys first — we write during iteration, and mutating a live
     // Storage while walking it by index is undefined behaviour across engines.
     const oldKeys: string[] = []
+
     for (let i = 0; i < storage.length; i++) {
       const key = storage.key(i)
-      if (key && newKeyFor(key)) oldKeys.push(key)
+
+      if (key && newKeyFor(key)) {
+        oldKeys.push(key)
+      }
     }
 
     for (const oldKey of oldKeys) {
       const newKey = newKeyFor(oldKey)
-      if (!newKey) continue
+
+      if (!newKey) {
+        continue
+      }
+
       // Copy only when the new key is absent — never clobber a value the
       // renamed build has already written.
-      if (storage.getItem(newKey) !== null) continue
+      if (storage.getItem(newKey) !== null) {
+        continue
+      }
+
       const value = storage.getItem(oldKey)
-      if (value !== null) storage.setItem(newKey, value)
+
+      if (value !== null) {
+        storage.setItem(newKey, value)
+      }
     }
   } catch {
     // localStorage can throw (private mode / quota / disabled). A failed

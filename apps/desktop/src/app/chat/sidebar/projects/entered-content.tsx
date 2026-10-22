@@ -13,8 +13,8 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import type { LliamGitWorktree } from '@/global'
-import type { SessionInfo } from '@/lliam'
 import { useI18n } from '@/i18n'
+import type { SessionInfo } from '@/lliam'
 import { $dismissedWorktreeIds, dismissWorktree } from '@/store/layout'
 import { notifyError } from '@/store/notifications'
 import { removeWorktreePath } from '@/store/projects'

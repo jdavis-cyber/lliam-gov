@@ -22,13 +22,13 @@ const path = require('node:path')
 // the hoisted copy.
 let simpleGit
 try {
-  simpleGit = require('simple-git')
+  simpleGit = require('simple-git').simpleGit
 } catch {
   const resourcesPath = process.resourcesPath
   if (!resourcesPath) {
     throw new Error("git-review IPC: 'simple-git' not found and no resourcesPath to fall back to")
   }
-  simpleGit = require(path.join(resourcesPath, 'native-deps', 'vendor', 'node_modules', 'simple-git'))
+  simpleGit = require(path.join(resourcesPath, 'native-deps', 'vendor', 'node_modules', 'simple-git')).simpleGit
 }
 
 const { resolveRequestedPathForIpc } = require('./hardening.cjs')

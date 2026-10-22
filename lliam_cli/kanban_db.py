@@ -7699,6 +7699,7 @@ def _default_spawn(
     from lliam_cli.profiles import resolve_profile_env
     try:
         env["HERMES_HOME"] = resolve_profile_env(profile_arg)
+        env["LLIAM_HOME"] = env["HERMES_HOME"]
     except FileNotFoundError:
         # Profile dir doesn't exist — defer resolution to the CLI's
         # _apply_profile_override() via HERMES_PROFILE (set below).

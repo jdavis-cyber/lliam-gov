@@ -11895,6 +11895,7 @@ def _resolve_chat_argv(
 
     if profile_dir is not None:
         env["HERMES_HOME"] = str(profile_dir)
+        env["LLIAM_HOME"] = str(profile_dir)
 
     if resume:
         latest_resume, _latest_path = _session_latest_descendant(resume)

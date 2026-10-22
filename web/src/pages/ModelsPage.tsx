@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Brain,
   ChevronDown,
@@ -1066,7 +1066,9 @@ export default function ModelsPage() {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<ModelsAnalyticsResponse | null>(null);
   const [aux, setAux] = useState<AuxiliaryModelsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadedRequest, setLoadedRequest] = useState<number | null>(null);
+  const loading = refreshing || loadedRequest !== days;
   const [error, setError] = useState<string | null>(null);
   const [saveKey, setSaveKey] = useState(0);
   // Gate the token/cost UI on `dashboard.show_token_analytics`.  See
@@ -1089,19 +1091,28 @@ export default function ModelsPage() {
       });
   }, []);
 
+  const requestSequence = useRef(0);
+
   const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
+    const request = ++requestSequence.current;
     Promise.all([
       api.getModelsAnalytics(days),
       api.getAuxiliaryModels().catch(() => null),
     ])
       .then(([models, auxData]) => {
+        if (request !== requestSequence.current) return;
+        setError(null);
         setData(models);
         setAux(auxData);
       })
-      .catch((err) => setError(String(err)))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (request === requestSequence.current) setError(String(err));
+      })
+      .finally(() => {
+        if (request !== requestSequence.current) return;
+        setLoadedRequest(days);
+        setRefreshing(false);
+      });
   }, [days]);
 
   const refreshAux = useCallback(() => {
@@ -1141,7 +1152,11 @@ export default function ModelsPage() {
           ghost
           size="icon"
           className="text-muted-foreground hover:text-foreground"
-          onClick={load}
+          onClick={() => {
+              setRefreshing(true);
+              setError(null);
+              load();
+            }}
           disabled={loading}
           aria-label={t.common.refresh}
         >
