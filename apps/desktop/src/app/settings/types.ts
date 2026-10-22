@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 
-import type { LliamGateway } from '@/lliam'
 import type { IconComponent } from '@/lib/icons'
+import type { LliamGateway } from '@/lliam'
 import type { EnvVarInfo } from '@/types/lliam'
 
 export type SettingsView =

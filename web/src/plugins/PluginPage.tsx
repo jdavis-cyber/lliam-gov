@@ -26,6 +26,9 @@ export function PluginPage({ name }: { name: string }) {
   );
 
   if (Component) {
+    // Registry snapshots return the same registered component until the plugin changes.
+    // No component is created here; dynamic plugin registration is an external store.
+    // eslint-disable-next-line react-hooks/static-components
     return <Component />;
   }
 

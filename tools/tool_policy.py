@@ -94,13 +94,9 @@ def _as_set(values: Any) -> Set[str]:
 # --------------------------------------------------------------------------- #
 
 def _is_strict() -> bool:
-    """True when the effective gov config posture is strict (no-op otherwise)."""
-    try:
-        from lliam_cli import config as _cfg
-        from lliam_cli import posture_resolver as _pr
-        return _pr.is_strict(_cfg.load_config())
-    except Exception:
-        return False
+    """Strict-posture predicate; a configuration fault enforces (fails closed)."""
+    from lliam_cli import posture_resolver as _pr
+    return _pr.enforce_strict_controls("tool-policy PDP")
 
 
 def _candidate_policy_paths() -> List[Path]:
@@ -339,7 +335,7 @@ def skill_load_decision(
         return "allow", "low-side (posture not strict)"
 
     nm = (name or "").strip()
-    if nm in policy_denied_skill_names():
+    if nm in policy_denied_skill_names() or nm.rsplit(":", 1)[-1] in _NEVER_ELIGIBLE:
         mandatory = nm in (set(_NEVER_ELIGIBLE) | _as_set(
             (load_skill_policy().get("exceptions") or {}).get("never_eligible")))
         tag = " (mandatory must-disable)" if mandatory else ""
@@ -353,7 +349,7 @@ def skill_load_decision(
             return "deny", f"SKILL.md intent tag/description matches deny_tag '{hit}' (LG-SC-01/02)"
 
     allow = allowlist_names()
-    if allow and nm not in allow:
+    if nm not in allow:
         pol = load_skill_policy()
         disp = str(((pol.get("policy") or {}).get("unlisted_disposition")
                     or "log")).strip().lower()
@@ -368,6 +364,30 @@ def skill_load_decision(
         if not clean:
             return "hold", "AST audit findings require review before load (LG-SC-02)"
     return "allow", "vetted / built-in"
+
+
+def policy_held_skill_names() -> Set[str]:
+    """Hide unlisted installed skills when strict hold is explicitly activated.
+
+    Re-scan the same local/external roots as discovery on each call so policy
+    activation and newly installed skills cannot reuse a permissive cache.
+    Actual loads also evaluate the full decision before serving any content.
+    """
+    if not _is_strict():
+        return set()
+    pol = load_skill_policy()
+    if str((pol.get("policy") or {}).get("unlisted_disposition", "log")).lower() != "hold":
+        return set()
+    from agent.skill_utils import iter_skill_index_files
+    approved = allowlist_names()
+    held = set()
+    for root in _skill_dirs():
+        for md in iter_skill_index_files(root, "SKILL.md"):
+            meta = _skill_meta(md.parent)
+            name = str(meta.get("name") or md.parent.name)
+            if name not in approved:
+                held.add(name)
+    return held
 
 
 def enforce_skill_enablement(installed: Iterable[Dict[str, Any]]) -> Dict[str, List[str]]:
@@ -512,8 +532,16 @@ def grant_capability(
     agent cannot self-extend). TTL defaults to the policy's grant.ttl_seconds
     (1800s). Scope is per-session; reset_pdp_state() revokes everything.
     A grant NEVER re-enables a deny-tier class (deny is terminal).
+    LG-GV-05: when ``security.require_authenticated_approver`` is set, the
+    approver must be the authenticated approver principal bound to this
+    context (a dashboard_auth user or the desktop app's local operator), else
+    PermissionError.
     """
     import time
+    from tools.hitl_oversight import _require_bound_approver
+    _require_bound_approver(
+        str(approver), gate=str(action_class).strip(), origin="jit_grant",
+    )
     if ttl_seconds is None:
         policy = _load_risk_policy()
         zsp = policy.get("zero_standing_privilege") if isinstance(policy, dict) else {}
@@ -743,7 +771,16 @@ def evaluate_call(
     to default_disposition (deny), and an unparseable policy fails closed.
     """
     name = (function_name or "").strip()
-    if not _is_strict():
+    try:
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
+        strict = _pr.is_strict(_cfg.load_config())
+    except Exception:
+        return PolicyDecision(
+            disposition="deny", action_class="unevaluated", tool_name=name,
+            reason="tool-risk configuration unavailable — failing closed",
+        )
+    if not strict:
         return PolicyDecision(
             disposition="allow", action_class="unevaluated", tool_name=name,
             reason="low-side (posture not strict) — PDP inactive",
@@ -940,13 +977,31 @@ def _hitl_delegated_to_backend(action_class: str) -> bool:
     return False
 
 
-def _emit_pdp_ledger_event(decision: PolicyDecision, function_args: Optional[Dict[str, Any]]) -> None:
-    """Record a blocking PDP verdict as ``policy.violation`` (LG-AZ-06/AU-02)."""
+def _emit_pdp_ledger_event(
+    decision: PolicyDecision,
+    function_args: Optional[Dict[str, Any]],
+    *,
+    session_id: Optional[str] = None,
+    task_id: str = "",
+    tool_call_id: str = "",
+) -> None:
+    """Record a blocking PDP verdict as ``policy.violation`` (LG-AZ-06/AU-02).
+
+    Correlated like the call's terminal outcome record (task id, else session
+    id) and stamped with the session's instance identity, so the denial is
+    attributed to the right session rather than the process-wide default.
+    """
     try:
-        from agent.governance_audit_hooks import _enabled_ledger, classify_risk
+        from agent.governance_audit_hooks import (
+            _enabled_ledger, classify_risk, denial_record_context,
+        )
         ledger = _enabled_ledger()
         if ledger is None:
             return
+        context = denial_record_context(
+            task_id=task_id or "", session_id=session_id or "",
+            tool_call_id=tool_call_id or "",
+        )
         ledger.emit(
             "policy.violation",
             action=f"tool.{decision.tool_name}",
@@ -961,6 +1016,7 @@ def _emit_pdp_ledger_event(decision: PolicyDecision, function_args: Optional[Dic
                 "origin": decision.origin,
                 "reason": decision.reason,
             },
+            **context,
         )
     except Exception:
         # Observer safety: the PDP verdict stands regardless; the ledger's own
@@ -973,6 +1029,8 @@ def pdp_gate(
     function_args: Optional[Dict[str, Any]] = None,
     *,
     session_id: Optional[str] = None,
+    task_id: str = "",
+    tool_call_id: str = "",
 ):
     """Enforce the PDP verdict at a dispatch seam.
 
@@ -983,8 +1041,6 @@ def pdp_gate(
     Never raises.
     """
     try:
-        if not _is_strict():
-            return None
         decision = evaluate_call(function_name, function_args, session_id=session_id)
         if decision.allows_execution:
             return None
@@ -994,7 +1050,10 @@ def pdp_gate(
             and _hitl_delegated_to_backend(decision.action_class)
         ):
             return None   # existing backend approval flow is the HITL gate
-        _emit_pdp_ledger_event(decision, function_args)
+        _emit_pdp_ledger_event(
+            decision, function_args, session_id=session_id,
+            task_id=task_id, tool_call_id=tool_call_id,
+        )
         from agent.tool_guardrails import ToolGuardrailDecision
         if decision.disposition == "deny":
             return ToolGuardrailDecision(

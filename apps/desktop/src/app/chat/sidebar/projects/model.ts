@@ -2,8 +2,8 @@ import { useStore } from '@nanostores/react'
 import { useEffect, useMemo, useState } from 'react'
 
 import type { LliamGitWorktree } from '@/global'
-import type { SessionInfo } from '@/lliam'
 import { mapPool } from '@/lib/pool'
+import type { SessionInfo } from '@/lliam'
 import { $sidebarWorkspaceCollapsedIds, toggleWorkspaceNodeCollapsed } from '@/store/layout'
 import { $worktreeRefreshToken } from '@/store/projects'
 

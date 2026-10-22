@@ -51,6 +51,7 @@ function appendUniquePathEntries(entries, { delimiter = path.delimiter } = {}) {
 
 function buildDesktopBackendPath({
   lliamHome,
+  userHome,
   venvRoot,
   currentPath = '',
   platform = process.platform,
@@ -59,9 +60,11 @@ function buildDesktopBackendPath({
   const delimiter = delimiterForPlatform(platform)
   const lliamNodeBin = lliamHome ? pathModule.join(lliamHome, 'node', 'bin') : null
   const venvBin = venvRoot ? pathModule.join(venvRoot, platform === 'win32' ? 'Scripts' : 'bin') : null
+  const lliamBin = lliamHome ? pathModule.join(lliamHome, 'bin') : null
+  const userBin = platform !== 'win32' && userHome ? pathModule.join(userHome, '.local', 'bin') : null
   const saneEntries = platform === 'win32' ? [] : POSIX_SANE_PATH_ENTRIES
 
-  return appendUniquePathEntries([lliamNodeBin, venvBin, currentPath, saneEntries], { delimiter })
+  return appendUniquePathEntries([lliamNodeBin, venvBin, currentPath, lliamBin, userBin, saneEntries], { delimiter })
 }
 
 function normalizeLliamHomeRoot(lliamHome, { pathModule = pathModuleForPlatform(process.platform) } = {}) {
@@ -76,6 +79,7 @@ function normalizeLliamHomeRoot(lliamHome, { pathModule = pathModuleForPlatform(
 
 function buildDesktopBackendEnv({
   lliamHome,
+  userHome,
   pythonPathEntries = [],
   venvRoot,
   currentEnv = process.env,
@@ -87,9 +91,11 @@ function buildDesktopBackendEnv({
   const key = pathEnvKey(currentEnv, platform)
 
   return {
+    ...(lliamHome ? { LLIAM_HOME: lliamHome, HERMES_HOME: lliamHome } : {}),
     PYTHONPATH: appendUniquePathEntries([...pythonPathEntries, currentPythonPath], { delimiter }),
     [key]: buildDesktopBackendPath({
       lliamHome,
+      userHome,
       venvRoot,
       currentPath: currentPathValue(currentEnv, platform),
       platform,

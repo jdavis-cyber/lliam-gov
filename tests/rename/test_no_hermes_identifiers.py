@@ -27,8 +27,11 @@ safe; the register documents it. NEVER allowlist-away a real product-name rename
 """
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
+
+from tests.rename import _hermes_scan
 
 # ---------------------------------------------------------------------------
 # Directory / glob EXCLUDES — mirror scripts/rename/exclude_globs.sh byte-for-byte.
@@ -568,6 +571,7 @@ KEEP_PATTERNS += [
      "internal Nix package pname / Rust crate name / build-derivation name — build-time identifier, "
      "not the shipped display name (the shipped artifacts are Lliam-GOV*)"),
     (r"-HermesHome\b", "PowerShell -HermesHome install param — back-compat with install.ps1"),
+    (r'\[Alias\("HermesHome"\)\]', "install.ps1 parameter alias so legacy -HermesHome callers reach -LliamHome"),
     # --- Env-compat rebrand shims (migrate-from) ---
     (r"rebrandEnv|rebrand.*hermes|hermes -> lliam|hermes \*|legacy .hermes\*|hermes\* localStorage|"
      r"Migrate legacy .hermes",
@@ -775,8 +779,28 @@ KEEP_PATTERNS += [
 _COMPILED = [(re.compile(rx, re.IGNORECASE), why) for rx, why in KEEP_PATTERNS]
 
 
-def _line_is_allowed(text: str) -> bool:
+_EXACT_CREDITS = {
+    "README.md": {"Lliam-GOV is a governance-hardened fork of the MIT-licensed Hermes Agent. It"},
+}
+
+
+def _line_is_allowed(text: str, path: str = "") -> bool:
+    # Preserve this exact upstream credit without allowing appended stale markers.
+    if text in _EXACT_CREDITS.get(path.removeprefix("./"), set()):
+        return True
     return any(rx.search(text) for rx, _ in _COMPILED)
+
+
+def test_exact_upstream_credit_allowed_only_in_readme():
+    credit = "Lliam-GOV is a governance-hardened fork of the MIT-licensed Hermes Agent. It"
+    assert _line_is_allowed(credit, "./README.md")
+    assert not _line_is_allowed(credit, "app/banner.txt")
+
+
+def test_upstream_credit_exception_does_not_hide_stale_markers():
+    credit = "Lliam-GOV is a governance-hardened fork of the MIT-licensed Hermes Agent. It"
+    assert not _line_is_allowed(credit + " Welcome to HermesOldProduct", "README.md")
+    assert not _line_is_allowed("Welcome to HermesOldProduct", "README.md")
 
 
 def test_no_lliam_owned_hermes_refs():
@@ -784,20 +808,29 @@ def test_no_lliam_owned_hermes_refs():
     # rg must run with this as cwd so relative excludes keep matching.
     repo_root = Path(__file__).resolve().parents[2]
 
-    # -i case-insensitive, -n line numbers, --no-heading path:line:text per match.
-    result = subprocess.run(
-        ["rg", "-in", "--no-heading", "hermes", *EXCLUDES, "."],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-    )
-    # rg exit codes: 0 = matches found, 1 = no matches, 2+ = actual error.
-    assert result.returncode in (0, 1), (
-        f"rg failed to run (exit {result.returncode}): {result.stderr}"
-    )
+    if shutil.which("rg"):
+        # -i case-insensitive, -n line numbers, --no-heading path:line:text per match.
+        result = subprocess.run(
+            ["rg", "-in", "--no-heading", "hermes", *EXCLUDES, "."],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+        )
+        # rg exit codes: 0 = matches found, 1 = no matches, 2+ = actual error.
+        assert result.returncode in (0, 1), (
+            f"rg failed to run (exit {result.returncode}): {result.stderr}"
+        )
+        stdout = result.stdout
+    else:
+        # No ripgrep on PATH: the pure-Python scan prints the same lines rg
+        # would (same file set, excludes, encoding and case rules — proven
+        # against rg in test_hermes_scan_fallback.py). For binary files it
+        # prints every match before the first NUL, the most any rg version
+        # shows, so the guard without rg is never looser than with it.
+        stdout = _hermes_scan.scan(repo_root, EXCLUDES)
 
     offenders: list[str] = []
-    for raw in result.stdout.splitlines():
+    for raw in stdout.splitlines():
         # Split "path:linenum:content" — path may contain ':' only on Windows,
         # not here; split on the first two colons.
         parts = raw.split(":", 2)
@@ -806,7 +839,7 @@ def test_no_lliam_owned_hermes_refs():
         path, _lineno, text = parts
         if _is_whole_tree_keep(path):
             continue
-        if _line_is_allowed(text):
+        if _line_is_allowed(text, path):
             continue
         offenders.append(f"{path}:{_lineno}: {text.strip()[:160]}")
 

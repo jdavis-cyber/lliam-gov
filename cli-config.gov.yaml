@@ -124,6 +124,13 @@ security:
   max_mutating_calls:              # [additive @ P2.1] LG-AZ-10 mirror of policy budgets (PDP reads the policy file; this key is the one-artifact audit mirror)
     per_turn: 25
     per_session: 200
+  spend_ceiling:                   # inference spend ceiling (lliam_cli/model_cost_guard.py), checked before every model call. Breach -> HITL approval (gateway queue / CLI prompt); no approver, denial or timeout -> no further calls (fail closed). An approval buys one more increment.
+    enabled: true
+    per_session_tokens: 2000000    # input+output+cache tokens per session, shared with delegated subagents
+    per_day_tokens: 20000000       # all sessions started today (UTC), from the session DB
+    per_session_cost_usd: 10       # applied only when the provider price is known
+    per_day_cost_usd: 100
+    on_breach: hitl_approve        # hitl_approve | deny
 
   # [ACTIVE @ P2.4]  DATA PROTECTION + DLP TAINT-GATE  (LG-DP-01/02/04/07/08/10/11)
   # Consumed by the NEW agent/data_protection.py. CUI/PII classification arms
@@ -313,6 +320,16 @@ skills:
 terminal:
   backend: docker             # config.py:1095  DEFAULT "local" -> OVERRIDE "docker" (sandboxed exec)
   timeout: 180                # config.py:1098  (confirm-pinned)
+  # Sandbox resource ceilings + network (JER-74). Single-workstation sizing:
+  # the sandbox can never take more than 2 CPUs / 4 GiB from the host. Under
+  # strict posture DockerEnvironment refuses to start with unbounded (<=0)
+  # values and refuses docker_extra_args that would lift these ceilings.
+  container_cpu: 2            # --cpus 2
+  container_memory: 4096      # MB -> --memory 4096m
+  # No sandbox network. The squid egress enclave fronts the gateway container
+  # only; a sandbox on Docker's default bridge would reach the internet
+  # directly and bypass the egress allowlist. --network=none removes that path.
+  docker_network: false       # --network=none
 
 
 # =============================================================================
@@ -412,13 +429,40 @@ audit:
 monitoring:
   iscm_sink:
     enabled: true                    # [additive @ P5.1] LG-MO-05 stream ON in the gov profile
-    kind: file                       # [additive] file | syslog — a syslog/OTel collector tails the file
-    path: "$HERMES_HOME/logs/iscm-events.log"   # [additive] SIEM-consumable JSONL of the sealed ledger
+    kind: file                       # [additive] file | syslog | otlp_http — file keeps the stream on the host until an off-host collector is provisioned
+    path: "$HERMES_HOME/logs/iscm-events.log"   # [additive] SIEM-consumable JSONL of the sealed ledger ($HERMES_HOME / $LLIAM_HOME resolve to the agent home); still written as the local copy for syslog / otlp_http
     format: json                     # [additive] json (SIEM default) | cef
+    # Off-host forwarders [additive @ JER-76] — set kind and the matching keys
+    # once a real collector exists. Destinations go through
+    # tools.egress_policy.check_egress(..., surface="messaging"); a refused
+    # destination is logged at ERROR and events stay in `path`.
+    # syslog_address: ""             # kind=syslog: local socket (/dev/log, /var/run/syslog) or host:port; non-loopback hosts are egress-checked as syslog://host:port
+    # syslog_protocol: udp           # kind=syslog: udp | tcp
+    # otlp_endpoint: ""              # kind=otlp_http: https OTLP/HTTP JSON logs URL (collector .../v1/logs)
+    # otlp_auth_header_env: ""       # kind=otlp_http: NAME of an env var holding the Authorization value (never the secret itself)
+    # otlp_timeout_seconds: 5
   runaway_threshold: 8               # [additive @ P5.1] LG-MO-01 consecutive-identical-dispatch alert threshold
   egress_volume_threshold: 50        # [additive @ P5.1] LG-MO-02 per-session egress-count spike threshold
   notify: [jdavis@agency.mil]        # [additive @ P5.1] LG-MO-06 near-real-time notify list (role_bindings.isso)
   notify_severity: warning           # [additive @ P5.1] LG-MO-06 min alert severity that pages named staff
+  notify_transport:                  # [additive @ JER-76] LG-MO-06 delivery for `notify`. Every notification is appended to $HERMES_HOME/logs/notifications.jsonl (0600) with each delivery outcome; failed/queued ones are redelivered by the scheduled assurance job
+    # record_path: ""                # [additive] default $HERMES_HOME/logs/notifications.jsonl
+    max_attempts: 3                  # [additive] attempts per transport (exponential backoff) before a record is marked failed
+    retry_backoff_seconds: 2         # [additive] backoff base, seconds
+    webhook:
+      enabled: false                 # [additive] OFF until a real receiver is provisioned
+      url: ""                        # [additive] https only; must pass check_egress(url, surface="messaging") (allowlist entry with surfaces: [messaging]); redirects are refused
+      auth_header_env: ""            # [additive] NAME of an env var whose value is sent as Authorization (never the secret itself)
+      timeout_seconds: 5
+    smtp:
+      enabled: false                 # [additive] OFF until a relay is provisioned
+      host: ""                       # [additive] loopback relay = the host MTA; any other host must pass check_egress("smtp://host:port", surface="messaging")
+      port: 25
+      from_addr: ""                  # [additive] From header; recipients are the `notify` list
+      starttls: false
+      timeout_seconds: 5
+  assurance:
+    max_age_hours: 26                # [additive @ JER-76] control_effectiveness fails on a deployed host (pinned home + real ledger) if the scheduled assurance job last completed longer ago than this; install with `lliam-gov assurance install`
 
 
 # =============================================================================
@@ -442,6 +486,10 @@ incident_response:
     conditions: [egress_violation, cui_taint, loop_exhaustion, audit_break]   # LG-IR-03
     action: halt                     # [additive] halt | degrade
     notify_role: isso
+    policy_denials:                  # [additive] LG-IR-03 governance circuit-breaker (agent/governance_breaker.py)
+      enabled: true                  #   N consecutive blocked/denied tool calls in one session
+      threshold: 10                  #   ...within window_seconds engage the kill-switch;
+      window_seconds: 120            #   any allowed call resets the run
 
 
 # =============================================================================
@@ -477,8 +525,8 @@ cato:
 # gateway.multiplex_profiles below. LG-IA-01/04/05 land as the managed-account
 # inventory + secret-source config-of-record + the no-default-credential startup
 # check; heavier runtime enforcement (live secrets-CLI reconcile, Bitwarden
-# migration, full delegation-context module + max_spawn_depth enforcement) is
-# flagged for the cross-phase remediation pass (see P1.4 report).
+# migration, full delegation-context module) is flagged for the cross-phase
+# remediation pass (see P1.4 report). max_spawn_depth is enforced (below).
 # =============================================================================
 identity:
   bind_instance: true                # [additive @ P1.4] LG-IA-02: derive + stamp the NPE instance_id into audit actor
@@ -494,7 +542,7 @@ secrets:
   #  security.no_default_credentials; a duplicate here would be unread.)
 
 delegation:
-  max_spawn_depth: 3                 # [additive @ P1.4] LG-IA-10 config-of-record: bound the operator→Lliam→sub-agent delegation chain; runtime enforcement in delegate_tool is remediation-pass scope
+  max_spawn_depth: 3                 # [additive @ P1.4] LG-IA-10: bound the operator→Lliam→sub-agent delegation chain. delegate_task refuses beyond it; under strict this value caps any home-config value, and depth carries into spawned processes (LLIAM_DELEGATE_DEPTH) so an agent started beyond it refuses to run
 
 # =============================================================================
 # [ACTIVE @ P1.6]  ROLES / RACI / SEPARATION-OF-DUTIES  (LG-GV-04/05)
@@ -556,7 +604,6 @@ governance:
     privacy_policy: docs/governance/privacy-policy.md                # LG-PF-01/02/03/05
     ai_disclosure: docs/governance/ai-disclosure-notice.md           # LG-PF-04
     bias_risk: docs/governance/bias-risk-register.yaml               # LG-PF-06
-    fairness_evaluations: docs/governance/fairness-evaluations.yaml  # LG-PF-07
     # [additive @ P4.5] secure-dev + personnel/supplier layer (LG-SD-*, LG-TP-*)
     secure_development: docs/governance/secure-development.md        # LG-SD-02..08
     requirements_traceability: docs/governance/requirements-traceability.yaml  # LG-SD-02

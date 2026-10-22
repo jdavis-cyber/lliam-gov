@@ -42,21 +42,28 @@ skills:
   ast_audit: pass
   provenance: foreground
   attestation: builtin
-  signed_hash: sha256:PLACEHOLDER-recompute-at-build
+  content_hash: 'UNPROVISIONED: no skill directory named ''pdf'' in the repository'
+  signed_hash: 'UNPROVISIONED: model_manifest.yaml skill_hashes.pdf is a template
+    value'
 - name: xlsx
   source: builtin
   ast_audit: pass
   provenance: foreground
   attestation: builtin
-  signed_hash: sha256:PLACEHOLDER-recompute-at-build
+  content_hash: 'UNPROVISIONED: no skill directory named ''xlsx'' in the repository'
+  signed_hash: 'UNPROVISIONED: model_manifest.yaml skill_hashes.xlsx is a template
+    value'
 - name: docx
   source: builtin
   ast_audit: pass
   provenance: foreground
   attestation: builtin
-  signed_hash: sha256:PLACEHOLDER-recompute-at-build
+  content_hash: 'UNPROVISIONED: no skill directory named ''docx'' in the repository'
+  signed_hash: 'UNPROVISIONED: model_manifest.yaml skill_hashes.docx is a template
+    value'
 attestations:
-  manifest_signature: REPLACE-WITH-PROVISIONED-SIGNATURE
+  manifest_signature: 'UNPROVISIONED: model_manifest.yaml signature is a template
+    value; re-sign with the provisioned key'
   model_primary: lmstudio/llama-3.1-8b-instruct
   model_fallback: bedrock/anthropic.claude-3-5-sonnet
 relationships:

@@ -135,7 +135,9 @@ sdl_gate:
   require_osv_scan: true
   osv_fail_on: high
   require_codeowners: true
-  sdl_record_dir: "docs/governance/sdl"
+  # SDL review records are rows of the supplier vetting register (its §5
+  # procedure), not files in a separate directory.
+  sdl_record_register: "docs/governance/supplier-vetting-register.md"
 
 
 # =============================================================================

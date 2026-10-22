@@ -64,7 +64,6 @@ import { notify } from '@/store/notifications'
 import { $previewStatusBySession } from '@/store/preview-status'
 import { listRepoBranches, requestStartWorkSession, startWorkInRepo, switchBranchInRepo } from '@/store/projects'
 import { $activeSessionAwaitingInput } from '@/store/prompts'
-import { toggleReview } from '@/store/review'
 import { $gatewayState, $messages, setSessionPickerOpen } from '@/store/session'
 import { $threadScrolledUp } from '@/store/thread-scroll'
 import { isSecondaryWindow } from '@/store/windows'
@@ -1848,9 +1847,9 @@ export function ChatBar({
       .catch(restore)
   }
 
-  // External "submit this prompt" requests (e.g. the review pane's agent-ship
-  // button) route through the same send path. A ref keeps the listener stable
-  // while always calling the latest dispatchSubmit closure.
+  // External "submit this prompt" requests route through the same send path.
+  // A ref keeps the listener stable while always calling the latest
+  // dispatchSubmit closure.
   const dispatchSubmitRef = useRef(dispatchSubmit)
   dispatchSubmitRef.current = dispatchSubmit
 
@@ -2276,7 +2275,6 @@ export function ChatBar({
                 onBranchOff={handleBranchOff}
                 onConvertBranch={handleConvertBranch}
                 onListBranches={handleListBranches}
-                onOpen={toggleReview}
                 onOpenWorktree={openInWorktree}
                 onSwitchBranch={handleSwitchBranch}
               />

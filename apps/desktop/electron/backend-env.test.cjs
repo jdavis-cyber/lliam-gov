@@ -103,3 +103,16 @@ test('Windows PATH casing and delimiter are preserved without POSIX sane entries
 test('appendUniquePathEntries drops empty entries and keeps first occurrence', () => {
   assert.equal(appendUniquePathEntries([':/a::/b', ['/a', '/c']], { delimiter: ':' }), '/a:/b:/c')
 })
+
+test('Dock environment discovers user CLI locations and pins both home names', () => {
+  const env = buildDesktopBackendEnv({
+    lliamHome: '/some user/data',
+    userHome: '/some user',
+    currentEnv: { PATH: '/usr/bin:/bin', LLIAM_HOME: '/wrong-home' },
+    platform: 'darwin'
+  })
+  assert.ok(env.PATH.split(':').includes('/some user/.local/bin'))
+  assert.ok(env.PATH.split(':').includes('/some user/data/bin'))
+  assert.equal(env.HERMES_HOME, '/some user/data')
+  assert.equal(env.LLIAM_HOME, env.HERMES_HOME)
+})

@@ -59,10 +59,11 @@ export function OAuthProvidersCard({ onError, onSuccess }: Props) {
   const { t } = useI18n();
 
   const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   const refresh = useCallback(() => {
-    setLoading(true);
     api
       .getOAuthProviders()
       .then((resp) => setProviders(resp.providers))
@@ -80,6 +81,7 @@ export function OAuthProvidersCard({ onError, onSuccess }: Props) {
     try {
       await api.disconnectOAuthProvider(provider.id);
       onSuccess?.(`${provider.name} ${t.oauth.disconnect.toLowerCase()}ed`);
+      setLoading(true);
       refresh();
     } catch (e) {
       onError?.(`${t.oauth.disconnect} failed: ${e}`);
@@ -106,7 +108,7 @@ export function OAuthProvidersCard({ onError, onSuccess }: Props) {
             ghost
             size="icon"
             className="text-muted-foreground hover:text-foreground"
-            onClick={refresh}
+            onClick={() => { setLoading(true); refresh(); }}
             disabled={loading}
             aria-label={t.common.refresh}
           >
@@ -265,6 +267,7 @@ export function OAuthProvidersCard({ onError, onSuccess }: Props) {
           provider={loginFor}
           onClose={() => {
             setLoginFor(null);
+            setLoading(true);
             refresh();
           }}
           onSuccess={(msg) => onSuccess?.(msg)}

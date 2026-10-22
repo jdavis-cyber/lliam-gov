@@ -27,7 +27,6 @@ import {
   toggleShowAllProfiles
 } from '@/store/profile'
 import { requestNewWorktree } from '@/store/projects'
-import { toggleReview } from '@/store/review'
 import { setModelPickerOpen } from '@/store/session'
 import {
   $switcherOpen,
@@ -161,7 +160,6 @@ export function useKeybinds(deps: KeybindRuntimeDeps): void {
         toggleFileBrowserOpen()
       }
     },
-    'view.toggleReview': toggleReview,
     'view.showFiles': showFiles,
     'view.showTerminal': () => setTerminalTakeover(!$terminalTakeover.get()),
     'view.flipPanes': togglePanesFlipped,

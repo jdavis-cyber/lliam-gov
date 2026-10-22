@@ -153,25 +153,36 @@ def _env_float(name: str, default: float) -> float:
 
 
 def _enforce_provider_egress(agent) -> None:
-    """Apply the strict egress record at the provider request boundary."""
+    """Apply the strict egress record at the provider request boundary.
+
+    Checks the configured provider URL and, on the Anthropic-SDK path, the
+    endpoint the live client will actually call (``AnthropicBedrock`` derives
+    it from its region / ``ANTHROPIC_BEDROCK_BASE_URL``; ``Anthropic`` from
+    ``ANTHROPIC_BASE_URL``), so the two cannot disagree silently. Bedrock
+    Converse is additionally checked on its boto3 client endpoint at the call
+    site (``get_bedrock_runtime_client_for_request``).
+    """
+    from agent.provider_egress import client_endpoint_url, enforce_provider_egress_url
+
     candidates = [
         getattr(agent, "_anthropic_base_url", None),
         getattr(agent, "base_url", None),
         getattr(getattr(agent, "client", None), "base_url", None),
     ]
-    url = next((str(value) for value in candidates if value), "")
-    if not url or "://" not in url:
+    urls = []
+    if getattr(agent, "api_mode", None) == "anthropic_messages":
+        live = client_endpoint_url(getattr(agent, "_anthropic_client", None))
+        if live:
+            urls.append(live)
+    configured = next((str(value) for value in candidates if value), "")
+    if configured and "://" in configured and configured not in urls:
+        urls.append(configured)
+    if not urls:
         # Local/non-HTTP adapters have no URL for this policy surface.
         return
-    from tools.egress_policy import check_egress
-
-    decision = check_egress(
-        url,
-        surface="provider",
-        session_id=getattr(agent, "session_id", None),
-    )
-    if decision.disposition != "allow":
-        raise PermissionError(f"Provider request blocked by egress policy: {decision.reason}")
+    session_id = getattr(agent, "session_id", None)
+    for url in urls:
+        enforce_provider_egress_url(url, session_id=session_id)
 
 
 def interruptible_api_call(agent, api_kwargs: dict):
@@ -265,14 +276,16 @@ def interruptible_api_call(agent, api_kwargs: dict):
                 # SimpleNamespace so the rest of the agent loop can treat
                 # bedrock responses like chat_completions responses.
                 from agent.bedrock_adapter import (
-                    _get_bedrock_runtime_client,
+                    get_bedrock_runtime_client_for_request,
                     invalidate_runtime_client,
                     is_stale_connection_error,
                     normalize_converse_response,
                 )
                 region = api_kwargs.pop("__bedrock_region__", "us-east-1")
                 api_kwargs.pop("__bedrock_converse__", None)
-                client = _get_bedrock_runtime_client(region)
+                client = get_bedrock_runtime_client_for_request(
+                    region, session_id=getattr(agent, "session_id", None),
+                )
                 try:
                     raw_response = client.converse(**api_kwargs)
                 except Exception as _bedrock_exc:
@@ -1443,6 +1456,9 @@ def handle_max_iterations(agent, messages: list, api_call_count: int) -> str:
     messages.append({"role": "user", "content": summary_request})
 
     try:
+        # The summary request sends the full history straight through the
+        # transport clients below, not interruptible_api_call — gate it here.
+        _enforce_provider_egress(agent)
         # Build API messages, stripping internal-only fields
         # (finish_reason, reasoning) that strict APIs like Mistral reject with 422
         _needs_sanitize = agent._should_sanitize_tool_calls()
@@ -1743,7 +1759,7 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
         def _bedrock_call():
             try:
                 from agent.bedrock_adapter import (
-                    _get_bedrock_runtime_client,
+                    get_bedrock_runtime_client_for_request,
                     invalidate_runtime_client,
                     is_stale_connection_error,
                     is_streaming_access_denied_error,
@@ -1752,7 +1768,9 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
                 )
                 region = api_kwargs.pop("__bedrock_region__", "us-east-1")
                 api_kwargs.pop("__bedrock_converse__", None)
-                client = _get_bedrock_runtime_client(region)
+                client = get_bedrock_runtime_client_for_request(
+                    region, session_id=getattr(agent, "session_id", None),
+                )
                 try:
                     raw_response = client.converse_stream(**api_kwargs)
                 except Exception as _bedrock_exc:
