@@ -244,10 +244,15 @@ terminal:
 #     - "NPM_TOKEN"
 #   # Optional: extra flags passed verbatim to docker run (appended after security defaults).
 #   # Useful for adding capabilities (e.g. apt installs needing SETUID) or custom options.
+#   # Under security.posture: strict, flags that weaken the sandbox (--privileged,
+#   # --cap-add, --security-opt, host namespaces, --device, sensitive host mounts,
+#   # resource-limit overrides, --network other than none) refuse container start.
 #   # Example: add a Linux capability not included by default
 #   # docker_extra_args:
 #   #   - "--cap-add"
 #   #   - "SETUID"
+#   # Optional: run the sandbox with no network at all (--network=none).
+#   # docker_network: false
 
 # -----------------------------------------------------------------------------
 # OPTION 4: Singularity/Apptainer container
