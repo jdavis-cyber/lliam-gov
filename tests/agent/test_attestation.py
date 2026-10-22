@@ -14,6 +14,7 @@ No-op on low-side postures (capability preserving).
 from __future__ import annotations
 
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -184,3 +185,70 @@ def test_low_side_attestation_never_blocks(monkeypatch):
     decision = att.attest_high_impact("terminal", manifest={}, runtime_model="anything")
     assert decision is None  # no-op low-side
     att.reset_attestation_cache()
+
+
+# ---------------------------------------------------------------------------
+# 4. JER-78 — shipped template signature / skill hashes never verify
+# ---------------------------------------------------------------------------
+
+_REPO_MANIFEST = Path(__file__).resolve().parents[2] / "model_manifest.yaml"
+
+
+def test_shipped_repo_manifest_never_verifies_even_with_a_trusted_key(strict_att):
+    import yaml
+
+    manifest = yaml.safe_load(_REPO_MANIFEST.read_text(encoding="utf-8"))
+    verdict = strict_att.verify_manifest(manifest)
+    assert verdict.valid is False
+    assert "not provisioned" in verdict.reason
+
+
+@pytest.mark.parametrize("signature", [
+    "REPLACE-WITH-PROVISIONED-SIGNATURE",
+    "${LLIAM_GOV_MANIFEST_SIGNATURE}",
+    "<signature>",
+])
+def test_template_signature_reports_not_provisioned_not_tamper(strict_att, signature):
+    manifest = {"signer": "lliam-gov-signer", "signature": signature,
+                "models": {"primary": "lmstudio/llama-3.1-8b-instruct"}}
+    verdict = strict_att.verify_manifest(manifest)
+    assert verdict.valid is False
+    assert "signature not provisioned" in verdict.reason
+    assert "tampered" not in verdict.reason
+
+
+def test_genuinely_signed_manifest_with_template_skill_hashes_fails(strict_att):
+    body = {"models": {"primary": "lmstudio/llama-3.1-8b-instruct"},
+            "skill_hashes": {"pdf": "sha256:PLACEHOLDER-recompute-at-build",
+                             "xlsx": "sha256:" + "ab" * 32}}
+    manifest = _signed_manifest(strict_att, body)   # real HMAC over the template
+    verdict = strict_att.verify_manifest(manifest)
+    assert verdict.valid is False
+    assert "skill hashes not provisioned for pdf" in verdict.reason
+
+
+def test_non_mapping_skill_hashes_fail_closed(strict_att):
+    body = {"models": {"primary": "lmstudio/llama-3.1-8b-instruct"},
+            "skill_hashes": ["sha256:" + "ab" * 32]}
+    verdict = strict_att.verify_manifest(_signed_manifest(strict_att, body))
+    assert verdict.valid is False
+    assert "not provisioned" in verdict.reason
+
+
+def test_high_impact_blocked_on_template_signature(strict_att):
+    manifest = {"signer": "lliam-gov-signer",
+                "signature": "REPLACE-WITH-PROVISIONED-SIGNATURE",
+                "models": {"primary": "lmstudio/llama-3.1-8b-instruct"}}
+    decision = strict_att.attest_high_impact(
+        "terminal", manifest=manifest, runtime_model="lmstudio/llama-3.1-8b-instruct")
+    assert decision is not None and decision.should_halt
+    assert "not provisioned" in decision.message
+
+
+def test_runtime_model_switch_refused_against_shipped_manifest(strict_att, monkeypatch):
+    cfg = strict_att._security_cfg()
+    cfg = {"security": {**cfg, "model_manifest_path": str(_REPO_MANIFEST)}}
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
+    verdict = strict_att.runtime_model_attested("lmstudio/llama-3.1-8b-instruct")
+    assert verdict.valid is False
+    assert "not provisioned" in verdict.reason

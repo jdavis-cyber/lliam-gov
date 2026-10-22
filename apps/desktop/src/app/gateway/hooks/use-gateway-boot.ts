@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
 
 import type { LliamConnection } from '@/global'
-import { LliamGateway } from '@/lliam'
 import { translateNow } from '@/i18n'
 import { desktopDefaultCwd } from '@/lib/desktop-fs'
 import { isGatewayReauthRequired, resolveGatewayWsUrl } from '@/lib/gateway-ws-url'
+import { LliamGateway } from '@/lliam'
 import {
   $desktopBoot,
   applyDesktopBootProgress,

@@ -451,10 +451,19 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
         # dispatch, surfacing through the existing guardrail-block path.
         if block_result is None:
             try:
+                # Instance identity for records of a call the PDP denies
+                # before predispatch_gate runs (LG-QT-03). Never raises.
+                from agent.governance_audit_hooks import bind_session_actor
+                bind_session_actor(agent)
+            except Exception:
+                pass
+            try:
                 from tools.tool_policy import pdp_gate
                 _pdp_decision = pdp_gate(
                     function_name, function_args,
                     session_id=getattr(agent, "session_id", None),
+                    task_id=effective_task_id or "",
+                    tool_call_id=getattr(tool_call, "id", "") or "",
                 )
             except Exception:
                 _pdp_decision = None
@@ -488,8 +497,11 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
                     effective_task_id=effective_task_id,
                     middleware_trace=list(middleware_trace),
                 )
-            except Exception:
-                _gov_decision = None
+            except Exception as _gov_exc:
+                # Strict posture: a raising gate denies (fail-closed); low-side
+                # keeps the non-blocking convention.
+                from agent.governance_gate_errors import gate_error_decision
+                _gov_decision = gate_error_decision(function_name, "predispatch_gate", _gov_exc)
             if _gov_decision is not None:
                 block_result = agent._guardrail_block_result(_gov_decision)
                 blocked_by_guardrail = True
@@ -1031,10 +1043,19 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
         # dispatch, surfacing through the existing guardrail-block path.
         if not _execution_blocked:
             try:
+                # Instance identity for records of a call the PDP denies
+                # before predispatch_gate runs (LG-QT-03). Never raises.
+                from agent.governance_audit_hooks import bind_session_actor
+                bind_session_actor(agent)
+            except Exception:
+                pass
+            try:
                 from tools.tool_policy import pdp_gate
                 _pdp_decision = pdp_gate(
                     function_name, function_args,
                     session_id=getattr(agent, "session_id", None),
+                    task_id=effective_task_id or "",
+                    tool_call_id=getattr(tool_call, "id", "") or "",
                 )
             except Exception:
                 _pdp_decision = None
@@ -1057,8 +1078,11 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     effective_task_id=effective_task_id,
                     middleware_trace=list(middleware_trace),
                 )
-            except Exception:
-                _gov_decision = None
+            except Exception as _gov_exc:
+                # Strict posture: a raising gate denies (fail-closed); low-side
+                # keeps the non-blocking convention.
+                from agent.governance_gate_errors import gate_error_decision
+                _gov_decision = gate_error_decision(function_name, "predispatch_gate", _gov_exc)
             if _gov_decision is not None:
                 _guardrail_block_decision = _gov_decision
                 _execution_blocked = True

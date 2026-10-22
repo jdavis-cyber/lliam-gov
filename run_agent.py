@@ -659,6 +659,9 @@ class AIAgent:
         self.session_estimated_cost_usd = 0.0
         self.session_cost_status = "unknown"
         self.session_cost_source = "none"
+        # security.spend_ceiling: a new session starts a fresh per-session
+        # allowance (the daily ceiling is unaffected).
+        self._spend_tracker = None
         
         # Turn counter (added after reset_session_state was first written — #2635)
         self._user_turn_count = 0
@@ -5387,19 +5390,43 @@ class AIAgent:
         persist_user_timestamp: Optional[float] = None,
         moa_config: Optional[dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Forwarder — see ``agent.conversation_loop.run_conversation``."""
+        """Forwarder — see ``agent.conversation_loop.run_conversation``.
+
+        The turn runs inside :func:`agent.delegation_depth.agent_depth_scope`
+        so subprocesses the agent spawns inherit its delegation depth
+        (``delegation.max_spawn_depth`` across process boundaries).
+        """
         from agent.conversation_loop import run_conversation
-        return run_conversation(
-            self,
-            user_message,
-            system_message,
-            conversation_history,
-            task_id,
-            stream_callback,
-            persist_user_message,
-            persist_user_timestamp=persist_user_timestamp,
-            moa_config=moa_config,
-        )
+        from agent import delegation_depth as _dd
+
+        if os.environ.get(_dd.ENV_VAR) is not None:
+            # This process was started by an agent; under strict posture refuse
+            # the turn when it is already beyond the depth limit.
+            from tools.delegate_tool import turn_admission_error
+
+            _refusal = turn_admission_error(self)
+            if _refusal:
+                logger.warning("%s", _refusal)
+                return {
+                    "final_response": None,
+                    "messages": list(conversation_history or []),
+                    "api_calls": 0,
+                    "completed": False,
+                    "failed": True,
+                    "error": _refusal,
+                }
+        with _dd.agent_depth_scope(self):
+            return run_conversation(
+                self,
+                user_message,
+                system_message,
+                conversation_history,
+                task_id,
+                stream_callback,
+                persist_user_message,
+                persist_user_timestamp=persist_user_timestamp,
+                moa_config=moa_config,
+            )
 
     def chat(self, message: str, stream_callback: Optional[callable] = None) -> str:
         """

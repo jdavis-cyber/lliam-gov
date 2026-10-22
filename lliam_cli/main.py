@@ -281,6 +281,8 @@ from lliam_cli.subcommands.webhook import build_webhook_parser
 from lliam_cli.subcommands.hooks import build_hooks_parser
 from lliam_cli.subcommands.doctor import build_doctor_parser
 from lliam_cli.subcommands.security import build_security_parser
+from lliam_cli.subcommands.killswitch import build_killswitch_parser
+from lliam_cli.killswitch_cli import cmd_killswitch
 from lliam_cli.subcommands.dump import build_dump_parser
 from lliam_cli.subcommands.debug import build_debug_parser
 from lliam_cli.subcommands.backup import build_backup_parser
@@ -449,9 +451,11 @@ def _apply_profile_override() -> None:
     # still read active_profile — the user may have switched profiles via
     # `lliam-gov profile use` and the gateway should honour that choice.
     # See issue #22502.
-    lliam_home_env = os.environ.get("HERMES_HOME", "")
+    lliam_home_env = getenv_compat("HOME", "")
     if profile_name is None and lliam_home_env:
         if Path(lliam_home_env).parent.name == "profiles":
+            os.environ["HERMES_HOME"] = lliam_home_env
+            os.environ["LLIAM_HOME"] = lliam_home_env
             return
 
     # 2. If no flag, check active_profile in the lliam-gov root.
@@ -501,6 +505,7 @@ def _apply_profile_override() -> None:
             )
             return
         os.environ["HERMES_HOME"] = lliam_home
+        os.environ["LLIAM_HOME"] = lliam_home
         # Strip the flag from argv so argparse doesn't choke
         if consume > 0 and profile_index is not None:
             start = profile_index + 1  # +1 because argv is sys.argv[1:]
@@ -11816,9 +11821,10 @@ def _build_provider_choices() -> list[str]:
 # to parse.
 _BUILTIN_SUBCOMMANDS = frozenset(
     {
-        "acp", "auth", "backup", "bundles", "checkpoints", "claw", "completion",
+        "acp", "assurance", "auth", "backup", "bundles", "checkpoints", "claw", "completion",
         "computer-use",
         "config", "cron", "curator", "dashboard", "debug", "doctor",
+        "killswitch", "kill-switch",
         "dump", "fallback", "gateway", "hooks", "import", "insights",
         "gui", "desktop", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate", "moa",
         "model", "pairing", "pets", "plugins", "portal", "postinstall", "profile",
@@ -12689,6 +12695,13 @@ def main():
     build_security_parser(subparsers, cmd_security=cmd_security)
 
     # =========================================================================
+    # killswitch command — operator engage / status / release (LG-IR-01/08)
+    # =========================================================================
+    # killswitch command  (parser built in lliam_cli/subcommands/killswitch.py)
+    # =========================================================================
+    build_killswitch_parser(subparsers, cmd_killswitch=cmd_killswitch)
+
+    # =========================================================================
     # dump command  (parser built in lliam_cli/subcommands/dump.py)
     # =========================================================================
     build_dump_parser(subparsers, cmd_dump=cmd_dump)
@@ -12823,6 +12836,26 @@ def main():
         _register_curator_cli(curator_parser)
     except Exception as _exc:
         logging.getLogger(__name__).debug("curator CLI wiring failed: %s", _exc)
+
+    # =========================================================================
+    # assurance command — schedule the recurring assurance / cATO job
+    # =========================================================================
+    assurance_parser = subparsers.add_parser(
+        "assurance",
+        help="Install, remove, inspect or run the scheduled assurance job",
+        description=(
+            "Schedule ci/governance-ci-gates/scheduled_assurance_cron.sh "
+            "(control-effectiveness, red-team, governance metrics, cATO "
+            "cycle, freshness heartbeat) as a launchd agent on macOS or a "
+            "systemd user timer on Linux."
+        ),
+    )
+    try:
+        from lliam_cli.assurance_schedule import register_cli as _register_assurance_cli
+
+        _register_assurance_cli(assurance_parser)
+    except Exception as _exc:
+        logging.getLogger(__name__).debug("assurance CLI wiring failed: %s", _exc)
 
     # =========================================================================
     # pets command — petdex animated mascots (CLI / TUI / desktop display)

@@ -61,7 +61,8 @@ import { Typography } from "@nous-research/ui/ui/components/typography/index";
 import { cn } from "@/lib/utils";
 import { Backdrop } from "@/components/Backdrop";
 import { SidebarFooter } from "@/components/SidebarFooter";
-import { SidebarStatusStrip, gatewayLine } from "@/components/SidebarStatusStrip";
+import { SidebarStatusStrip } from "@/components/SidebarStatusStrip";
+import { gatewayLine } from "@/lib/gateway-status";
 import { useBelowBreakpoint } from "@nous-research/ui/hooks/use-below-breakpoint";
 import { useSidebarStatus } from "@/hooks/useSidebarStatus";
 import { AuthWidget } from "@/components/AuthWidget";
@@ -918,8 +919,8 @@ function SidebarSystemActions({
     items.push({
       action: "update",
       icon: Download,
-      label: t.status.updateLliam,
-      runningLabel: t.status.updatingLliam,
+      label: t.status.updateHermes,
+      runningLabel: t.status.updatingHermes,
       spin: false,
     });
   }

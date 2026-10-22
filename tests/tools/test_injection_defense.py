@@ -11,6 +11,7 @@ existing tools/threat_patterns engine. No-op on low-side postures.
 
 from __future__ import annotations
 
+import datetime
 import textwrap
 
 import pytest
@@ -194,6 +195,9 @@ def test_fetched_injection_page_then_egress_blocked_e2e(tmp_path, monkeypatch):
         "default_disposition": "deny", "fail_closed": True}}}
     monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
     monkeypatch.setattr(model_tools, "_READ_SEARCH_TOOLS", frozenset())
+    # The fetch goes through the shipped egress allowlist; pin its clock so the
+    # test exercises injection gating, not whether the shipped entry is in date.
+    monkeypatch.setattr("tools.egress_policy._today", lambda: datetime.date(2026, 7, 1))
 
     import tools.injection_defense as idf
     import tools.tool_policy as tp

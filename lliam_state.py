@@ -1960,6 +1960,22 @@ class SessionDB:
 
         return self._execute_write(_do) or 0
 
+    def usage_since(self, since_ts: float) -> Dict[str, float]:
+        """Token and estimated-cost totals for sessions started at/after ``since_ts``.
+
+        ``tokens`` counts input + output + cache read/write tokens (the same
+        total the agent loop accounts per API call). Used by the daily
+        inference spend ceiling (lliam_cli/model_cost_guard.py).
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens"
+                " + cache_write_tokens), 0), COALESCE(SUM(estimated_cost_usd), 0)"
+                " FROM sessions WHERE started_at >= ?",
+                (since_ts,),
+            ).fetchone()
+        return {"tokens": int(row[0] or 0), "cost_usd": float(row[1] or 0.0)}
+
     def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get a session by ID."""
         with self._lock:

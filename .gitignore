@@ -66,6 +66,7 @@ environments/benchmarks/evals/
 
 # Web UI build output
 hermes_cli/web_dist/
+lliam_cli/web_dist/
 apps/desktop/build/
 apps/desktop/dist/
 apps/desktop/release/
@@ -106,7 +107,9 @@ opencode.json
 config/mcporter.json
 
 hermes_cli/tui_dist/*
+lliam_cli/tui_dist/
 hermes_cli/scripts/
+lliam_cli/scripts/
 docs/superpowers/*
 # Working directory for the Hermes Agent's session state (~/.hermes/ at runtime;
 # also created in-repo when an agent operates in this checkout). Plans, audit

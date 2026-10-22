@@ -1,8 +1,8 @@
 import { type QueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 
-import { getGlobalModelInfo } from '@/lliam'
 import { useI18n } from '@/i18n'
+import { getGlobalModelInfo } from '@/lliam'
 import { notifyError } from '@/store/notifications'
 import { $activeSessionId, $currentModel, $currentProvider, setCurrentModel, setCurrentProvider } from '@/store/session'
 import type { ModelOptionsResponse } from '@/types/lliam'

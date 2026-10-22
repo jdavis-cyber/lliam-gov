@@ -4523,6 +4523,15 @@ def _resolve_provider_client_unchecked(
             logger.warning("resolve_provider_client: cannot create Bedrock "
                            "client: %s", exc)
             return None, None
+        # The synthetic base_url below is what validate_provider sees; check
+        # the endpoint the AnthropicBedrock client will actually call
+        # (region / ANTHROPIC_BEDROCK_BASE_URL) against the egress policy.
+        try:
+            from agent.provider_egress import enforce_client_egress
+            enforce_client_egress(real_client)
+        except PermissionError as exc:
+            logger.warning("resolve_provider_client: bedrock blocked: %s", exc)
+            return None, None
         client = AnthropicAuxiliaryClient(
             real_client, final_model, api_key="aws-sdk",
             base_url=f"https://bedrock-runtime.{region}.amazonaws.com",

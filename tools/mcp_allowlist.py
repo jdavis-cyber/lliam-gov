@@ -72,13 +72,14 @@ def reset_mcp_allowlist_cache() -> None:
 
 
 def _is_strict() -> bool:
-    try:
-        from lliam_cli import config as _cfg
-        from lliam_cli import posture_resolver as _pr
-        return _pr.is_strict(_cfg.load_config())
-    except Exception:
-        logger.warning("mcp-allowlist posture resolution failed; enforcing", exc_info=True)
-        return True
+    """Strict-posture predicate; a configuration fault enforces (fails closed)."""
+    from lliam_cli import posture_resolver as _pr
+    return _pr.enforce_strict_controls("mcp-allowlist")
+
+
+def _pr_flag(key: str) -> bool:
+    from lliam_cli import posture_resolver as _pr
+    return _pr.security_flag(key, "mcp-allowlist")
 
 
 def _security_cfg() -> Dict[str, Any]:
@@ -90,7 +91,7 @@ def _security_cfg() -> Dict[str, Any]:
 
 
 def mcp_enforcement_enabled() -> bool:
-    return _is_strict() and bool(_security_cfg().get("mcp_allowlist_enforce"))
+    return _is_strict() and _pr_flag("mcp_allowlist_enforce")
 
 
 def _candidate_paths() -> List[Path]:
@@ -312,7 +313,7 @@ def skill_attestation_ok(skill_name: str, skill_dir: Path) -> SkillDecision:
     A skill without clean provenance is refused; the existing tool_policy AST +
     allowlist gate (P0.3) remains the complementary check.
     """
-    if not (_is_strict() and _security_cfg().get("require_signed_skills")):
+    if not (_is_strict() and _pr_flag("require_signed_skills")):
         return SkillDecision(allowed=True, skill=skill_name, reason="not enforced (low-side / flag off)")
     if _provenance_clean(skill_name, Path(skill_dir)):
         return SkillDecision(allowed=True, skill=skill_name, reason="clean provenance / attested")

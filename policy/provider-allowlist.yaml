@@ -42,7 +42,7 @@ metadata:
     cadence_days: 90                    # [LG-MP-08]
     last_validated: "2026-07-16"
     next_due: "2026-10-14"
-    register: "docs/governance/provider-vetting-register.md"
+    register: "docs/governance/supplier-vetting-register.md"
 
 
 # -----------------------------------------------------------------------------

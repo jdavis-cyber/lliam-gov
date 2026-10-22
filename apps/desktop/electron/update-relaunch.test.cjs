@@ -187,7 +187,7 @@ test('shellQuote neutralizes single quotes and metacharacters', () => {
 test('buildRelaunchScript embeds pid/exec/args/env/cwd and is valid bash', () => {
   const script = buildRelaunchScript({
     pid: 4242,
-    execPath: '/home/u/.hermes/hermes-agent/apps/desktop/release/linux-unpacked/Hermes',
+    execPath: '/home/u/.hermes/hermes-agent/apps/desktop/release/linux-unpacked/Lliam-GOV',
     args: ['lliam-gov://open/agent/42', "--note=it's fine"],
     env: { HERMES_HOME: '/home/u/.hermes', LLIAM_DESKTOP_REMOTE_URL: 'http://box:9119' },
     cwd: '/home/u/work dir'
@@ -217,7 +217,7 @@ test('buildRelaunchScript embeds pid/exec/args/env/cwd and is valid bash', () =>
 test('buildRelaunchScript with no args/env still lints clean', () => {
   const script = buildRelaunchScript({
     pid: 1,
-    execPath: '/opt/Hermes/Hermes',
+    execPath: '/opt/Lliam-GOV/Lliam-GOV',
     args: [],
     env: {},
     cwd: ''

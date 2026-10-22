@@ -290,6 +290,20 @@ def test_docker_orphan_reaper_is_bridged_everywhere():
     assert "TERMINAL_DOCKER_ORPHAN_REAPER" in _terminal_tool_env_var_names()
 
 
+def test_docker_network_is_bridged_everywhere():
+    """Regression pin for ``terminal.docker_network`` (JER-74).
+
+    The governed overlay sets ``docker_network: false`` so the sandbox runs
+    with ``--network=none``. Drift at any bridge site means that setting
+    silently does nothing for one entry point and the sandbox keeps a
+    direct route out that bypasses the egress enclave.
+    """
+    assert "docker_network" in _cli_env_map_keys()
+    assert "docker_network" in _gateway_env_map_keys()
+    assert "docker_network" in _save_config_env_sync_keys()
+    assert "TERMINAL_DOCKER_NETWORK" in _terminal_tool_env_var_names()
+
+
 def test_docker_volumes_is_bridged_everywhere():
     """Regression pin for ``terminal.docker_volumes`` being silently dropped by
     ``lliam-gov config set``.

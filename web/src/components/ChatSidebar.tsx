@@ -36,7 +36,7 @@ import { titleFromSessionInfoPayload } from "@/lib/chat-title";
 
 import { cn } from "@/lib/utils";
 import { AlertCircle, ChevronDown, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 interface SessionInfo {
   cwd?: string;
@@ -88,11 +88,10 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   // `version` bumps on reconnect; gw is derived so we never call setState
   // for it inside an effect (React 19's set-state-in-effect rule). The
-  // counter is the dependency on purpose — it's not read in the memo body,
-  // it's the signal that says "rebuild the client".
+  // version forces manual reconnect; scope changes also create a fresh client.
   const [version, setVersion] = useState(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const gw = useMemo(() => new GatewayClient(), [version]);
+  const gw = useMemo(() => new GatewayClient(), [version, channel, profile]);
 
   const [state, setState] = useState<ConnectionState>("idle");
   const [info, setInfo] = useState<SessionInfo>({});
@@ -136,23 +135,6 @@ export function ChatSidebar({
         // Best-effort: keep the last known label rather than blanking it.
       });
   }, []);
-
-  // Profile or PTY channel change tears down both WebSockets. Bump `version`
-  // (same path as the manual Reconnect button) so the gateway client is
-  // recreated and the events feed resubscribes — otherwise the old events
-  // socket's close handler can leave a stale error banner after a switch.
-  const scopeKey = `${channel}\0${profile ?? ""}`;
-  const prevScopeKey = useRef<string | null>(null);
-  useEffect(() => {
-    if (prevScopeKey.current === null) {
-      prevScopeKey.current = scopeKey;
-      return;
-    }
-    if (prevScopeKey.current === scopeKey) return;
-    prevScopeKey.current = scopeKey;
-    setError(null);
-    setVersion((v) => v + 1);
-  }, [scopeKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,7 +190,7 @@ export function ChatSidebar({
       gw.close();
     };
     // `profile` is read from render; scope changes bump `version` → new `gw`.
-  }, [gw]);
+  }, [gw, profile]);
 
   // Event subscriber WebSocket — receives the rebroadcast of every
   // dispatcher emit from the PTY child's gateway.  See /api/pub +

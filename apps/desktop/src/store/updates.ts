@@ -13,9 +13,9 @@ import type {
   DesktopUpdateStatus,
   DesktopVersionInfo
 } from '@/global'
-import { checkLliamUpdate, getActionStatus, updateLliam } from '@/lliam'
 import { translateNow } from '@/i18n'
 import { persistString, storedString } from '@/lib/storage'
+import { checkLliamUpdate, getActionStatus, updateLliam } from '@/lliam'
 import { dismissNotification, notify } from '@/store/notifications'
 import { $connection } from '@/store/session'
 import type { BackendUpdateCheckResponse } from '@/types/lliam'
