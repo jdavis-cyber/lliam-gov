@@ -12,7 +12,9 @@ Consumes each sealed governance-audit record and raises graduated alerts:
     policy.violation / deny / security.error event.
   * LG-MO-06 session risk-timeline correlation + near-real-time notification —
     alerts are correlated per session into a timeline and, above a severity,
-    queued as notifications to the configured named staff.
+    queued as notifications to the configured named staff. Each notification
+    is recorded durably and delivered off-thread by
+    ``agent/notify_transport.py`` (``monitoring.notify_transport``).
 
 Design: additive and fail-safe. ``MonitorHub.observe(record)`` returns the
 alerts raised by that record and streams them to the ISCM sink as
@@ -28,6 +30,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from agent import iscm_sink as _iscm
+from agent import notify_transport as _nt
 
 _log = logging.getLogger("hermes.monitors")
 
@@ -97,6 +100,12 @@ class MonitorHub:
         # cross-session load signatures (drift is cross-session, LG-MO-03)
         self._load_sigs: dict[str, dict] = {}
         self._notifications: list[Notification] = []
+        self._dispatcher: Optional[_nt.NotificationDispatcher] = None
+        if self.enabled and self.notify_recipients:
+            try:
+                self._dispatcher = _nt.NotificationDispatcher(config)
+            except Exception as e:  # never break hub construction
+                _log.error("notification transport unavailable: %s", e)
 
     # -- public API ---------------------------------------------------------
 
@@ -244,6 +253,12 @@ class MonitorHub:
         # near-real-time: log at warning so an operator tail sees it now
         _log.warning("[ISCM notify %s] %s",
                      ",".join(note.recipients), note.summary)
+        if self._dispatcher is not None:
+            # durable record + off-thread delivery; never raises
+            self._dispatcher.dispatch(
+                severity=note.severity, summary=note.summary,
+                session=session, alerts=notable,
+                recipients=note.recipients)
         if self.sink is not None:
             self.sink.forward({
                 "schema": "lg-mo/1", "event": "security.alert",

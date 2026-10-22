@@ -11819,7 +11819,7 @@ def _build_provider_choices() -> list[str]:
 # to parse.
 _BUILTIN_SUBCOMMANDS = frozenset(
     {
-        "acp", "auth", "backup", "bundles", "checkpoints", "claw", "completion",
+        "acp", "assurance", "auth", "backup", "bundles", "checkpoints", "claw", "completion",
         "computer-use",
         "config", "cron", "curator", "dashboard", "debug", "doctor",
         "dump", "fallback", "gateway", "hooks", "import", "insights",
@@ -12756,6 +12756,26 @@ def main():
         _register_curator_cli(curator_parser)
     except Exception as _exc:
         logging.getLogger(__name__).debug("curator CLI wiring failed: %s", _exc)
+
+    # =========================================================================
+    # assurance command — schedule the recurring assurance / cATO job
+    # =========================================================================
+    assurance_parser = subparsers.add_parser(
+        "assurance",
+        help="Install, remove, inspect or run the scheduled assurance job",
+        description=(
+            "Schedule ci/governance-ci-gates/scheduled_assurance_cron.sh "
+            "(control-effectiveness, red-team, governance metrics, cATO "
+            "cycle, freshness heartbeat) as a launchd agent on macOS or a "
+            "systemd user timer on Linux."
+        ),
+    )
+    try:
+        from lliam_cli.assurance_schedule import register_cli as _register_assurance_cli
+
+        _register_assurance_cli(assurance_parser)
+    except Exception as _exc:
+        logging.getLogger(__name__).debug("assurance CLI wiring failed: %s", _exc)
 
     # =========================================================================
     # pets command — petdex animated mascots (CLI / TUI / desktop display)

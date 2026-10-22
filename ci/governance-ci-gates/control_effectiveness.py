@@ -9,7 +9,8 @@ ledger on with verify-on-startup, continuous-monitoring enabled, and the
 approval channel authenticated (require_authenticated_approver set AND
 enforced by the runtime: an approval with no authenticated subject is
 refused, while the desktop app's local-operator subject can still approve;
-the MCP permissions_respond tool withheld under strict posture — JER-73). FAILS
+the MCP permissions_respond tool withheld under strict posture — JER-73),
+and — on a deployed host only — a recent scheduled-assurance heartbeat. FAILS
 CLOSED (exit 1) on any broken invariant, and emits a `security.posture` event
 so the break is on the ISCM stream. Distinct from go_no_go_gate (a release
 precondition check): this runs recurring, post-deployment, as a detective
@@ -21,6 +22,7 @@ PATH-FREEZE: NEW additive script; read-only over the overlay.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -51,6 +53,41 @@ def _get(d: dict, dotted: str, default=None):
             return default
         node = node[part]
     return node
+
+
+# Scheduled assurance job freshness (JER-76). Only asserted on a deployed
+# host: the agent home is pinned (LLIAM_HOME / HERMES_HOME) AND holds a real
+# ledger, the same home + ledger check attestation_export and the cron units
+# use. A repo checkout / CI run has no deployed job, so the check is n/a there.
+_ASSURANCE_MAX_AGE_HOURS = 26.0
+_ASSURANCE_HEARTBEAT = Path("logs") / "assurance" / "last-run.json"
+
+
+def _deployed_home() -> Path | None:
+    import os
+    home = os.environ.get("LLIAM_HOME") or os.environ.get("HERMES_HOME")
+    if not home:
+        return None
+    p = Path(home).expanduser()
+    return p if (p / "logs" / "agent-audit.log").is_file() else None
+
+
+def assurance_job_fresh(cfg: dict, *, home: Path | None = None,
+                        now=None) -> bool:
+    """True when not deployed, or the assurance job completed recently."""
+    import datetime as _dt
+    home = home or _deployed_home()
+    if home is None:
+        return True
+    max_age = float(_get(cfg, "monitoring.assurance.max_age_hours")
+                    or _ASSURANCE_MAX_AGE_HOURS)
+    try:
+        data = json.loads((home / _ASSURANCE_HEARTBEAT).read_text("utf-8"))
+        done = _dt.datetime.fromisoformat(str(data["completed_at"]))
+    except Exception:
+        return False
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    return (now - done).total_seconds() <= max_age * 3600
 
 
 # Safety modules whose posture predicate must enforce, not disable, when the
@@ -160,7 +197,8 @@ def _approval_channel_probe(cfg: dict, repo_root: Path) -> dict:
 
 
 def effectiveness_report(*, repo_root: Path = _REPO_ROOT,
-                         overlay_path: Path | None = None) -> dict:
+                         overlay_path: Path | None = None,
+                         check_assurance_freshness: bool = True) -> dict:
     overlay_path = overlay_path or (repo_root / "cli-config.gov.yaml")
     cfg = _load(overlay_path)
     disabled = set(_get(cfg, "skills.disabled") or [])
@@ -181,12 +219,17 @@ def effectiveness_report(*, repo_root: Path = _REPO_ROOT,
         "authenticated_approver_required": _get(
             cfg, "security.require_authenticated_approver") is True,
         **_approval_channel_probe(cfg, repo_root),
+        "assurance_job_fresh": (assurance_job_fresh(cfg)
+                                if check_assurance_freshness else True),
     }
 
 
 def check_effectiveness(*, repo_root: Path = _REPO_ROOT,
-                        overlay_path: Path | None = None) -> list[str]:
-    r = effectiveness_report(repo_root=repo_root, overlay_path=overlay_path)
+                        overlay_path: Path | None = None,
+                        check_assurance_freshness: bool = True) -> list[str]:
+    r = effectiveness_report(
+        repo_root=repo_root, overlay_path=overlay_path,
+        check_assurance_freshness=check_assurance_freshness)
     checks = {
         "posture_strict": "security.posture is not strict",
         "godmode_disabled": "godmode is not disabled",
@@ -206,6 +249,9 @@ def check_effectiveness(*, repo_root: Path = _REPO_ROOT,
             "the desktop app's local operator cannot approve HITL requests",
         "mcp_permissions_respond_withheld":
             "MCP permissions_respond is exposed under strict posture",
+        "assurance_job_fresh": ("scheduled assurance job has not completed "
+                                "within monitoring.assurance.max_age_hours "
+                                "on this host (not installed or stale)"),
     }
     return [f"[INEFFECTIVE] {msg} (LG-MO-08)"
             for key, msg in checks.items() if not r.get(key)]
@@ -227,7 +273,8 @@ def main(argv: list[str] | None = None) -> int:
             _emit(f"    - {f}", error=True)
         return 1
     _emit("[LG-MO-08] OK — posture invariants effective (godmode/obliteratus "
-          "disabled, allowlists enforced, encryption + audit + monitoring on).")
+          "disabled, allowlists enforced, encryption + audit + monitoring on, "
+          "approval channel authenticated).")
     return 0
 
 

@@ -422,13 +422,40 @@ audit:
 monitoring:
   iscm_sink:
     enabled: true                    # [additive @ P5.1] LG-MO-05 stream ON in the gov profile
-    kind: file                       # [additive] file | syslog — a syslog/OTel collector tails the file
-    path: "$HERMES_HOME/logs/iscm-events.log"   # [additive] SIEM-consumable JSONL of the sealed ledger
+    kind: file                       # [additive] file | syslog | otlp_http — file keeps the stream on the host until an off-host collector is provisioned
+    path: "$HERMES_HOME/logs/iscm-events.log"   # [additive] SIEM-consumable JSONL of the sealed ledger ($HERMES_HOME / $LLIAM_HOME resolve to the agent home); still written as the local copy for syslog / otlp_http
     format: json                     # [additive] json (SIEM default) | cef
+    # Off-host forwarders [additive @ JER-76] — set kind and the matching keys
+    # once a real collector exists. Destinations go through
+    # tools.egress_policy.check_egress(..., surface="messaging"); a refused
+    # destination is logged at ERROR and events stay in `path`.
+    # syslog_address: ""             # kind=syslog: local socket (/dev/log, /var/run/syslog) or host:port; non-loopback hosts are egress-checked as syslog://host:port
+    # syslog_protocol: udp           # kind=syslog: udp | tcp
+    # otlp_endpoint: ""              # kind=otlp_http: https OTLP/HTTP JSON logs URL (collector .../v1/logs)
+    # otlp_auth_header_env: ""       # kind=otlp_http: NAME of an env var holding the Authorization value (never the secret itself)
+    # otlp_timeout_seconds: 5
   runaway_threshold: 8               # [additive @ P5.1] LG-MO-01 consecutive-identical-dispatch alert threshold
   egress_volume_threshold: 50        # [additive @ P5.1] LG-MO-02 per-session egress-count spike threshold
   notify: [jdavis@agency.mil]        # [additive @ P5.1] LG-MO-06 near-real-time notify list (role_bindings.isso)
   notify_severity: warning           # [additive @ P5.1] LG-MO-06 min alert severity that pages named staff
+  notify_transport:                  # [additive @ JER-76] LG-MO-06 delivery for `notify`. Every notification is appended to $HERMES_HOME/logs/notifications.jsonl (0600) with each delivery outcome; failed/queued ones are redelivered by the scheduled assurance job
+    # record_path: ""                # [additive] default $HERMES_HOME/logs/notifications.jsonl
+    max_attempts: 3                  # [additive] attempts per transport (exponential backoff) before a record is marked failed
+    retry_backoff_seconds: 2         # [additive] backoff base, seconds
+    webhook:
+      enabled: false                 # [additive] OFF until a real receiver is provisioned
+      url: ""                        # [additive] https only; must pass check_egress(url, surface="messaging") (allowlist entry with surfaces: [messaging]); redirects are refused
+      auth_header_env: ""            # [additive] NAME of an env var whose value is sent as Authorization (never the secret itself)
+      timeout_seconds: 5
+    smtp:
+      enabled: false                 # [additive] OFF until a relay is provisioned
+      host: ""                       # [additive] loopback relay = the host MTA; any other host must pass check_egress("smtp://host:port", surface="messaging")
+      port: 25
+      from_addr: ""                  # [additive] From header; recipients are the `notify` list
+      starttls: false
+      timeout_seconds: 5
+  assurance:
+    max_age_hours: 26                # [additive @ JER-76] control_effectiveness fails on a deployed host (pinned home + real ledger) if the scheduled assurance job last completed longer ago than this; install with `lliam-gov assurance install`
 
 
 # =============================================================================
