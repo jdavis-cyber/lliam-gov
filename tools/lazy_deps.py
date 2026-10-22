@@ -150,7 +150,7 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
     "platform.slack": (
         "slack-bolt==1.27.0",
         "slack-sdk==3.40.1",
-        "aiohttp==3.14.1",  # CVE-2026-34513/34518/34519/34520/34525
+        "aiohttp==3.14.4",  # CVE-2026-34513/34518/34519/34520/34525; PYSEC-2026-3545/3546/3547, GHSA-2g87-pp6c-29x5/494j-54xm-rwp3/5wr8-gcqf-gqf3
     ),
     "platform.matrix": (
         "mautrix[encryption]==0.21.0",
@@ -175,7 +175,7 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
     # (microsoft-teams-api/cards/common, dependency-injector, msal). Lazy-
     # installed on demand like every other messaging platform; also exposed
     # as the `teams` extra in pyproject for packagers / explicit installs.
-    "platform.teams": ("microsoft-teams-apps==2.0.13.4", "aiohttp==3.14.1"),
+    "platform.teams": ("microsoft-teams-apps==2.0.13.4", "aiohttp==3.14.4"),
 
     # ─── Terminal backends ─────────────────────────────────────────────────
     "terminal.modal": ("modal==1.3.4",),
@@ -204,14 +204,14 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
     # for stripped/source-build installs that somehow dropped it. The vision
     # call site uses prompt=False so it can never raise a blocking input()
     # prompt mid-session (#40490).
-    "tool.vision": ("Pillow==12.2.0",),
+    "tool.vision": ("Pillow==12.3.0",),
     # Computer Use (cua-driver) — the MCP client SDK used to spawn and talk
     # to the cua-driver process over stdio. Matches the `mcp` / `computer-use`
     # extras in pyproject.toml. The one-liner installer pulls this in via
     # `[all]`; lazy-installing here covers lean / partial / broken-extra
     # installs so computer_use never dead-ends on `No module named 'mcp'`.
     "tool.computer_use": (
-        "mcp==1.26.0",
+        "mcp==1.30.0",
         "starlette==1.3.1",  # CVE-2026-48710 - keep in sync with pyproject [computer-use]
     ),
 }
