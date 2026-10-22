@@ -38,6 +38,27 @@ const { canImportLliamCli, verifyLliamCli } = require('./backend-probes.cjs')
 const { createLinkTitleWindow } = require('./link-title-window.cjs')
 const { probeGatewayWebSocket } = require('./gateway-ws-probe.cjs')
 const { adoptServedDashboardToken } = require('./dashboard-token.cjs')
+
+// Per-launch tui_gateway secret (JER-73). Under strict posture the backend's
+// /api/ws refuses a peer that only presents the loopback session token, since
+// any local process can read that token from the served index.html. The secret
+// is minted here per backend spawn, pinned in the child's env (the backend
+// removes it from its own env on adoption), and handed to our renderer only
+// inside the ws URL — it is never served over HTTP. Because only this process
+// holds it, the backend binds the connection that presents it as the local
+// operator (local-operator:<os-user>@<host>), so HITL approvals made in the
+// renderer are accepted under require_authenticated_approver and recorded with
+// that principal. Low-side backends need no handshake but still bind it.
+function mintGatewaySecret() {
+  return crypto.randomBytes(32).toString('base64url')
+}
+
+function localGatewayWsUrl(port, authToken, gatewaySecret) {
+  return (
+    `ws://127.0.0.1:${port}/api/ws?token=${encodeURIComponent(authToken)}` +
+    `&gw_secret=${encodeURIComponent(gatewaySecret)}`
+  )
+}
 const { waitForDashboardPortAnnouncement } = require('./backend-ready.cjs')
 const { serializeJsonBody, setJsonRequestHeaders } = require('./oauth-net-request.cjs')
 const { fetchMarketplaceThemes, searchMarketplaceThemes } = require('./vscode-marketplace.cjs')
@@ -5219,6 +5240,7 @@ async function spawnPoolBackend(profile, entry) {
   }
 
   const token = crypto.randomBytes(32).toString('base64url')
+  const gatewaySecret = mintGatewaySecret()
   // --profile wins over the inherited HERMES_HOME env (see _apply_profile_override
   // step 3 in lliam_cli/main.py), so the child re-homes to this profile.
   // --port 0: the OS assigns an ephemeral port; the child announces it on stdout.
@@ -5247,6 +5269,7 @@ async function spawnPoolBackend(profile, entry) {
         // rename R.8a: set the new LLIAM_ names (the Python readers resolve
         // LLIAM_ first, legacy HERMES_ as a transition fallback).
         LLIAM_DASHBOARD_SESSION_TOKEN: token,
+        LLIAM_TUI_GATEWAY_SECRET: gatewaySecret,
         // Marks this dashboard backend as desktop-spawned so it runs the cron
         // scheduler tick loop (the gateway isn't running under the app).
         LLIAM_DESKTOP: '1',
@@ -5307,7 +5330,7 @@ async function spawnPoolBackend(profile, entry) {
     authMode: 'token',
     token: authToken,
     profile,
-    wsUrl: `ws://127.0.0.1:${port}/api/ws?token=${encodeURIComponent(authToken)}`,
+    wsUrl: localGatewayWsUrl(port, authToken, gatewaySecret),
     logs: lliamLog.slice(-80),
     ...getWindowState()
   }
@@ -5441,6 +5464,7 @@ async function startLliam() {
     await waitForUpdateToFinish()
 
     const token = crypto.randomBytes(32).toString('base64url')
+    const gatewaySecret = mintGatewaySecret()
     // --port 0: the OS assigns an ephemeral port; the child announces it on stdout.
     const dashboardArgs = ['dashboard', '--no-open', '--host', '127.0.0.1', '--port', '0']
     // Pin the desktop's chosen profile via the global --profile flag. This is
@@ -5483,6 +5507,7 @@ async function startLliam() {
           // rename R.8a: set the new LLIAM_ names (Python readers resolve
           // LLIAM_ first, legacy HERMES_ as a transition fallback).
           LLIAM_DASHBOARD_SESSION_TOKEN: token,
+          LLIAM_TUI_GATEWAY_SECRET: gatewaySecret,
           // Marks this dashboard backend as desktop-spawned so it runs the cron
           // scheduler tick loop (the gateway isn't running under the app).
           LLIAM_DESKTOP: '1',
@@ -5575,7 +5600,7 @@ async function startLliam() {
       source: 'local',
       authMode: 'token',
       token: authToken,
-      wsUrl: `ws://127.0.0.1:${port}/api/ws?token=${encodeURIComponent(authToken)}`,
+      wsUrl: localGatewayWsUrl(port, authToken, gatewaySecret),
       logs: lliamLog.slice(-80),
       ...getWindowState()
     }

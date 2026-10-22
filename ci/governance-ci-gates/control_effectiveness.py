@@ -5,7 +5,11 @@
 Re-asserts the standing posture invariants on a schedule (the cATO
 control-effectiveness check the plan requires): godmode + obliteratus
 disabled, provider + MCP allowlists enforced, at-rest encryption on, audit
-ledger on with verify-on-startup, and continuous-monitoring enabled. FAILS
+ledger on with verify-on-startup, continuous-monitoring enabled, and the
+approval channel authenticated (require_authenticated_approver set AND
+enforced by the runtime: an approval with no authenticated subject is
+refused, while the desktop app's local-operator subject can still approve;
+the MCP permissions_respond tool withheld under strict posture — JER-73). FAILS
 CLOSED (exit 1) on any broken invariant, and emits a `security.posture` event
 so the break is on the ISCM stream. Distinct from go_no_go_gate (a release
 precondition check): this runs recurring, post-deployment, as a detective
@@ -87,6 +91,74 @@ def posture_fault_fails_closed(*, repo_root: Path = _REPO_ROOT) -> bool:
         return False
 
 
+def _approval_channel_probe(cfg: dict, repo_root: Path) -> dict:
+    """Exercise the runtime approval-channel controls against *cfg* (JER-73).
+
+    * ``authenticated_approver_enforced`` — the runtime reads
+      ``security.require_authenticated_approver`` from this overlay and
+      refuses an approval that carries no authenticated subject, while a
+      denial still passes.
+    * ``local_operator_approval_accepted`` — the subject the gateway binds to
+      the desktop app's connection (the one that presented the per-launch
+      gateway secret) is accepted as an authenticated approver, so the
+      operator's own desktop app can still approve.
+    * ``mcp_permissions_respond_withheld`` — the inbound MCP server's strict
+      tool surface does not include ``permissions_respond``.
+
+    Read-only: each probe runs in a fresh context (nothing bound unless the
+    probe binds it) with ``record=False``, so nothing reaches the ledger. Any
+    import/probe error reports False.
+    """
+    import contextvars
+
+    root = str(repo_root)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    out = {"authenticated_approver_enforced": False,
+           "local_operator_approval_accepted": False,
+           "mcp_permissions_respond_withheld": False}
+    try:
+        from tools import hitl_oversight as ho
+
+        def _probe(choice):
+            return ho.authorize_approval(
+                choice, gate="ci.probe", origin="control_effectiveness",
+                config=cfg, record=False)
+
+        refused = contextvars.Context().run(_probe, "once")
+        denied = contextvars.Context().run(_probe, "deny")
+        out["authenticated_approver_enforced"] = bool(
+            ho.require_authenticated_approver(cfg)
+            and not refused.allowed and denied.allowed)
+    except Exception as e:  # pragma: no cover - surfaced as INEFFECTIVE
+        _emit(f"approval-channel probe error: {e}")
+    try:
+        from agent import governance_audit_hooks as gah
+        from tools import hitl_oversight as ho
+        from tui_gateway import transport as gw
+
+        def _desktop_probe():
+            gah._operator_subject.set(gw.local_operator_subject())
+            return ho.authorize_approval(
+                "once", gate="ci.probe", origin="control_effectiveness",
+                config=cfg, record=False)
+
+        accepted = contextvars.Context().run(_desktop_probe)
+        out["local_operator_approval_accepted"] = bool(
+            accepted.allowed
+            and str(accepted.principal or "").startswith("local-operator:")
+            and accepted.method == gw.LOCAL_OPERATOR_AUTH)
+    except Exception as e:  # pragma: no cover - surfaced as INEFFECTIVE
+        _emit(f"desktop-approver probe error: {e}")
+    try:
+        import mcp_serve
+        out["mcp_permissions_respond_withheld"] = (
+            "permissions_respond" not in mcp_serve.tool_surface(strict=True))
+    except Exception as e:  # pragma: no cover - surfaced as INEFFECTIVE
+        _emit(f"MCP tool-surface probe error: {e}")
+    return out
+
+
 def effectiveness_report(*, repo_root: Path = _REPO_ROOT,
                          overlay_path: Path | None = None) -> dict:
     overlay_path = overlay_path or (repo_root / "cli-config.gov.yaml")
@@ -106,6 +178,9 @@ def effectiveness_report(*, repo_root: Path = _REPO_ROOT,
         "audit_verify_on_startup": bool(_get(cfg, "audit.verify_on_startup")),
         "monitoring_enabled": bool(_get(cfg, "monitoring.iscm_sink.enabled")),
         "posture_fault_fails_closed": posture_fault_fails_closed(repo_root=repo_root),
+        "authenticated_approver_required": _get(
+            cfg, "security.require_authenticated_approver") is True,
+        **_approval_channel_probe(cfg, repo_root),
     }
 
 
@@ -123,6 +198,14 @@ def check_effectiveness(*, repo_root: Path = _REPO_ROOT,
         "audit_verify_on_startup": "audit verify-on-startup off",
         "monitoring_enabled": "continuous monitoring (ISCM sink) not enabled",
         "posture_fault_fails_closed": "a configuration fault disables a safety control",
+        "authenticated_approver_required":
+            "security.require_authenticated_approver is not true",
+        "authenticated_approver_enforced":
+            "an unauthenticated HITL approval is not refused at runtime",
+        "local_operator_approval_accepted":
+            "the desktop app's local operator cannot approve HITL requests",
+        "mcp_permissions_respond_withheld":
+            "MCP permissions_respond is exposed under strict posture",
     }
     return [f"[INEFFECTIVE] {msg} (LG-MO-08)"
             for key, msg in checks.items() if not r.get(key)]

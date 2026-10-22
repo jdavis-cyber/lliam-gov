@@ -532,8 +532,16 @@ def grant_capability(
     agent cannot self-extend). TTL defaults to the policy's grant.ttl_seconds
     (1800s). Scope is per-session; reset_pdp_state() revokes everything.
     A grant NEVER re-enables a deny-tier class (deny is terminal).
+    LG-GV-05: when ``security.require_authenticated_approver`` is set, the
+    approver must be the authenticated approver principal bound to this
+    context (a dashboard_auth user or the desktop app's local operator), else
+    PermissionError.
     """
     import time
+    from tools.hitl_oversight import _require_bound_approver
+    _require_bound_approver(
+        str(approver), gate=str(action_class).strip(), origin="jit_grant",
+    )
     if ttl_seconds is None:
         policy = _load_risk_policy()
         zsp = policy.get("zero_standing_privilege") if isinstance(policy, dict) else {}

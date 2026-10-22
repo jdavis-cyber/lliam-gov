@@ -16,6 +16,17 @@ Usage:
     lliam-gov mcp serve
     lliam-gov mcp serve --verbose
 
+Caller authentication (JER-73): the server speaks MCP over stdio only, so a
+request can come only from the process that launched it — but any process
+running as the operator can launch its own ``lliam-gov mcp serve``. A
+per-launch secret would be minted by that same launcher and proves nothing,
+so the controls sit where the authority is instead: under strict posture
+``permissions_respond`` is not on the tool surface at all, and any approval
+resolution must carry an authenticated approver
+(``tools.hitl_oversight.authorize_approval`` — LG-GV-05): a dashboard_auth
+user or the desktop app's local operator, neither of which an MCP stdio
+client ever is.
+
 MCP client config (e.g. claude_desktop_config.json):
     {
         "mcpServers": {
@@ -58,6 +69,36 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+#: Every tool this server can expose, in registration order.
+ALL_TOOLS = (
+    "conversations_list", "conversation_get", "messages_read",
+    "attachments_fetch", "events_poll", "events_wait", "messages_send",
+    "channels_list", "permissions_list_open", "permissions_respond",
+)
+
+#: Tools withheld under strict posture (JER-73): resolving a pending HITL
+#: approval is not a capability an unauthenticated MCP client may hold.
+STRICT_EXCLUDED_TOOLS = frozenset({"permissions_respond"})
+
+
+def _strict_posture() -> bool:
+    """True when the live config is in strict posture. Never raises."""
+    try:
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
+        return _pr.is_strict(_cfg.load_config())
+    except Exception:
+        return False
+
+
+def tool_surface(strict: Optional[bool] = None) -> List[str]:
+    """Names of the tools ``create_mcp_server`` registers for *strict*."""
+    if strict is None:
+        strict = _strict_posture()
+    excluded = STRICT_EXCLUDED_TOOLS if strict else frozenset()
+    return [name for name in ALL_TOOLS if name not in excluded]
+
 
 def _get_sessions_dir() -> Path:
     """Return the sessions directory using HERMES_HOME."""
@@ -309,7 +350,26 @@ class EventBridge:
             )
 
     def respond_to_approval(self, approval_id: str, decision: str) -> dict:
-        """Resolve a pending approval (best-effort without gateway IPC)."""
+        """Resolve a pending approval (best-effort without gateway IPC).
+
+        LG-GV-05: an approving decision is refused unless an authenticated
+        approver is bound (when the config requires one).
+        """
+        with self._lock:
+            approval = self._pending_approvals.get(approval_id)
+        if not approval:
+            return {"error": f"Approval not found: {approval_id}"}
+
+        from tools.hitl_oversight import authorize_approval
+        auth = authorize_approval(
+            decision,
+            gate="mcp.permissions_respond",
+            target=str(approval.get("description", "")),
+            origin="mcp_serve",
+        )
+        if not auth.allowed:
+            return {"error": auth.reason}
+
         with self._lock:
             approval = self._pending_approvals.pop(approval_id, None)
 
@@ -454,8 +514,16 @@ class EventBridge:
 # MCP Server
 # ---------------------------------------------------------------------------
 
-def create_mcp_server(event_bridge: Optional[EventBridge] = None) -> "FastMCP":
-    """Create and return the Lliam-GOV MCP server with all tools registered."""
+def create_mcp_server(
+    event_bridge: Optional[EventBridge] = None,
+    *,
+    strict: Optional[bool] = None,
+) -> "FastMCP":
+    """Create and return the Lliam-GOV MCP server with its tools registered.
+
+    Under strict posture (*strict* defaults to the live config) the tools in
+    :data:`STRICT_EXCLUDED_TOOLS` are not registered.
+    """
     if not _MCP_SERVER_AVAILABLE:
         raise ImportError(
             "MCP server requires the 'mcp' package. "
@@ -472,6 +540,7 @@ def create_mcp_server(event_bridge: Optional[EventBridge] = None) -> "FastMCP":
     )
 
     bridge = event_bridge or EventBridge()
+    exposed = set(tool_surface(strict))
 
     # -- conversations_list ------------------------------------------------
 
@@ -842,26 +911,28 @@ def create_mcp_server(event_bridge: Optional[EventBridge] = None) -> "FastMCP":
         }, indent=2)
 
     # -- permissions_respond -----------------------------------------------
+    # Not registered under strict posture (STRICT_EXCLUDED_TOOLS, JER-73).
 
-    @mcp.tool()
-    def permissions_respond(
-        id: str,
-        decision: str,
-    ) -> str:
-        """Respond to a pending approval request.
+    if "permissions_respond" in exposed:
+        @mcp.tool()
+        def permissions_respond(
+            id: str,
+            decision: str,
+        ) -> str:
+            """Respond to a pending approval request.
 
-        Args:
-            id: The approval ID from permissions_list_open
-            decision: One of "allow-once", "allow-always", or "deny"
-        """
-        if decision not in {"allow-once", "allow-always", "deny"}:
-            return json.dumps({
-                "error": f"Invalid decision: {decision}. "
-                         f"Must be allow-once, allow-always, or deny"
-            })
+            Args:
+                id: The approval ID from permissions_list_open
+                decision: One of "allow-once", "allow-always", or "deny"
+            """
+            if decision not in {"allow-once", "allow-always", "deny"}:
+                return json.dumps({
+                    "error": f"Invalid decision: {decision}. "
+                             f"Must be allow-once, allow-always, or deny"
+                })
 
-        result = bridge.respond_to_approval(id, decision)
-        return json.dumps(result, indent=2)
+            result = bridge.respond_to_approval(id, decision)
+            return json.dumps(result, indent=2)
 
     return mcp
 
