@@ -62,7 +62,6 @@ import {
   refreshActiveProfile
 } from '../store/profile'
 import { $startWorkSessionRequest, followActiveSessionCwd, resolveNewSessionCwd } from '../store/projects'
-import { $reviewOpen, REVIEW_PANE_ID } from '../store/review'
 import {
   $activeSessionId,
   $attentionSessionIds,
@@ -124,7 +123,6 @@ import { ModelVisibilityOverlay } from './model-visibility-overlay'
 import { PetGenerateOverlay } from './pet-generate/pet-generate-overlay'
 import { RightSidebarPane } from './right-sidebar'
 import { FileActionDialogs } from './right-sidebar/file-actions'
-import { ReviewPane } from './right-sidebar/review'
 import { $terminalTakeover } from './right-sidebar/store'
 import { PersistentTerminal, TerminalSlot } from './right-sidebar/terminal/persistent'
 import { CRON_ROUTE, NEW_CHAT_ROUTE, routeSessionId, sessionRoute, SETTINGS_ROUTE } from './routes'
@@ -230,7 +228,6 @@ export function DesktopController() {
   const previewTarget = useStore($previewTarget)
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
   const terminalTakeover = useStore($terminalTakeover)
-  const reviewOpen = useStore($reviewOpen)
   const fileBrowserOpen = useStore($fileBrowserOpen)
   const previewPaneOpen = useStore($paneOpen(PREVIEW_PANE_ID))
   const panesFlipped = useStore($panesFlipped)
@@ -1227,8 +1224,7 @@ export function DesktopController() {
   // hover-reveal overlays (narrow window) don't take a column, so they don't count.
   const railColumnOpen =
     (chatOpen && Boolean(previewTarget || filePreviewTarget) && previewPaneOpen) ||
-    (chatOpen && !narrowViewport && fileBrowserOpen) ||
-    (chatOpen && Boolean(currentCwd.trim()) && !narrowViewport && reviewOpen)
+    (chatOpen && !narrowViewport && fileBrowserOpen)
 
   // Once the terminal would share its rail with another sidebar, drop it to a
   // full-width row beneath them rather than cramming in one more skinny column.
@@ -1272,33 +1268,6 @@ export function DesktopController() {
         onActivateFile={path => composer.insertContextPathInlineRef(path)}
         onActivateFolder={path => composer.insertContextPathInlineRef(path, true)}
       />
-    </Pane>
-  )
-
-  const reviewPane = (
-    <Pane
-      defaultOpen
-      // The diff pane only makes sense in a workspace, so force it shut when the
-      // session is detached — "No diffs" then only ever shows inside a project,
-      // never as a second empty panel next to the file browser.
-      // Docked (wide): `reviewOpen` gates it. Narrow: drop `reviewOpen` from the
-      // gate so the pane stays mounted as a collapsed overlay — `toggleReview`
-      // then slides it in/out via the forced-reveal pin, exactly like ⌘B for the
-      // sidebar. Still requires a repo (no diffs to show otherwise).
-      disabled={!chatOpen || !currentCwd.trim() || (!narrowViewport && !reviewOpen)}
-      forceCollapsed={narrowViewport}
-      hoverReveal
-      id={REVIEW_PANE_ID}
-      key="review"
-      maxWidth={FILE_BROWSER_MAX_WIDTH}
-      minWidth={FILE_BROWSER_MIN_WIDTH}
-      // Mobile overlay sits at its min width — compact, doesn't bury the chat.
-      overlayWidth={FILE_BROWSER_MIN_WIDTH}
-      resizable
-      side={railSide}
-      width={FILE_BROWSER_DEFAULT_WIDTH}
-    >
-      <ReviewPane key={currentCwd || 'no-cwd'} />
     </Pane>
   )
 
@@ -1407,7 +1376,6 @@ export function DesktopController() {
       */}
       {panesFlipped ? fileBrowserPane : terminalPane}
       {previewPane}
-      {reviewPane}
       {panesFlipped ? terminalPane : fileBrowserPane}
     </AppShell>
   )

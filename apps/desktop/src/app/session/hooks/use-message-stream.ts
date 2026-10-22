@@ -1015,7 +1015,7 @@ export function useMessageStream({
         }
 
         // A file-mutating tool just finished — nudge the git-mirroring surfaces
-        // (coding rail, review pane, file tree) to refresh. Event-driven, not
+        // (coding rail, file tree) to refresh. Event-driven, not
         // polled: fires exactly when the agent touches the tree.
         if (payload && toolMayMutateFiles(payload)) {
           notifyWorkspaceChanged()

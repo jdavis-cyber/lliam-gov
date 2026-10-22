@@ -58,21 +58,7 @@ const {
 } = require('./update-relaunch.cjs')
 const { gitRootForIpc } = require('./git-root.cjs')
 const { addWorktree, listBranches, listWorktrees, removeWorktree, switchBranch } = require('./git-worktree-ops.cjs')
-const {
-  fileDiffVsHead,
-  repoStatus,
-  reviewCommit,
-  reviewCommitContext,
-  reviewCreatePr,
-  reviewDiff,
-  reviewList,
-  reviewPush,
-  reviewRevParse,
-  reviewRevert,
-  reviewShipInfo,
-  reviewStage,
-  reviewUnstage
-} = require('./git-review-ops.cjs')
+const { fileDiffVsHead, repoStatus } = require('./git-status-ops.cjs')
 const { scanGitRepos } = require('./git-repo-scan.cjs')
 const { OFFICIAL_REPO_HTTPS_URL, isOfficialSshRemote } = require('./update-remote.cjs')
 const { resolveBehindCount, shouldCountCommits } = require('./update-count.cjs')
@@ -1685,30 +1671,6 @@ function resolveGitBinary() {
 
   _gitBinaryCache = candidates.find(fileExists) || findOnPath('git') || 'git'
   return _gitBinaryCache
-}
-
-// resolveGhBinary — locate the GitHub CLI. GUI-launched apps get a minimal PATH
-// that omits Homebrew (/opt/homebrew/bin, /usr/local/bin) where `gh` usually
-// lives, so a bare spawn('gh') ENOENTs even though `gh` works in the user's
-// terminal. Check the common install locations first, then PATH. Cached.
-let _ghBinaryCache = null
-function resolveGhBinary() {
-  if (_ghBinaryCache) return _ghBinaryCache
-
-  const candidates = []
-
-  if (IS_WINDOWS) {
-    candidates.push(path.join(process.env['ProgramFiles'] || 'C:\\Program Files', 'GitHub CLI', 'gh.exe'))
-    if (process.env.LOCALAPPDATA) {
-      candidates.push(path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links', 'gh.exe'))
-    }
-  } else {
-    const home = app.getPath('home')
-    candidates.push('/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh', path.join(home, '.local', 'bin', 'gh'))
-  }
-
-  _ghBinaryCache = candidates.find(fileExists) || findOnPath('gh') || 'gh'
-  return _ghBinaryCache
 }
 
 function recentLliamLog() {
@@ -7025,41 +6987,9 @@ ipcMain.handle('lliam:git:branchList', async (_event, repoPath) => listBranches(
 // hides cleanly rather than erroring.
 ipcMain.handle('lliam:git:repoStatus', async (_event, repoPath) => repoStatus(repoPath, resolveGitBinary()))
 
-// Codex-style review pane: list changed files for a scope, fetch one file's
-// unified diff, and stage / unstage / revert. Reads return empty on failure;
-// mutations reject so the renderer can toast.
-ipcMain.handle('lliam:git:review:list', async (_event, repoPath, scope, baseRef) =>
-  reviewList(repoPath, scope, baseRef, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:diff', async (_event, repoPath, filePath, scope, baseRef, staged) =>
-  reviewDiff(repoPath, filePath, scope, baseRef, staged, resolveGitBinary())
-)
 // Working-tree-vs-HEAD diff for one file (the preview's "show the diff" view).
 ipcMain.handle('lliam:git:fileDiff', async (_event, repoPath, filePath) =>
   fileDiffVsHead(repoPath, filePath, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:stage', async (_event, repoPath, filePath) =>
-  reviewStage(repoPath, filePath ?? null, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:unstage', async (_event, repoPath, filePath) =>
-  reviewUnstage(repoPath, filePath ?? null, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:revert', async (_event, repoPath, filePath) =>
-  reviewRevert(repoPath, filePath ?? null, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:revParse', async (_event, repoPath, ref) =>
-  reviewRevParse(repoPath, ref, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:commit', async (_event, repoPath, message, push) =>
-  reviewCommit(repoPath, message, Boolean(push), resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:commitContext', async (_event, repoPath) =>
-  reviewCommitContext(repoPath, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:push', async (_event, repoPath) => reviewPush(repoPath, resolveGitBinary()))
-ipcMain.handle('lliam:git:review:shipInfo', async (_event, repoPath) => reviewShipInfo(repoPath, resolveGhBinary()))
-ipcMain.handle('lliam:git:review:createPr', async (_event, repoPath) =>
-  reviewCreatePr(repoPath, resolveGitBinary(), resolveGhBinary())
 )
 
 // Repo-first project discovery: scan bounded roots for git repos (pure fs walk,
