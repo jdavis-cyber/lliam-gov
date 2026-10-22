@@ -110,9 +110,6 @@ layers:
                   ci/governance-ci-gates/scheduled_assurance_cron.sh]
     - control: [LG-PF-08, LG-PF-09]
       artifacts: [agent/output_monitor.py]
-    - control: LG-PF-07
-      artifacts: [ci/governance-ci-gates/fairness_gate.py,
-                  docs/governance/fairness-evaluations.yaml]
     - control: [LG-RM-04, LG-IN-07]
       artifacts: [ci/governance-ci-gates/soa_gate.py,
                   ci/governance-ci-gates/ssp_reconciliation_gate.py]

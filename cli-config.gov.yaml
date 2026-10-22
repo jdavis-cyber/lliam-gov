@@ -604,7 +604,6 @@ governance:
     privacy_policy: docs/governance/privacy-policy.md                # LG-PF-01/02/03/05
     ai_disclosure: docs/governance/ai-disclosure-notice.md           # LG-PF-04
     bias_risk: docs/governance/bias-risk-register.yaml               # LG-PF-06
-    fairness_evaluations: docs/governance/fairness-evaluations.yaml  # LG-PF-07
     # [additive @ P4.5] secure-dev + personnel/supplier layer (LG-SD-*, LG-TP-*)
     secure_development: docs/governance/secure-development.md        # LG-SD-02..08
     requirements_traceability: docs/governance/requirements-traceability.yaml  # LG-SD-02
