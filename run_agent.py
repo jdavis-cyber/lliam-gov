@@ -5576,6 +5576,14 @@ def main(
         print("  # Run with trajectory saving enabled")
         print("  python run_agent.py --save_trajectories --query='your question here'")
         return
+
+    # Fail-closed strict-posture startup gates (JER-80) — the lliam-gov-agent
+    # console script and `python run_agent.py` build an agent below. Outside
+    # the AIAgent RuntimeError handler on purpose: a gate refusal must exit
+    # non-zero, not print and return 0.
+    from lliam_cli.startup_posture import enforce_startup_posture_or_exit
+
+    enforce_startup_posture_or_exit("lliam-gov-agent")
     
     # Parse toolset selection arguments
     enabled_toolsets_list = None

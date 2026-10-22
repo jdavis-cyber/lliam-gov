@@ -261,6 +261,15 @@ def join_mcp_discovery(timeout: float | None = None) -> bool:
 
 
 def main():
+    # Fail-closed strict-posture startup gates (JER-80). The TUI (and the
+    # dashboard's embedded PTY chat) spawn this process as their agent
+    # backend, so it must refuse to start on its own — it is a separate
+    # process from the `lliam-gov --tui` launcher. Refusal goes to stderr and
+    # exits before gateway.ready; stdout is the JSON-RPC channel.
+    from lliam_cli.startup_posture import enforce_startup_posture_or_exit
+
+    enforce_startup_posture_or_exit("tui_gateway")
+
     _install_sidecar_publisher()
 
     # MCP tool discovery — runs in a background daemon thread so a slow or
