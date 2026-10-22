@@ -451,10 +451,19 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
         # dispatch, surfacing through the existing guardrail-block path.
         if block_result is None:
             try:
+                # Instance identity for records of a call the PDP denies
+                # before predispatch_gate runs (LG-QT-03). Never raises.
+                from agent.governance_audit_hooks import bind_session_actor
+                bind_session_actor(agent)
+            except Exception:
+                pass
+            try:
                 from tools.tool_policy import pdp_gate
                 _pdp_decision = pdp_gate(
                     function_name, function_args,
                     session_id=getattr(agent, "session_id", None),
+                    task_id=effective_task_id or "",
+                    tool_call_id=getattr(tool_call, "id", "") or "",
                 )
             except Exception:
                 _pdp_decision = None
@@ -1031,10 +1040,19 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
         # dispatch, surfacing through the existing guardrail-block path.
         if not _execution_blocked:
             try:
+                # Instance identity for records of a call the PDP denies
+                # before predispatch_gate runs (LG-QT-03). Never raises.
+                from agent.governance_audit_hooks import bind_session_actor
+                bind_session_actor(agent)
+            except Exception:
+                pass
+            try:
                 from tools.tool_policy import pdp_gate
                 _pdp_decision = pdp_gate(
                     function_name, function_args,
                     session_id=getattr(agent, "session_id", None),
+                    task_id=effective_task_id or "",
+                    tool_call_id=getattr(tool_call, "id", "") or "",
                 )
             except Exception:
                 _pdp_decision = None
