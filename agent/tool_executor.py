@@ -497,8 +497,11 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
                     effective_task_id=effective_task_id,
                     middleware_trace=list(middleware_trace),
                 )
-            except Exception:
-                _gov_decision = None
+            except Exception as _gov_exc:
+                # Strict posture: a raising gate denies (fail-closed); low-side
+                # keeps the non-blocking convention.
+                from agent.governance_gate_errors import gate_error_decision
+                _gov_decision = gate_error_decision(function_name, "predispatch_gate", _gov_exc)
             if _gov_decision is not None:
                 block_result = agent._guardrail_block_result(_gov_decision)
                 blocked_by_guardrail = True
@@ -1075,8 +1078,11 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     effective_task_id=effective_task_id,
                     middleware_trace=list(middleware_trace),
                 )
-            except Exception:
-                _gov_decision = None
+            except Exception as _gov_exc:
+                # Strict posture: a raising gate denies (fail-closed); low-side
+                # keeps the non-blocking convention.
+                from agent.governance_gate_errors import gate_error_decision
+                _gov_decision = gate_error_decision(function_name, "predispatch_gate", _gov_exc)
             if _gov_decision is not None:
                 _guardrail_block_decision = _gov_decision
                 _execution_blocked = True
