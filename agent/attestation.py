@@ -54,13 +54,14 @@ def reset_attestation_cache() -> None:
 
 
 def _is_strict() -> bool:
-    try:
-        from lliam_cli import config as _cfg
-        from lliam_cli import posture_resolver as _pr
-        return _pr.is_strict(_cfg.load_config())
-    except Exception:
-        logger.warning("attestation posture resolution failed; enforcing", exc_info=True)
-        return True
+    """Strict-posture predicate; a configuration fault enforces (fails closed)."""
+    from lliam_cli import posture_resolver as _pr
+    return _pr.enforce_strict_controls("attestation")
+
+
+def _pr_flag(key: str) -> bool:
+    from lliam_cli import posture_resolver as _pr
+    return _pr.security_flag(key, "attestation")
 
 
 def _security_cfg() -> Dict[str, Any]:
@@ -136,7 +137,7 @@ def _load_cards() -> Dict[str, Any]:
 
 
 def require_model_card() -> bool:
-    return _is_strict() and bool(_security_cfg().get("require_model_card"))
+    return _is_strict() and _pr_flag("require_model_card")
 
 
 def model_card_present(model_id: str) -> bool:
@@ -176,7 +177,7 @@ def check_serialization(artifact: str, *, weights_only: bool = False) -> Seriali
     ``weights_only=True`` (the torch.load safeguard) permits a legacy .pt.
     Low-side or safe_serialization_only off → allow (no-op).
     """
-    if not (_is_strict() and _security_cfg().get("safe_serialization_only")):
+    if not (_is_strict() and _pr_flag("safe_serialization_only")):
         return SerializationDecision(allowed=True, artifact=artifact, reason="not enforced (low-side / flag off)")
     name = (artifact or "").strip().lower()
     suffix = Path(name).suffix

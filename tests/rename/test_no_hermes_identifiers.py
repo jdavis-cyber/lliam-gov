@@ -776,8 +776,28 @@ KEEP_PATTERNS += [
 _COMPILED = [(re.compile(rx, re.IGNORECASE), why) for rx, why in KEEP_PATTERNS]
 
 
-def _line_is_allowed(text: str) -> bool:
+_EXACT_CREDITS = {
+    "README.md": {"Lliam-GOV is a governance-hardened fork of the MIT-licensed Hermes Agent. It"},
+}
+
+
+def _line_is_allowed(text: str, path: str = "") -> bool:
+    # Preserve this exact upstream credit without allowing appended stale markers.
+    if text in _EXACT_CREDITS.get(path.removeprefix("./"), set()):
+        return True
     return any(rx.search(text) for rx, _ in _COMPILED)
+
+
+def test_exact_upstream_credit_allowed_only_in_readme():
+    credit = "Lliam-GOV is a governance-hardened fork of the MIT-licensed Hermes Agent. It"
+    assert _line_is_allowed(credit, "./README.md")
+    assert not _line_is_allowed(credit, "app/banner.txt")
+
+
+def test_upstream_credit_exception_does_not_hide_stale_markers():
+    credit = "Lliam-GOV is a governance-hardened fork of the MIT-licensed Hermes Agent. It"
+    assert not _line_is_allowed(credit + " Welcome to HermesOldProduct", "README.md")
+    assert not _line_is_allowed("Welcome to HermesOldProduct", "README.md")
 
 
 def test_no_lliam_owned_hermes_refs():
@@ -807,7 +827,7 @@ def test_no_lliam_owned_hermes_refs():
         path, _lineno, text = parts
         if _is_whole_tree_keep(path):
             continue
-        if _line_is_allowed(text):
+        if _line_is_allowed(text, path):
             continue
         offenders.append(f"{path}:{_lineno}: {text.strip()[:160]}")
 

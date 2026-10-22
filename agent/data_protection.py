@@ -74,12 +74,9 @@ def _state(session_id: Optional[str] = None) -> Dict[str, bool]:
 
 
 def _is_strict() -> bool:
-    try:
-        from lliam_cli import config as _cfg
-        from lliam_cli import posture_resolver as _pr
-        return _pr.is_strict(_cfg.load_config())
-    except Exception:
-        return False
+    """Strict-posture predicate; a configuration fault enforces (fails closed)."""
+    from lliam_cli import posture_resolver as _pr
+    return _pr.enforce_strict_controls("data-protection (DLP)")
 
 
 def _security_cfg() -> dict:
@@ -204,10 +201,20 @@ def dlp_egress_decision(
     ``allowlist`` defaults to security.data_protection.egress_allowlist; the
     full destination allowlist policy is P2.5 — this gate composes with it.
     """
-    if not _is_strict() or not session_cui_tainted(session_id=session_id):
+    try:
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
+        config = _cfg.load_config()
+        strict = _pr.is_strict(config)
+    except Exception:
+        return DlpDecision(
+            blocked=session_cui_tainted(session_id=session_id),
+            reason="data-protection configuration unavailable — retaining CUI egress block",
+        )
+    if not strict or not session_cui_tainted(session_id=session_id):
         return DlpDecision(blocked=False)
     if allowlist is None:
-        allowlist = list((_security_cfg().get("data_protection") or {}).get("egress_allowlist") or [])
+        allowlist = list(((config.get("security") or {}).get("data_protection") or {}).get("egress_allowlist") or [])
     if _host_allowlisted(destination, allowlist):
         return DlpDecision(blocked=False, reason="allowlisted CUI sink")
     return DlpDecision(

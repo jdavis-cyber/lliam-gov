@@ -49,12 +49,9 @@ def _state(session_id: Optional[str] = None) -> Dict[str, object]:
 
 
 def _is_strict() -> bool:
-    try:
-        from lliam_cli import config as _cfg
-        from lliam_cli import posture_resolver as _pr
-        return _pr.is_strict(_cfg.load_config())
-    except Exception:
-        return False
+    """Strict-posture predicate; a configuration fault enforces (fails closed)."""
+    from lliam_cli import posture_resolver as _pr
+    return _pr.enforce_strict_controls("injection-defense")
 
 
 @dataclass(frozen=True)

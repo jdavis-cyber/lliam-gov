@@ -50,16 +50,13 @@ def reset_egress_cache() -> None:
 
 def _strict_status() -> Tuple[bool, bool]:
     """Return ``(strict, config_error)`` so posture faults cannot fail open."""
-    try:
-        from lliam_cli import config as _cfg
-        from lliam_cli import posture_resolver as _pr
-        return _pr.is_strict(_cfg.load_config()), False
-    except Exception:
-        return False, True
+    from lliam_cli import posture_resolver as _pr
+    return _pr.strict_status()
 
 
 def _is_strict() -> bool:
-    return _strict_status()[0]
+    strict, config_error = _strict_status()
+    return strict or config_error
 
 
 def _egress_cfg() -> Dict[str, Any]:
