@@ -38,8 +38,8 @@ risk_acceptance:
     docs/governance/deviation-register.yaml.
 
 baseline:
-  git_tag: gov-P3-good
-  git_commit: e92b6f35a15420455d7b74b043fc3b885fc5312a
+  git_tag: gov-P6-good
+  git_commit: 9818a3a0835427db791daff333fe169635de1f95
   overlay: cli-config.gov.yaml
 
 issued: 2026-07-16
@@ -60,7 +60,7 @@ conditions:
 
 go_no_go_checklist:
   - {item: signed AI policy of record present, ref: docs/governance/ai-policy.md, result: go}
-  - {item: baseline pinned to signed tag, ref: gov-P3-good, result: go}
+  - {item: baseline pinned to signed tag, ref: gov-P6-good, result: go}
   - {item: prohibited skills disabled, ref: cli-config.gov.yaml skills.disabled, result: go}
   - {item: provider allowlist enforced, ref: policy/provider-allowlist.yaml, result: go}
   - {item: audit chain verified, ref: ci/governance-ci-gates/audit_chain_selftest.py, result: go}
