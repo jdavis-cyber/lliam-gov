@@ -1,4 +1,10 @@
-"""Shared file safety rules used by both tools and ACP shims."""
+"""Shared file safety rules used by both tools and ACP shims.
+
+Reads and writes block .env, every .env.* name, and .envrc, except the
+documented example shapes .env.example and .env.sample. Matching applies
+NFKC, backslash, NTFS stream, trailing space/dot, and case normalization
+before checking names, so case variants of the examples remain allowed.
+"""
 
 from __future__ import annotations
 
@@ -200,8 +206,8 @@ def is_write_denied(path: str) -> bool:
 
 
 # Common secret-bearing project-local environment file basenames.
-# These are blocked because .env files routinely contain API keys,
-# database passwords, and other credentials.
+# This is not exhaustive: the shared predicate also blocks every .env.* name
+# except .env.example and .env.sample, for both reads and writes.
 _BLOCKED_PROJECT_ENV_BASENAMES: set[str] = {
     ".env",
     ".env.local",
@@ -214,11 +220,14 @@ _BLOCKED_PROJECT_ENV_BASENAMES: set[str] = {
 
 
 def _is_project_env_basename(name: str) -> bool:
-    """Match env names across case, Unicode and Windows path conventions."""
+    """Block normalized .env / .env.* / .envrc names, except example shapes."""
     name = unicodedata.normalize("NFKC", name)
     name = name.replace("\\", "/").rsplit("/", 1)[-1]
     name = name.split(":", 1)[0].rstrip(" .")
-    return name.casefold() in _BLOCKED_PROJECT_ENV_BASENAMES
+    name = name.casefold()
+    return name in _BLOCKED_PROJECT_ENV_BASENAMES or (
+        name.startswith(".env.") and name not in {".env.example", ".env.sample"}
+    )
 
 
 def get_read_block_error(path: str) -> Optional[str]:
@@ -236,13 +245,12 @@ def get_read_block_error(path: str) -> Optional[str]:
         OAuth tokens, and HMAC secrets that the agent never needs to read
         directly — provider tools / gateway adapters consume them through
         internal channels.
-      * Project-local environment files anywhere on disk: ``.env``,
-        ``.env.local``, ``.env.development``, ``.env.production``,
-        ``.env.test``, ``.env.staging``, ``.envrc``. These routinely hold
+      * Project-local environment files anywhere on disk: ``.env``, every
+        ``.env.*`` name, and ``.envrc``. These routinely hold
         API keys, database passwords, and other credentials for the user's
         own projects. The agent helping debug a project shouldn't normally
-        need to read these — ``.env.example`` is the documented-shape
-        substitute.
+        need to read these — only ``.env.example`` and ``.env.sample`` are
+        documented-shape exceptions, readable and writable after normalization.
 
     **This is NOT a security boundary.** The terminal tool runs as the
     same OS user with shell access; the agent can still ``cat auth.json``
@@ -351,11 +359,12 @@ def get_read_block_error(path: str) -> Optional[str]:
             "security boundary; the terminal tool can still bypass.)"
         )
 
-    # Block common secret-bearing project-local .env files anywhere on disk.
+    # Block .env, every .env.* name, and .envrc anywhere on disk, except
+    # normalized .env.example and .env.sample, using the same rule as writes.
     # The agent helping a user with their project rarely needs to read raw
     # .env contents — .env.example is the documented-shape substitute. The
     # terminal tool can still ``cat .env``; this is defense-in-depth, not a
-    # boundary (see module docstring).
+    # boundary (see get_read_block_error's docstring).
     if any(
         _is_project_env_basename(name)
         for name in (Path(path).name, resolved.name)

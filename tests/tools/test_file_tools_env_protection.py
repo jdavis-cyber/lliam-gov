@@ -73,6 +73,45 @@ def mutate(operation, path, *, ops=None, cross_profile=False):
     ))
 
 
+@pytest.mark.parametrize("basename, allowed", [
+    (".env", False),
+    (".env.local", False),
+    (".env.production.local", False),
+    (".env.development.local", False),
+    (".env.custom", False),
+    (".env.secret", False),
+    (".ENV.PRODUCTION.LOCAL", False),
+    (".env.custom ", False),
+    (".envrc", False),
+    (".env.example", True),
+    (".env.sample", True),
+    (".env.EXAMPLE", True),
+    ("ordinary.txt", True),
+])
+@pytest.mark.parametrize("operation", ["read", "write"])
+def test_env_read_write_policy(workspace, basename, allowed, operation):
+    target = workspace / basename
+    target.write_text("TEST_VALUE=1\n", encoding="utf-8")
+
+    if operation == "read":
+        result = json.loads(file_tools.read_file_tool(basename, task_id="env-protection"))
+    else:
+        result = json.loads(file_tools.write_file_tool(
+            basename, "TEST_VALUE=2\n", task_id="env-protection",
+        ))
+
+    if allowed:
+        assert not result.get("error"), result
+        if operation == "read":
+            assert "TEST_VALUE=1" in result["content"]
+        else:
+            assert target.read_text(encoding="utf-8") == "TEST_VALUE=2\n"
+    else:
+        assert "denied" in result.get("error", "").lower(), result
+        assert "TEST_VALUE=1" not in json.dumps(result)
+        assert target.read_text(encoding="utf-8") == "TEST_VALUE=1\n"
+
+
 @pytest.mark.parametrize("basename", [
     ".env", ".env.local", ".env.development", ".env.production",
     ".env.test", ".env.staging", ".envrc", ".ENV.LOCAL",
@@ -86,7 +125,7 @@ def test_env_mutations_follow_read_policy(workspace, basename, operation, layer)
     if existing:
         target.parent.mkdir()
         target.write_text("TEST_VALUE=1\n", encoding="utf-8")
-    elif operation == "move" and basename in {".env.custom", ".env.example", ".env.sample"}:
+    elif operation == "move" and basename in {".env.example", ".env.sample"}:
         target.parent.mkdir()
     source = workspace / "source.txt"
     source.write_text("TEST_VALUE=1\n", encoding="utf-8")
@@ -94,7 +133,7 @@ def test_env_mutations_follow_read_policy(workspace, basename, operation, layer)
 
     result = mutate(operation, f"scratch/{basename}", ops=ops, cross_profile=True)
 
-    if basename in {".env.custom", ".env.example", ".env.sample"}:
+    if basename in {".env.example", ".env.sample"}:
         assert not result.get("error"), result
         expected = "TEST_VALUE=1" if operation == "move" else "TEST_VALUE=2"
         assert target.read_text(encoding="utf-8").strip() == expected
@@ -177,12 +216,8 @@ def test_safe_root_does_not_override_env_denial(workspace, monkeypatch, basename
     monkeypatch.setenv("HERMES_WRITE_SAFE_ROOT", str(workspace))
     monkeypatch.setenv("LLIAM_WRITE_SAFE_ROOT", str(workspace))
     result = mutate("create", basename)
-    if basename == ".env.custom":
-        assert not result.get("error"), result
-        assert (workspace / basename).read_text(encoding="utf-8") == "TEST_VALUE=2\n"
-    else:
-        assert "denied" in result.get("error", "").lower(), result
-        assert not (workspace / basename).exists()
+    assert "denied" in result.get("error", "").lower(), result
+    assert not (workspace / basename).exists()
     assert not mutate("create", "ordinary.txt").get("error")
 
 
