@@ -157,7 +157,7 @@ word word word
         assert result["success"] is False
         assert "structure" in result["error"].lower() or "frontmatter" in result["error"].lower()
 
-    def test_skill_manage_patch_uses_fuzzy(self):
+    def test_skill_manage_patch_uses_fuzzy(self, submit_and_approve_skill):
         """The dispatcher should route to the fuzzy-matching patch."""
         _create_skill("test-skill", SKILL_CONTENT)
         raw = skill_manage(
@@ -166,13 +166,6 @@ word word word
             old_string="  Step 1: Do the thing.",  # extra leading space
             new_string="Step 1: Updated.",
         )
-        result = json.loads(raw)
-        assert result["staged"] is True
-        from tools.skill_manager_tool import apply_skill_pending
-        from tools.write_approval import get_pending
-
-        pending = get_pending("skills", result["pending_id"])
-        assert pending is not None
-        result = json.loads(apply_skill_pending(pending["payload"]))
+        result = json.loads(submit_and_approve_skill(raw))
         # Should succeed via line-trimmed or indentation-flexible matching
         assert result["success"] is True

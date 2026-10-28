@@ -590,14 +590,14 @@ When on, any flagged `skill_manage` write surfaces as an approval prompt with th
 
 ### Write approval for skill writes
 
-Independent of the content scanner above, `skills.write_approval` gates **every** agent skill write (create / edit / patch / delete / supporting files) behind your explicit approval — the same approve/deny mechanism as dangerous commands:
+Agent skill writes through `skill_manage` (create, edit, patch, delete, and supporting files) always need your approval. This applies to foreground turns and background reviews. `skills.write_approval` is **deprecated and ignored**, including when set to `false`:
 
 ```yaml
 skills:
-  write_approval: false   # false = write freely (default) | true = stage every write for review
+  write_approval: false   # deprecated, ignored; agent skill changes always need approval
 ```
 
-When on, skill writes are staged under `~/.lliam/pending/skills/` and reviewed with `/skills pending`, `/skills diff <id>`, `/skills approve <id>`, `/skills reject <id>` — from the CLI or any messaging platform. Toggle at runtime with `/skills approval on|off`. Memory has the same gate (`memory.write_approval`, below). Full walkthrough: [Gating agent skill writes](/user-guide/features/skills#gating-agent-skill-writes-skillswrite_approval).
+Review staged proposals with `/skills pending` and `/skills diff <id>`, then use `/skills approve <id>` or `/skills reject <id>`. The CLI and gateway both support review. The CLI accepts `/skills approval on|off` for compatibility, but neither value changes the policy or saves a setting. Memory retains its separate `memory.write_approval` setting. Full walkthrough: [Reviewing agent skill writes](/user-guide/features/skills#gating-agent-skill-writes-skillswrite_approval).
 
 ## Memory Configuration
 

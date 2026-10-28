@@ -36,11 +36,19 @@ def _set_approval(subsystem, enabled):
 # Config resolution
 # ---------------------------------------------------------------------------
 
-def test_default_gate_is_off(lliam_home):
+def test_only_memory_gate_defaults_off(lliam_home):
     from tools import write_approval as wa
     # Default: gate off → writes flow freely.
     assert wa.write_approval_enabled("memory") is False
-    assert wa.write_approval_enabled("skills") is False
+    assert wa.write_approval_enabled("skills") is True
+
+
+@pytest.mark.parametrize("setting", [False, True, "off", None])
+def test_skill_approval_setting_is_ignored(lliam_home, setting):
+    from tools import write_approval as wa
+    _set_approval("skills", setting)
+    assert wa.write_approval_enabled("skills") is True
+    assert wa.evaluate_gate("skills").stage
 
 
 def test_invalid_subsystem_is_off(lliam_home):
@@ -208,7 +216,7 @@ def test_skill_gate_on_then_apply_writes_file(lliam_home):
     _set_approval("skills", True)
     r = json.loads(smt.skill_manage("create", "applied-skill", content=_SKILL))
     rec = wa.get_pending("skills", r["pending_id"])
-    res = json.loads(smt.apply_skill_pending(rec["payload"]))
+    res = json.loads(smt.apply_skill_pending(rec["id"]))
     assert res["success"] is True
     assert smt._find_skill("applied-skill") is not None
 
@@ -287,16 +295,18 @@ def test_handle_approval_on(lliam_home):
     assert "on" in out
 
 
-def test_handle_approval_off(lliam_home):
+@pytest.mark.parametrize("mode", ["on", "off"])
+def test_skill_approval_toggle_does_not_persist(lliam_home, mode):
     from lliam_cli.write_approval_commands import handle_pending_subcommand
     from tools import write_approval as wa
     captured = {}
     out = handle_pending_subcommand(
-        wa.SKILLS, ["approval", "off"],
+        wa.SKILLS, ["approval", mode],
         set_mode_fn=lambda enabled: captured.update(enabled=enabled),
     )
-    assert captured["enabled"] is False
-    assert "off" in out
+    assert captured == {}
+    assert "always" in out.lower() and "approval" in out.lower()
+    assert "always" in handle_pending_subcommand(wa.SKILLS, []).lower()
 
 
 def test_handle_mode_alias_still_works(lliam_home):
@@ -441,3 +451,170 @@ def test_memory_invalid_params_rejected_before_staging(lliam_home):
     r = json.loads(memory_tool("add", "memory", None, store=store))
     assert r["success"] is False
     assert wa.pending_count("memory") == 0
+
+
+@pytest.mark.parametrize("subsystem", ["memory", "skills"])
+def test_stage_write_raises_on_disk_failure(lliam_home, subsystem):
+    from pathlib import Path
+    from tools import write_approval as wa
+    (Path(lliam_home) / "pending").write_text("blocked", encoding="utf-8")
+    with pytest.raises(OSError):
+        wa.stage_write(subsystem, {"action": "add"}, summary="test", origin="foreground")
+    assert wa.list_pending(subsystem) == []
+
+
+@pytest.mark.parametrize("subsystem", ["memory", "skills"])
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_decisions_are_durable_before_mutation(lliam_home, monkeypatch, subsystem, decision):
+    import hashlib
+    import getpass
+    from datetime import datetime
+    from pathlib import Path
+    from tools import write_approval as wa, skill_manager_tool as manager
+    from tools.memory_tool import MemoryStore
+    from lliam_cli.write_approval_commands import handle_pending_subcommand
+
+    monkeypatch.setattr(manager, "SKILLS_DIR", Path(lliam_home) / "skills")
+    payload = ({"action": "add", "target": "user", "content": "reviewed fact"}
+               if subsystem == "memory" else
+               {"action": "create", "name": "reviewed-skill", "content": _SKILL})
+    rec = wa.stage_write(subsystem, payload, summary="review this", origin="background_review")
+    log = Path(lliam_home) / "logs/write-approvals.jsonl"
+    store = MemoryStore()
+    store.load_from_disk()
+
+    # Observe the actual filesystem boundary, including pending-record deletion.
+    original_unlink = Path.unlink
+    original_write = Path.write_text
+    original_replace = os.replace
+    observed = []
+
+    def check_record():
+        entries = [json.loads(line) for line in log.read_text().splitlines()]
+        entry = entries[0]
+        assert entry["result"] == "pending"
+        assert entry["decision"] == decision
+        assert entry["subsystem"] == subsystem
+        assert entry["pending_id"] == rec["id"]
+        assert entry["action"] == payload["action"]
+        assert entry["name"] == payload.get("name", payload.get("target"))
+        assert entry["origin"] == "background_review"
+        assert entry["summary"] == "review this"
+        assert entry["sha256"] == hashlib.sha256(json.dumps(
+            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        ).encode("utf-8")).hexdigest()
+        assert entry["approver"] == getpass.getuser()
+        assert datetime.fromisoformat(entry["ts"]).utcoffset().total_seconds() == 0
+        observed.append(True)
+
+    def unlink(path, *args, **kwargs):
+        if path.name == f"{rec['id']}.json":
+            check_record()
+        return original_unlink(path, *args, **kwargs)
+
+    def write(path, *args, **kwargs):
+        if path.name == "SKILL.md":
+            check_record()
+        return original_write(path, *args, **kwargs)
+
+    def replace(src, dst, *args, **kwargs):
+        if Path(dst).name == "USER.md":
+            check_record()
+        return original_replace(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+    monkeypatch.setattr(Path, "write_text", write)
+    monkeypatch.setattr(os, "replace", replace)
+    handle_pending_subcommand(subsystem, [decision, rec["id"]], memory_store=store)
+    assert observed
+    assert wa.get_pending(subsystem, rec["id"]) is None
+    entries = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [entry["result"] for entry in entries] == ["pending", "applied" if decision == "approve" else "discarded"]
+    if subsystem == "memory":
+        assert store.user_entries == (["reviewed fact"] if decision == "approve" else [])
+    else:
+        assert (manager.SKILLS_DIR / "reviewed-skill/SKILL.md").exists() == (decision == "approve")
+
+
+@pytest.mark.parametrize("subsystem", ["memory", "skills"])
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+@pytest.mark.parametrize("target_all", [False, True])
+def test_unwritable_decision_log_refuses_mutation(lliam_home, monkeypatch, subsystem, decision, target_all):
+    from pathlib import Path
+    from tools import write_approval as wa, skill_manager_tool as manager
+    from tools.memory_tool import MemoryStore
+    from lliam_cli.write_approval_commands import handle_pending_subcommand
+    monkeypatch.setattr(manager, "SKILLS_DIR", Path(lliam_home) / "skills")
+    payload = ({"action": "add", "target": "user", "content": "keep pending"}
+               if subsystem == "memory" else
+               {"action": "create", "name": "keep-pending", "content": _SKILL})
+    rec = wa.stage_write(subsystem, payload, summary="keep", origin="foreground")
+    (Path(lliam_home) / "logs").write_text("blocked", encoding="utf-8")
+    store = MemoryStore()
+    store.load_from_disk()
+    out = handle_pending_subcommand(subsystem, [decision, "all" if target_all else rec["id"]], memory_store=store)
+    assert wa.get_pending(subsystem, rec["id"]) == rec
+    assert store.user_entries == []
+    assert not (manager.SKILLS_DIR / "keep-pending").exists()
+    assert "Failed" in out
+
+
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+@pytest.mark.parametrize("ledger_enabled", [False, True])
+def test_decision_uses_bound_principal_and_emits_oversight(lliam_home, monkeypatch, decision, ledger_enabled):
+    from pathlib import Path
+    from agent import governance_audit_hooks as hooks
+    from agent.governance_audit import GovernanceLedger, iter_records
+    from lliam_cli.write_approval_commands import handle_pending_subcommand
+    from tools import write_approval as wa
+    from tools.memory_tool import MemoryStore
+
+    ledger = GovernanceLedger(Path(lliam_home) / "audit.jsonl")
+    monkeypatch.setattr(hooks, "_enabled_ledger", lambda: ledger if ledger_enabled else None)
+    rec = wa.stage_write("memory", {"action": "add", "target": "user", "content": "a fact"},
+                         summary="a fact", origin="foreground")
+    hooks.set_operator_subject("authenticated-reviewer", auth="dashboard_auth:password")
+    try:
+        store = MemoryStore()
+        store.load_from_disk()
+        handle_pending_subcommand("memory", [decision, rec["id"]], memory_store=store)
+    finally:
+        hooks.set_operator_subject(None)
+    entries = [json.loads(line) for line in (Path(lliam_home) / "logs/write-approvals.jsonl").read_text().splitlines()]
+    assert all(entry["approver"] == "authenticated-reviewer" for entry in entries)
+    if ledger_enabled:
+        records = [record for record in iter_records(ledger.path) if record["event"] == "approval.decision"]
+        assert len(records) == 1
+        assert records[0]["decision"] == ("approve" if decision == "approve" else "deny")
+        assert records[0]["approver"]["id"] == "authenticated-reviewer"
+        assert records[0]["approver"]["authenticated"] is True
+    else:
+        assert not ledger.path.exists()
+
+
+def test_failed_replay_keeps_proposal_and_records_outcome(lliam_home):
+    from pathlib import Path
+    from lliam_cli.write_approval_commands import handle_pending_subcommand
+    from tools import write_approval as wa
+    rec = wa.stage_write("memory", {"action": "add", "target": "user", "content": "a fact"},
+                         summary="a fact", origin="foreground")
+    out = handle_pending_subcommand("memory", ["approve", rec["id"]])
+    assert "Failed" in out
+    assert wa.get_pending("memory", rec["id"]) == rec
+    entries = [json.loads(line) for line in (Path(lliam_home) / "logs/write-approvals.jsonl").read_text().splitlines()]
+    assert [entry["result"] for entry in entries] == ["pending", "failed"]
+    assert "memory store unavailable" in entries[-1]["error"]
+
+
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_sync_failure_refuses_decision(lliam_home, monkeypatch, decision):
+    from lliam_cli.write_approval_commands import handle_pending_subcommand
+    from tools import write_approval as wa
+    rec = wa.stage_write("memory", {"action": "add", "target": "user", "content": "a fact"},
+                         summary="a fact", origin="foreground")
+    def fail_sync(fd):
+        raise OSError("disk sync failed")
+    monkeypatch.setattr(os, "fsync", fail_sync)
+    out = handle_pending_subcommand("memory", [decision, rec["id"]])
+    assert "Failed" in out
+    assert wa.get_pending("memory", rec["id"]) == rec

@@ -50,7 +50,7 @@ def test_create_requires_operator_approval(library, origin, approval_setting, ca
     assert "Skill write approved" not in caplog.text
 
     reply = handle_pending_subcommand("skills", ["approve", result["pending_id"]])
-    assert reply == "Approved 1 skills write(s)."
+    assert "Approved 1" in reply
     assert (library / "local-file-tasks" / "SKILL.md").read_text(encoding="utf-8") == CONTENT
     assert json.loads(skills_tool.skill_view("local-file-tasks"))["success"] is True
     assert write_approval.pending_count("skills") == 0
@@ -86,7 +86,7 @@ def test_pending_changes_leave_operator_authored_skill_untouched(library, action
 
     # The same mutation becomes effective only through operator approval.
     proposal = json.loads(manager.skill_manage(action, "local-file-tasks", **kwargs))
-    assert handle_pending_subcommand("skills", ["approve", proposal["pending_id"]]) == "Approved 1 skills write(s)."
+    handle_pending_subcommand("skills", ["approve", proposal["pending_id"]])
     if action == "delete":
         assert not skill.exists()
     elif action == "remove_file":
@@ -108,8 +108,8 @@ def test_failed_pending_store_does_not_save_skill(library, monkeypatch):
     assert not (library / "local-file-tasks").exists()
 
 
-def test_best_effort_staging_failure_is_reported(library):
-    # The backend catches disk errors; its returned record is not proof of save.
+def test_staging_disk_failure_is_reported(library):
+    # A disk error must not claim the proposal is available for review.
     (library.parent / "pending").write_text("not a directory", encoding="utf-8")
     result = json.loads(manager.skill_manage("create", "local-file-tasks", content=CONTENT))
     assert result["success"] is False
@@ -118,9 +118,7 @@ def test_best_effort_staging_failure_is_reported(library):
 
 def test_approval_replay_requires_pending_record(library, caplog):
     caplog.set_level(logging.INFO, logger=manager.__name__)
-    result = json.loads(manager.apply_skill_pending({
-        "action": "create", "name": "local-file-tasks", "content": CONTENT,
-    }))
+    result = json.loads(manager.apply_skill_pending("missing-id"))
     assert result["success"] is False
     assert not (library / "local-file-tasks").exists()
     assert "Skill write approved" not in caplog.text
@@ -131,7 +129,7 @@ def test_duplicate_proposals_log_the_selected_approval(library, caplog):
     second = json.loads(manager.skill_manage("create", "local-file-tasks", content=CONTENT))
     caplog.set_level(logging.INFO, logger=manager.__name__)
     reply = handle_pending_subcommand("skills", ["approve", second["pending_id"]])
-    assert reply == "Approved 1 skills write(s)."
+    assert "Approved 1" in reply
     assert f"Skill write approved: id={second['pending_id']}" in caplog.text
     assert f"Skill write approved: id={first['pending_id']}" not in caplog.text
     assert write_approval.get_pending("skills", first["pending_id"]) is not None
@@ -176,7 +174,7 @@ def test_real_background_review_stages_before_operator_approval(library, monkeyp
     api = Mock(side_effect=[response(None, [tool_call]), response("Proposal submitted.")])
     monkeypatch.setattr(AIAgent, "_interruptible_api_call", api)
     monkeypatch.setattr(AIAgent, "_interruptible_streaming_api_call", api)
-    (library.parent / "config.yaml").write_text("model:\n  context_length: 128000\n", encoding="utf-8")
+    (library.parent / "config.yaml").write_text("model:\n  context_length: 128000\nskills:\n  write_approval: false\n", encoding="utf-8")
     caplog.set_level(logging.INFO, logger=manager.__name__)
     parent = AIAgent(model="test-model", provider="openai", api_key="test-key",
                      base_url="http://127.0.0.1:1/v1", enabled_toolsets=["skills"],
@@ -187,7 +185,11 @@ def test_real_background_review_stages_before_operator_approval(library, monkeyp
     token = set_current_write_origin(get_current_write_origin())
     try:
         target, _ = spawn_background_review_thread(parent, [], review_skills=True)
-        target()
+        import threading
+        worker = threading.Thread(target=target)
+        worker.start()
+        worker.join(timeout=30)
+        assert not worker.is_alive()
     finally:
         reset_current_write_origin(token)
         parent.close()
@@ -199,7 +201,7 @@ def test_real_background_review_stages_before_operator_approval(library, monkeyp
     assert json.loads(skills_tool.skill_view("local-file-tasks"))["success"] is False
     assert "Skill write approved" not in caplog.text
     assert notifications and "pending approval" in str(notifications)
-    assert handle_pending_subcommand("skills", ["approve", records[0]["id"]]) == "Approved 1 skills write(s)."
+    handle_pending_subcommand("skills", ["approve", records[0]["id"]])
     assert json.loads(skills_tool.skill_view("local-file-tasks"))["success"] is True
     assert "Skill write approved" in caplog.text
 

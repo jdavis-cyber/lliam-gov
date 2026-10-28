@@ -38,7 +38,6 @@ import os
 import re
 import shutil
 import tempfile
-import uuid
 from pathlib import Path
 from lliam_constants import get_lliam_home, display_lliam_home
 from typing import Dict, Any, List, Optional, Tuple
@@ -1132,19 +1131,19 @@ def _remove_file(name: str, file_path: str) -> Dict[str, Any]:
 # ContextVar bypass: set while replaying an already-approved staged skill write
 # so skill_manage() does not re-gate (and re-stage) it.
 import contextvars as _ctxvars
-_skill_gate_bypass: "_ctxvars.ContextVar[bool]" = _ctxvars.ContextVar(
-    "skill_gate_bypass", default=False
+_replaying_approved_skill: "_ctxvars.ContextVar[bool]" = _ctxvars.ContextVar(
+    "replaying_approved_skill", default=False
 )
 
 
-def _apply_skill_write_gate(action, name, **payload_kwargs):
-    """Evaluate the skill write gate. Returns a JSON tool-result string when the
-    write should NOT proceed (blocked or staged), or None to perform the real
-    write. Bypassed during approved-pending replay.
+def _stage_skill_proposal(action, name, **payload_kwargs):
+    """Stage an agent proposal and return its JSON tool result.
+
+    Return None for non-write actions or an approved replay.
     """
     if action not in {"create", "edit", "patch", "delete", "write_file", "remove_file"}:
         return None
-    if _skill_gate_bypass.get():
+    if _replaying_approved_skill.get():
         return None
 
     # All calls to this model tool are proposals, including foreground calls.
@@ -1152,9 +1151,6 @@ def _apply_skill_write_gate(action, name, **payload_kwargs):
     # its own instructions. Operator-authored files never pass through here.
     payload = {"action": action, "name": name}
     payload.update({k: v for k, v in payload_kwargs.items() if v is not None})
-    # The approval handler passes only the payload back. Distinguish repeated
-    # identical proposals so replay restores and logs the selected record.
-    payload["_proposal_id"] = uuid.uuid4().hex
     try:
         from tools import write_approval as wa
 
@@ -1166,11 +1162,7 @@ def _apply_skill_write_gate(action, name, **payload_kwargs):
             new_string=payload_kwargs.get("new_string") or "",
         )
         record = wa.stage_write(wa.SKILLS, payload, summary=gist, origin=wa.current_origin())
-        # stage_write is best-effort and can return a record after disk failure.
-        # Do not report a reviewable proposal unless it was actually persisted.
-        if wa.get_pending(wa.SKILLS, record["id"]) != record:
-            raise OSError("Pending skill write was not persisted")
-    except Exception:
+    except (OSError, TypeError, ValueError):
         logger.exception("Could not stage skill write: action=%s name=%s", action, name)
         return tool_error("Could not save the pending skill proposal. No skill was changed.", success=False)
 
@@ -1187,24 +1179,24 @@ def _apply_skill_write_gate(action, name, **payload_kwargs):
     )
 
 
-def apply_skill_pending(payload: Dict[str, Any]) -> str:
-    """Replay a staged skill write, bypassing the gate. Returns the tool result
-    JSON string. Called by the /skills approve handler.
+def apply_skill_pending(pending_id: str) -> str:
+    """Replay the selected staged record after the operator handler logs approval.
+
+    Returns the tool result JSON string. This is not a model tool.
     """
     from tools import write_approval as wa
     from tools.skill_provenance import set_current_write_origin, reset_current_write_origin
 
-    record = next((rec for rec in wa.list_pending(wa.SKILLS)
-                   if rec.get("payload") == payload), None)
+    record = wa.get_pending(wa.SKILLS, pending_id)
     if record is None:
         return tool_error("No pending skill proposal matches this approval.", success=False)
 
-    # This function is the existing operator approval handler's replay path,
-    # not a model tool. Record the authorization before making a skill loadable.
+    payload = record["payload"]
+    # The operator handler already persisted the authorization before replay.
     logger.info("Skill write approved: id=%s action=%s name=%s origin=%s",
                 record["id"], payload.get("action"), payload.get("name"), record["origin"])
     origin_token = set_current_write_origin(record["origin"])
-    token = _skill_gate_bypass.set(True)
+    token = _replaying_approved_skill.set(True)
     try:
         return skill_manage(
             action=payload.get("action", ""),
@@ -1219,7 +1211,7 @@ def apply_skill_pending(payload: Dict[str, Any]) -> str:
             absorbed_into=payload.get("absorbed_into"),
         )
     finally:
-        _skill_gate_bypass.reset(token)
+        _replaying_approved_skill.reset(token)
         reset_current_write_origin(origin_token)
 
 
@@ -1259,7 +1251,7 @@ def skill_manage(
 
     # Stage all agent proposals outside the skill library. Only an operator's
     # approval replay may bypass this gate; staging never invalidates caches.
-    gate_result = _apply_skill_write_gate(
+    gate_result = _stage_skill_proposal(
         action, name, content=content, category=category,
         file_path=file_path, file_content=file_content,
         old_string=old_string, new_string=new_string,
@@ -1350,9 +1342,6 @@ SKILL_MANAGE_SCHEMA = {
         "If you used a skill and hit issues not covered by it, patch it immediately.\n\n"
         "After difficult/iterative tasks, offer to save as a skill. "
         "Skip for simple one-offs. Confirm with user before creating/deleting.\n\n"
-        "Changes are staged outside the skill library until the operator reviews "
-        "and approves them with /skills pending, /skills diff <id>, and "
-        "/skills approve <id>. A staged result has not changed a loadable skill.\n\n"
         "Good skills: trigger conditions, numbered steps with exact commands, "
         "pitfalls section, verification steps. Use skill_view() to see format examples.\n\n"
         "Pinned skills are protected from deletion only — skill_manage(action='delete') "

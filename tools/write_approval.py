@@ -15,13 +15,9 @@ Both stores are written from two origins:
     turn and autonomously decides what to save (the source of the
     "wrong assumptions" users complained about)
 
-This module lets the user gate those writes per-subsystem with a boolean
-``write_approval``:
-
-  * ``false`` (default) — write freely (the pre-gate behaviour)
-  * ``true``            — require approval: do not commit the write; either
-    prompt inline (memory, interactive CLI only) or **stage** it to a pending
-    store and surface it for the user to approve or reject out-of-band
+Agent skill writes always stage for operator approval; ``skills.write_approval``
+is deprecated and ignored. Memory retains its boolean ``memory.write_approval``:
+false allows writes, while true prompts inline or stages them for review.
 
 The size asymmetry between memory and skills is real and unavoidable: a memory
 entry can be reviewed inline in a chat bubble; a 100 KB SKILL.md cannot. So
@@ -43,10 +39,13 @@ web dashboard.
 from __future__ import annotations
 
 import json
+import getpass
+import hashlib
 import logging
 import os
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -59,11 +58,7 @@ MEMORY = "memory"
 SKILLS = "skills"
 _SUBSYSTEMS = (MEMORY, SKILLS)
 
-# Config key (per subsystem). A single boolean: the approval gate is OFF by
-# default (writes flow freely, the pre-gate behaviour), and ON means stage /
-# prompt every write for the user's approval. There is intentionally no third
-# "block all writes" state — to disable a subsystem entirely use its own
-# enable flag (e.g. ``memory.memory_enabled: false``).
+# Memory's opt-in approval setting. The legacy skill key is ignored.
 CONFIG_KEY = "write_approval"
 
 
@@ -74,10 +69,12 @@ CONFIG_KEY = "write_approval"
 def write_approval_enabled(subsystem: str) -> bool:
     """Return whether the approval gate is enabled for ``subsystem``.
 
-    Reads ``<subsystem>.write_approval`` from config.yaml. Defaults to
-    ``False`` (gate off — writes flow freely) for any unset / invalid value so
-    existing installs keep their current behaviour until the user opts in.
+    Skills always require approval; ``skills.write_approval`` is deprecated
+    and ignored. Memory reads ``memory.write_approval`` from config.yaml,
+    defaulting to False for unset or invalid values.
     """
+    if subsystem == SKILLS:
+        return True
     if subsystem not in _SUBSYSTEMS:
         return False
     try:
@@ -125,9 +122,8 @@ def stage_write(subsystem: str, payload: Dict[str, Any],
             entry text itself.
         origin: ``foreground`` or ``background_review`` — recorded for audit.
 
-    Returns a dict with ``id`` and metadata. Best-effort: on disk failure it
-    logs and still returns a record (the write is simply lost, which is the
-    safe failure for an approval gate — nothing is silently committed).
+    Returns a dict with ``id`` and metadata only after persistence succeeds.
+    Disk errors propagate to the caller; no proposal is reported as staged.
     """
     pid = uuid.uuid4().hex[:8]
     record = {
@@ -139,15 +135,15 @@ def stage_write(subsystem: str, payload: Dict[str, Any],
         "created_at": time.time(),
         "payload": payload,
     }
+    d = _pending_dir(subsystem)
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / f"{pid}.json"
+    tmp = path.with_suffix(".json.tmp")
     try:
-        d = _pending_dir(subsystem)
-        d.mkdir(parents=True, exist_ok=True)
-        path = d / f"{pid}.json"
-        tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, path)
-    except Exception as e:  # pragma: no cover - disk failure path
-        logger.error("Failed to stage pending %s write: %s", subsystem, e, exc_info=True)
+    finally:
+        tmp.unlink(missing_ok=True)
     return record
 
 
@@ -198,6 +194,68 @@ def pending_count(subsystem: str) -> int:
         return sum(1 for _ in d.glob("*.json"))
     except Exception:
         return 0
+
+
+# ---------------------------------------------------------------------------
+# Durable operator decisions
+# ---------------------------------------------------------------------------
+
+def _append_decision(record: Dict[str, Any]) -> None:
+    """Append and sync one JSON line; errors must stop a pending decision."""
+    directory = get_lliam_home() / "logs"
+    directory.mkdir(parents=True, exist_ok=True)
+    data = (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8")
+    fd = os.open(directory / "write-approvals.jsonl", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        if os.write(fd, data) != len(data):
+            raise OSError("Incomplete write-approval decision record")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def record_write_decision(subsystem: str, pending: Dict[str, Any],
+                          decision: str) -> Dict[str, Any]:
+    """Persist authorization BEFORE applying/discarding a staged payload.
+
+    ``result=pending`` means execution has not occurred. A second line records
+    the outcome; a crash between the two leaves an honest pending result.
+    The hash covers UTF-8 JSON with sorted keys and compact separators.
+    """
+    from tools import hitl_oversight
+
+    payload = pending["payload"]
+    record = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "decision": decision,
+        "subsystem": subsystem,
+        "pending_id": pending["id"],
+        "action": payload.get("action", ""),
+        "name": payload.get("name", payload.get("target", "")),
+        "origin": pending.get("origin", "foreground"),
+        "summary": pending.get("summary", ""),
+        "sha256": hashlib.sha256(json.dumps(
+            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        ).encode("utf-8")).hexdigest(),
+        "approver": hitl_oversight.authenticated_principal() or getpass.getuser(),
+        "result": "pending",
+    }
+    _append_decision(record)
+    hitl_oversight.record_decision(
+        decision="approve" if decision == "approve" else "deny",
+        gate=f"{subsystem}.write_approval", target=pending["id"],
+        description=record["summary"], approver=record["approver"],
+        origin=record["origin"], justification=f"sha256:{record['sha256']}",
+    )
+    return record
+
+
+def record_write_outcome(record: Dict[str, Any], result: str, error: str = "") -> None:
+    """Append execution outcome without replacing the prior authorization."""
+    outcome = {**record, "ts": datetime.now(timezone.utc).isoformat(), "result": result}
+    if error:
+        outcome["error"] = error
+    _append_decision(outcome)
 
 
 # ---------------------------------------------------------------------------
@@ -262,10 +320,10 @@ def evaluate_gate(subsystem: str, *, inline_summary: str = "",
             are small; skills never take the inline path).
 
     Decision matrix:
-        gate off (default)                    → allow (writes flow freely)
+        memory gate off (default)             → allow (writes flow freely)
         gate on, memory + interactive CLI     → inline approve/deny prompt
         gate on, memory + gateway/script/bg   → stage
-        gate on, skills (any origin)          → stage (too big to review inline)
+        skills (any config or origin)        → stage (operator approval required)
 
     Note: there is no config-driven "blocked" outcome — the gate only ever
     delays a write for approval, never silently refuses it. ``blocked`` is
@@ -283,7 +341,7 @@ def evaluate_gate(subsystem: str, *, inline_summary: str = "",
         return GateDecision(
             stage=True,
             message=(
-                f"Staged for approval ({subsystem}.write_approval is on). "
+                "Staged for approval. "
                 f"Not yet saved — review with {where}."
             ),
         )
