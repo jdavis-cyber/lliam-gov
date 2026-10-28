@@ -1845,6 +1845,7 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict,
             approver_authenticated=True if entry.approver else None,
             approver_method=entry.approver_method,
             origin=surface,
+            session_id=session_key,
         )
     except Exception:
         pass

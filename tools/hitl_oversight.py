@@ -35,7 +35,9 @@ shipped behavior (capability preserving).
 
 from __future__ import annotations
 
+import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, NamedTuple, Optional, Tuple
 
 logger = logging.getLogger("hermes.governance.hitl_oversight")
@@ -230,6 +232,7 @@ def record_decision(
     justification: str = "",
     approver_authenticated: Optional[bool] = None,
     approver_method: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> None:
     """Emit one ``approval.decision`` record (LG-HO-10). Never raises.
 
@@ -239,7 +242,26 @@ def record_decision(
     ``approver.method`` how it authenticated. A caller that captured the
     principal in another context (the gateway resolver thread) passes
     ``approver_authenticated=True`` and ``approver_method``.
+
+    A completed request supplies ``session_id`` to also record its resolution
+    in agent.log, independently of the ledger. Authorization probes omit it
+    because they may leave the request pending. The supplied approver is the
+    resolver's identity; None means no identified operator answered.
     """
+    if session_id is not None:
+        try:
+            from agent.redact import redact_sensitive_text
+
+            logger.info("approval.decision %s", json.dumps({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "session_id": session_id,
+                "command": redact_sensitive_text(target, force=True),
+                "decision": decision,
+                "approver": approver,
+            }))
+        except Exception:
+            logger.warning("Approval resolution log failed (non-blocking)", exc_info=True)
+
     try:
         from agent.governance_audit_hooks import _current_subject, _enabled_ledger
         ledger = _enabled_ledger()
