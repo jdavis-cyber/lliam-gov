@@ -197,7 +197,9 @@ const ApprovalBar: FC<{ request: ApprovalRequest; surface: 'floating' | 'inline'
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-44">
-              <DropdownMenuItem onSelect={() => void respond('session')}>{copy.allowSession}</DropdownMenuItem>
+              {request.allowSession !== false && (
+                <DropdownMenuItem onSelect={() => void respond('session')}>{copy.allowSession}</DropdownMenuItem>
+              )}
               {allowPermanent && (
                 <DropdownMenuItem
                   onSelect={() => {

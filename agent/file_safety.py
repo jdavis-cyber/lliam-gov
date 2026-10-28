@@ -1,8 +1,15 @@
-"""Shared file safety rules used by both tools and ACP shims."""
+"""Shared file safety rules used by both tools and ACP shims.
+
+Reads and writes block .env, every .env.* name, and .envrc, except the
+documented example shapes .env.example and .env.sample. Matching applies
+NFKC, backslash, NTFS stream, trailing space/dot, and case normalization
+before checking names, so case variants of the examples remain allowed.
+"""
 
 from __future__ import annotations
 
 import os
+import unicodedata
 from lliam_cli.env_compat import getenv_compat
 from pathlib import Path
 from typing import Optional
@@ -100,16 +107,30 @@ def get_safe_write_roots() -> set[str]:
     return roots
 
 
-def is_write_denied(path: str) -> bool:
-    """Return True if path is blocked by the write denylist or safe root."""
+def get_write_block_error(path: str, *, cwd: str) -> Optional[str]:
+    """Return the denial reason, anchoring relative paths at the operation's cwd.
+
+    Check both the supplied name and the real target, including dangling
+    symlinks used to create files. Environment-file denials have no override.
+    """
+    expanded = os.path.join(cwd, os.path.expanduser(str(path)))
+    resolved = os.path.realpath(expanded)
+    if any(
+        _is_project_env_basename(os.path.basename(candidate))
+        for candidate in (expanded, resolved)
+    ):
+        return (
+            f"Write denied: {path} is a protected environment file "
+            "and cannot be created, overwritten, patched, moved, or deleted by file tools."
+        )
     home = os.path.realpath(os.path.expanduser("~"))
-    resolved = os.path.realpath(os.path.expanduser(str(path)))
+    denied = f"Write denied: '{path}' is a protected system/credential file."
 
     if resolved in build_write_denied_paths(home):
-        return True
+        return denied
     for prefix in build_write_denied_prefixes(home):
         if resolved.startswith(prefix):
-            return True
+            return denied
 
     mcp_tokens_dir_name = "mcp-tokens"
 
@@ -126,13 +147,13 @@ def is_write_denied(path: str) -> bool:
         try:
             mcp_real = os.path.realpath(os.path.join(base_real, mcp_tokens_dir_name))
             if resolved == mcp_real or resolved.startswith(mcp_real + os.sep):
-                return True
+                return denied
         except Exception:
             pass
         try:
             pairing_real = os.path.realpath(os.path.join(base_real, "pairing"))
             if resolved == pairing_real or resolved.startswith(pairing_real + os.sep):
-                return True
+                return denied
         except Exception:
             pass
         try:
@@ -150,7 +171,7 @@ def is_write_denied(path: str) -> bool:
             logs_real = os.path.realpath(os.path.join(base_real, "logs")).casefold()
             resolved_cf = resolved.casefold()
             if resolved_cf == logs_real or resolved_cf.startswith(logs_real + os.sep):
-                return True
+                return denied
         except Exception:
             pass
         try:
@@ -162,7 +183,7 @@ def is_write_denied(path: str) -> bool:
             keys_real = os.path.realpath(os.path.join(base_real, "keys")).casefold()
             resolved_cf = resolved.casefold()
             if resolved_cf == keys_real or resolved_cf.startswith(keys_real + os.sep):
-                return True
+                return denied
         except Exception:
             pass
 
@@ -174,14 +195,19 @@ def is_write_denied(path: str) -> bool:
                 allowed = True
                 break
         if not allowed:
-            return True
+            return denied
 
-    return False
+    return None
+
+
+def is_write_denied(path: str) -> bool:
+    """Return True if path is blocked by the write denylist or safe root."""
+    return get_write_block_error(path, cwd=os.getcwd()) is not None
 
 
 # Common secret-bearing project-local environment file basenames.
-# These are blocked because .env files routinely contain API keys,
-# database passwords, and other credentials.
+# This is not exhaustive: the shared predicate also blocks every .env.* name
+# except .env.example and .env.sample, for both reads and writes.
 _BLOCKED_PROJECT_ENV_BASENAMES: set[str] = {
     ".env",
     ".env.local",
@@ -191,6 +217,17 @@ _BLOCKED_PROJECT_ENV_BASENAMES: set[str] = {
     ".env.staging",
     ".envrc",
 }
+
+
+def _is_project_env_basename(name: str) -> bool:
+    """Block normalized .env / .env.* / .envrc names, except example shapes."""
+    name = unicodedata.normalize("NFKC", name)
+    name = name.replace("\\", "/").rsplit("/", 1)[-1]
+    name = name.split(":", 1)[0].rstrip(" .")
+    name = name.casefold()
+    return name in _BLOCKED_PROJECT_ENV_BASENAMES or (
+        name.startswith(".env.") and name not in {".env.example", ".env.sample"}
+    )
 
 
 def get_read_block_error(path: str) -> Optional[str]:
@@ -208,13 +245,12 @@ def get_read_block_error(path: str) -> Optional[str]:
         OAuth tokens, and HMAC secrets that the agent never needs to read
         directly — provider tools / gateway adapters consume them through
         internal channels.
-      * Project-local environment files anywhere on disk: ``.env``,
-        ``.env.local``, ``.env.development``, ``.env.production``,
-        ``.env.test``, ``.env.staging``, ``.envrc``. These routinely hold
+      * Project-local environment files anywhere on disk: ``.env``, every
+        ``.env.*`` name, and ``.envrc``. These routinely hold
         API keys, database passwords, and other credentials for the user's
         own projects. The agent helping debug a project shouldn't normally
-        need to read these — ``.env.example`` is the documented-shape
-        substitute.
+        need to read these — only ``.env.example`` and ``.env.sample`` are
+        documented-shape exceptions, readable and writable after normalization.
 
     **This is NOT a security boundary.** The terminal tool runs as the
     same OS user with shell access; the agent can still ``cat auth.json``
@@ -323,12 +359,16 @@ def get_read_block_error(path: str) -> Optional[str]:
             "security boundary; the terminal tool can still bypass.)"
         )
 
-    # Block common secret-bearing project-local .env files anywhere on disk.
+    # Block .env, every .env.* name, and .envrc anywhere on disk, except
+    # normalized .env.example and .env.sample, using the same rule as writes.
     # The agent helping a user with their project rarely needs to read raw
     # .env contents — .env.example is the documented-shape substitute. The
     # terminal tool can still ``cat .env``; this is defense-in-depth, not a
-    # boundary (see module docstring).
-    if resolved.name in _BLOCKED_PROJECT_ENV_BASENAMES:
+    # boundary (see get_read_block_error's docstring).
+    if any(
+        _is_project_env_basename(name)
+        for name in (Path(path).name, resolved.name)
+    ):
         return (
             f"Access denied: {path} is a secret-bearing environment file "
             "and cannot be read to prevent credential leakage. "
