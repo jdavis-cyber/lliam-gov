@@ -8,6 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch as mock_patch
 
+import pytest
+
 import tools.approval as approval_module
 from lliam_constants import get_lliam_home
 from tools.approval import (
@@ -178,64 +180,23 @@ class TestSessionKeyContext:
 
 
 
-class TestRmFalsePositiveFix:
-    """Regression tests: filenames starting with 'r' must NOT trigger recursive delete."""
+class TestNonRecursiveFileDeleteConsent:
+    """Filenames starting with 'r' need delete consent, not a recursive label."""
 
-    def test_rm_readme_requires_consent_not_recursive(self):
-        is_dangerous, key, desc = detect_dangerous_command("rm readme.txt")
-        assert is_dangerous is True
-        assert key is not None
-        assert "delete" in desc.lower()
-        assert "recursive" not in desc.lower()
-
-    def test_rm_requirements_requires_consent_not_recursive(self):
-        is_dangerous, key, desc = detect_dangerous_command("rm requirements.txt")
-        assert is_dangerous is True
-        assert key is not None
-        assert "delete" in desc.lower()
-        assert "recursive" not in desc.lower()
-
-    def test_rm_report_requires_consent_not_recursive(self):
-        is_dangerous, key, desc = detect_dangerous_command("rm report.csv")
-        assert is_dangerous is True
-        assert key is not None
-        assert "delete" in desc.lower()
-        assert "recursive" not in desc.lower()
-
-    def test_rm_results_requires_consent_not_recursive(self):
-        is_dangerous, key, desc = detect_dangerous_command("rm results.json")
-        assert is_dangerous is True
-        assert key is not None
-        assert "delete" in desc.lower()
-        assert "recursive" not in desc.lower()
-
-    def test_rm_robots_requires_consent_not_recursive(self):
-        is_dangerous, key, desc = detect_dangerous_command("rm robots.txt")
-        assert is_dangerous is True
-        assert key is not None
-        assert "delete" in desc.lower()
-        assert "recursive" not in desc.lower()
-
-    def test_rm_run_requires_consent_not_recursive(self):
-        is_dangerous, key, desc = detect_dangerous_command("rm run.sh")
-        assert is_dangerous is True
-        assert key is not None
-        assert "delete" in desc.lower()
-        assert "recursive" not in desc.lower()
-
-    def test_rm_force_readme_requires_consent_not_recursive(self):
-        is_dangerous, key, desc = detect_dangerous_command("rm -f readme.txt")
-        assert is_dangerous is True
-        assert key is not None
-        assert "delete" in desc.lower()
-        assert "recursive" not in desc.lower()
-
-    def test_rm_verbose_readme_requires_consent_not_recursive(self):
-        is_dangerous, key, desc = detect_dangerous_command("rm -v readme.txt")
-        assert is_dangerous is True
-        assert key is not None
-        assert "delete" in desc.lower()
-        assert "recursive" not in desc.lower()
+    @pytest.mark.parametrize("command", [
+        "rm readme.txt",
+        "rm requirements.txt",
+        "rm report.csv",
+        "rm results.json",
+        "rm robots.txt",
+        "rm run.sh",
+        "rm -f readme.txt",
+        "rm -v readme.txt",
+    ])
+    def test_file_delete_requires_consent_not_recursive(self, command):
+        assert detect_dangerous_command(command) == (
+            True, "file/directory delete", "file/directory delete",
+        )
 
 
 class TestRmRecursiveFlagVariants:

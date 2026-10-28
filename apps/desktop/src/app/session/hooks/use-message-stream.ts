@@ -1083,8 +1083,9 @@ export function useMessageStream({
         const description = typeof payload?.description === 'string' ? payload.description : 'dangerous command'
 
         setApprovalRequest({
-          // false only when a tirith warning forbids it; backend omits the field otherwise.
+          // Missing scope flags retain the defaults used by older backends.
           allowPermanent: payload?.allow_permanent !== false,
+          allowSession: payload?.allow_session !== false,
           command,
           description,
           sessionId: sessionId ?? null

@@ -11,6 +11,7 @@ This module is the single source of truth for the dangerous command system:
 import contextvars
 import fnmatch
 import functools
+import inspect
 import logging
 import os
 from lliam_cli.env_compat import getenv_compat
@@ -379,6 +380,15 @@ def _sudo_stdin_block_result(description: str) -> dict:
 # Dangerous command patterns
 # =========================================================================
 
+# Executable positions, including common command wrappers and find actions.
+_DELETE_COMMAND_START = (
+    r'(?:^|[;&|\n]|\$\(|`)\s*'
+    r'(?:(?:xargs|sudo|env|command|exec|nohup)\s+(?:[^;|&\n]*?\s+)?'
+    r'|find\b[^;|&\n]*?-exec(?:dir)?\s+)?'
+    r'(?:[^\s\'";|&`()]*/)?'
+)
+
+
 DANGEROUS_PATTERNS = [
     (r'\brm\s+(-[^\s]*\s+)*/', "delete in root path"),
     (r'\brm\s+-[^\s]*r', "recursive delete"),
@@ -409,7 +419,7 @@ DANGEROUS_PATTERNS = [
     (r':\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:', "fork bomb"),
     # Any shell invocation via -c or combined flags like -lc, -ic, etc.
     (r'\b(bash|sh|zsh|ksh)\s+-[^\s]*c(\s+|$)', "shell command via -c/-lc flag"),
-    (r'\b(python[23]?|perl|ruby|node)\s+-[ec]\s+', "script execution via -e/-c flag"),
+    (r'\b(python[23]?(?:\.\d+)*|perl|ruby|node)\s+-[ec]\s+', "script execution via -e/-c flag"),
     (r'\b(curl|wget)\b.*\|\s*(?:[/\w]*/)?(?:ba)?sh(?:\s|$|-c)', "pipe remote content to shell"),
     (r'\b(bash|sh|zsh|ksh)\s+<\s*<?\s*\(\s*(curl|wget)\b', "execute remote script via process substitution"),
     (rf'\btee\b.*["\']?{_SENSITIVE_WRITE_TARGET}', "overwrite system file via tee"),
@@ -499,7 +509,7 @@ DANGEROUS_PATTERNS = [
     (rf'\b(?:perl|ruby)\b.*(?:^|\s)-[^\s]*i\b.*(?:{_LLIAM_CONFIG_PATH}|{_LLIAM_ENV_PATH})', "in-place edit of Lliam-GOV config/env (perl/ruby)"),
     # Script execution via heredoc — bypasses the -e/-c flag patterns above.
     # `python3 << 'EOF'` feeds arbitrary code via stdin without -c/-e flags.
-    (r'\b(python[23]?|perl|ruby|node)\s+<<', "script execution via heredoc"),
+    (r'\b(python[23]?(?:\.\d+)*|perl|ruby|node)\s+(?:-\s+)?<<', "script execution via heredoc"),
     # Git destructive operations that can lose uncommitted work or rewrite
     # shared history. Not captured by rm/chmod/etc patterns.
     (r'\bgit\s+reset\s+--hard\b', "git reset --hard (destroys uncommitted changes)"),
@@ -533,16 +543,51 @@ DANGEROUS_PATTERNS = [
     # Deletes require consent even for a single relative path in the working
     # directory. Keep these after the existing rules to preserve their more
     # specific descriptions and approval keys (recursive rm, find, scripts).
-    (r'\b(?:rm|unlink|rmdir)(?=\s|[;&|)]|$)', "file/directory delete"),
+    (rf'{_DELETE_COMMAND_START}(?:rm|unlink|rmdir)(?=\s|[;&|)]|$)', "file/directory delete"),
+    (rf'{_DELETE_COMMAND_START}git\s+rm(?=\s|$)', "file/directory delete"),
+    (rf'{_DELETE_COMMAND_START}(?:\$\(\s*|`\s*)(?:which|command\s+-v)\s+'
+     r'(?:[^\s;|&`()]*/)?(?:rm|unlink|rmdir)\s*(?:\)|`)', "file/directory delete"),
+    # Decoded programs are opaque to static detection; require one-shot consent
+    # before piping them to a shell, where they can perform arbitrary deletes.
+    (rf'{_DELETE_COMMAND_START}(?:base64\s+[^;|&\n]*?-d\b|xxd\s+[^;|&\n]*?-r\b)'
+     r'[^;|&\n]*\|\s*(?:[^\s;|&]*/)?(?:sh|bash|zsh|ksh)\b',
+     "file/directory delete via decoded shell"),
+    (rf'{_DELETE_COMMAND_START}find\b[^;|&\n]*?-delete\b', "file/directory delete"),
     # Inline Python can arrive via -c, stdin (`python - <<...`), or a versioned
-    # interpreter. Match the delete calls independently of the shell wrapper.
-    # The bare forms cover `from os import remove`; exclude object.remove()
-    # because removing an item from a collection is not a filesystem delete.
-    (r'(?<![\w.])(?:os\s*\.\s*)?(?:remove|removedirs)\s*\(',
+    # interpreter. Apply these only to extracted Python source. Include aliases
+    # and dynamic dispatch conservatively: static matching cannot resolve the
+    # receiver or the function name constructed at runtime.
+    (r'\b(?:remove|removedirs|getattr|__import__)\s*\(|\bsubprocess\b.*\brm\b',
      "file/directory delete via Python os"),
     (r'\b(?:unlink|rmdir|rmtree)\s*\(',
      "file/directory delete via Python pathlib/os/shutil"),
+    # Node source is extracted before matching. Recognize direct fs calls and
+    # delete calls following a filesystem import, including destructured names
+    # and dynamic-import callbacks. Require a call, not a bare word like npm rm.
+    (r'(?:\bfs\s*\.\s*(?:promises\s*\.\s*)?'
+     r'|\b(?:(?:require|import)\s*\(\s*|import\s+[^;]*?\bfrom\s+)'
+     r'''['"](?:node:)?fs(?:/promises)?['"][\s\S]*?\b)'''
+     r'(?:rmSync|unlinkSync|rmdirSync|rm|unlink|rmdir)\s*\(',
+     "file/directory delete via Node.js"),
+    (r'\b(?:File\s*\.\s*(?:delete|unlink)|FileUtils\s*\.\s*rm(?:_rf|_f)?)\b',
+     "file/directory delete via Ruby"),
+    (r'\b(?:unlink|remove_tree)\b', "file/directory delete via Perl"),
+    (r'\bDeno\s*\.\s*(?:remove|removeSync)\s*\(', "file/directory delete via Deno"),
+    (rf'{_DELETE_COMMAND_START}shred\b[^;|&\n]*?\s+(?:-[a-z]*u[a-z]*\b|--remove\b)',
+     "file/directory delete via shred"),
+    (rf'{_DELETE_COMMAND_START}rsync\b[^;|&\n]*?\s+--(?:delete|remove-source-files)\b',
+     "file/directory delete via rsync"),
+    (rf'{_DELETE_COMMAND_START}tar\b[^;|&\n]*?\s+--remove-files\b',
+     "file/directory delete via tar"),
 ]
+
+
+# Delete consent is scoped to one execution, even if an older config contains
+# one of these keys. Other dangerous operations retain their existing scopes.
+_ONCE_ONLY_DELETE_KEYS = {
+    description for _, description in DANGEROUS_PATTERNS
+    if description.startswith("file/directory delete")
+}
 
 
 # Pre-compiled variant (same rationale as HARDLINE_PATTERNS_COMPILED above).
@@ -579,7 +624,7 @@ def _approval_key_aliases(pattern_key: str) -> set[str]:
 # Detection
 # =========================================================================
 
-def _normalize_command_for_detection(command: str) -> str:
+def _normalize_command_for_detection(command: str, *, preserve_shell_quotes: bool = False) -> str:
     """Normalize a command string before dangerous-pattern matching.
 
     Strips ANSI escape sequences (full ECMA-48 via tools.ansi_strip),
@@ -611,10 +656,13 @@ def _normalize_command_for_detection(command: str) -> str:
     # first would eat the prefix the Lliam-GOV-home fold needs.
     command = _rewrite_resolved_lliam_home(command)
     command = _rewrite_resolved_user_home(command)
-    # Strip shell backslash-escapes: r\m → rm. Prevents \-injection bypass.
-    command = re.sub(r'\\([^\n])', r'\1', command)
-    # Strip empty-string literals that split tokens: r''m → rm, r"\"m → rm.
-    command = re.sub(r"''|\"\"", '', command)
+    # Parsing script bodies needs the original quote escapes to find the real
+    # closing delimiter. Existing pattern matching still uses the folded form.
+    if not preserve_shell_quotes:
+        # Strip shell backslash-escapes: r\m → rm. Prevents \-injection bypass.
+        command = re.sub(r'\\([^\n])', r'\1', command)
+        # Strip empty-string literals that split tokens: r''m → rm, r"\"m → rm.
+        command = re.sub(r"''|\"\"", '', command)
     return command
 
 
@@ -726,18 +774,82 @@ def _rewrite_resolved_lliam_home(command: str) -> str:
     return _fold_home_prefixes(command, candidates, "~/.hermes")
 
 
-def detect_dangerous_command(command: str) -> tuple:
-    """Check if a command matches any dangerous patterns.
+def _normalize_delete_words(command: str) -> str:
+    """Join shell quote fragments in delete words without unquoting prose."""
+    def normalize(match):
+        word = match.group()
+        unquoted = word.replace("'", "").replace('"', '')
+        if unquoted.rsplit("/", 1)[-1] in {"rm", "unlink", "rmdir"}:
+            return unquoted
+        return word
 
-    Returns:
-        (is_dangerous, pattern_key, description) or (False, None, None)
+    command = command.replace("${ifs}", " ")
+    return re.sub(r"(?:[^\s'\";&|`()]+|'[^']*'|\"[^\"]*\")+", normalize, command)
+
+
+def _script_bodies(command: str, interpreter: str, flag: str) -> list[str]:
+    """Extract inline/stdin source; do not scan adjacent search prose."""
+    bodies = []
+    invocation = re.compile(
+        rf'{_DELETE_COMMAND_START}{interpreter}\s+'
+        rf"(?:(?:{flag})\s*(?P<quote>['\"])(?P<code>(?:\\.|(?!(?P=quote)).)*)(?P=quote)"
+        r"|(?:-\s+)?<<-?\s*(?P<delimiter>[^\s]+)[^\n]*\n)",
+        re.DOTALL,
+    )
+    for match in invocation.finditer(command):
+        if match.group("code") is not None:
+            bodies.append(match.group("code"))
+        else:
+            delimiter = match.group("delimiter").strip("'\"")
+            tail = command[match.end():]
+            end = re.search(rf"(?m)^\t*{re.escape(delimiter)}[ \t]*$", tail)
+            bodies.append(tail[:end.start()] if end else tail)
+    return bodies
+
+
+def detect_all_dangerous_commands(command: str) -> list[tuple[str, str]]:
+    """Return every matched approval key/description, in pattern order.
+
+    Shell -c bodies are executable commands, not ordinary quoted arguments.
+    Inspect them as command contexts so an approved shell wrapper cannot hide
+    an unapproved delete. Never execute substitutions while inspecting input.
     """
-    command_lower = _normalize_command_for_detection(command).lower()
+    raw = _normalize_command_for_detection(command, preserve_shell_quotes=True).lower()
+    raw_contexts = [raw, *_script_bodies(raw, r"(?:bash|sh|zsh|ksh)", r"-[^\s]*c")]
+    contexts = [_normalize_command_for_detection(context).lower() for context in raw_contexts]
+    script_specs = {
+        "Python": (r"python[23]?(?:\.\d+)*", r"-c"),
+        "Node.js": (r"node", r"-e|-p|--eval(?:=|\s+)"),
+        "Ruby": (r"ruby", r"-e"),
+        "Perl": (r"perl", r"-e"),
+        "Deno": (r"deno", r"eval\s+"),
+    }
+    script_bodies = {
+        language: [
+            _normalize_command_for_detection(body).lower()
+            for context in raw_contexts for body in _script_bodies(context, interpreter, flag)
+        ]
+        for language, (interpreter, flag) in script_specs.items()
+    }
+    delete_contexts = [_normalize_delete_words(context) for context in contexts]
+    matches = []
     for pattern_re, description in DANGEROUS_PATTERNS_COMPILED:
-        if pattern_re.search(command_lower):
-            pattern_key = description
-            return (True, pattern_key, description)
-    return (False, None, None)
+        candidates = delete_contexts if description.startswith("file/directory delete") else contexts
+        for language, bodies in script_bodies.items():
+            if description.startswith(f"file/directory delete via {language}"):
+                candidates = bodies
+                break
+        if any(pattern_re.search(context) for context in candidates):
+            entry = (description, description)
+            if entry not in matches:
+                matches.append(entry)
+    return matches
+
+
+def detect_dangerous_command(command: str) -> tuple:
+    """Return the first dangerous match, preserving the historical contract."""
+    matches = detect_all_dangerous_commands(command)
+    return (True, *matches[0]) if matches else (False, None, None)
 
 
 # =========================================================================
@@ -887,6 +999,8 @@ def submit_pending(session_key: str, approval: dict):
 
 def approve_session(session_key: str, pattern_key: str):
     """Approve a pattern for this session only."""
+    if pattern_key in _ONCE_ONLY_DELETE_KEYS:
+        return
     with _lock:
         _session_approved.setdefault(session_key, set()).add(pattern_key)
 
@@ -942,6 +1056,8 @@ def is_approved(session_key: str, pattern_key: str) -> bool:
     Accept both the current canonical key and the legacy regex-derived key so
     existing command_allowlist entries continue to work after key migrations.
     """
+    if pattern_key in _ONCE_ONLY_DELETE_KEYS:
+        return False
     aliases = _approval_key_aliases(pattern_key)
     with _lock:
         if any(alias in _permanent_approved for alias in aliases):
@@ -952,6 +1068,8 @@ def is_approved(session_key: str, pattern_key: str) -> bool:
 
 def approve_permanent(pattern_key: str):
     """Add a pattern to the permanent allowlist."""
+    if pattern_key in _ONCE_ONLY_DELETE_KEYS:
+        return
     with _lock:
         _permanent_approved.add(pattern_key)
 
@@ -1075,16 +1193,17 @@ def _unauthenticated_approver_block(command: str, description: str,
 def prompt_dangerous_approval(command: str, description: str,
                               timeout_seconds: int | None = None,
                               allow_permanent: bool = True,
-                              approval_callback=None) -> str:
+                              approval_callback=None,
+                              allow_session: bool = True) -> str:
     """Prompt the user to approve a dangerous command (CLI only).
 
     Args:
-        allow_permanent: When False, hide the [a]lways option (used when
-            tirith warnings are present, since broad permanent allowlisting
-            is inappropriate for content-level security findings).
+        allow_permanent: When False, hide the [a]lways option (tirith or deletes).
+        allow_session: When False, offer only once/deny (deletes).
         approval_callback: Optional callback registered by the CLI for
             prompt_toolkit integration. Signature:
-            (command, description, *, allow_permanent=True) -> str.
+            (command, description, *, allow_permanent=True, allow_session=True) -> str.
+            Older callbacks may omit allow_session; scope is still enforced here.
 
     Returns: 'once', 'session', 'always', or 'deny'
 
@@ -1101,8 +1220,17 @@ def prompt_dangerous_approval(command: str, description: str,
 
     if approval_callback is not None:
         try:
-            return approval_callback(command, description,
-                                     allow_permanent=allow_permanent)
+            scope = {"allow_permanent": allow_permanent}
+            if not allow_session:
+                # Older adapters only accept allow_permanent. Keep their
+                # callback contract; the guard still enforces once-only scope.
+                parameters = inspect.signature(approval_callback).parameters
+                if "allow_session" in parameters or any(
+                    param.kind == inspect.Parameter.VAR_KEYWORD for param in parameters.values()
+                ):
+                    scope["allow_session"] = False
+            choice = approval_callback(command, description, **scope)
+            return "once" if not allow_session and choice in {"session", "always"} else choice
         except Exception as e:
             logger.error("Approval callback failed: %s", e, exc_info=True)
             return "deny"
@@ -1144,7 +1272,9 @@ def prompt_dangerous_approval(command: str, description: str,
             print(f"  {t('approval.dangerous_header', description=description)}")
             print(f"      {command}")
             print()
-            if allow_permanent:
+            if not allow_session:
+                print("  [o]nce / [d]eny")
+            elif allow_permanent:
                 print(t("approval.choose_long"))
             else:
                 print(t("approval.choose_short"))
@@ -1156,6 +1286,8 @@ def prompt_dangerous_approval(command: str, description: str,
             def get_input():
                 try:
                     prompt = t("approval.prompt_long") if allow_permanent else t("approval.prompt_short")
+                    if not allow_session:
+                        prompt = "[o/d]: "
                     result["choice"] = input(prompt).strip().lower()
                 except (EOFError, OSError):
                     result["choice"] = ""
@@ -1169,6 +1301,8 @@ def prompt_dangerous_approval(command: str, description: str,
                 return "deny"
 
             choice = result["choice"]
+            if not allow_session and choice in {"s", "session", "a", "always"}:
+                choice = "once"
             if choice in {'o', 'once'}:
                 print(t("approval.allowed_once"))
                 return "once"
@@ -1414,16 +1548,18 @@ def check_dangerous_command(command: str, env_type: str,
     if _YOLO_MODE_FROZEN or is_current_session_yolo_enabled():
         return {"approved": True, "message": None}
 
-    if _command_matches_permanent_allowlist(command):
-        return {"approved": True, "message": None}
-
-    is_dangerous, pattern_key, description = detect_dangerous_command(command)
-    if not is_dangerous:
+    matches = detect_all_dangerous_commands(command)
+    has_delete = any(key in _ONCE_ONLY_DELETE_KEYS for key, _ in matches)
+    if not has_delete and _command_matches_permanent_allowlist(command):
         return {"approved": True, "message": None}
 
     session_key = get_current_session_key()
-    if is_approved(session_key, pattern_key):
+    warnings = [(key, desc) for key, desc in matches if not is_approved(session_key, key)]
+    if not warnings:
         return {"approved": True, "message": None}
+    pattern_key = warnings[0][0]
+    all_keys = [key for key, _ in warnings]
+    description = "; ".join(desc for _, desc in warnings)
 
     is_cli = env_var_enabled("HERMES_INTERACTIVE")
     is_gateway = _is_gateway_approval_context()
@@ -1484,7 +1620,10 @@ def check_dangerous_command(command: str, env_type: str,
         submit_pending(session_key, {
             "command": command,
             "pattern_key": pattern_key,
+            "pattern_keys": all_keys,
             "description": description,
+            "allow_permanent": not has_delete,
+            "allow_session": not has_delete,
         })
         return {
             "approved": False,
@@ -1515,7 +1654,11 @@ def check_dangerous_command(command: str, env_type: str,
         _ho_record = None
 
     choice = prompt_dangerous_approval(command, description,
+                                       allow_permanent=not has_delete,
+                                       allow_session=not has_delete,
                                        approval_callback=approval_callback)
+    if has_delete and choice in {"session", "always"}:
+        choice = "once"
 
     if choice == "deny":
         if _ho_record is not None:
@@ -1532,12 +1675,13 @@ def check_dangerous_command(command: str, env_type: str,
             "description": description,
         }
 
-    if choice == "session":
-        approve_session(session_key, pattern_key)
-    elif choice == "always":
-        approve_session(session_key, pattern_key)
-        approve_permanent(pattern_key)
-        save_permanent_allowlist(_permanent_approved)
+    for key in all_keys:
+        if choice == "session":
+            approve_session(session_key, key)
+        elif choice == "always":
+            approve_session(session_key, key)
+            approve_permanent(key)
+            save_permanent_allowlist(_permanent_approved)
 
     if _ho_record is not None:
         try:
@@ -1681,6 +1825,8 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict,
     _drop_entry()
 
     choice = entry.result
+    if approval_data.get("allow_session") is False and choice in {"session", "always"}:
+        choice = "once"
     # LG-HO-10 / LG-GV-05: record the gateway verdict with the authenticated
     # approver (if any) that resolved it. Never blocking.
     try:
@@ -1758,7 +1904,9 @@ def check_all_command_guards(command: str, env_type: str,
     if _YOLO_MODE_FROZEN or is_current_session_yolo_enabled() or approval_mode == "off":
         return {"approved": True, "message": None}
 
-    if _command_matches_permanent_allowlist(command):
+    matches = detect_all_dangerous_commands(command)
+    has_delete = any(key in _ONCE_ONLY_DELETE_KEYS for key, _ in matches)
+    if not has_delete and _command_matches_permanent_allowlist(command):
         return {"approved": True, "message": None}
 
     is_cli = env_var_enabled("HERMES_INTERACTIVE")
@@ -1858,9 +2006,6 @@ def check_all_command_guards(command: str, env_type: str,
             }
         # else: tirith_fail_open is True — allow as before (tirith_result stays "allow")
 
-    # Dangerous command check (detection only, no approval)
-    is_dangerous, pattern_key, description = detect_dangerous_command(command)
-
     # --- Phase 2: Decide ---
 
     # Collect warnings that need approval
@@ -1880,7 +2025,7 @@ def check_all_command_guards(command: str, env_type: str,
         if not is_approved(session_key, tirith_key):
             warnings.append((tirith_key, tirith_desc, True))
 
-    if is_dangerous:
+    for pattern_key, description in matches:
         if not is_approved(session_key, pattern_key):
             warnings.append((pattern_key, description, False))
 
@@ -1921,6 +2066,7 @@ def check_all_command_guards(command: str, env_type: str,
     primary_key = warnings[0][0]
     all_keys = [key for key, _, _ in warnings]
     has_tirith = any(is_t for _, _, is_t in warnings)
+    has_delete = any(key in _ONCE_ONLY_DELETE_KEYS for key in all_keys)
 
     # Gateway/async approval — block the agent thread until the user
     # responds with /approve or /deny, mirroring the CLI's synchronous
@@ -1943,7 +2089,8 @@ def check_all_command_guards(command: str, env_type: str,
                 "description": combined_desc,
                 # Mirror the CLI's allow_permanent gate: a tirith warning downgrades
                 # "always" to session scope below, so the UI must not offer it.
-                "allow_permanent": not has_tirith,
+                "allow_permanent": not (has_tirith or has_delete),
+                "allow_session": not has_delete,
             }
             decision = _await_gateway_decision(
                 session_key, notify_cb, approval_data, surface="gateway"
@@ -1957,6 +2104,8 @@ def check_all_command_guards(command: str, env_type: str,
                 }
             resolved = decision["resolved"]
             choice = decision["choice"]
+            if has_delete and choice in {"session", "always"}:
+                choice = "once"
 
             if not resolved or choice is None or choice == "deny":
                 # Consent contract: silence is NOT consent, and an explicit
@@ -2010,6 +2159,8 @@ def check_all_command_guards(command: str, env_type: str,
             "pattern_key": primary_key,
             "pattern_keys": all_keys,
             "description": combined_desc,
+            "allow_permanent": not (has_tirith or has_delete),
+            "allow_session": not has_delete,
         })
         return {
             "approved": False,
@@ -2042,7 +2193,8 @@ def check_all_command_guards(command: str, env_type: str,
         surface="cli",
     )
     choice = prompt_dangerous_approval(command, combined_desc,
-                                       allow_permanent=not has_tirith,
+                                       allow_permanent=not (has_tirith or has_delete),
+                                       allow_session=not has_delete,
                                        approval_callback=approval_callback)
     _fire_approval_hook(
         "post_approval_response",
@@ -2082,6 +2234,9 @@ def check_all_command_guards(command: str, env_type: str,
             "outcome": "denied",
             "user_consent": False,
         }
+
+    if has_delete and choice in {"session", "always"}:
+        choice = "once"
 
     # Persist approval for each warning individually
     for key, _, is_tirith in warnings:
