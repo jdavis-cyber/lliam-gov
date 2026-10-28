@@ -60,7 +60,8 @@
     "http-cache-semantics": "4.3.0",
     "joi": "18.2.9",
     "js-yaml@^4": "4.3.2",
-    "postcss-selector-parser@^6": "6.1.5"
+    "postcss-selector-parser@^6": "6.1.5",
+    "katex": "0.18.2"
   },
   "engines": {
     "node": ">=22.12.0"
