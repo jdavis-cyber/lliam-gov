@@ -38,6 +38,7 @@ import os
 import re
 import shutil
 import tempfile
+import uuid
 from pathlib import Path
 from lliam_constants import get_lliam_home, display_lliam_home
 from typing import Dict, Any, List, Optional, Tuple
@@ -1146,31 +1147,42 @@ def _apply_skill_write_gate(action, name, **payload_kwargs):
     if _skill_gate_bypass.get():
         return None
 
-    try:
-        from tools import write_approval as wa
-    except Exception:
-        return None  # fail open
-
-    decision = wa.evaluate_gate(wa.SKILLS)
-    if decision.allow:
-        return None
-    if decision.blocked:
-        return tool_error(decision.message, success=False)
-
-    # stage — record the full skill_manage kwargs so approval can replay it.
+    # All calls to this model tool are proposals, including foreground calls.
+    # The optional write_approval setting must not authorize an agent to change
+    # its own instructions. Operator-authored files never pass through here.
     payload = {"action": action, "name": name}
     payload.update({k: v for k, v in payload_kwargs.items() if v is not None})
-    gist = wa.skill_gist(
-        action, name,
-        content=payload_kwargs.get("content") or "",
-        file_path=payload_kwargs.get("file_path") or "",
-        old_string=payload_kwargs.get("old_string") or "",
-        new_string=payload_kwargs.get("new_string") or "",
-    )
-    record = wa.stage_write(wa.SKILLS, payload, summary=gist, origin=wa.current_origin())
+    # The approval handler passes only the payload back. Distinguish repeated
+    # identical proposals so replay restores and logs the selected record.
+    payload["_proposal_id"] = uuid.uuid4().hex
+    try:
+        from tools import write_approval as wa
+
+        gist = wa.skill_gist(
+            action, name,
+            content=payload_kwargs.get("content") or "",
+            file_path=payload_kwargs.get("file_path") or "",
+            old_string=payload_kwargs.get("old_string") or "",
+            new_string=payload_kwargs.get("new_string") or "",
+        )
+        record = wa.stage_write(wa.SKILLS, payload, summary=gist, origin=wa.current_origin())
+        # stage_write is best-effort and can return a record after disk failure.
+        # Do not report a reviewable proposal unless it was actually persisted.
+        if wa.get_pending(wa.SKILLS, record["id"]) != record:
+            raise OSError("Pending skill write was not persisted")
+    except Exception:
+        logger.exception("Could not stage skill write: action=%s name=%s", action, name)
+        return tool_error("Could not save the pending skill proposal. No skill was changed.", success=False)
+
+    logger.info("Skill write pending approval: id=%s action=%s name=%s origin=%s",
+                record["id"], action, name, record["origin"])
     return json.dumps(
         {"success": True, "staged": True, "pending_id": record["id"],
-         "gist": gist, "message": decision.message},
+         "gist": gist, "message": (
+             f"Skill '{name}' pending approval. No skill was changed. "
+             f"Review with /skills pending or /skills diff {record['id']}; "
+             f"approve with /skills approve {record['id']}."
+         )},
         ensure_ascii=False,
     )
 
@@ -1179,6 +1191,19 @@ def apply_skill_pending(payload: Dict[str, Any]) -> str:
     """Replay a staged skill write, bypassing the gate. Returns the tool result
     JSON string. Called by the /skills approve handler.
     """
+    from tools import write_approval as wa
+    from tools.skill_provenance import set_current_write_origin, reset_current_write_origin
+
+    record = next((rec for rec in wa.list_pending(wa.SKILLS)
+                   if rec.get("payload") == payload), None)
+    if record is None:
+        return tool_error("No pending skill proposal matches this approval.", success=False)
+
+    # This function is the existing operator approval handler's replay path,
+    # not a model tool. Record the authorization before making a skill loadable.
+    logger.info("Skill write approved: id=%s action=%s name=%s origin=%s",
+                record["id"], payload.get("action"), payload.get("name"), record["origin"])
+    origin_token = set_current_write_origin(record["origin"])
     token = _skill_gate_bypass.set(True)
     try:
         return skill_manage(
@@ -1195,6 +1220,7 @@ def apply_skill_pending(payload: Dict[str, Any]) -> str:
         )
     finally:
         _skill_gate_bypass.reset(token)
+        reset_current_write_origin(origin_token)
 
 
 def skill_manage(
@@ -1218,10 +1244,21 @@ def skill_manage(
     if preflight is not None:
         return json.dumps(preflight, ensure_ascii=False)
 
-    # Approval gate: when on, stages the write for review (skills are too large
-    # to review inline, so they always stage regardless of origin); when off
-    # (default) passes straight through. The gate is bypassed when this call is
-    # itself replaying an already-approved staged write (_skill_apply_pending).
+    # Reject incomplete requests before putting them in the operator's queue.
+    if action in {"create", "edit"} and not content:
+        return tool_error(f"content is required for '{action}'. Provide the full SKILL.md text (frontmatter + body).", success=False)
+    if action == "patch":
+        if not old_string:
+            return tool_error("old_string is required for 'patch'. Provide the text to find.", success=False)
+        if new_string is None:
+            return tool_error("new_string is required for 'patch'. Use empty string to delete matched text.", success=False)
+    if action in {"write_file", "remove_file"} and not file_path:
+        return tool_error(f"file_path is required for '{action}'. Example: 'references/api-guide.md'", success=False)
+    if action == "write_file" and file_content is None:
+        return tool_error("file_content is required for 'write_file'.", success=False)
+
+    # Stage all agent proposals outside the skill library. Only an operator's
+    # approval replay may bypass this gate; staging never invalidates caches.
     gate_result = _apply_skill_write_gate(
         action, name, content=content, category=category,
         file_path=file_path, file_content=file_content,
@@ -1232,35 +1269,21 @@ def skill_manage(
         return gate_result
 
     if action == "create":
-        if not content:
-            return tool_error("content is required for 'create'. Provide the full SKILL.md text (frontmatter + body).", success=False)
         result = _create_skill(name, content, category)
 
     elif action == "edit":
-        if not content:
-            return tool_error("content is required for 'edit'. Provide the full updated SKILL.md text.", success=False)
         result = _edit_skill(name, content)
 
     elif action == "patch":
-        if not old_string:
-            return tool_error("old_string is required for 'patch'. Provide the text to find.", success=False)
-        if new_string is None:
-            return tool_error("new_string is required for 'patch'. Use empty string to delete matched text.", success=False)
         result = _patch_skill(name, old_string, new_string, file_path, replace_all)
 
     elif action == "delete":
         result = _delete_skill(name, absorbed_into=absorbed_into)
 
     elif action == "write_file":
-        if not file_path:
-            return tool_error("file_path is required for 'write_file'. Example: 'references/api-guide.md'", success=False)
-        if file_content is None:
-            return tool_error("file_content is required for 'write_file'.", success=False)
         result = _write_file(name, file_path, file_content)
 
     elif action == "remove_file":
-        if not file_path:
-            return tool_error("file_path is required for 'remove_file'.", success=False)
         result = _remove_file(name, file_path)
 
     else:
@@ -1327,6 +1350,9 @@ SKILL_MANAGE_SCHEMA = {
         "If you used a skill and hit issues not covered by it, patch it immediately.\n\n"
         "After difficult/iterative tasks, offer to save as a skill. "
         "Skip for simple one-offs. Confirm with user before creating/deleting.\n\n"
+        "Changes are staged outside the skill library until the operator reviews "
+        "and approves them with /skills pending, /skills diff <id>, and "
+        "/skills approve <id>. A staged result has not changed a loadable skill.\n\n"
         "Good skills: trigger conditions, numbered steps with exact commands, "
         "pitfalls section, verification steps. Use skill_view() to see format examples.\n\n"
         "Pinned skills are protected from deletion only — skill_manage(action='delete') "

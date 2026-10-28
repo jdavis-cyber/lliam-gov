@@ -174,15 +174,17 @@ _SKILL = (
 )
 
 
-def test_skill_gate_off_allows_create(lliam_home):
-    # Default (gate off) → skill is created normally, not staged.
+def test_skill_gate_off_still_requires_operator_approval(lliam_home):
+    # Agent skill proposals require approval even with the optional gate off.
     import importlib
     import tools.skill_manager_tool as smt
     importlib.reload(smt)
     from tools import write_approval as wa
     r = json.loads(smt.skill_manage("create", "free-skill", content=_SKILL))
     assert r.get("success") is True
-    assert wa.pending_count("skills") == 0
+    assert r["staged"] is True
+    assert smt._find_skill("free-skill") is None
+    assert wa.pending_count("skills") == 1
 
 
 def test_skill_gate_on_always_stages(lliam_home):

@@ -167,5 +167,12 @@ word word word
             new_string="Step 1: Updated.",
         )
         result = json.loads(raw)
+        assert result["staged"] is True
+        from tools.skill_manager_tool import apply_skill_pending
+        from tools.write_approval import get_pending
+
+        pending = get_pending("skills", result["pending_id"])
+        assert pending is not None
+        result = json.loads(apply_skill_pending(pending["payload"]))
         # Should succeed via line-trimmed or indentation-flexible matching
         assert result["success"] is True
