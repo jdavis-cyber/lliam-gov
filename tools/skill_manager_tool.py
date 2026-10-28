@@ -1147,7 +1147,7 @@ def _stage_skill_proposal(action, name, **payload_kwargs):
         return None
 
     # All calls to this model tool are proposals, including foreground calls.
-    # The optional write_approval setting must not authorize an agent to change
+    # The deprecated write_approval setting cannot authorize an agent to change
     # its own instructions. Operator-authored files never pass through here.
     payload = {"action": action, "name": name}
     payload.update({k: v for k, v in payload_kwargs.items() if v is not None})

@@ -25,11 +25,9 @@ the gate stages BOTH to disk, but review affordances differ by subsystem
 (see ``lliam_cli`` slash handlers): memory shows full content, skills show
 metadata + a one-line gist + a ``diff`` escape hatch (CLI/dashboard/file).
 
-Staging is mandatory for background-origin writes (a daemon thread cannot
-block on an interactive prompt) and for gateway sessions (no inline prompt
-channel — review happens via ``/memory pending``). Foreground CLI memory
-writes prompt inline via the dangerous-command approval callback; skill
-writes always stage (too big to eyeball mid-loop).
+When memory approval is enabled, background and gateway memory writes stage
+for ``/memory pending`` review; foreground CLI writes can prompt inline.
+Skill writes always stage, regardless of origin or configuration.
 
 Pending records live under ``<HERMES_HOME>/pending/{memory,skills}/<id>.json``
 so they survive process restarts and can be reviewed from CLI, gateway, or the
@@ -38,9 +36,9 @@ web dashboard.
 
 from __future__ import annotations
 
-import json
 import getpass
 import hashlib
+import json
 import logging
 import os
 import time
@@ -202,16 +200,35 @@ def pending_count(subsystem: str) -> int:
 
 def _append_decision(record: Dict[str, Any]) -> None:
     """Append and sync one JSON line; errors must stop a pending decision."""
+    from agent.governance_audit import _lock_file, _unlock_file
+
     directory = get_lliam_home() / "logs"
     directory.mkdir(parents=True, exist_ok=True)
     data = (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8")
-    fd = os.open(directory / "write-approvals.jsonl", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-    try:
-        if os.write(fd, data) != len(data):
-            raise OSError("Incomplete write-approval decision record")
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    fd = os.open(directory / "write-approvals.jsonl", os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd, "a+b", buffering=0) as stream:
+        # Reuse the ledger's cross-process POSIX/Windows locking. A torn tail
+        # requires operator repair; never concatenate a new decision onto it.
+        _lock_file(stream)
+        try:
+            if stream.seek(0, os.SEEK_END):
+                stream.seek(-1, os.SEEK_END)
+                if stream.read(1) != b"\n":
+                    raise OSError("Decision log has an incomplete record; repair it before retrying")
+            if os.write(fd, data) != len(data):
+                raise OSError("Incomplete write-approval decision record")
+            os.fsync(fd)
+            if os.name != "nt":
+                # Persist both the log entry and a newly created logs/ entry.
+                # Windows has no POSIX directory-fsync interface.
+                for path in (directory, directory.parent):
+                    directory_fd = os.open(path, os.O_RDONLY)
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+        finally:
+            _unlock_file(stream)
 
 
 def record_write_decision(subsystem: str, pending: Dict[str, Any],

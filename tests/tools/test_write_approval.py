@@ -1,10 +1,8 @@
 """Tests for the memory/skill write-approval gate (tools/write_approval.py)
 and the shared slash-command handlers (lliam_cli/write_approval_commands.py).
 
-Covers the boolean write_approval gate (off by default = write freely; on =
-require approval) for both subsystems, the foreground-vs-background staging
-split, pending store CRUD, and the list/approve/reject/diff/approval
-subcommand dispatch.
+Covers the optional memory gate, mandatory skill approval, pending store CRUD,
+review commands, and durable operator decisions before apply/discard.
 """
 
 import json
@@ -618,3 +616,51 @@ def test_sync_failure_refuses_decision(lliam_home, monkeypatch, decision):
     out = handle_pending_subcommand("memory", [decision, rec["id"]])
     assert "Failed" in out
     assert wa.get_pending("memory", rec["id"]) == rec
+
+
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_torn_decision_log_refuses_later_retry(lliam_home, monkeypatch, decision):
+    from pathlib import Path
+    from lliam_cli.write_approval_commands import handle_pending_subcommand
+    from tools import write_approval as wa
+    from tools.memory_tool import MemoryStore
+    rec = wa.stage_write("memory", {"action": "add", "target": "user", "content": "keep pending"},
+                         summary="keep pending", origin="foreground")
+    store = MemoryStore()
+    store.load_from_disk()
+    write = os.write
+    with monkeypatch.context() as short_write:
+        short_write.setattr(os, "write", lambda fd, data: write(fd, data[:len(data) // 2]))
+        out = handle_pending_subcommand("memory", [decision, rec["id"]], memory_store=store)
+        assert "Failed" in out
+    log = Path(lliam_home) / "logs/write-approvals.jsonl"
+    torn = log.read_bytes()
+    assert torn and not torn.endswith(b"\n")
+    out = handle_pending_subcommand("memory", [decision, rec["id"]], memory_store=store)
+    assert "Failed" in out
+    assert log.read_bytes() == torn
+    assert wa.get_pending("memory", rec["id"]) == rec
+    assert store.user_entries == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX directory fsync")
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_directory_sync_failure_refuses_decision(lliam_home, monkeypatch, decision):
+    import stat
+    from lliam_cli.write_approval_commands import handle_pending_subcommand
+    from tools import write_approval as wa
+    from tools.memory_tool import MemoryStore
+    rec = wa.stage_write("memory", {"action": "add", "target": "user", "content": "keep pending"},
+                         summary="keep pending", origin="foreground")
+    store = MemoryStore()
+    store.load_from_disk()
+    fsync = os.fsync
+    def fail_directory_sync(fd):
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise OSError("directory sync failed")
+        return fsync(fd)
+    monkeypatch.setattr(os, "fsync", fail_directory_sync)
+    out = handle_pending_subcommand("memory", [decision, rec["id"]], memory_store=store)
+    assert "Failed" in out
+    assert wa.get_pending("memory", rec["id"]) == rec
+    assert store.user_entries == []

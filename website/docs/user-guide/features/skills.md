@@ -482,7 +482,8 @@ UTF-8 JSON with sorted keys and compact separators.
 The first record has `result: "pending"`; a second records `applied`,
 `discarded`, or `failed`. A crash before completion leaves the pending result
 for review. If the initial record cannot be written and synced, the decision
-stops and the proposal remains pending. The optional oversight ledger also
+stops and the proposal remains pending. An incomplete log line also blocks
+further decisions until the operator repairs the log. The optional oversight ledger also
 receives the decision when enabled. These records cover both skill and memory
 pending-review decisions.
 
