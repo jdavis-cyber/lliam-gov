@@ -118,8 +118,9 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
     #
     # mistralai pin tracks the `mistral` extra in pyproject.toml. PyPI
     # quarantined the project 2026-05-12 (malicious 2.4.6, Mini Shai-Hulud);
-    # 2.4.6 was removed and clean releases resumed (2.4.7, 2.4.8). Voxtral
-    # STT + TTS share the same SDK.
+    # 2.4.6 was removed and clean releases resumed (2.4.7, 2.4.8). The current
+    # pin, 2.9.4, was published 2026-08-21 and reviewed against OSV on
+    # 2026-10-28 with no known advisories. Voxtral STT + TTS share the SDK.
     "tts.mistral": ("mistralai==2.9.4",),
     "tts.edge": ("edge-tts==7.2.7",),
     "tts.elevenlabs": ("elevenlabs==1.59.0",),
