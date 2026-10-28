@@ -2,12 +2,12 @@
 """
 Tests for structured-document extraction in the read_file tool.
 
-Covers .ipynb / .docx / .xlsx extraction (ported from Kilo-Org/kilocode
+Covers PDF extraction and .ipynb / .docx / .xlsx extraction (ported from Kilo-Org/kilocode
 #10733, #10737, #10740) and the read_file_tool integration: pagination,
 line-numbering, graceful fallback on malformed input, and hidden-sheet
 omission.
 
-Run with:  python -m pytest tests/tools/test_read_extract.py -v
+Run with:  scripts/run_tests.sh tests/tools/test_read_extract.py -v
 """
 
 import json
@@ -15,6 +15,10 @@ import os
 import tempfile
 import unittest
 import zipfile
+
+import pytest
+from pypdf import PdfWriter
+from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from tools.read_extract import (
     ExtractionError,
@@ -38,6 +42,37 @@ def _write_docx(path, document_xml):
     with zipfile.ZipFile(path, "w") as z:
         z.writestr("[Content_Types].xml", "<Types/>")
         z.writestr("word/document.xml", document_xml)
+
+
+def _write_pdf(path, pages=(), *, image_only=False, password=None):
+    """Generate a small PDF with compressed text streams or an inline image."""
+    writer = PdfWriter()
+    font = DictionaryObject({
+        NameObject("/Type"): NameObject("/Font"),
+        NameObject("/Subtype"): NameObject("/Type1"),
+        NameObject("/BaseFont"): NameObject("/Helvetica"),
+    })
+    for lines in ([[]] if image_only else pages):
+        page = writer.add_blank_page(width=300, height=300)
+        page[NameObject("/Resources")] = DictionaryObject({
+            NameObject("/Font"): DictionaryObject({NameObject("/F1"): font}),
+        })
+        stream = DecodedStreamObject()
+        if image_only:
+            # A real one-pixel RGB image, with no text layer.
+            content = b"q 100 0 0 100 0 0 cm BI /W 1 /H 1 /CS /RGB /BPC 8 ID \xff\x00\x00 EI Q"
+        else:
+            commands = ["BT /F1 12 Tf 14 TL 20 280 Td"]
+            for line in lines:
+                escaped = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+                commands.append(f"({escaped}) Tj T*")
+            commands.append("ET")
+            content = "\n".join(commands).encode("latin-1")
+        stream.set_data(content)
+        page[NameObject("/Contents")] = stream.flate_encode()
+    if password is not None:
+        writer.encrypt(password)
+    writer.write(path)
 
 
 def _write_xlsx(path, *, workbook, rels, shared, sheets):
@@ -64,10 +99,11 @@ class TestIsExtractable(unittest.TestCase):
         self.assertTrue(is_extractable_document("a.ipynb"))
         self.assertTrue(is_extractable_document("/x/B.DOCX"))
         self.assertTrue(is_extractable_document("report.xlsx"))
+        self.assertTrue(is_extractable_document("report.PDF"))
 
     def test_unrecognized_extensions(self):
         self.assertFalse(is_extractable_document("a.py"))
-        self.assertFalse(is_extractable_document("a.pdf"))
+        self.assertFalse(is_extractable_document("a.png"))
         self.assertFalse(is_extractable_document("a.txt"))
 
 
@@ -289,6 +325,100 @@ class TestReadFileToolIntegration(unittest.TestCase):
         res = json.loads(read_file_tool(p))
         self.assertTrue(res.get("extracted_document"))
         self.assertIn("Report body", res["content"])
+
+
+@pytest.fixture
+def pdf_task(tmp_path, monkeypatch):
+    from tools.terminal_tool import register_task_env_overrides, cleanup_vm
+
+    task_id = f"pdf-{tmp_path.name}"
+    monkeypatch.setenv("TERMINAL_ENV", "local")
+    register_task_env_overrides(task_id, {"cwd": str(tmp_path), "env_type": "local"})
+    try:
+        yield task_id
+    finally:
+        cleanup_vm(task_id)
+
+
+@pytest.mark.parametrize("suffix", [".pdf", ".PDF"])
+def test_pdf_text_and_paging(tmp_path, pdf_task, suffix):
+    path = tmp_path / f"document{suffix}"
+    pages = [["First line", "Second line"], ["Third line", "Fourth line"]]
+    _write_pdf(path, pages)
+    expected = [line for page in pages for line in page]
+
+    assert extract_document_text(str(path)).splitlines() == expected
+    # Exercise real path resolution, extraction and formatting under the
+    # suite's isolated HERMES_HOME, without mocking file operations.
+    first = json.loads(read_file_tool(path.name, limit=2, task_id=pdf_task))
+    second = json.loads(read_file_tool(path.name, offset=3, limit=2, task_id=pdf_task))
+    for result in (first, second):
+        assert result["extracted_document"] is True
+        assert result["total_lines"] == len(expected)
+        assert result["file_size"] == path.stat().st_size
+    assert first["content"].splitlines() == ["1|First line", "2|Second line"]
+    assert first["truncated"] is True
+    assert "offset=3" in first["hint"]
+    assert second["content"].splitlines() == ["3|Third line", "4|Fourth line"]
+    assert second["truncated"] is False
+    assert "hint" not in second
+    beyond = json.loads(read_file_tool(str(path), offset=5, limit=2, task_id=pdf_task))
+    assert beyond["content"] == ""
+    assert beyond["truncated"] is False
+    assert beyond["total_lines"] == len(expected)
+
+
+@pytest.mark.parametrize("kind", ["image", "blank", "encrypted"])
+def test_pdf_no_extractable_text(tmp_path, kind):
+    path = tmp_path / f"{kind}.pdf"
+    _write_pdf(
+        path,
+        [["Protected text"]] if kind == "encrypted" else [[]],
+        image_only=kind == "image",
+        password="test-password" if kind == "encrypted" else None,
+    )
+    with pytest.raises(ExtractionError, match="no extractable text"):
+        extract_document_text(str(path))
+    result = json.loads(read_file_tool(str(path)))
+    assert "no extractable text" in result["error"].lower()
+    if kind == "encrypted":
+        assert "encrypted" in result["error"].lower()
+    else:
+        assert "OCR" in result["error"]
+    assert "content" not in result
+
+
+def test_malformed_pdf_error(tmp_path):
+    path = tmp_path / "broken.pdf"
+    path.write_bytes(b"%PDF-1.4\nnot a complete PDF")
+    with pytest.raises(ExtractionError, match="Cannot extract PDF text"):
+        extract_document_text(str(path))
+    result = json.loads(read_file_tool(str(path)))
+    assert "Cannot extract PDF text" in result["error"]
+
+
+def test_pdf_respects_character_limit(tmp_path, pdf_task, monkeypatch):
+    path = tmp_path / "large.pdf"
+    _write_pdf(path, [["A" * 100, "Short line"]])
+    monkeypatch.setattr("tools.file_tools._max_read_chars_cached", 50)
+
+    oversized = json.loads(read_file_tool(str(path), task_id=pdf_task))
+    assert "safety limit" in oversized["error"]
+    assert "offset and limit" in oversized["error"]
+    smaller = json.loads(read_file_tool(str(path), offset=2, limit=1, task_id=pdf_task))
+    assert smaller["content"] == "2|Short line"
+
+
+def test_pdf_redacts_credentials(tmp_path, pdf_task, monkeypatch):
+    path = tmp_path / "credentials.pdf"
+    credential = "sk-proj-abc123def456ghi789jkl012"
+    _write_pdf(path, [[f"Key: {credential}", "Public text"]])
+    monkeypatch.setattr("agent.redact._REDACT_ENABLED", True)
+
+    result = json.loads(read_file_tool(str(path), task_id=pdf_task))
+    assert credential not in result["content"]
+    assert "redacted" in result["content"]
+    assert "Public text" in result["content"]
 
 
 if __name__ == "__main__":

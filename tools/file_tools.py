@@ -1024,15 +1024,18 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
         _resolved = _resolve_path_for_task(path, task_id)
 
         # ── Structured-document extraction ────────────────────────────
-        # Try before the binary-extension guard so .docx/.xlsx can render as text.
-        # Malformed documents fall through to the normal path/binary guard.
+        # Try before the binary-extension guard so .docx/.xlsx/.pdf render as text.
+        # PDF errors explain why text is unavailable; other malformed documents
+        # fall through to the normal path/binary guard.
         from tools.read_extract import ExtractionError, extract_document_text, is_extractable_document
 
         if is_extractable_document(str(_resolved)):
             try:
                 extracted_text = extract_document_text(str(_resolved))
-            except ExtractionError:
+            except ExtractionError as exc:
                 logger.debug("document extraction failed for %s", path, exc_info=True)
+                if _resolved.suffix.lower() == ".pdf":
+                    return json.dumps({"error": str(exc)}, ensure_ascii=False)
             else:
                 file_ops = _get_file_ops(task_id)
                 lines = extracted_text.splitlines()

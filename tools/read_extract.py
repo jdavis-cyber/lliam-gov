@@ -1,6 +1,6 @@
-"""Stdlib document-to-text extraction for ``read_file``.
+"""Document-to-text extraction for ``read_file``.
 
-Supports Jupyter notebooks, DOCX, and XLSX without adding hard dependencies.
+Uses the stdlib for Jupyter notebooks, DOCX, and XLSX, and pypdf for PDFs.
 Malformed documents raise :class:`ExtractionError`; callers can then fall back to
 normal text/binary handling.
 """
@@ -15,7 +15,7 @@ from xml.etree import ElementTree as ET
 
 __all__ = ["EXTRACTABLE_EXTENSIONS", "ExtractionError", "extract_document_text", "is_extractable_document"]
 
-EXTRACTABLE_EXTENSIONS = frozenset({".ipynb", ".docx", ".xlsx"})
+EXTRACTABLE_EXTENSIONS = frozenset({".ipynb", ".docx", ".xlsx", ".pdf"})
 MAX_XLSX_BYTES = 50 * 1024 * 1024
 _MAX_XLSX_ROWS_PER_SHEET = 5000
 _MAX_XLSX_COLS = 256
@@ -47,7 +47,32 @@ def extract_document_text(path: str) -> str:
         return _extract_docx(path)
     if ext == ".xlsx":
         return _extract_xlsx(path)
+    if ext == ".pdf":
+        return _extract_pdf(path)
     raise ExtractionError(f"Unsupported document type: {path!r}")
+
+
+def _extract_pdf(path: str) -> str:
+    from pypdf import PdfReader
+    from pypdf.errors import PyPdfError
+
+    try:
+        with open(path, "rb") as fh:
+            reader = PdfReader(fh)
+            if reader.is_encrypted:
+                raise ExtractionError("PDF has no extractable text: the document is encrypted.")
+            # Separate pages even when extract_text() omits the final newline.
+            pages = [(page.extract_text() or "").rstrip("\n") for page in reader.pages]
+    except (OSError, PyPdfError, ValueError) as exc:
+        raise ExtractionError(f"Cannot extract PDF text: {exc}") from exc
+
+    text = "\n".join(pages)
+    if not text.strip():
+        raise ExtractionError(
+            "PDF has no extractable text. It may be image-only or blank; "
+            "scanned pages require OCR."
+        )
+    return text.rstrip("\n") + "\n"
 
 
 def _source_text(source) -> str:
