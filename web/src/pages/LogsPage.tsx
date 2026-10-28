@@ -62,18 +62,24 @@ export default function LogsPage() {
   const [lineCount, setLineCount] = useState<(typeof LINE_COUNTS)[number]>(100);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [lines, setLines] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadedRequest, setLoadedRequest] = useState<string | null>(null);
+  const requestKey = JSON.stringify([file, lineCount, level, component]);
+  const loading = refreshing || loadedRequest !== requestKey;
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { t } = useI18n();
   const { setAfterTitle, setEnd } = usePageHeader();
 
+  const requestSequence = useRef(0);
+
   const fetchLogs = useCallback(() => {
-    setLoading(true);
-    setError(null);
+    const request = ++requestSequence.current;
     api
       .getLogs({ file, lines: lineCount, level, component })
       .then((resp) => {
+        if (request !== requestSequence.current) return;
+        setError(null);
         setLines(resp.lines);
         setTimeout(() => {
           if (scrollRef.current) {
@@ -81,9 +87,15 @@ export default function LogsPage() {
           }
         }, 50);
       })
-      .catch((err) => setError(String(err)))
-      .finally(() => setLoading(false));
-  }, [file, lineCount, level, component]);
+      .catch((err) => {
+        if (request === requestSequence.current) setError(String(err));
+      })
+      .finally(() => {
+        if (request !== requestSequence.current) return;
+        setLoadedRequest(requestKey);
+        setRefreshing(false);
+      });
+  }, [file, lineCount, level, component, requestKey]);
 
   useLayoutEffect(() => {
     setAfterTitle(
@@ -97,7 +109,11 @@ export default function LogsPage() {
           ghost
           size="icon"
           className="text-muted-foreground hover:text-foreground"
-          onClick={fetchLogs}
+          onClick={() => {
+              setRefreshing(true);
+              setError(null);
+              fetchLogs();
+            }}
           disabled={loading}
           aria-label={t.common.refresh}
         >
@@ -149,7 +165,10 @@ export default function LogsPage() {
 
   useEffect(() => {
     if (!autoRefresh) return;
-    const interval = setInterval(fetchLogs, 5000);
+    const interval = setInterval(() => {
+      setRefreshing(true);
+      fetchLogs();
+    }, 5000);
     return () => clearInterval(interval);
   }, [autoRefresh, fetchLogs]);
 

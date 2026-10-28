@@ -111,6 +111,33 @@ def _get_bedrock_control_client(region: str):
     return _bedrock_control_client_cache[region]
 
 
+def enforce_bedrock_egress(client, *, session_id: Optional[str] = None) -> None:
+    """Apply the provider egress policy to the endpoint ``client`` will call.
+
+    boto3 does its own HTTP, so the OpenAI-path boundary check never sees it.
+    The host comes from ``client.meta.endpoint_url`` — what botocore resolved
+    from the region, FIPS/dual-stack settings and any ``endpoint_url`` /
+    ``AWS_ENDPOINT_URL*`` override — not from the configured base_url. Raises
+    PermissionError before any request is sent when the policy denies it.
+    """
+    from agent.provider_egress import enforce_client_egress
+
+    enforce_client_egress(client, session_id=session_id)
+
+
+def get_bedrock_runtime_client_for_request(
+    region: str, *, session_id: Optional[str] = None,
+):
+    """Return the cached ``bedrock-runtime`` client after the egress check.
+
+    Every converse/converse_stream call site must obtain its client here so a
+    denied endpoint raises before the network call.
+    """
+    client = _get_bedrock_runtime_client(region)
+    enforce_bedrock_egress(client, session_id=session_id)
+    return client
+
+
 def reset_client_cache():
     """Clear cached boto3 clients. Used in tests and profile switches."""
     _bedrock_runtime_client_cache.clear()
@@ -996,12 +1023,13 @@ def call_converse(
     top_p: Optional[float] = None,
     stop_sequences: Optional[List[str]] = None,
     guardrail_config: Optional[Dict] = None,
+    session_id: Optional[str] = None,
 ) -> SimpleNamespace:
     """Call Bedrock Converse API (non-streaming) and return an OpenAI-compatible response.
 
     This is the primary entry point for the agent loop when using the Bedrock provider.
     """
-    client = _get_bedrock_runtime_client(region)
+    client = get_bedrock_runtime_client_for_request(region, session_id=session_id)
     kwargs = build_converse_kwargs(
         model=model,
         messages=messages,
@@ -1037,13 +1065,14 @@ def call_converse_stream(
     top_p: Optional[float] = None,
     stop_sequences: Optional[List[str]] = None,
     guardrail_config: Optional[Dict] = None,
+    session_id: Optional[str] = None,
 ) -> SimpleNamespace:
     """Call Bedrock ConverseStream API and return an OpenAI-compatible response.
 
     Consumes the full stream and returns the assembled response. For true
     streaming with delta callbacks, use ``iter_converse_stream()`` instead.
     """
-    client = _get_bedrock_runtime_client(region)
+    client = get_bedrock_runtime_client_for_request(region, session_id=session_id)
     kwargs = build_converse_kwargs(
         model=model,
         messages=messages,
@@ -1122,6 +1151,11 @@ def discover_bedrock_models(
         client = _get_bedrock_control_client(region)
     except Exception as e:
         logger.warning("Failed to create Bedrock client for model discovery: %s", e)
+        return []
+    try:
+        enforce_bedrock_egress(client)
+    except PermissionError as e:
+        logger.warning("Bedrock model discovery skipped: %s", e)
         return []
 
     models = []

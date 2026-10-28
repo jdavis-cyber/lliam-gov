@@ -200,6 +200,9 @@ _LLIAM_BEHAVIORAL_VARS = frozenset({
     "HERMES_EXEC_ASK",
     "HERMES_HOME_MODE",
     "HERMES_AGENT_USE_LEGACY_SESSION_KEYS",
+    # Delegation depth inherited from a spawning agent (agent/delegation_depth.py).
+    # A test run launched from an agent's terminal must not inherit it.
+    "LLIAM_DELEGATE_DEPTH",
     # Kanban path/board pins must never leak from a developer shell or
     # dispatched worker into tests; otherwise tests can write fake tasks to
     # the real ~/.hermes/kanban.db instead of the per-test HERMES_HOME.
@@ -230,6 +233,7 @@ _LLIAM_BEHAVIORAL_VARS = frozenset({
     "TERMINAL_CONTAINER_PERSISTENT",
     "TERMINAL_DOCKER_PERSIST_ACROSS_PROCESSES",
     "TERMINAL_DOCKER_ORPHAN_REAPER",
+    "TERMINAL_DOCKER_NETWORK",
     "TERMINAL_DOCKER_RUN_AS_HOST_USER",
     "BROWSER_CDP_URL",
     "CAMOFOX_URL",

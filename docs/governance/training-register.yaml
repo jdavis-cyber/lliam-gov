@@ -1,0 +1,65 @@
+# training-register.yaml — Role-based operator AI training + acknowledgement
+# register (LG-TP-01, P4.5).
+#
+# Purpose: the required-training definitions per role and the acknowledgement
+# records that gate CUI access. Roles map to governance.role_bindings. In the
+# single-operator eval deployment one principal holds several roles (tracked
+# SoD deviations in roles.yaml); each required training is acknowledged once
+# per role held. Production assigns distinct principals.
+#
+# Review-by: annually and on role-binding change (LG-GV-08).
+
+schema: lg-tp/1
+owner_role: isso
+classification: CUI//SP-PRIV   # template — mark per instance
+periodic_assessment: annual
+
+required_training:
+  - id: TR-01
+    title: High-impact AI operation & the approval workflow
+    roles: [caio, approver, isso, engineer]
+    covers: >-
+      Intended/prohibited use, the graduated-enforcement model, the HITL
+      approval workflow, and why deny-on-no-approver exists.
+
+  - id: TR-02
+    title: Prompt-injection & tool-abuse recognition
+    roles: [approver, isso, engineer, auditor]
+    covers: >-
+      Direct/indirect injection, covert-Unicode smuggling, tool/MCP poisoning,
+      and how to recognize a suspicious approval prompt.
+
+  - id: TR-03
+    title: Kill-switch / disconnect & incident response
+    roles: [killswitch_owner, isso, approver]
+    covers: >-
+      When and how to trip the kill-switch, forensic preservation, the
+      halt/rollback runbook, and DFARS/DIBNet reporting duties.
+
+  - id: TR-04
+    title: CAIO governance duties (M-25-21) & risk acceptance
+    roles: [caio]
+    covers: >-
+      High-impact determinations, waiver signing, management review, and
+      residual-risk acceptance authority.
+
+  - id: TR-05
+    title: Independent audit & separation of duties
+    roles: [auditor]
+    covers: >-
+      Ledger integrity verification, register-to-control reconciliation, and
+      auditor independence obligations.
+
+# Acknowledgement records (per principal, per training, before CUI access).
+# Eval deployment: single operator holding multiple roles.
+acknowledgements:
+  - principal: jdavis@agency.mil
+    trainings: [TR-01, TR-02, TR-03, TR-04]
+    date: 2026-07-16
+    note: >-
+      Single-operator eval; CAIO/ISSO/Approver/Killswitch roles co-held per
+      roles.yaml tracked deviations. No CUI in scope.
+  - principal: auditor@independent.mil
+    trainings: [TR-02, TR-05]
+    date: 2026-07-16
+    note: Independent auditor role (SoD-separated).

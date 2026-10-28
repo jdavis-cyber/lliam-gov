@@ -746,6 +746,10 @@ class GovernanceLedger:
                             os.fsync(f.fileno())
                     finally:
                         _unlock_file(f)
+                # LG-MO-05 (additive @ P5.1): stream the sealed record to the
+                # ISCM sink + runtime monitors. Fail-safe — never breaks the
+                # tamper-evident write, no-op when monitoring is unconfigured.
+                _feed_monitors(record)
                 return record
         except AuditWriteError as e:
             if must_block:
@@ -856,6 +860,62 @@ def get_ledger() -> Optional[Any]:
         if enabled_now:
             _was_enabled = True
         return _ledger_singleton
+
+
+# --------------------------------------------------------------------------
+# ISCM/SIEM export + runtime monitors (LG-MO-01..06, additive @ P5.1).
+# The hub streams each sealed record to monitoring.iscm_sink and raises
+# anomaly/drift/runaway alerts. Complete no-op when monitoring is not
+# configured; fail-safe — a monitor error never breaks the ledger write.
+# --------------------------------------------------------------------------
+
+_monitor_hub: Optional[Any] = None
+_monitor_hub_built = False
+_monitor_lock = threading.Lock()
+
+
+def _full_config_or_none() -> Optional[dict]:
+    try:
+        from lliam_cli import config as _cfg
+        return _cfg.load_config()
+    except Exception:
+        return None
+
+
+def get_monitor_hub() -> Optional[Any]:
+    """Process-singleton MonitorHub over ``monitoring`` config, or None.
+
+    Returns None (no-op) when monitoring is unconfigured or the hub cannot be
+    built. Never raises.
+    """
+    global _monitor_hub, _monitor_hub_built
+    if _monitor_hub_built:
+        return _monitor_hub
+    with _monitor_lock:
+        if _monitor_hub_built:
+            return _monitor_hub
+        try:
+            from agent import runtime_monitors as _rm
+            cfg = _full_config_or_none()
+            hub = _rm.MonitorHub(cfg or {})
+            _monitor_hub = hub if hub.enabled else None
+        except Exception as e:
+            _log.debug("monitor hub unavailable (non-fatal): %s", e)
+            _monitor_hub = None
+        _monitor_hub_built = True
+        return _monitor_hub
+
+
+def _feed_monitors(record: Optional[dict]) -> None:
+    """Forward a sealed record to the ISCM sink + monitors. Never raises."""
+    if not isinstance(record, dict):
+        return
+    try:
+        hub = get_monitor_hub()
+        if hub is not None:
+            hub.observe(record)
+    except Exception as e:
+        _log.debug("monitor feed failed (non-fatal): %s", e)
 
 
 def emit(

@@ -773,20 +773,20 @@ def init_agent(
         # Region is extracted from the base_url or defaults to us-east-1.
         _region_match = re.search(r"bedrock-runtime\.([a-z0-9-]+)\.", base_url or "")
         agent._bedrock_region = _region_match.group(1) if _region_match else "us-east-1"
-        # Guardrail config — read from config.yaml at init time.
+        # Guardrail config — read from config.yaml at init time. Under strict
+        # posture an unprovisioned binding refuses init (never sent to Bedrock).
         agent._bedrock_guardrail_config = None
+        from lliam_cli.provisioning import UnprovisionedValueError
         try:
             from lliam_cli.config import load_config as _load_br_cfg
-            _gr = _load_br_cfg().get("bedrock", {}).get("guardrail", {})
-            if _gr.get("guardrail_identifier") and _gr.get("guardrail_version"):
-                agent._bedrock_guardrail_config = {
-                    "guardrailIdentifier": _gr["guardrail_identifier"],
-                    "guardrailVersion": _gr["guardrail_version"],
-                }
-                if _gr.get("stream_processing_mode"):
-                    agent._bedrock_guardrail_config["streamProcessingMode"] = _gr["stream_processing_mode"]
-                if _gr.get("trace"):
-                    agent._bedrock_guardrail_config["trace"] = _gr["trace"]
+            from lliam_cli.provisioning import bedrock_guardrail_config, strict_posture
+            _br_full_cfg = _load_br_cfg()
+            agent._bedrock_guardrail_config = bedrock_guardrail_config(
+                _br_full_cfg.get("bedrock", {}).get("guardrail", {}),
+                strict=strict_posture(_br_full_cfg),
+            )
+        except UnprovisionedValueError:
+            raise
         except Exception:
             pass
         agent.client = None
@@ -1214,6 +1214,8 @@ def init_agent(
                 agent._memory_store = MemoryStore(
                     memory_char_limit=mem_config.get("memory_char_limit", 2200),
                     user_char_limit=mem_config.get("user_char_limit", 1375),
+                    session_id=agent.session_id,
+                    identity=getattr(agent, "_user_id", None) or "default",
                 )
                 agent._memory_store.load_from_disk()
         except Exception:

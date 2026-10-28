@@ -81,6 +81,31 @@ class TestLoadMCPConfig:
             result = _load_mcp_config()
             assert result == {}
 
+    def test_live_loader_applies_governance_filter(self):
+        servers = {"rogue": {"command": "python", "args": ["rogue.py"]}}
+        denied = SimpleNamespace(allowed=False, reason="not approved")
+        with patch("lliam_cli.config.load_config", return_value={"mcp_servers": servers}), \
+             patch("tools.mcp_allowlist.check_mcp_server", return_value=denied):
+            from tools.mcp_tool import _load_mcp_config
+            assert _load_mcp_config() == {}
+
+    def test_live_loader_interpolates_before_governance(self):
+        servers = {"approved": {"command": "${CMD}", "args": ["${ARG}"]}}
+
+        def decide(_name, cfg):
+            return SimpleNamespace(
+                allowed=cfg.get("command") != "python",
+                reason="interpolated command not approved",
+            )
+
+        with patch("lliam_cli.config.load_config", return_value={"mcp_servers": servers}), \
+             patch("tools.mcp_tool._interpolate_env_vars", return_value={
+                 "command": "python", "args": ["rogue.py"]}), \
+             patch("tools.mcp_allowlist.check_mcp_server", side_effect=decide), \
+             patch("tools.mcp_allowlist.mcp_enforcement_enabled", return_value=True):
+            from tools.mcp_tool import _load_mcp_config
+            assert _load_mcp_config() == {}
+
 
 class TestMCPStatus:
     def test_status_distinguishes_configured_connecting_failed_and_disabled(
@@ -3860,6 +3885,36 @@ class TestRegisterMcpServers:
         with patch("tools.mcp_tool._MCP_AVAILABLE", False):
             result = register_mcp_servers({"srv": {"command": "test"}})
         assert result == []
+
+    def test_explicit_registration_applies_governance_filter(self):
+        from tools.mcp_tool import register_mcp_servers
+
+        denied = SimpleNamespace(allowed=False, reason="not approved")
+        with patch("tools.mcp_tool._MCP_AVAILABLE", True), \
+             patch("tools.mcp_allowlist.check_mcp_server", return_value=denied), \
+             patch("tools.mcp_tool._ensure_mcp_loop") as ensure_loop:
+            assert register_mcp_servers({"rogue": {"command": "python"}}) == []
+        ensure_loop.assert_not_called()
+
+    def test_newly_denied_connected_server_is_deregistered(self):
+        from tools import mcp_tool
+
+        server = SimpleNamespace(
+            _registered_tool_names=["mcp_rogue_read"],
+            _deregister_tools=MagicMock(),
+            shutdown=AsyncMock(),
+        )
+        mcp_tool._servers["rogue"] = server
+        denied = SimpleNamespace(allowed=False, reason="not approved")
+        try:
+            with patch("tools.mcp_tool._MCP_AVAILABLE", True), \
+                 patch("tools.mcp_allowlist.check_mcp_server", return_value=denied), \
+                 patch("tools.mcp_allowlist.mcp_enforcement_enabled", return_value=True):
+                assert mcp_tool.register_mcp_servers({"rogue": {"command": "python"}}) == []
+            assert "rogue" not in mcp_tool._servers
+            server._deregister_tools.assert_called_once()
+        finally:
+            mcp_tool._servers.pop("rogue", None)
 
     def test_skips_already_connected_servers(self):
         from tools.mcp_tool import register_mcp_servers, _servers

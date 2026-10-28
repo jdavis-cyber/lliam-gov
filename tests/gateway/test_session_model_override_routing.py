@@ -186,11 +186,18 @@ fallback_providers:
     )
     monkeypatch.setattr(gateway_run, "_lliam_home", tmp_path)
 
-    def fake_resolve_runtime_provider(*, requested=None, explicit_base_url=None, explicit_api_key=None):
+    def fake_resolve_runtime_provider(
+        *,
+        requested=None,
+        explicit_base_url=None,
+        explicit_api_key=None,
+        governance_path=None,
+    ):
         if requested in {None, "", "openai-codex"}:
             from lliam_cli.auth import AuthError
             raise AuthError("No Codex credentials stored. Run `lliam-gov auth` to authenticate.")
         assert requested == "openrouter"
+        assert governance_path == "fallback"
         return {
             "api_key": "sk-openrouter",
             "base_url": "https://openrouter.ai/api/v1",
@@ -235,10 +242,17 @@ fallback_providers:
     monkeypatch.setattr(gateway_run, "_lliam_home", tmp_path)
     monkeypatch.setenv("MY_FALLBACK_KEY", "env-secret")
 
-    def fake_resolve_runtime_provider(*, requested=None, explicit_base_url=None, explicit_api_key=None):
+    def fake_resolve_runtime_provider(
+        *,
+        requested=None,
+        explicit_base_url=None,
+        explicit_api_key=None,
+        governance_path=None,
+    ):
         assert requested == "custom"
         assert explicit_base_url == "https://fallback.example/v1"
         assert explicit_api_key == "env-secret"
+        assert governance_path == "fallback"
         return {
             "api_key": explicit_api_key,
             "base_url": explicit_base_url,
@@ -260,4 +274,3 @@ fallback_providers:
     assert runtime_kwargs["api_key"] == "env-secret"
     assert runtime_kwargs["base_url"] == "https://fallback.example/v1"
     assert runtime_kwargs["model"] == "fallback-model"
-

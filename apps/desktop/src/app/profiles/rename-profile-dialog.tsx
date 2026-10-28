@@ -11,10 +11,10 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { renameProfile } from '@/lliam'
 import { useI18n } from '@/i18n'
 import { AlertTriangle } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { renameProfile } from '@/lliam'
 
 import { isValidProfileName } from './create-profile-dialog'
 

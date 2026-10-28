@@ -881,6 +881,34 @@ def _emit_post_tool_call_hook(
     result *after* the gate (parsing the result is only worth it when a
     listener will actually consume it).
     """
+    # LG-PI-04/06 (additive @ P2.3): classify the tool RESULT for indirect
+    # injection at this universal funnel. A high-risk result taints the
+    # session so the model's NEXT egress/exec action is escalated to HITL by
+    # the PDP (tools/tool_policy.evaluate_call) rather than auto-triggered.
+    # Never gates this call, never raises.
+    try:
+        from tools.injection_defense import note_tool_result
+        note_tool_result(
+            function_name,
+            result if isinstance(result, str) else str(result),
+            session_id=session_id,
+        )
+    except Exception:
+        pass
+
+    # LG-DP-10 (additive @ P2.4): arm the DLP taint-gate when a tool result
+    # exposes CUI/PII in the session, so the model's NEXT egress action is
+    # escalated by the PDP. Post-facto, never gates this call, never raises.
+    try:
+        from agent.data_protection import note_cui_exposure
+        note_cui_exposure(
+            function_name,
+            result if isinstance(result, str) else str(result),
+            session_id=session_id,
+        )
+    except Exception:
+        pass
+
     # LG-AU-02 (additive): the governance audit ledger records every
     # terminal tool outcome at this universal funnel — independent of, and
     # before, the plugin observer gate below (which no-ops without
@@ -979,6 +1007,55 @@ def handle_function_call(
     if not isinstance(function_args, dict):
         function_args = {}
     _tool_middleware_trace = list(tool_request_middleware_trace or [])
+
+    # P2.5 last shared application boundary: enforce URL destination policy for
+    # every URL-bearing tool before tool-specific code or third-party SDKs run.
+    _surface = None
+    if function_name == "web_extract":
+        _surface = "web"
+    elif function_name == "browser_navigate":
+        _surface = "browser"
+    elif function_name == "vision_analyze":
+        _surface = "web"
+    if _surface:
+        _raw_urls = function_args.get("urls")
+        if not isinstance(_raw_urls, list):
+            _raw_urls = [
+                function_args.get("url")
+                or function_args.get("image_url")
+                or function_args.get("image")
+            ]
+        for _url in [str(value) for value in _raw_urls if value and "://" in str(value)]:
+            try:
+                from tools.egress_policy import check_egress
+                _egress = check_egress(
+                    _url, surface=_surface, session_id=session_id,
+                )
+            except Exception as _egress_exc:
+                _egress = None
+                _egress_reason = f"egress policy unavailable ({_egress_exc})"
+            else:
+                _egress_reason = _egress.reason
+            if _egress is None or _egress.disposition != "allow":
+                _egress_result = json.dumps(
+                    {"error": f"Blocked by egress policy: {_egress_reason}"},
+                    ensure_ascii=False,
+                )
+                _emit_post_tool_call_hook(
+                    function_name=function_name,
+                    function_args=function_args,
+                    result=_egress_result,
+                    task_id=task_id,
+                    session_id=session_id,
+                    tool_call_id=tool_call_id,
+                    turn_id=turn_id,
+                    api_request_id=api_request_id,
+                    status="blocked",
+                    error_type="guardrail_block",
+                    error_message=_egress_reason,
+                    middleware_trace=list(_tool_middleware_trace),
+                )
+                return _egress_result
 
     # ── Tool Search bridge dispatch ──────────────────────────────────
     # tool_search and tool_describe are pure catalog reads — handle them
@@ -1208,6 +1285,35 @@ def handle_function_call(
         # high-risk call whose audit record cannot be written is refused
         # (fail-closed) before dispatch.
         if not skip_governance_predispatch:
+            # LG-AZ-01/RM-08 (additive): tool-risk PDP for DIRECT callers of
+            # this public dispatcher (nested code execution, the API server).
+            # The executor path already ran pdp_gate and passes
+            # skip_governance_predispatch=True — evaluated exactly once so
+            # mutating-budget counters are never double-consumed.
+            try:
+                from tools.tool_policy import pdp_gate
+                _pdp_decision = pdp_gate(
+                    function_name, function_args, session_id=session_id,
+                    task_id=task_id or "", tool_call_id=tool_call_id or "",
+                )
+            except Exception:
+                _pdp_decision = None
+            if _pdp_decision is not None:
+                _pdp_msg = (
+                    getattr(_pdp_decision, "message", None)
+                    or "Blocked by tool-risk policy"
+                )
+                _pdp_result = json.dumps({"error": _pdp_msg}, ensure_ascii=False)
+                _emit_post_tool_call_hook(
+                    function_name=function_name, function_args=function_args,
+                    result=_pdp_result, task_id=task_id, session_id=session_id,
+                    tool_call_id=tool_call_id, turn_id=turn_id,
+                    api_request_id=api_request_id,
+                    status="blocked", error_type="guardrail_block",
+                    error_message=_pdp_msg,
+                    middleware_trace=list(_tool_middleware_trace),
+                )
+                return _pdp_result
             try:
                 from agent.governance_audit_hooks import predispatch_gate
                 _gov_decision = predispatch_gate(
@@ -1218,8 +1324,11 @@ def handle_function_call(
                     effective_task_id=task_id or "",
                     middleware_trace=list(_tool_middleware_trace),
                 )
-            except Exception:
-                _gov_decision = None
+            except Exception as _gov_exc:
+                # Strict posture: a raising gate denies (fail-closed); low-side
+                # keeps the non-blocking convention.
+                from agent.governance_gate_errors import gate_error_decision
+                _gov_decision = gate_error_decision(function_name, "predispatch_gate", _gov_exc)
             if _gov_decision is not None:
                 _gov_msg = (
                     getattr(_gov_decision, "message", None)

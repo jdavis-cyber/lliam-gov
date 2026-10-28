@@ -113,8 +113,8 @@ export const onComposerInsertRefsRequest = (handler: (detail: InsertRefsDetail) 
   subscribe<InsertRefsDetail>(INSERT_REFS_EVENT, handler)
 
 /** Submit a prompt through a composer as if the user typed + sent it. Lets
- * external panels (e.g. the review pane's "let the agent ship it" button) hand
- * the agent a task without the user round-tripping through the input. */
+ * external panels hand the agent a task without the user round-tripping
+ * through the input. */
 export const requestComposerSubmit = (
   text: string,
   { target = 'active' }: { target?: ComposerTarget | 'active' } = {}

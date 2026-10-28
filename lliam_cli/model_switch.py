@@ -1161,7 +1161,10 @@ def switch_model(
                 api_key = runtime.get("api_key", "") or _ukey
                 base_url = runtime.get("base_url", "") or _user_pdef.base_url
                 api_mode = runtime.get("api_mode", "")
-            except Exception:
+            except Exception as exc:
+                from lliam_cli.runtime_provider import is_provider_governance_error
+                if is_provider_governance_error(exc):
+                    raise
                 api_key = _ukey
                 base_url = _user_pdef.base_url
                 api_mode = ""
@@ -1202,7 +1205,10 @@ def switch_model(
             api_key = runtime.get("api_key", "")
             base_url = runtime.get("base_url", "")
             api_mode = runtime.get("api_mode", "")
-        except Exception:
+        except Exception as exc:
+            from lliam_cli.runtime_provider import is_provider_governance_error
+            if is_provider_governance_error(exc):
+                raise
             pass
 
     # --- Direct alias override: use exact base_url from the alias if set ---
@@ -1214,6 +1220,30 @@ def switch_model(
             api_mode = ""  # clear so determine_api_mode re-detects from URL
             if not api_key:
                 api_key = "no-key-required"
+
+    # Direct aliases replace the previously validated endpoint, so validate
+    # the exact post-alias URL before any model client is accepted.
+    try:
+        from lliam_cli import provider_allowlist as _provider_allowlist
+        _alias_decision = _provider_allowlist.validate_provider(
+            target_provider, base_url, path="primary", cui=True
+        )
+        if _alias_decision.disposition != "allow":
+            return ModelSwitchResult(
+                success=False,
+                target_provider=target_provider,
+                provider_label=provider_label,
+                is_global=is_global,
+                error_message=f"Provider route blocked by governance: {_alias_decision.reason}",
+            )
+    except Exception as exc:
+        return ModelSwitchResult(
+            success=False,
+            target_provider=target_provider,
+            provider_label=provider_label,
+            is_global=is_global,
+            error_message=f"Provider route could not be validated: {exc}",
+        )
 
     # --- Normalize model name for target provider ---
     new_model = normalize_model_for_provider(new_model, target_provider)

@@ -77,7 +77,8 @@ security:
 
   # [ACTIVE @ P1.5 — LG-IA]  OPERATOR + ENDPOINT AUTHENTICATION
   # Consumed by the NEW fail-closed enforce_control_plane_auth_at_startup gate
-  # (lliam_cli/security_audit_startup.py), wired at gateway startup. Kept in THIS
+  # (lliam_cli/security_audit_startup.py), run on every entrypoint via
+  # lliam_cli.startup_posture.enforce_startup_posture. Kept in THIS
   # security block (a second top-level security: would drop the P0 posture).
   api_server_key_required: true  # [additive @ P1.5] LG-IA-11: a network-accessible API server with no API_SERVER_KEY REFUSES to start (RCE gate). Loopback-only binds are unaffected.
   require_operator_auth: true    # [additive @ P1.5] LG-IA-06: no shared/anonymous operator sessions on a networked control plane (config-of-record; dashboard_auth enforces token/oauth)
@@ -108,16 +109,98 @@ security:
     - name: docx
       source: builtin
 
-  # [ACTIVE @ P0.4]  LEAST-PRIVILEGE TOOL ENABLEMENT  (LG-AZ-03/11, LG-AZ-02)
+  # [ACTIVE @ P0.4; PDP wired @ P2.1]  LEAST-PRIVILEGE TOOL ENABLEMENT + PER-CALL
+  # PDP  (LG-AZ-01/02/03/06/07/10/11/12, LG-RM-08)
   # Mirror of policy/tool-risk-policy.yaml. computer_use + browser are policy-
   # disabled in the CUI baseline (also enforced via agent.disabled_toolsets below
   # which removes them from the resolved toolset). tool_denylist is read by the
-  # NEW tools/tool_policy.py gate. The full per-call PDP lands in Phase 2.
+  # tools/tool_policy.py enablement gate. As of P2.1 the same module's per-call
+  # PDP (evaluate_call/pdp_gate) enforces the four-tier ladder at the dispatch
+  # chokepoint (tool_executor before_call seams + model_tools direct funnel).
   tool_risk_policy:
-    enabled: true                  # [additive] policy of record active (PDP wiring = Phase 2)
-    policy_path: policy/tool-risk-policy.yaml   # [additive] reviewable tier policy
-    default_disposition: deny      # [additive] deny-by-default for the Phase-2 PDP
+    enabled: true                  # [additive] per-call PDP ACTIVE under strict posture (P2.1)
+    policy_path: policy/tool-risk-policy.yaml   # [additive] reviewable tier policy of record
+    default_disposition: deny      # [additive] unmatched action class -> deny (fail-closed)
     fail_closed: true              # [additive] on policy parse/eval error -> deny
+  max_mutating_calls:              # [additive @ P2.1] LG-AZ-10 mirror of policy budgets (PDP reads the policy file; this key is the one-artifact audit mirror)
+    per_turn: 25
+    per_session: 200
+  spend_ceiling:                   # inference spend ceiling (lliam_cli/model_cost_guard.py), checked before every model call. Breach -> HITL approval (gateway queue / CLI prompt); no approver, denial or timeout -> no further calls (fail closed). An approval buys one more increment.
+    enabled: true
+    per_session_tokens: 2000000    # input+output+cache tokens per session, shared with delegated subagents
+    per_day_tokens: 20000000       # all sessions started today (UTC), from the session DB
+    per_session_cost_usd: 10       # applied only when the provider price is known
+    per_day_cost_usd: 100
+    on_breach: hitl_approve        # hitl_approve | deny
+
+  # [ACTIVE @ P2.4]  DATA PROTECTION + DLP TAINT-GATE  (LG-DP-01/02/04/07/08/10/11)
+  # Consumed by the NEW agent/data_protection.py. CUI/PII classification arms
+  # the session DLP taint at the tool-result funnel; once CUI is exposed the PDP
+  # escalates egress/external-send to HITL (LG-DP-10) so CUI is not freely
+  # exfiltrated. Redaction (LG-DP-03/05) and TLS (LG-DP-06) are the P0/P1
+  # surfaces (privacy.redact_pii above, security.require_tls). At-rest key store
+  # is <lliam_home>/keys, on the file_safety write-denylist (LG-DP-08).
+  data_protection:
+    cui_redaction: true            # [additive] LG-DP-04: CUI/PII pattern pack active on the high side
+    dlp_taint_gate: true           # [additive] LG-DP-10: CUI-exposed session escalates egress to HITL
+    at_rest_encryption: true       # [additive] LG-DP-07: Fernet at-rest wrapper for CUI/audit blobs
+    result_retention_ttl_seconds: 86400   # [additive] LG-DP-11: tool-result retention cap (24h)
+    egress_allowlist: []           # [additive] LG-DP-10 sink allowlist (destination policy of record = P2.5 egress.*)
+
+  # [ACTIVE @ P2.5]  NETWORK EGRESS BOUNDARY  (LG-NE-01..06)
+  # Consumed by the NEW tools/egress_policy.py (check_egress), layered OVER the
+  # existing url_safety SSRF floor + website_policy. Deny-by-default destination
+  # allowlist (policy/egress-allowlist.yaml); the metadata/private-IP floor is
+  # unconditional (is_always_blocked_url). The squid isolation enclave
+  # (deploy/docker-compose.gov.override.yml) is the connection-level mirror.
+  egress:
+    mode: allowlist                # [additive] allowlist | deny_all (air-gap, LG-NE-06)
+    policy_path: policy/egress-allowlist.yaml   # [additive] LG-NE-01 destination policy of record
+    new_domain_disposition: deny   # [additive] deny | hitl_approve — new hosts denied by default
+    proxy_required: true           # [additive] LG-NE-04/05 squid enclave is the gov default
+    fail_closed: true              # [additive] parse/eval error -> deny
+  website_policy:
+    mode: allowlist                # [additive] LG-NE-03 allowlist mode on web/browser tools
+    allow_domains_from: policy/egress-allowlist.yaml
+    fail_closed: true
+
+  # [ACTIVE @ P3.1]  APPROVED-PROVIDER ALLOWLIST  (LG-MP-01/02/03/04/08)
+  # Consumed by the NEW lliam_cli/provider_allowlist.py validator + the
+  # fail-closed startup gate enforce_provider_allowlist_at_startup (run by
+  # lliam_cli.startup_posture.enforce_startup_posture on every entrypoint,
+  # next to the control-plane gate). Restricts CUI inference
+  # routing to vetted US/FedRAMP/local endpoints on every routing path; a
+  # non-allowlisted provider/host refuses to start. No-op unless strict + the
+  # enforce flag (capability-preserving on low-side).
+  provider_allowlist_enforce: true       # [additive] LG-MP-01/02 fail-closed enforcement ON
+  provider_allowlist_path: policy/provider-allowlist.yaml   # [additive] policy of record
+  allowed_providers: [lmstudio, ollama, vllm, bedrock]      # [additive] mirror of allowlist ids
+  allowlist_paths: [primary, fallback, moa, auxiliary, delegation]   # [additive] LG-MP-02 all paths
+  high_sensitivity_local_only: true      # [additive] LG-MP-04 clamp high-sensitivity CUI to local
+  local_provider_preference: [lmstudio, ollama, vllm]       # [additive] LG-MP-04 preference order
+  allowlist_review_cadence_days: 90      # [additive] LG-MP-08 provider posture re-validation cadence
+
+  # [ACTIVE @ P3.2]  MODEL INTEGRITY + ATTESTATION  (LG-MP-05/06/07)
+  # Consumed by the NEW agent/attestation.py. A model needs a card before it is
+  # CUI-eligible (LG-MP-05); a signed manifest is verified before high-impact
+  # actions (LG-MP-06); only safe serialization formats load (LG-MP-07).
+  require_model_card: true               # [additive] LG-MP-05: uncarded model refused for CUI
+  model_cards_path: docs/governance/model-cards/model-cards.yaml   # [additive] card index of record
+  safe_serialization_only: true          # [additive] LG-MP-07: allow safetensors/gguf; deny code-executing formats
+  model_hash_verify: true                # [additive] LG-MP-07: verify artifact hash at load
+  model_manifest_path: model_manifest.yaml   # [additive] LG-MP-06 signed manifest of record
+  trusted_signers:                       # [additive] LG-MP-06 signer id -> key (KEY provisioned out-of-repo)
+    lliam-gov-signer: "${LLIAM_GOV_SIGNING_KEY}"
+
+  # [ACTIVE @ P3.3]  MCP & SKILL SUPPLY-CHAIN VETTING  (LG-SC-03/04/05/07/08/09)
+  # Consumed by the NEW tools/mcp_allowlist.py. Deny-by-default for unlisted MCP
+  # servers; block shell-egress/persistence IOC command shapes; least-privilege
+  # scope + default-deny write; TLS required on HTTP transports; unsigned/
+  # unvetted third-party skills refused. require_signed_skills was set at P0.3.
+  mcp_allowlist_enforce: true            # [additive] LG-SC-07 deny-by-default MCP vetting ON
+  mcp_allowlist_path: policy/mcp-allowlist.yaml   # [additive] approved-server policy of record
+  mcp_require_tls: true                  # [additive] LG-SC-08 TLS/mTLS on HTTP MCP transports
+  supplier_vetting_register: docs/governance/supplier-vetting-register.md   # [additive] LG-TP-03
   tool_allowlist: []               # [additive] LG-AZ-02 (empty = no positive tool allowlist yet)
   tool_denylist:                   # [additive] LG-AZ-11/AZ-02: refuse these capabilities for CUI
     - computer_use
@@ -185,6 +268,18 @@ privacy:
 
 memory:
   write_approval: true        # config.py:2037  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-HO-04: stage memory writes for review)
+  # [ACTIVE @ P2.6]  MEMORY GOVERNANCE  (LG-MC-02/04/05/06/07)
+  # Consumed by the NEW agent/memory_governance.py. Partition per session/
+  # identity so cross-session memory does not leak (MC-02); critical writes
+  # route to HITL (MC-04); purpose-limited retention TTL + PII exclusion
+  # (MC-05); secure purge + between-task context reset (MC-06/07).
+  governance:
+    partition_per_session: true      # [additive] LG-MC-02: per-identity/session partition
+    critical_write_hitl: true        # [additive] LG-MC-04: critical memory writes -> HITL
+    retention_ttl_seconds: 604800    # [additive] LG-MC-05: 7-day purpose-limited retention
+    exclude_pii: true                # [additive] LG-MC-05: PII-tagged content not persisted
+    secure_purge: true               # [additive] LG-MC-06: overwrite-then-unlink on purge
+    reset_context_between_tasks: true # [additive] LG-MC-07: wipe partition between unrelated tasks
 
 skills:
   write_approval: true        # config.py:2176  DEFAULT False -> OVERRIDE true   (LG-CH-07 / LG-HO-04: stage skill writes for review)
@@ -227,6 +322,16 @@ skills:
 terminal:
   backend: docker             # config.py:1095  DEFAULT "local" -> OVERRIDE "docker" (sandboxed exec)
   timeout: 180                # config.py:1098  (confirm-pinned)
+  # Sandbox resource ceilings + network (JER-74). Single-workstation sizing:
+  # the sandbox can never take more than 2 CPUs / 4 GiB from the host. Under
+  # strict posture DockerEnvironment refuses to start with unbounded (<=0)
+  # values and refuses docker_extra_args that would lift these ceilings.
+  container_cpu: 2            # --cpus 2
+  container_memory: 4096      # MB -> --memory 4096m
+  # No sandbox network. The squid egress enclave fronts the gateway container
+  # only; a sandbox on Docker's default bridge would reach the internet
+  # directly and bypass the egress allowlist. --network=none removes that path.
+  docker_network: false       # --network=none
 
 
 # =============================================================================
@@ -243,6 +348,20 @@ agent:
   disabled_toolsets:          # config.py:1091  DEFAULT [] -> disable high-risk toolsets for CUI
     - computer_use            #   LG-AZ-11: desktop/OS automation OFF in CUI baseline
     - browser                 #   LG-AZ-03: interactive web automation OFF in CUI baseline
+
+
+# [ACTIVE @ P2.1]  RUNAWAY-LOOP HARD STOPS  (LG-AZ-12)
+# Shipped default is hard_stop_enabled: false (soft warnings only) so
+# interactive sessions keep flowing; the gov overlay flips hard stops ON so a
+# genuine runaway/non-progress loop halts via ToolGuardrailDecision.should_halt.
+# Complements the PDP's mutating-call budgets (security.max_mutating_calls).
+tool_loop_guardrails:
+  warnings_enabled: true      # config.py:1329  DEFAULT True   (confirm-pinned)
+  hard_stop_enabled: true     # config.py:1330  DEFAULT False -> OVERRIDE true (LG-AZ-12)
+  hard_stop_after:
+    exact_failure: 5
+    same_tool_failure: 8
+    idempotent_no_progress: 12   # tuned up from shipped 5 — long legitimate tasks must not trip it
 
 
 # =============================================================================
@@ -299,6 +418,104 @@ audit:
 
 
 # =============================================================================
+# [ACTIVE @ P5.1]  CONTINUOUS MONITORING — ISCM/SIEM + RUNTIME MONITORS
+#    Controls: LG-MO-01 (runaway/non-progress), LG-MO-02 (egress anomaly /
+#              first-seen domain / volume spike), LG-MO-03 (provider/MCP
+#              schema/permission drift), LG-MO-04 (goal-drift + policy-violation
+#              patterns), LG-MO-05 (ISCM/SIEM stream of the hash-chained
+#              ledger), LG-MO-06 (session risk-timeline + near-real-time notify)
+#    Consumed by: agent/iscm_sink.py (build_sink) + agent/runtime_monitors.py
+#              (MonitorHub), hooked fail-safe at agent/governance_audit.emit
+#              after the record seals. Complete no-op when absent (low side).
+# =============================================================================
+monitoring:
+  iscm_sink:
+    enabled: true                    # [additive @ P5.1] LG-MO-05 stream ON in the gov profile
+    kind: file                       # [additive] file | syslog | otlp_http — file keeps the stream on the host until an off-host collector is provisioned
+    path: "$HERMES_HOME/logs/iscm-events.log"   # [additive] SIEM-consumable JSONL of the sealed ledger ($HERMES_HOME / $LLIAM_HOME resolve to the agent home); still written as the local copy for syslog / otlp_http
+    format: json                     # [additive] json (SIEM default) | cef
+    # Off-host forwarders [additive @ JER-76] — set kind and the matching keys
+    # once a real collector exists. Destinations go through
+    # tools.egress_policy.check_egress(..., surface="messaging"); a refused
+    # destination is logged at ERROR and events stay in `path`.
+    # syslog_address: ""             # kind=syslog: local socket (/dev/log, /var/run/syslog) or host:port; non-loopback hosts are egress-checked as syslog://host:port
+    # syslog_protocol: udp           # kind=syslog: udp | tcp
+    # otlp_endpoint: ""              # kind=otlp_http: https OTLP/HTTP JSON logs URL (collector .../v1/logs)
+    # otlp_auth_header_env: ""       # kind=otlp_http: NAME of an env var holding the Authorization value (never the secret itself)
+    # otlp_timeout_seconds: 5
+  runaway_threshold: 8               # [additive @ P5.1] LG-MO-01 consecutive-identical-dispatch alert threshold
+  egress_volume_threshold: 50        # [additive @ P5.1] LG-MO-02 per-session egress-count spike threshold
+  notify: [jdavis@agency.mil]        # [additive @ P5.1] LG-MO-06 near-real-time notify list (role_bindings.isso)
+  notify_severity: warning           # [additive @ P5.1] LG-MO-06 min alert severity that pages named staff
+  notify_transport:                  # [additive @ JER-76] LG-MO-06 delivery for `notify`. Every notification is appended to $HERMES_HOME/logs/notifications.jsonl (0600) with each delivery outcome; failed/queued ones are redelivered by the scheduled assurance job
+    # record_path: ""                # [additive] default $HERMES_HOME/logs/notifications.jsonl
+    max_attempts: 3                  # [additive] attempts per transport (exponential backoff) before a record is marked failed
+    retry_backoff_seconds: 2         # [additive] backoff base, seconds
+    webhook:
+      enabled: false                 # [additive] OFF until a real receiver is provisioned
+      url: ""                        # [additive] https only; must pass check_egress(url, surface="messaging") (allowlist entry with surfaces: [messaging]); redirects are refused
+      auth_header_env: ""            # [additive] NAME of an env var whose value is sent as Authorization (never the secret itself)
+      timeout_seconds: 5
+    smtp:
+      enabled: false                 # [additive] OFF until a relay is provisioned
+      host: ""                       # [additive] loopback relay = the host MTA; any other host must pass check_egress("smtp://host:port", surface="messaging")
+      port: 25
+      from_addr: ""                  # [additive] From header; recipients are the `notify` list
+      starttls: false
+      timeout_seconds: 5
+  assurance:
+    max_age_hours: 26                # [additive @ JER-76] control_effectiveness fails on a deployed host (pinned home + real ledger) if the scheduled assurance job last completed longer ago than this; install with `lliam-gov assurance install`
+
+
+# =============================================================================
+# [ACTIVE @ P5.3]  KILL-SWITCH / CONTAINMENT / RECOVERY  (LG-IR-01/02/08, RM-09)
+#    Consumed by: agent/killswitch.py (durable state under $HERMES_HOME/
+#    killswitch.state), wired fail-safe at agent/governance_audit_hooks.
+#    predispatch_gate (tool exec) + lliam_cli/runtime_provider.
+#    resolve_runtime_provider (inference). Recovery is fail-closed on a broken
+#    audit chain (verify_chain PASS required before re-enable). Complete no-op
+#    when not engaged — NO false auto-suspension on steady state.
+# =============================================================================
+incident_response:
+  killswitch:
+    enabled: true                    # [additive @ P5.3] LG-IR-01 kill-switch authority active
+    default_scope: global            # [additive] SEV-1 emergency posture; session scope per incident
+    require_verified_chain_to_recover: true   # [additive @ P5.3] LG-IR-08 fail-closed re-enable
+  runbook: docs/governance/incident-response-plan.md          # [additive @ P5.3] LG-IR-05
+  reporting:
+    dfars_dibnet_hours: 72           # [additive @ P5.3] LG-IR-06 DFARS 252.204-7012 clock
+  circuit_breaker:
+    conditions: [egress_violation, cui_taint, loop_exhaustion, audit_break]   # LG-IR-03
+    action: halt                     # [additive] halt | degrade
+    notify_role: isso
+    policy_denials:                  # [additive] LG-IR-03 governance circuit-breaker (agent/governance_breaker.py)
+      enabled: true                  #   N consecutive blocked/denied tool calls in one session
+      threshold: 10                  #   ...within window_seconds engage the kill-switch;
+      window_seconds: 120            #   any allowed call resets the run
+
+
+# =============================================================================
+# [ACTIVE @ P5.4]  cATO LOOP + AUTONOMY CLASSIFICATION + RECIPROCITY
+#    Controls: LG-GV-07 (continuous authorization + posture-break auto-suspend),
+#              LG-GV-08 (management review + re-authorization), LG-TP-05
+#              (autonomy L0-L5 + kill-switch cadence), LG-TP-06 (third-party
+#              contingency), LG-TP-07 (portable attestation export).
+#    Consumed by: agent/cato_loop.py (evaluate/run_cato_cycle → killswitch on a
+#    real posture-break; steady-state no-op) + ci/governance-ci-gates/
+#    attestation_export.py.
+# =============================================================================
+cato:
+  enabled: true                      # [additive @ P5.4] LG-GV-07 continuous authorization ON
+  autonomy_level: L3                 # [additive @ P5.4] LG-TP-05 authorized level (conditional autonomy + HITL on high-impact)
+  auto_suspend_on_break: true        # [additive @ P5.4] LG-GV-07 posture-break -> kill-switch
+  reauthorization_required_after_suspend: true   # [additive] LG-GV-06/08 re-auth gate
+  management_review_cadence_days: 90 # [additive @ P5.4] LG-GV-08 review cadence
+  autonomy_classification: docs/governance/autonomy-classification.md   # LG-TP-05
+  contingency: docs/governance/third-party-contingency.md               # LG-TP-06
+  management_review: docs/governance/management-review.md               # LG-GV-08
+
+
+# =============================================================================
 # [ACTIVE @ P1.4]  AGENT IDENTITY + MANAGED CREDENTIALS  (LG-IA-01..05, IA-10)
 # -----------------------------------------------------------------------------
 # LG-IA-02 agent NPE identity is computed by the NEW additive module
@@ -310,8 +527,8 @@ audit:
 # gateway.multiplex_profiles below. LG-IA-01/04/05 land as the managed-account
 # inventory + secret-source config-of-record + the no-default-credential startup
 # check; heavier runtime enforcement (live secrets-CLI reconcile, Bitwarden
-# migration, full delegation-context module + max_spawn_depth enforcement) is
-# flagged for the cross-phase remediation pass (see P1.4 report).
+# migration, full delegation-context module) is flagged for the cross-phase
+# remediation pass (see P1.4 report). max_spawn_depth is enforced (below).
 # =============================================================================
 identity:
   bind_instance: true                # [additive @ P1.4] LG-IA-02: derive + stamp the NPE instance_id into audit actor
@@ -327,7 +544,7 @@ secrets:
   #  security.no_default_credentials; a duplicate here would be unread.)
 
 delegation:
-  max_spawn_depth: 3                 # [additive @ P1.4] LG-IA-10 config-of-record: bound the operator→Lliam→sub-agent delegation chain; runtime enforcement in delegate_tool is remediation-pass scope
+  max_spawn_depth: 3                 # [additive @ P1.4] LG-IA-10: bound the operator→Lliam→sub-agent delegation chain. delegate_task refuses beyond it; under strict this value caps any home-config value, and depth carries into spawned processes (LLIAM_DELEGATE_DEPTH) so an agent started beyond it refuses to run
 
 # =============================================================================
 # [ACTIVE @ P1.6]  ROLES / RACI / SEPARATION-OF-DUTIES  (LG-GV-04/05)
@@ -350,6 +567,52 @@ governance:
     engineer: "npe:lliam-gov"               #   the acting party is the NPE agent — Approver ≠ Engineer ✓
     auditor: auditor@independent.mil        #   independent of approver/engineer/risk (SoD)
     killswitch_owner: jdavis@agency.mil
+  # ---------------------------------------------------------------------------
+  # [ACTIVE @ P4.1]  TOP-MANAGEMENT POLICY IDENTITY + REGISTER BINDINGS
+  #   Controls: LG-GV-01 (policy of record), LG-GV-03 (regulatory register),
+  #             LG-GV-06 (go/no-go authorization), LG-GV-10 (CAIO waivers)
+  #   Consumed by: lliam_cli/security_audit_startup.py
+  #                enforce_governance_artifacts_at_startup (fail-closed under
+  #                strict; complete no-op low-side) and
+  #                ci/governance-ci-gates/regulatory_reconciliation_gate.py.
+  # Register paths resolve relative to this overlay's directory (the repo root).
+  # ---------------------------------------------------------------------------
+  policy_id: LG-POL-001                    # [additive @ P4.1] LG-GV-01 policy of record
+  policy_version: "1.0"                    # [additive @ P4.1] must match ai-policy.md §11
+  policy_approved_by: jdavis@agency.mil    # [additive @ P4.1] CAIO (role_bindings.caio)
+  policy_review_date: 2027-07-16           # [additive @ P4.1] past-due -> fail-closed (strict)
+  policy_path: docs/governance/ai-policy.md
+  authorization_id: LG-ATO-2026-001        # [additive @ P4.1] LG-GV-06 go/no-go of record
+  registers:                               # [additive @ P4.1] register bindings of record
+    regulatory: docs/governance/regulatory-register.yaml     # LG-GV-03
+    authorization: docs/governance/authorization-record.yaml # LG-GV-06
+    waiver: docs/governance/waiver-register.yaml             # LG-GV-10
+    deviation: docs/governance/deviation-register.yaml       # LG-CH-08 (P0.7)
+    # [additive @ P4.2] risk & applicability layer (LG-RM-01..07,09)
+    control_catalog: docs/governance/control-catalog.yaml    # LG-RM-04 machine canon
+    soa: docs/governance/SoA.md                              # LG-RM-04
+    poam: docs/governance/poam.yaml                          # LG-RM-07
+    threat_risk: docs/governance/threat-risk-register.yaml   # LG-RM-02
+    determinations: docs/governance/high-impact-determinations.yaml  # LG-RM-06
+    impact_assessment: docs/governance/ai-impact-assessment.md       # LG-RM-05
+    risk_process: docs/governance/risk-assessment-process.md         # LG-RM-01
+    halt_runbook: docs/governance/halt-rollback-runbook.md           # LG-RM-09
+    # [additive @ P4.3] boundary/inventory + SSP layer (LG-IN-01/04..07)
+    ssp: docs/governance/SSP.md                                      # LG-IN-07
+    boundary_scope: docs/governance/boundary-scope.md                # LG-IN-01/04/05/06
+    traceability: docs/governance/traceability-171r3.yaml            # LG-IN-07
+    # [additive @ P4.4] QMS + privacy/fairness layer (LG-QT-*, LG-PF-01..07)
+    qms: docs/governance/qms-process-maps.md                         # LG-QT-01/02/04/08/09
+    privacy_policy: docs/governance/privacy-policy.md                # LG-PF-01/02/03/05
+    ai_disclosure: docs/governance/ai-disclosure-notice.md           # LG-PF-04
+    bias_risk: docs/governance/bias-risk-register.yaml               # LG-PF-06
+    # [additive @ P4.5] secure-dev + personnel/supplier layer (LG-SD-*, LG-TP-*)
+    secure_development: docs/governance/secure-development.md        # LG-SD-02..08
+    requirements_traceability: docs/governance/requirements-traceability.yaml  # LG-SD-02
+    shared_responsibility: docs/governance/shared-responsibility-matrix.yaml   # LG-TP-04
+    training_register: docs/governance/training-register.yaml        # LG-TP-01
+    rules_of_behavior: docs/governance/rules-of-behavior.md          # LG-TP-02
+    evidence_register: docs/governance/evidence-register.yaml        # LG-TP-08
 # NOTE: LG-IA-01 managed-account inventory (security.accounts) and the
 # LG-IA-05 no-default-credential switch (security.no_default_credentials) live
 # in the EXISTING `security:` block at the top of this file — a SECOND top-level

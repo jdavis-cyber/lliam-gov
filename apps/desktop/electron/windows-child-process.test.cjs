@@ -36,7 +36,7 @@ test('desktop background child processes opt into hidden Windows consoles', () =
   requireHiddenChildOptions(source, "spawn('curl'")
   requireHiddenChildOptions(source, /spawn\(\s*backend\.command,\s*backend\.args/)
   requireHiddenChildOptions(source, /lliamProcess = spawn\(\s*backend\.command,\s*backend\.args/)
-  requireHiddenChildOptions(source, /spawn\(\s*py,\s*\['-m', 'hermes_cli\.main', 'uninstall', '--gui-summary'\]/)
+  requireHiddenChildOptions(source, /spawn\(\s*py,\s*\['-m', 'lliam_cli\.main', 'uninstall', '--gui-summary'\]/)
 
   assert.match(source, /function unwrapWindowsVenvLliamCommand\(command, dashboardArgs\)/)
   assert.match(source, /existing Lliam-GOV no-console Python at/)
@@ -50,7 +50,7 @@ test('desktop background child processes opt into hidden Windows consoles', () =
   assert.match(source, /readyFile: true/)
   assert.match(source, /function getVenvSitePackagesEntries\(venvRoot\)/)
   assert.match(source, /path\.join\(venvRoot, 'Lib', 'site-packages'\)/)
-  assert.match(source, /args: \['-m', 'hermes_cli\.main', \.\.\.dashboardArgs\]/)
+  assert.match(source, /args: \['-m', 'lliam_cli\.main', \.\.\.dashboardArgs\]/)
 })
 
 test('getNoConsoleVenvPython prefers base pythonw over the uv re-exec shim', () => {
@@ -84,5 +84,5 @@ test('bootstrap PowerShell runner hides Windows console children', () => {
   const source = readElectronFile('bootstrap-runner.cjs')
 
   assert.match(source, /function hiddenWindowsChildOptions\(options = \{\}\)/)
-  requireHiddenChildOptions(source, 'spawn(ps, fullArgs')
+  requireHiddenChildOptions(source, /spawn\(\s*ps,\s*fullArgs/)
 })

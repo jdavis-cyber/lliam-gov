@@ -4,12 +4,12 @@
  * Cheap "does this candidate backend actually work" checks used by
  * resolveLliamBackend (main.cjs). The resolver walks a ladder of
  * candidates -- bootstrap marker, `lliam-gov` on PATH, system Python with
- * hermes_cli installed -- and historically returned the first candidate
+ * lliam_cli installed -- and historically returned the first candidate
  * whose binary existed on disk. That assumption breaks when a user has
  * a pre-installed Python 3.11-3.13 (so findSystemPython() returns a
- * path) but no hermes_cli in its site-packages: the resolver hands back
+ * path) but no lliam_cli in its site-packages: the resolver hands back
  * a backend the spawn step can't actually run, and the user gets a
- * dead-on-arrival "ModuleNotFoundError: No module named 'hermes_cli'"
+ * dead-on-arrival "ModuleNotFoundError: No module named 'lliam_cli'"
  * instead of the first-launch installer.
  *
  * These probes give the resolver a way to verify a candidate before
@@ -44,20 +44,20 @@ const PROBE_TIMEOUT_MS = 5000
  * @returns {string}
  */
 function lliamRuntimeImportProbe() {
-  return 'import yaml; import hermes_cli.config'
+  return 'import yaml; import lliam_cli.config'
 }
 
 /**
  * Return true iff the Lliam-GOV runtime import probe exits 0.
  *
- * Used to gate the "fallback to system Python with hermes_cli installed"
+ * Used to gate the "fallback to system Python with lliam_cli installed"
  * rung of resolveLliamBackend. Without this, a system Python 3.11-3.13
  * registered in PEP 514 makes findSystemPython() succeed regardless of
- * whether hermes_cli has actually been pip-installed into its
+ * whether lliam_cli has actually been pip-installed into its
  * site-packages -- and the resolver returns a backend that immediately
  * dies on spawn.
  *
- * The probe intentionally imports hermes_cli.config, not just the top-level
+ * The probe intentionally imports lliam_cli.config, not just the top-level
  * package: a broken/empty Windows launcher venv can still see the source tree
  * through PYTHONPATH but lack PyYAML, then die on the first real CLI import.
  *
@@ -82,7 +82,7 @@ function canImportLliamCli(pythonPath, opts = {}) {
 }
 
 /**
- * Return true iff `<lliamCommand> --version` exits 0.
+ * Return true iff `<lliamCommand> --help` exits 0.
  *
  * Used to gate the "existing `lliam-gov` on PATH" rung. Without this, a
  * stale hermes.cmd shim left behind by an uninstalled pip install (or
@@ -90,8 +90,8 @@ function canImportLliamCli(pythonPath, opts = {}) {
  * Python) survives findOnPath() and gets selected as the backend.
  *
  * We intentionally avoid invoking the command with the dashboard args
- * here -- `--version` is the cheapest "is this binary alive" smoke
- * test that every hermes_cli entry-point has supported since 0.1.
+ * here -- `--help` is the cheapest "is this binary alive" smoke
+ * test that every lliam_cli entry-point has supported since 0.1.
  *
  * @param {string} lliamCommand - Resolved absolute path to a hermes
  *   executable (or an interpreter+script wrapper).
@@ -105,10 +105,11 @@ function canImportLliamCli(pythonPath, opts = {}) {
 function verifyLliamCli(lliamCommand, opts = {}) {
   if (!lliamCommand) return false
   try {
-    execFileSync(lliamCommand, ['--version'], {
+    execFileSync(lliamCommand, ['--help'], {
       stdio: 'ignore',
       timeout: PROBE_TIMEOUT_MS,
       shell: Boolean(opts.shell),
+      env: { ...process.env, ...(opts.env || {}) },
       windowsHide: true
     })
     return true

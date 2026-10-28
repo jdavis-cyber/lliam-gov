@@ -1382,7 +1382,7 @@ def _resolve_explicit_runtime(
     return None
 
 
-def resolve_runtime_provider(
+def _resolve_runtime_provider_unchecked(
     *,
     requested: Optional[str] = None,
     explicit_api_key: Optional[str] = None,
@@ -1746,18 +1746,19 @@ def resolve_runtime_provider(
         # Region priority: config.yaml bedrock.region → env var → us-east-1
         region = (_bedrock_cfg.get("region") or "").strip() or resolve_bedrock_region()
         auth_source = resolve_aws_auth_env_var() or "aws-sdk-default-chain"
-        # Build guardrail config if configured
-        _gr = _bedrock_cfg.get("guardrail", {})
-        guardrail_config = None
-        if _gr.get("guardrail_identifier") and _gr.get("guardrail_version"):
-            guardrail_config = {
-                "guardrailIdentifier": _gr["guardrail_identifier"],
-                "guardrailVersion": _gr["guardrail_version"],
-            }
-            if _gr.get("stream_processing_mode"):
-                guardrail_config["streamProcessingMode"] = _gr["stream_processing_mode"]
-            if _gr.get("trace"):
-                guardrail_config["trace"] = _gr["trace"]
+        # Build guardrail config if configured. Under strict posture a
+        # template / partial / DRAFT binding is refused, never sent to Bedrock.
+        from lliam_cli.provisioning import (
+            UnprovisionedValueError,
+            bedrock_guardrail_config,
+            strict_posture,
+        )
+        try:
+            guardrail_config = bedrock_guardrail_config(
+                _bedrock_cfg.get("guardrail", {}), strict=strict_posture(load_config())
+            )
+        except UnprovisionedValueError as exc:
+            raise AuthError(str(exc), provider="bedrock", code="guardrail_not_provisioned") from exc
         # Dual-path routing: Claude models use AnthropicBedrock SDK for full
         # feature parity (prompt caching, thinking budgets, adaptive thinking).
         # Non-Claude models use the Converse API for multi-model support.
@@ -1851,6 +1852,103 @@ def resolve_runtime_provider(
     )
     runtime["requested_provider"] = requested_provider
     return runtime
+
+
+def _is_strict() -> bool:
+    try:
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
+        return _pr.is_strict(_cfg.load_config())
+    except Exception:
+        logger.warning("runtime-provider posture resolution failed; enforcing", exc_info=True)
+        return True
+
+
+def resolve_runtime_provider(
+    *,
+    requested: Optional[str] = None,
+    explicit_api_key: Optional[str] = None,
+    explicit_base_url: Optional[str] = None,
+    target_model: Optional[str] = None,
+    governance_path: str = "primary",
+    high_sensitivity: bool = False,
+) -> Dict[str, Any]:
+    """Resolve credentials and enforce the effective provider endpoint policy.
+
+    The allowlist check intentionally happens after resolution so symbolic
+    providers (``auto``), environment-supplied endpoints, credential pools, and
+    mid-session model switches are checked against the endpoint that will
+    actually receive the request.  Enforcement remains a complete no-op on
+    low-side profiles or when the Phase 3 control is disabled.
+    """
+    # LG-IR-01 (additive @ P5.3): the kill-switch halts inference on EVERY
+    # routing path (primary/fallback/MoA/auxiliary/delegation all resolve
+    # here). Raises KillSwitchEngaged when engaged; complete no-op otherwise.
+    try:
+        from agent import killswitch as _ks
+        _ks.assert_inference_live()
+    except Exception as _ks_exc:
+        if _ks_exc.__class__.__name__ == "KillSwitchEngaged":
+            raise
+        # Strict posture fails closed: inference never starts when the
+        # kill-switch could not be imported or evaluated. Low-side unchanged.
+        if _is_strict():
+            raise AuthError(
+                "Inference blocked by governance: the kill-switch could not be "
+                f"evaluated under strict posture ({_ks_exc})",
+                code="killswitch_unavailable",
+            ) from _ks_exc
+
+    runtime = _resolve_runtime_provider_unchecked(
+        requested=requested,
+        explicit_api_key=explicit_api_key,
+        explicit_base_url=explicit_base_url,
+        target_model=target_model,
+    )
+    if str(runtime.get("provider") or "").strip().lower() == "moa":
+        return runtime
+
+    from lliam_cli import provider_allowlist as _provider_allowlist
+
+    requested_provider = str(runtime.get("requested_provider") or requested or "").strip().lower()
+    resolved_provider = str(runtime.get("provider") or "").strip().lower()
+    policy_provider = (
+        requested_provider
+        if requested_provider not in {"", "auto", "custom"}
+        else resolved_provider
+    )
+    decision = _provider_allowlist.validate_provider(
+        policy_provider,
+        str(runtime.get("base_url") or ""),
+        path=governance_path,
+        cui=True,
+        high_sensitivity=high_sensitivity,
+    )
+    if decision.disposition != "allow":
+        raise AuthError(
+            f"Provider route blocked by governance: {decision.reason}",
+            code="provider_not_allowlisted",
+        )
+    security_cfg = (load_config().get("security") or {})
+    if target_model and (
+        security_cfg.get("model_manifest_path") or security_cfg.get("require_model_card")
+    ):
+        from agent.attestation import runtime_model_attested
+        model_id = str(target_model).strip()
+        if "/" not in model_id and policy_provider:
+            model_id = f"{policy_provider}/{model_id}"
+        attestation = runtime_model_attested(model_id)
+        if not attestation.valid:
+            raise AuthError(
+                f"Runtime model blocked by governance: {attestation.reason}",
+                code="model_not_attested",
+            )
+    return runtime
+
+
+def is_provider_governance_error(error: Exception) -> bool:
+    """True when a runtime resolution was denied by the provider policy."""
+    return isinstance(error, AuthError) and error.code == "provider_not_allowlisted"
 
 
 def format_runtime_provider_error(error: Exception) -> str:

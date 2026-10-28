@@ -2025,6 +2025,12 @@ class MCPServerTask:
             )
 
         url = config["url"]
+        from tools.egress_policy import check_egress
+        egress = check_egress(url, surface="mcp", session_id=self.name)
+        if egress.disposition != "allow":
+            raise PermissionError(
+                f"MCP server '{self.name}' blocked by egress policy: {egress.reason}"
+            )
         headers = dict(config.get("headers") or {})
         # Some MCP servers require MCP-Protocol-Version on the initial
         # initialize request and reject session-less POSTs otherwise.
@@ -3223,15 +3229,70 @@ def _load_mcp_config() -> Dict[str, dict]:
             load_lliam_dotenv()
         except Exception:
             pass
-        safe_servers: Dict[str, dict] = {}
-        for name, cfg in _filter_suspicious_mcp_servers(servers).items():
-            interpolated = _interpolate_env_vars(cfg)
-            if isinstance(interpolated, dict):
-                safe_servers[name] = interpolated
-        return safe_servers
+        interpolated_servers = {
+            name: _interpolate_env_vars(cfg)
+            for name, cfg in servers.items()
+            if isinstance(cfg, dict)
+        }
+        return _filter_governed_mcp_servers(
+            _filter_suspicious_mcp_servers(interpolated_servers)
+        )
     except Exception as exc:
         logger.debug("Failed to load MCP config: %s", exc)
         return {}
+
+
+def _filter_governed_mcp_servers(servers: Dict[str, dict]) -> Dict[str, dict]:
+    """Apply the Phase 3 MCP identity/scope allowlist at every load seam."""
+    try:
+        from tools.mcp_allowlist import check_mcp_server, mcp_enforcement_enabled
+    except Exception:
+        logger.error("MCP governance control unavailable; failing closed", exc_info=True)
+        return {}
+
+    approved: Dict[str, dict] = {}
+    for name, cfg in servers.items():
+        if not isinstance(cfg, dict):
+            continue
+        if mcp_enforcement_enabled():
+            cfg = dict(cfg)
+            tools_cfg = dict(cfg.get("tools") or {})
+            tools_cfg.setdefault("resources", False)
+            tools_cfg.setdefault("prompts", False)
+            cfg["tools"] = tools_cfg
+        decision = check_mcp_server(name, cfg)
+        if not decision.allowed:
+            logger.warning("Skipping MCP server '%s': %s", name, decision.reason)
+            continue
+        approved[name] = cfg
+    return approved
+
+
+def _drop_denied_connected_mcp_servers(names: set[str]) -> None:
+    """Immediately deregister and asynchronously stop servers now denied."""
+    denied = []
+    with _lock:
+        for name in names:
+            server = _servers.pop(name, None)
+            if server is not None:
+                denied.append(server)
+    for server in denied:
+        server._deregister_tools()
+    if not denied:
+        return
+
+    async def _shutdown_denied():
+        await asyncio.gather(*(server.shutdown() for server in denied), return_exceptions=True)
+
+    with _lock:
+        loop = _mcp_loop
+    if loop is not None and loop.is_running():
+        from agent.async_utils import safe_schedule_threadsafe
+        safe_schedule_threadsafe(
+            _shutdown_denied(), loop,
+            logger=logger,
+            log_message="MCP governance: failed to stop denied server",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -4206,7 +4267,9 @@ def register_mcp_servers(servers: Dict[str, dict]) -> List[str]:
         logger.debug("MCP SDK not available -- skipping explicit MCP registration")
         return []
 
-    servers = _filter_suspicious_mcp_servers(servers)
+    requested_names = set(servers)
+    servers = _filter_governed_mcp_servers(_filter_suspicious_mcp_servers(servers))
+    _drop_denied_connected_mcp_servers(requested_names - set(servers))
     if not servers:
         logger.debug("No explicit MCP servers provided")
         return []

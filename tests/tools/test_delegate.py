@@ -1134,7 +1134,9 @@ class TestDelegationCredentialResolution(unittest.TestCase):
         self.assertEqual(creds["api_key"], "crof-key-abc")
         # Verify resolve_runtime_provider was called with the configured name
         mock_resolve.assert_called_once_with(
-            requested="crof.ai", target_model="deepseek-v4-pro-CEER"
+            requested="crof.ai",
+            target_model="deepseek-v4-pro-CEER",
+            governance_path="delegation",
         )
 
     @patch("lliam_cli.runtime_provider.resolve_runtime_provider")

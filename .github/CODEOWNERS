@@ -1,0 +1,33 @@
+# CODEOWNERS — peer review + independent challenge on governance-sensitive
+# changes (LG-SD-04, P4.5 / AI-497).
+#
+# Every change to the governance baseline, its enforcement code, the policy
+# allowlists, the CI gates, or the agent's prompt/skill surface requires
+# review by the code owner before merge. Pair with branch protection on
+# `main` (require review from Code Owners, require the local gate battery to
+# have passed) — see docs/governance/branch-protection.md. Owner is the ISSO
+# of record (governance.role_bindings.isso); independent challenge on
+# high-impact governance changes is the auditor role per docs/governance/roles-raci.md.
+#
+# @jdavis-cyber owns the account; the accountable ROLE is the ISSO.
+
+# --- Governance baseline + registers (highest sensitivity) -----------------
+cli-config.gov.yaml                         @jdavis-cyber
+/docs/governance/                           @jdavis-cyber
+/policy/                                     @jdavis-cyber
+
+# --- Enforcement code (the startup gates + PDP + audit ledger) -------------
+/lliam_cli/security_audit_startup.py        @jdavis-cyber
+/lliam_cli/posture_resolver.py              @jdavis-cyber
+/lliam_cli/provider_allowlist.py            @jdavis-cyber
+/tools/tool_policy.py                       @jdavis-cyber
+/agent/governance_audit.py                  @jdavis-cyber
+/agent/governance_audit_hooks.py            @jdavis-cyber
+
+# --- CI governance gates ----------------------------------------------------
+/ci/governance-ci-gates/                    @jdavis-cyber
+
+# --- Prompt / skill / policy surface ---------------------------------------
+/lliam_cli/default_soul.py                  @jdavis-cyber
+/model_manifest.yaml                        @jdavis-cyber
+/optional-skills/                           @jdavis-cyber

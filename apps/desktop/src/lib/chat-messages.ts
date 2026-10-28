@@ -59,8 +59,9 @@ export type GatewayEventPayload = {
   // approval.request (dangerous command / execute_code) — session-keyed
   command?: string
   description?: string
-  // False when a tirith content-security warning forbids a permanent allow.
+  // Approval scope restrictions; omitted fields keep the existing defaults.
   allow_permanent?: boolean
+  allow_session?: boolean
   // secret.request (skill credential capture)
   env_var?: string
   prompt?: string
