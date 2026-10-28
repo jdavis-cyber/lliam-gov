@@ -530,6 +530,18 @@ DANGEROUS_PATTERNS = [
     # into a single -X token. Catches the same threat class.
     (r'\bsudo\b[^;|&\n]*?\s+-[a-z]*[sa][a-z]*\b',
      "sudo with combined-flag privilege escalation"),
+    # Deletes require consent even for a single relative path in the working
+    # directory. Keep these after the existing rules to preserve their more
+    # specific descriptions and approval keys (recursive rm, find, scripts).
+    (r'\b(?:rm|unlink|rmdir)(?=\s|[;&|)]|$)', "file/directory delete"),
+    # Inline Python can arrive via -c, stdin (`python - <<...`), or a versioned
+    # interpreter. Match the delete calls independently of the shell wrapper.
+    # The bare forms cover `from os import remove`; exclude object.remove()
+    # because removing an item from a collection is not a filesystem delete.
+    (r'(?<![\w.])(?:os\s*\.\s*)?(?:remove|removedirs)\s*\(',
+     "file/directory delete via Python os"),
+    (r'\b(?:unlink|rmdir|rmtree)\s*\(',
+     "file/directory delete via Python pathlib/os/shutil"),
 ]
 
 

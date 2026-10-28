@@ -181,45 +181,61 @@ class TestSessionKeyContext:
 class TestRmFalsePositiveFix:
     """Regression tests: filenames starting with 'r' must NOT trigger recursive delete."""
 
-    def test_rm_readme_not_flagged(self):
+    def test_rm_readme_requires_consent_not_recursive(self):
         is_dangerous, key, desc = detect_dangerous_command("rm readme.txt")
-        assert is_dangerous is False, f"'rm readme.txt' should be safe, got: {desc}"
-        assert key is None
+        assert is_dangerous is True
+        assert key is not None
+        assert "delete" in desc.lower()
+        assert "recursive" not in desc.lower()
 
-    def test_rm_requirements_not_flagged(self):
+    def test_rm_requirements_requires_consent_not_recursive(self):
         is_dangerous, key, desc = detect_dangerous_command("rm requirements.txt")
-        assert is_dangerous is False, f"'rm requirements.txt' should be safe, got: {desc}"
-        assert key is None
+        assert is_dangerous is True
+        assert key is not None
+        assert "delete" in desc.lower()
+        assert "recursive" not in desc.lower()
 
-    def test_rm_report_not_flagged(self):
+    def test_rm_report_requires_consent_not_recursive(self):
         is_dangerous, key, desc = detect_dangerous_command("rm report.csv")
-        assert is_dangerous is False, f"'rm report.csv' should be safe, got: {desc}"
-        assert key is None
+        assert is_dangerous is True
+        assert key is not None
+        assert "delete" in desc.lower()
+        assert "recursive" not in desc.lower()
 
-    def test_rm_results_not_flagged(self):
+    def test_rm_results_requires_consent_not_recursive(self):
         is_dangerous, key, desc = detect_dangerous_command("rm results.json")
-        assert is_dangerous is False, f"'rm results.json' should be safe, got: {desc}"
-        assert key is None
+        assert is_dangerous is True
+        assert key is not None
+        assert "delete" in desc.lower()
+        assert "recursive" not in desc.lower()
 
-    def test_rm_robots_not_flagged(self):
+    def test_rm_robots_requires_consent_not_recursive(self):
         is_dangerous, key, desc = detect_dangerous_command("rm robots.txt")
-        assert is_dangerous is False, f"'rm robots.txt' should be safe, got: {desc}"
-        assert key is None
+        assert is_dangerous is True
+        assert key is not None
+        assert "delete" in desc.lower()
+        assert "recursive" not in desc.lower()
 
-    def test_rm_run_not_flagged(self):
+    def test_rm_run_requires_consent_not_recursive(self):
         is_dangerous, key, desc = detect_dangerous_command("rm run.sh")
-        assert is_dangerous is False, f"'rm run.sh' should be safe, got: {desc}"
-        assert key is None
+        assert is_dangerous is True
+        assert key is not None
+        assert "delete" in desc.lower()
+        assert "recursive" not in desc.lower()
 
-    def test_rm_force_readme_not_flagged(self):
+    def test_rm_force_readme_requires_consent_not_recursive(self):
         is_dangerous, key, desc = detect_dangerous_command("rm -f readme.txt")
-        assert is_dangerous is False, f"'rm -f readme.txt' should be safe, got: {desc}"
-        assert key is None
+        assert is_dangerous is True
+        assert key is not None
+        assert "delete" in desc.lower()
+        assert "recursive" not in desc.lower()
 
-    def test_rm_verbose_readme_not_flagged(self):
+    def test_rm_verbose_readme_requires_consent_not_recursive(self):
         is_dangerous, key, desc = detect_dangerous_command("rm -v readme.txt")
-        assert is_dangerous is False, f"'rm -v readme.txt' should be safe, got: {desc}"
-        assert key is None
+        assert is_dangerous is True
+        assert key is not None
+        assert "delete" in desc.lower()
+        assert "recursive" not in desc.lower()
 
 
 class TestRmRecursiveFlagVariants:
