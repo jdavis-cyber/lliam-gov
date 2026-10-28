@@ -35,6 +35,7 @@ from pathlib import Path
 from tools.binary_extensions import BINARY_EXTENSIONS
 
 from agent.file_safety import (
+    get_env_write_block_error,
     build_write_denied_paths,
     build_write_denied_prefixes,
     is_write_denied as _shared_is_write_denied,
@@ -1295,6 +1296,9 @@ class ShellFileOperations(FileOperations):
         src = self._expand_path(src)
         dst = self._expand_path(dst)
         for p in (src, dst):
+            env_error = self._env_write_block_error(p)
+            if env_error:
+                return WriteResult(error=env_error)
             if _is_write_denied(p):
                 return WriteResult(error=f"Move denied: {p} is a protected path")
         result = self._exec(
@@ -1307,6 +1311,12 @@ class ShellFileOperations(FileOperations):
     # =========================================================================
     # WRITE Implementation
     # =========================================================================
+
+    def _env_write_block_error(self, path: str) -> Optional[str]:
+        # Relative V4A and direct-operation paths follow the live backend cwd,
+        # which can differ from the host process cwd after a terminal cd.
+        cwd = getattr(self.env, "cwd", None) or self.cwd
+        return get_env_write_block_error(os.path.join(cwd, path))
 
     def write_file(self, path: str, content: str) -> WriteResult:
         """
@@ -1334,6 +1344,9 @@ class ShellFileOperations(FileOperations):
         path = self._expand_path(path)
 
         # Block writes to sensitive paths
+        env_error = self._env_write_block_error(path)
+        if env_error:
+            return WriteResult(error=env_error)
         if _is_write_denied(path):
             return WriteResult(error=f"Write denied: '{path}' is a protected system/credential file.")
 
@@ -1480,6 +1493,9 @@ class ShellFileOperations(FileOperations):
         path = self._expand_path(path)
 
         # Block writes to sensitive paths
+        env_error = self._env_write_block_error(path)
+        if env_error:
+            return PatchResult(error=env_error)
         if _is_write_denied(path):
             return PatchResult(error=f"Write denied: '{path}' is a protected system/credential file.")
 
@@ -1610,6 +1626,15 @@ class ShellFileOperations(FileOperations):
         operations, parse_error = parse_v4a_patch(patch_content)
         if parse_error:
             return PatchResult(error=f"Failed to parse patch: {parse_error}")
+
+        # Preflight parsed paths (including move destinations) before the
+        # parser reads content or applies any part of a multi-file patch.
+        for operation in operations:
+            for path in (operation.file_path, operation.new_path):
+                if path is not None:
+                    env_error = self._env_write_block_error(self._expand_path(path))
+                    if env_error:
+                        return PatchResult(error=env_error)
         
         # Apply operations
         result = apply_v4a_operations(operations, self)

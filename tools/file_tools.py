@@ -8,7 +8,7 @@ import os
 import threading
 from pathlib import Path
 
-from agent.file_safety import get_read_block_error
+from agent.file_safety import get_env_write_block_error, get_read_block_error
 from tools.binary_extensions import has_binary_extension
 from tools.file_operations import (
     ShellFileOperations,
@@ -450,6 +450,13 @@ def _get_lliam_config_resolved() -> str | None:
 def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None:
     """Return an error message if the path targets a sensitive system location."""
     try:
+        # Preserve the supplied basename as well as the resolved target: a
+        # .env symlink to an ordinary filename is still an environment file.
+        env_error = get_env_write_block_error(
+            str(_resolve_base_dir(task_id) / _expand_tilde(filepath))
+        )
+        if env_error:
+            return env_error
         resolved = str(_resolve_path_for_task(filepath, task_id))
     except (OSError, ValueError):
         resolved = filepath

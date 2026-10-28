@@ -102,6 +102,8 @@ def get_safe_write_roots() -> set[str]:
 
 def is_write_denied(path: str) -> bool:
     """Return True if path is blocked by the write denylist or safe root."""
+    if get_env_write_block_error(path):
+        return True
     home = os.path.realpath(os.path.expanduser("~"))
     resolved = os.path.realpath(os.path.expanduser(str(path)))
 
@@ -191,6 +193,38 @@ _BLOCKED_PROJECT_ENV_BASENAMES: set[str] = {
     ".env.staging",
     ".envrc",
 }
+
+
+def _is_project_env_basename(name: str, *, for_write: bool = False) -> bool:
+    """Share the read denylist, with all .env.* variants protected on write.
+
+    Reads retain the documented .env.example / .env.sample exceptions.
+    Writes also check case variants for case-insensitive filesystems.
+    """
+    if for_write:
+        name = name.casefold()
+    return name in _BLOCKED_PROJECT_ENV_BASENAMES or (
+        for_write and name.startswith(".env.")
+    )
+
+
+def get_env_write_block_error(path: str) -> Optional[str]:
+    """Refuse environment-file mutations without an approval override.
+
+    Check both the supplied name and the symlink target, including dangling
+    symlinks used to create files. Callers must anchor relative paths at the
+    file operation's cwd before calling this helper.
+    """
+    expanded = Path(path).expanduser()
+    if any(
+        _is_project_env_basename(name, for_write=True)
+        for name in (expanded.name, expanded.resolve().name)
+    ):
+        return (
+            f"Write denied: {path} is a protected environment file "
+            "and cannot be created, overwritten, or patched by file tools."
+        )
+    return None
 
 
 def get_read_block_error(path: str) -> Optional[str]:
@@ -328,7 +362,7 @@ def get_read_block_error(path: str) -> Optional[str]:
     # .env contents — .env.example is the documented-shape substitute. The
     # terminal tool can still ``cat .env``; this is defense-in-depth, not a
     # boundary (see module docstring).
-    if resolved.name in _BLOCKED_PROJECT_ENV_BASENAMES:
+    if _is_project_env_basename(resolved.name):
         return (
             f"Access denied: {path} is a secret-bearing environment file "
             "and cannot be read to prevent credential leakage. "
