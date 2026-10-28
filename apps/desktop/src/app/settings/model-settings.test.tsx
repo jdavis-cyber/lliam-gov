@@ -13,6 +13,7 @@ beforeAll(() => {
 const getGlobalModelInfo = vi.fn()
 const getGlobalModelOptions = vi.fn()
 const getAuxiliaryModels = vi.fn()
+const getMoaModels = vi.fn()
 const setModelAssignment = vi.fn()
 const getRecommendedDefaultModel = vi.fn()
 const setEnvVar = vi.fn()
@@ -24,6 +25,7 @@ vi.mock('@/lliam', () => ({
   getGlobalModelInfo: () => getGlobalModelInfo(),
   getGlobalModelOptions: () => getGlobalModelOptions(),
   getAuxiliaryModels: () => getAuxiliaryModels(),
+  getMoaModels: () => getMoaModels(),
   setModelAssignment: (body: unknown) => setModelAssignment(body),
   getRecommendedDefaultModel: (slug: string) => getRecommendedDefaultModel(slug),
   setEnvVar: (key: string, value: string) => setEnvVar(key, value),
@@ -36,6 +38,7 @@ vi.mock('@/store/onboarding', () => ({
 }))
 
 beforeEach(() => {
+  getMoaModels.mockResolvedValue(null)
   getGlobalModelInfo.mockResolvedValue({ provider: 'nous', model: 'hermes-4' })
   getGlobalModelOptions.mockResolvedValue({
     providers: [
@@ -80,6 +83,15 @@ async function renderModelSettings() {
 }
 
 describe('ModelSettings', () => {
+  it('loads the main and auxiliary models when optional MoA settings are unavailable', async () => {
+    getMoaModels.mockRejectedValueOnce(new Error('MoA unavailable'))
+
+    await renderModelSettings()
+
+    expect(await screen.findByRole('switch')).toBeTruthy()
+    expect(screen.getAllByText('hermes-4').length).toBeGreaterThan(0)
+    expect(screen.getByText('Vision')).toBeTruthy()
+  })
   it('loads the current main model and lists the full provider universe', async () => {
     await renderModelSettings()
 
@@ -87,15 +99,13 @@ describe('ModelSettings', () => {
     await waitFor(() => expect(getGlobalModelOptions).toHaveBeenCalled())
 
     // Open the provider Select — every provider from the full payload should be
-    // listed, including the unconfigured one with its "set up" hint.
+    // listed, including providers that still need credentials.
     const triggers = await screen.findAllByRole('combobox')
     fireEvent.click(triggers[0])
 
-    // "Nous" shows in both the trigger and the open list; the unconfigured
-    // provider + its setup hint are the unique signal of the full universe.
-    expect((await screen.findAllByText('Nous')).length).toBeGreaterThan(0)
-    expect(await screen.findByText(/DeepSeek/)).toBeTruthy()
-    expect(await screen.findByText(/set up/)).toBeTruthy()
+    expect(await screen.findByRole('option', { name: 'Nous' })).toBeTruthy()
+    const unconfiguredProvider = screen.getByRole('option', { name: 'DeepSeek' })
+    expect(unconfiguredProvider.getAttribute('aria-disabled')).not.toBe('true')
   })
 
   it('activates an unconfigured api_key provider inline by saving its key', async () => {

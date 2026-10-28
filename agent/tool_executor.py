@@ -294,6 +294,13 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
     # avoids rebuilding it per result inside the loop below).
     _tool_budget = _budget_for_agent(agent)
 
+    # LG-AZ-10 (additive): new turn → reset the PDP's per-turn mutating budget.
+    try:
+        from tools.tool_policy import pdp_begin_turn
+        pdp_begin_turn(getattr(agent, "session_id", None))
+    except Exception:
+        pass
+
     # ── Pre-flight: interrupt check ──────────────────────────────────
     if agent._interrupt_requested:
         print(f"{agent.log_prefix}⚡ Interrupt: skipping {num_tools} tool call(s)")
@@ -439,6 +446,43 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
                         middleware_trace=list(middleware_trace),
                     )
 
+        # LG-AZ-01/RM-08 (additive): tool-risk PDP verdict BEFORE the dispatch
+        # audit record — deny (fail-closed) and approval-required calls never
+        # dispatch, surfacing through the existing guardrail-block path.
+        if block_result is None:
+            try:
+                # Instance identity for records of a call the PDP denies
+                # before predispatch_gate runs (LG-QT-03). Never raises.
+                from agent.governance_audit_hooks import bind_session_actor
+                bind_session_actor(agent)
+            except Exception:
+                pass
+            try:
+                from tools.tool_policy import pdp_gate
+                _pdp_decision = pdp_gate(
+                    function_name, function_args,
+                    session_id=getattr(agent, "session_id", None),
+                    task_id=effective_task_id or "",
+                    tool_call_id=getattr(tool_call, "id", "") or "",
+                )
+            except Exception:
+                _pdp_decision = None
+            if _pdp_decision is not None:
+                block_result = agent._guardrail_block_result(_pdp_decision)
+                blocked_by_guardrail = True
+                _emit_terminal_post_tool_call(
+                    agent,
+                    function_name=function_name,
+                    function_args=function_args,
+                    result=block_result,
+                    effective_task_id=effective_task_id,
+                    tool_call_id=getattr(tool_call, "id", "") or "",
+                    status="blocked",
+                    error_type="guardrail_block",
+                    error_message=getattr(_pdp_decision, "message", None) or "Blocked by tool-risk policy",
+                    middleware_trace=list(middleware_trace),
+                )
+
         # LG-AU-02/09 (additive): pre-dispatch governance audit record for
         # calls that will execute; fail-closed block on audit-write failure
         # for the high-risk scope, surfaced as a guardrail-style block.
@@ -453,8 +497,11 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
                     effective_task_id=effective_task_id,
                     middleware_trace=list(middleware_trace),
                 )
-            except Exception:
-                _gov_decision = None
+            except Exception as _gov_exc:
+                # Strict posture: a raising gate denies (fail-closed); low-side
+                # keeps the non-blocking convention.
+                from agent.governance_gate_errors import gate_error_decision
+                _gov_decision = gate_error_decision(function_name, "predispatch_gate", _gov_exc)
             if _gov_decision is not None:
                 block_result = agent._guardrail_block_result(_gov_decision)
                 blocked_by_guardrail = True
@@ -894,6 +941,13 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
     """Execute tool calls sequentially (original behavior). Used for single calls or interactive tools."""
     # Resolve the context-scaled tool-output budget once per turn.
     _tool_budget = _budget_for_agent(agent)
+
+    # LG-AZ-10 (additive): new turn → reset the PDP's per-turn mutating budget.
+    try:
+        from tools.tool_policy import pdp_begin_turn
+        pdp_begin_turn(getattr(agent, "session_id", None))
+    except Exception:
+        pass
     for i, tool_call in enumerate(assistant_message.tool_calls, 1):
         # SAFETY: check interrupt BEFORE starting each tool.
         # If the user sent "stop" during a previous tool's execution,
@@ -984,6 +1038,31 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
 
         _execution_blocked = _block_msg is not None or _guardrail_block_decision is not None
 
+        # LG-AZ-01/RM-08 (additive): tool-risk PDP verdict BEFORE the dispatch
+        # audit record — deny (fail-closed) and approval-required calls never
+        # dispatch, surfacing through the existing guardrail-block path.
+        if not _execution_blocked:
+            try:
+                # Instance identity for records of a call the PDP denies
+                # before predispatch_gate runs (LG-QT-03). Never raises.
+                from agent.governance_audit_hooks import bind_session_actor
+                bind_session_actor(agent)
+            except Exception:
+                pass
+            try:
+                from tools.tool_policy import pdp_gate
+                _pdp_decision = pdp_gate(
+                    function_name, function_args,
+                    session_id=getattr(agent, "session_id", None),
+                    task_id=effective_task_id or "",
+                    tool_call_id=getattr(tool_call, "id", "") or "",
+                )
+            except Exception:
+                _pdp_decision = None
+            if _pdp_decision is not None:
+                _guardrail_block_decision = _pdp_decision
+                _execution_blocked = True
+
         # LG-AU-02/09 (additive): every about-to-execute call is recorded at
         # this chokepoint before dispatch; a high-risk call whose audit
         # record cannot be written comes back as a blocking decision
@@ -999,8 +1078,11 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     effective_task_id=effective_task_id,
                     middleware_trace=list(middleware_trace),
                 )
-            except Exception:
-                _gov_decision = None
+            except Exception as _gov_exc:
+                # Strict posture: a raising gate denies (fail-closed); low-side
+                # keeps the non-blocking convention.
+                from agent.governance_gate_errors import gate_error_decision
+                _gov_decision = gate_error_decision(function_name, "predispatch_gate", _gov_exc)
             if _gov_decision is not None:
                 _guardrail_block_decision = _gov_decision
                 _execution_blocked = True

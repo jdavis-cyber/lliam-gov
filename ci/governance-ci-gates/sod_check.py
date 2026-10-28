@@ -30,6 +30,11 @@ except Exception as e:  # pragma: no cover
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _today() -> datetime.date:
+    """Use the real date in operation; tests replace this clock locally."""
+    return datetime.date.today()
+
+
 def _emit(msg: str, *, error: bool = False) -> None:
     import os
     prefix = "::error::" if error and os.environ.get("GITHUB_ACTIONS") else ""
@@ -128,7 +133,7 @@ def classify_sod(roles: dict, bindings: dict) -> tuple[list[str], list[str]]:
     # deviation only WAIVES a conflict when it is complete AND unexpired; an
     # invalid one (missing owner/justification/review_by, or an expired/malformed
     # date) is recorded separately so the conflict stays blocking with a reason.
-    today = datetime.date.today()
+    today = _today()
     dev_index = set()
     dev_invalid: dict = {}
     for d in deviations:

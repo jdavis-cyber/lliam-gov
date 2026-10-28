@@ -111,6 +111,27 @@ critical_keys:
     activated_in: P0.x
     note: terminal.backend=local is CRITICAL drift for a CUI profile.
 
+  - key: terminal.container_cpu
+    expect: 2
+    severity: critical
+    control: LG-CH-05
+    activated_in: P0.x
+    note: sandbox CPU ceiling (--cpus); 0 means unbounded host CPU.
+
+  - key: terminal.container_memory
+    expect: 4096
+    severity: critical
+    control: LG-CH-05
+    activated_in: P0.x
+    note: sandbox memory ceiling in MB (--memory); 0 means unbounded host memory.
+
+  - key: terminal.docker_network
+    expect: false
+    severity: critical
+    control: LG-CH-05
+    activated_in: P0.x
+    note: sandbox runs --network=none; a bridged sandbox bypasses the squid egress enclave.
+
   - key: skills.disabled
     expect_contains: [godmode, sherlock, web-pentest]
     severity: critical

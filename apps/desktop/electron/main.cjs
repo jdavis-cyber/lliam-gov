@@ -38,10 +38,31 @@ const { canImportLliamCli, verifyLliamCli } = require('./backend-probes.cjs')
 const { createLinkTitleWindow } = require('./link-title-window.cjs')
 const { probeGatewayWebSocket } = require('./gateway-ws-probe.cjs')
 const { adoptServedDashboardToken } = require('./dashboard-token.cjs')
+
+// Per-launch tui_gateway secret (JER-73). Under strict posture the backend's
+// /api/ws refuses a peer that only presents the loopback session token, since
+// any local process can read that token from the served index.html. The secret
+// is minted here per backend spawn, pinned in the child's env (the backend
+// removes it from its own env on adoption), and handed to our renderer only
+// inside the ws URL — it is never served over HTTP. Because only this process
+// holds it, the backend binds the connection that presents it as the local
+// operator (local-operator:<os-user>@<host>), so HITL approvals made in the
+// renderer are accepted under require_authenticated_approver and recorded with
+// that principal. Low-side backends need no handshake but still bind it.
+function mintGatewaySecret() {
+  return crypto.randomBytes(32).toString('base64url')
+}
+
+function localGatewayWsUrl(port, authToken, gatewaySecret) {
+  return (
+    `ws://127.0.0.1:${port}/api/ws?token=${encodeURIComponent(authToken)}` +
+    `&gw_secret=${encodeURIComponent(gatewaySecret)}`
+  )
+}
 const { waitForDashboardPortAnnouncement } = require('./backend-ready.cjs')
 const { serializeJsonBody, setJsonRequestHeaders } = require('./oauth-net-request.cjs')
 const { fetchMarketplaceThemes, searchMarketplaceThemes } = require('./vscode-marketplace.cjs')
-const { buildDesktopBackendEnv, normalizeLliamHomeRoot } = require('./backend-env.cjs')
+const { buildDesktopBackendEnv, buildDesktopBackendPath, normalizeLliamHomeRoot } = require('./backend-env.cjs')
 const { readWindowsUserEnvVar } = require('./windows-user-env.cjs')
 const { readWslWindowsClipboardImage } = require('./wsl-clipboard-image.cjs')
 const { nativeOverlayWidth: computeNativeOverlayWidth } = require('./titlebar-overlay-width.cjs')
@@ -58,21 +79,7 @@ const {
 } = require('./update-relaunch.cjs')
 const { gitRootForIpc } = require('./git-root.cjs')
 const { addWorktree, listBranches, listWorktrees, removeWorktree, switchBranch } = require('./git-worktree-ops.cjs')
-const {
-  fileDiffVsHead,
-  repoStatus,
-  reviewCommit,
-  reviewCommitContext,
-  reviewCreatePr,
-  reviewDiff,
-  reviewList,
-  reviewPush,
-  reviewRevParse,
-  reviewRevert,
-  reviewShipInfo,
-  reviewStage,
-  reviewUnstage
-} = require('./git-review-ops.cjs')
+const { fileDiffVsHead, repoStatus } = require('./git-status-ops.cjs')
 const { scanGitRepos } = require('./git-repo-scan.cjs')
 const { OFFICIAL_REPO_HTTPS_URL, isOfficialSshRemote } = require('./update-remote.cjs')
 const { resolveBehindCount, shouldCountCommits } = require('./update-count.cjs')
@@ -282,8 +289,9 @@ if (INSTALL_STAMP) {
 // scripts/install.ps1's $HermesHome and scripts/install.sh's $HERMES_HOME.
 //
 // Defaults:
-//   Windows: %LOCALAPPDATA%\hermes (matches install.ps1)
-//   macOS / Linux: ~/.hermes (matches install.sh)
+//   Fresh Windows installs: %LOCALAPPDATA%\lliam
+//   Fresh macOS / Linux installs: ~/.lliam
+// Existing legacy homes remain in place; explicit home overrides take priority.
 //
 // Special case for Windows: if the user has a legacy ~/.hermes directory
 // (e.g., from a prior pip install or a manual setup) AND no
@@ -294,6 +302,7 @@ if (INSTALL_STAMP) {
 // HERMES_HOME beneath the throwaway userData dir so a fresh-install run never
 // touches the user's real ~/.hermes / %LOCALAPPDATA%\hermes.
 function resolveLliamHome() {
+  if (process.env.LLIAM_HOME) return normalizeLliamHomeRoot(process.env.LLIAM_HOME)
   if (process.env.HERMES_HOME) return normalizeLliamHomeRoot(process.env.HERMES_HOME)
   if (USER_DATA_OVERRIDE) return path.join(path.resolve(USER_DATA_OVERRIDE), 'hermes-home')
   if (IS_WINDOWS) {
@@ -303,18 +312,20 @@ function resolveLliamHome() {
     // backend silently falls back to %LOCALAPPDATA%\hermes and reports "No
     // inference provider configured" despite a valid configured home (#45471).
     // Consult the live User-scoped registry value before the default below.
-    const fromRegistry = readWindowsUserEnvVar('HERMES_HOME')
+    const fromRegistry = readWindowsUserEnvVar('LLIAM_HOME') || readWindowsUserEnvVar('HERMES_HOME')
     if (fromRegistry) return normalizeLliamHomeRoot(fromRegistry)
   }
   if (IS_WINDOWS && process.env.LOCALAPPDATA) {
     const localappdata = path.join(process.env.LOCALAPPDATA, 'hermes')
+    const canonical = path.join(process.env.LOCALAPPDATA, 'lliam')
     const legacy = path.join(app.getPath('home'), '.hermes')
     // Migrate transparently to LOCALAPPDATA, but honour an existing legacy
     // ~/.hermes setup (no LOCALAPPDATA install yet) so users don't lose state.
     if (!directoryExists(localappdata) && directoryExists(legacy)) return legacy
-    return localappdata
+    return directoryExists(localappdata) ? localappdata : canonical
   }
-  return path.join(app.getPath('home'), '.hermes')
+  const legacy = path.join(app.getPath('home'), '.hermes')
+  return directoryExists(legacy) ? legacy : path.join(app.getPath('home'), '.lliam')
 }
 
 const HERMES_HOME = resolveLliamHome()
@@ -359,11 +370,11 @@ const DESKTOP_WINDOW_STATE_PATH = path.join(app.getPath('userData'), 'window-sta
 // active-profile.json records which Lliam-GOV profile the desktop launches its
 // local backend as. When set, startLliam() passes `lliam-gov --profile <name>
 // dashboard …`, which deterministically pins HERMES_HOME (see
-// _apply_profile_override in hermes_cli/main.py) and bypasses the sticky
+// _apply_profile_override in lliam_cli/main.py) and bypasses the sticky
 // ~/.hermes/active_profile file. Unset (null) preserves the legacy behavior:
 // no --profile flag, so the backend honors active_profile / default.
 const DESKTOP_PROFILE_CONFIG_PATH = path.join(app.getPath('userData'), 'active-profile.json')
-// Mirrors hermes_cli.profiles._PROFILE_ID_RE so we never hand the backend a
+// Mirrors lliam_cli.profiles._PROFILE_ID_RE so we never hand the backend a
 // value its profile resolver would reject and exit on.
 const PROFILE_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
 // Branch we track for self-update. The GUI work has merged to main, so this
@@ -1282,7 +1293,12 @@ function findOnPath(command) {
     return command
   }
 
-  const pathEntries = String(process.env.PATH || '')
+  const pathEntries = buildDesktopBackendPath({
+    lliamHome: HERMES_HOME,
+    userHome: app.getPath('home'),
+    venvRoot: VENV_ROOT,
+    currentPath: process.env.PATH || ''
+  })
     .split(path.delimiter)
     .filter(Boolean)
   // On Windows, try PATHEXT extensions BEFORE the bare (empty-extension) name.
@@ -1313,7 +1329,7 @@ function unwrapWindowsVenvLliamCommand(command, dashboardArgs) {
   if (!IS_WINDOWS || !command || isCommandScript(command)) return null
 
   const resolved = path.resolve(String(command))
-  if (!/^hermes(?:\.exe)?$/i.test(path.basename(resolved))) return null
+  if (!/^lliam-gov(?:\.exe)?$/i.test(path.basename(resolved))) return null
 
   const scriptsDir = path.dirname(resolved)
   if (path.basename(scriptsDir).toLowerCase() !== 'scripts') return null
@@ -1326,10 +1342,11 @@ function unwrapWindowsVenvLliamCommand(command, dashboardArgs) {
   return {
     label: `existing Lliam-GOV no-console Python at ${python}`,
     command: python,
-    args: ['-m', 'hermes_cli.main', ...dashboardArgs],
+    args: ['-m', 'lliam_cli.main', ...dashboardArgs],
     bootstrap: false,
     env: buildDesktopBackendEnv({
-      hermesHome: HERMES_HOME,
+      lliamHome: HERMES_HOME,
+      userHome: app.getPath('home'),
       pythonPathEntries: [...(directoryExists(root) ? [root] : []), ...getVenvSitePackagesEntries(venvRoot)],
       venvRoot
     }),
@@ -1375,7 +1392,7 @@ function looksLikeDesktopAppBinary(commandPath) {
 }
 
 function isLliamSourceRoot(root) {
-  return directoryExists(root) && fileExists(path.join(root, 'hermes_cli', 'main.py'))
+  return directoryExists(root) && fileExists(path.join(root, 'lliam_cli', 'main.py'))
 }
 
 function findPythonForRoot(root) {
@@ -1604,7 +1621,7 @@ function applyWindowsNoConsoleSpawnHints(backend) {
 
   const usesLliamModule =
     backend.kind === 'python' ||
-    (Array.isArray(backend.args) && backend.args[0] === '-m' && backend.args[1] === 'hermes_cli.main')
+    (Array.isArray(backend.args) && backend.args[0] === '-m' && backend.args[1] === 'lliam_cli.main')
 
   if (!usesLliamModule) return backend
 
@@ -1675,30 +1692,6 @@ function resolveGitBinary() {
 
   _gitBinaryCache = candidates.find(fileExists) || findOnPath('git') || 'git'
   return _gitBinaryCache
-}
-
-// resolveGhBinary — locate the GitHub CLI. GUI-launched apps get a minimal PATH
-// that omits Homebrew (/opt/homebrew/bin, /usr/local/bin) where `gh` usually
-// lives, so a bare spawn('gh') ENOENTs even though `gh` works in the user's
-// terminal. Check the common install locations first, then PATH. Cached.
-let _ghBinaryCache = null
-function resolveGhBinary() {
-  if (_ghBinaryCache) return _ghBinaryCache
-
-  const candidates = []
-
-  if (IS_WINDOWS) {
-    candidates.push(path.join(process.env['ProgramFiles'] || 'C:\\Program Files', 'GitHub CLI', 'gh.exe'))
-    if (process.env.LOCALAPPDATA) {
-      candidates.push(path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links', 'gh.exe'))
-    }
-  } else {
-    const home = app.getPath('home')
-    candidates.push('/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh', path.join(home, '.local', 'bin', 'gh'))
-  }
-
-  _ghBinaryCache = candidates.find(fileExists) || findOnPath('gh') || 'gh'
-  return _ghBinaryCache
 }
 
 function recentLliamLog() {
@@ -2219,6 +2212,7 @@ async function applyUpdates(opts = {}) {
       env: {
         ...process.env,
         HERMES_HOME,
+        LLIAM_HOME: HERMES_HOME,
         PATH: pathWithLliamManagedNode(venvBin)
       },
       detached: true,
@@ -2278,6 +2272,7 @@ async function handOffWindowsBootstrapRecovery(reason) {
     env: {
       ...process.env,
       HERMES_HOME,
+      LLIAM_HOME: HERMES_HOME,
       PATH: pathWithLliamManagedNode(venvBin)
     },
     detached: true,
@@ -2369,6 +2364,7 @@ async function applyUpdatesPosixInApp() {
   // Node lives directly under %LOCALAPPDATA%\hermes\node, not node\bin.
   const env = {
     HERMES_HOME,
+    LLIAM_HOME: HERMES_HOME,
     PATH: pathWithLliamManagedNode(path.join(updateRoot, 'venv', 'bin'))
   }
 
@@ -2842,9 +2838,10 @@ function createPythonBackend(root, label, dashboardArgs, options = {}) {
     kind: 'python',
     label,
     command,
-    args: ['-m', 'hermes_cli.main', ...dashboardArgs],
+    args: ['-m', 'lliam_cli.main', ...dashboardArgs],
     env: buildDesktopBackendEnv({
-      hermesHome: HERMES_HOME,
+      lliamHome: HERMES_HOME,
+      userHome: app.getPath('home'),
       pythonPathEntries: [root, ...getVenvSitePackagesEntries(venvRoot)],
       venvRoot
     }),
@@ -2866,9 +2863,10 @@ function createActiveBackend(dashboardArgs) {
     kind: 'python',
     label: `Lliam-GOV at ${ACTIVE_HERMES_ROOT}`,
     command,
-    args: ['-m', 'hermes_cli.main', ...dashboardArgs],
+    args: ['-m', 'lliam_cli.main', ...dashboardArgs],
     env: buildDesktopBackendEnv({
-      hermesHome: HERMES_HOME,
+      lliamHome: HERMES_HOME,
+      userHome: app.getPath('home'),
       pythonPathEntries: [ACTIVE_HERMES_ROOT, ...getVenvSitePackagesEntries(VENV_ROOT)],
       venvRoot: VENV_ROOT
     }),
@@ -2946,36 +2944,39 @@ function resolveLliamBackend(dashboardArgs) {
       // entry-point pointing at a deleted interpreter) still resolves
       // via findOnPath but explodes on spawn -- the user then sees a
       // dead backend instead of the first-launch installer. The cheap
-      // `--version` probe (see backend-probes.cjs) catches that case
+      // `--help` probe (see backend-probes.cjs) catches that case
       // and lets the resolver fall through to step 6 / bootstrap.
       const shellForProbe = isCommandScript(lliamCommand)
-      if (verifyLliamCli(lliamCommand, { shell: shellForProbe })) {
+      if (verifyLliamCli(lliamCommand, {
+        shell: shellForProbe,
+        env: buildDesktopBackendEnv({ lliamHome: HERMES_HOME, userHome: app.getPath('home') })
+      })) {
         return (
           unwrapWindowsVenvLliamCommand(lliamCommand, dashboardArgs) || {
             label: `existing Lliam-GOV CLI at ${lliamCommand}`,
             command: lliamCommand,
             args: dashboardArgs,
             bootstrap: false,
-            env: {},
+            env: buildDesktopBackendEnv({ lliamHome: HERMES_HOME, userHome: app.getPath('home') }),
             kind: 'command',
             shell: shellForProbe
           }
         )
       }
       rememberLog(
-        `Ignoring existing Lliam-GOV CLI at ${lliamCommand}: --version probe failed; falling through to bootstrap.`
+        `Ignoring existing Lliam-GOV CLI at ${lliamCommand}: --help probe failed; falling through to bootstrap.`
       )
     }
   }
 
-  // 5. Last-ditch: pip-installed hermes_cli module via system Python.
+  // 5. Last-ditch: pip-installed lliam_cli module via system Python.
   //    Same rationale as #4 -- the user installed this; we use it but don't
   //    take ownership.
   const python = findSystemPython()
   if (python) {
     // Same smoke-test rationale as step 4: a system Python in the
     // SUPPORTED_VERSIONS range can be registered (PEP 514) without
-    // having hermes_cli installed -- common on dev boxes that have
+    // having lliam_cli installed -- common on dev boxes that have
     // a python.org install from prior unrelated work. Returning that
     // backend hands the spawn step a guaranteed ModuleNotFoundError.
     // Verify the import works before trusting the candidate; on
@@ -2984,15 +2985,15 @@ function resolveLliamBackend(dashboardArgs) {
     if (canImportLliamCli(python)) {
       return applyWindowsNoConsoleSpawnHints({
         kind: 'python',
-        label: `installed hermes_cli module via ${python}`,
+        label: `installed lliam_cli module via ${python}`,
         command: toNoConsolePython(python),
-        args: ['-m', 'hermes_cli.main', ...dashboardArgs],
+        args: ['-m', 'lliam_cli.main', ...dashboardArgs],
         bootstrap: false,
         env: {},
         shell: false
       })
     }
-    rememberLog(`Ignoring system Python ${python}: hermes_cli is not importable; falling through to bootstrap.`)
+    rememberLog(`Ignoring system Python ${python}: lliam_cli is not importable; falling through to bootstrap.`)
   }
 
   // 6. Nothing usable yet -- signal the bootstrap runner that we need to
@@ -3071,7 +3072,7 @@ async function ensureRuntime(backend) {
       installStamp: backend.installStamp,
       activeRoot: backend.activeRoot,
       sourceRepoRoot: SOURCE_REPO_ROOT,
-      hermesHome: HERMES_HOME,
+      lliamHome: HERMES_HOME,
       logRoot: path.join(HERMES_HOME, 'logs'),
       abortSignal: bootstrapAbortController.signal,
       onEvent: ev => {
@@ -5239,8 +5240,9 @@ async function spawnPoolBackend(profile, entry) {
   }
 
   const token = crypto.randomBytes(32).toString('base64url')
+  const gatewaySecret = mintGatewaySecret()
   // --profile wins over the inherited HERMES_HOME env (see _apply_profile_override
-  // step 3 in hermes_cli/main.py), so the child re-homes to this profile.
+  // step 3 in lliam_cli/main.py), so the child re-homes to this profile.
   // --port 0: the OS assigns an ephemeral port; the child announces it on stdout.
   const dashboardArgs = ['--profile', profile, 'dashboard', '--no-open', '--host', '127.0.0.1', '--port', '0']
   const backend = await ensureRuntime(resolveLliamBackend(dashboardArgs))
@@ -5258,6 +5260,7 @@ async function spawnPoolBackend(profile, entry) {
       env: {
         ...process.env,
         HERMES_HOME,
+        LLIAM_HOME: HERMES_HOME,
         ...backend.env,
         // Pin the gateway's tool/terminal cwd to the same directory we chose for
         // the child process. Inherited TERMINAL_CWD (or a stale config bridge)
@@ -5266,6 +5269,7 @@ async function spawnPoolBackend(profile, entry) {
         // rename R.8a: set the new LLIAM_ names (the Python readers resolve
         // LLIAM_ first, legacy HERMES_ as a transition fallback).
         LLIAM_DASHBOARD_SESSION_TOKEN: token,
+        LLIAM_TUI_GATEWAY_SECRET: gatewaySecret,
         // Marks this dashboard backend as desktop-spawned so it runs the cron
         // scheduler tick loop (the gateway isn't running under the app).
         LLIAM_DESKTOP: '1',
@@ -5326,7 +5330,7 @@ async function spawnPoolBackend(profile, entry) {
     authMode: 'token',
     token: authToken,
     profile,
-    wsUrl: `ws://127.0.0.1:${port}/api/ws?token=${encodeURIComponent(authToken)}`,
+    wsUrl: localGatewayWsUrl(port, authToken, gatewaySecret),
     logs: lliamLog.slice(-80),
     ...getWindowState()
   }
@@ -5460,6 +5464,7 @@ async function startLliam() {
     await waitForUpdateToFinish()
 
     const token = crypto.randomBytes(32).toString('base64url')
+    const gatewaySecret = mintGatewaySecret()
     // --port 0: the OS assigns an ephemeral port; the child announces it on stdout.
     const dashboardArgs = ['dashboard', '--no-open', '--host', '127.0.0.1', '--port', '0']
     // Pin the desktop's chosen profile via the global --profile flag. This is
@@ -5496,11 +5501,13 @@ async function startLliam() {
           // directories. install.ps1 sets HERMES_HOME via setx; the desktop
           // can't reliably do that, so we set it inline for every spawn.
           HERMES_HOME,
+          LLIAM_HOME: HERMES_HOME,
           ...backend.env,
           TERMINAL_CWD: lliamCwd,
           // rename R.8a: set the new LLIAM_ names (Python readers resolve
           // LLIAM_ first, legacy HERMES_ as a transition fallback).
           LLIAM_DASHBOARD_SESSION_TOKEN: token,
+          LLIAM_TUI_GATEWAY_SECRET: gatewaySecret,
           // Marks this dashboard backend as desktop-spawned so it runs the cron
           // scheduler tick loop (the gateway isn't running under the app).
           LLIAM_DESKTOP: '1',
@@ -5593,7 +5600,7 @@ async function startLliam() {
       source: 'local',
       authMode: 'token',
       token: authToken,
-      wsUrl: `ws://127.0.0.1:${port}/api/ws?token=${encodeURIComponent(authToken)}`,
+      wsUrl: localGatewayWsUrl(port, authToken, gatewaySecret),
       logs: lliamLog.slice(-80),
       ...getWindowState()
     }
@@ -7005,41 +7012,9 @@ ipcMain.handle('lliam:git:branchList', async (_event, repoPath) => listBranches(
 // hides cleanly rather than erroring.
 ipcMain.handle('lliam:git:repoStatus', async (_event, repoPath) => repoStatus(repoPath, resolveGitBinary()))
 
-// Codex-style review pane: list changed files for a scope, fetch one file's
-// unified diff, and stage / unstage / revert. Reads return empty on failure;
-// mutations reject so the renderer can toast.
-ipcMain.handle('lliam:git:review:list', async (_event, repoPath, scope, baseRef) =>
-  reviewList(repoPath, scope, baseRef, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:diff', async (_event, repoPath, filePath, scope, baseRef, staged) =>
-  reviewDiff(repoPath, filePath, scope, baseRef, staged, resolveGitBinary())
-)
 // Working-tree-vs-HEAD diff for one file (the preview's "show the diff" view).
 ipcMain.handle('lliam:git:fileDiff', async (_event, repoPath, filePath) =>
   fileDiffVsHead(repoPath, filePath, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:stage', async (_event, repoPath, filePath) =>
-  reviewStage(repoPath, filePath ?? null, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:unstage', async (_event, repoPath, filePath) =>
-  reviewUnstage(repoPath, filePath ?? null, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:revert', async (_event, repoPath, filePath) =>
-  reviewRevert(repoPath, filePath ?? null, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:revParse', async (_event, repoPath, ref) =>
-  reviewRevParse(repoPath, ref, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:commit', async (_event, repoPath, message, push) =>
-  reviewCommit(repoPath, message, Boolean(push), resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:commitContext', async (_event, repoPath) =>
-  reviewCommitContext(repoPath, resolveGitBinary())
-)
-ipcMain.handle('lliam:git:review:push', async (_event, repoPath) => reviewPush(repoPath, resolveGitBinary()))
-ipcMain.handle('lliam:git:review:shipInfo', async (_event, repoPath) => reviewShipInfo(repoPath, resolveGhBinary()))
-ipcMain.handle('lliam:git:review:createPr', async (_event, repoPath) =>
-  reviewCreatePr(repoPath, resolveGitBinary(), resolveGhBinary())
 )
 
 // Repo-first project discovery: scan bounded roots for git repos (pure fs walk,
@@ -7147,14 +7122,14 @@ ipcMain.handle('lliam:updates:branch:set', async (_event, name) => {
 })
 
 // Resolve the canonical Lliam-GOV version (the one `release.py` bumps in
-// hermes_cli/__init__.py + pyproject.toml) so the desktop About panel shows the
+// lliam_cli/__init__.py + pyproject.toml) so the desktop About panel shows the
 // real Lliam-GOV version instead of the Electron app's own package.json version,
 // which historically drifted (stuck at 0.0.2). Falls back to app.getVersion()
 // when the source tree can't be read (e.g. a packaged build without the repo).
 function resolveLliamVersion() {
   try {
     const root = resolveUpdateRoot()
-    const initPath = path.join(root, 'hermes_cli', '__init__.py')
+    const initPath = path.join(root, 'lliam_cli', '__init__.py')
     if (fileExists(initPath)) {
       const raw = fs.readFileSync(initPath, 'utf8')
       const match = raw.match(/__version__\s*=\s*["']([^"']+)["']/)
@@ -7197,7 +7172,7 @@ ipcMain.handle('lliam:version', async () => ({
 // CLI exactly: GUI only, Lite (keep user data), Full. We ask the agent to do
 // the actual removal via `lliam-gov uninstall …` so the cross-platform PATH /
 // registry / service / node-symlink cleanup all lives in one place
-// (hermes_cli/uninstall.py + hermes_cli/gui_uninstall.py).
+// (lliam_cli/uninstall.py + lliam_cli/gui_uninstall.py).
 //
 // getUninstallSummary() shells out to `--gui-summary` (a fast, no-side-effect
 // JSON probe) so the UI can gate options on what's actually installed — and
@@ -7240,10 +7215,10 @@ async function getUninstallSummary() {
     try {
       const child = spawn(
         py,
-        ['-m', 'hermes_cli.main', 'uninstall', '--gui-summary'],
+        ['-m', 'lliam_cli.main', 'uninstall', '--gui-summary'],
         hiddenWindowsChildOptions({
           cwd: agentRoot,
-          env: { ...process.env, HERMES_HOME, NO_COLOR: '1' },
+          env: { ...process.env, HERMES_HOME, LLIAM_HOME: HERMES_HOME, NO_COLOR: '1' },
           stdio: ['ignore', 'pipe', 'ignore']
         })
       )
@@ -7292,7 +7267,7 @@ async function runDesktopUninstall(mode) {
   // Interpreter choice (Finding 3): lite/full rmtree the venv that holds the
   // running python.exe. On Windows a running .exe is mandatory-locked, so the
   // rmtree must NOT be driven by the venv's own interpreter — use a system
-  // Python with PYTHONPATH=<agentRoot> so `import hermes_cli` resolves from
+  // Python with PYTHONPATH=<agentRoot> so `import lliam_cli` resolves from
   // source while the venv is torn down. gui-only doesn't touch the venv, so the
   // venv python is fine there. If no system Python exists (the Windows edge
   // case), fall back to the venv python — gui-only is unaffected; lite/full may
@@ -7335,7 +7310,7 @@ async function runDesktopUninstall(mode) {
     agentRoot: ACTIVE_HERMES_ROOT,
     uninstallArgs,
     appPath: removeBundle,
-    hermesHome: HERMES_HOME
+    lliamHome: HERMES_HOME
   }
 
   let scriptPath

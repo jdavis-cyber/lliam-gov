@@ -15,8 +15,6 @@ import {
   DropdownMenuSubTrigger
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { LliamGateway } from '@/lliam'
-import { getGlobalModelOptions, getMoaModels } from '@/lliam'
 import { useI18n } from '@/i18n'
 import {
   currentPickerSelection,
@@ -25,6 +23,8 @@ import {
   reasoningEffortLabel
 } from '@/lib/model-status-label'
 import { cn } from '@/lib/utils'
+import type { LliamGateway } from '@/lliam'
+import { getGlobalModelOptions, getMoaModels } from '@/lliam'
 import { $modelPresets, applyModelPreset, modelPresetKey } from '@/store/model-presets'
 import {
   $visibleModels,

@@ -95,21 +95,7 @@ contextBridge.exposeInMainWorld('lliamDesktop', {
     branchList: repoPath => ipcRenderer.invoke('lliam:git:branchList', repoPath),
     repoStatus: repoPath => ipcRenderer.invoke('lliam:git:repoStatus', repoPath),
     fileDiff: (repoPath, filePath) => ipcRenderer.invoke('lliam:git:fileDiff', repoPath, filePath),
-    scanRepos: (roots, options) => ipcRenderer.invoke('lliam:git:scanRepos', roots, options),
-    review: {
-      list: (repoPath, scope, baseRef) => ipcRenderer.invoke('lliam:git:review:list', repoPath, scope, baseRef),
-      diff: (repoPath, filePath, scope, baseRef, staged) =>
-        ipcRenderer.invoke('lliam:git:review:diff', repoPath, filePath, scope, baseRef, staged),
-      stage: (repoPath, filePath) => ipcRenderer.invoke('lliam:git:review:stage', repoPath, filePath),
-      unstage: (repoPath, filePath) => ipcRenderer.invoke('lliam:git:review:unstage', repoPath, filePath),
-      revert: (repoPath, filePath) => ipcRenderer.invoke('lliam:git:review:revert', repoPath, filePath),
-      revParse: (repoPath, ref) => ipcRenderer.invoke('lliam:git:review:revParse', repoPath, ref),
-      commit: (repoPath, message, push) => ipcRenderer.invoke('lliam:git:review:commit', repoPath, message, push),
-      commitContext: repoPath => ipcRenderer.invoke('lliam:git:review:commitContext', repoPath),
-      push: repoPath => ipcRenderer.invoke('lliam:git:review:push', repoPath),
-      shipInfo: repoPath => ipcRenderer.invoke('lliam:git:review:shipInfo', repoPath),
-      createPr: repoPath => ipcRenderer.invoke('lliam:git:review:createPr', repoPath)
-    }
+    scanRepos: (roots, options) => ipcRenderer.invoke('lliam:git:scanRepos', roots, options)
   },
   terminal: {
     dispose: id => ipcRenderer.invoke('lliam:terminal:dispose', id),

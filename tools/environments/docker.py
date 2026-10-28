@@ -5,6 +5,7 @@ configurable resource limits (CPU, memory, disk), and optional filesystem
 persistence via bind mounts.
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -368,6 +369,268 @@ def _build_security_args(run_as_host_user: bool, run_exec: bool = False) -> list
     return args + list(_PRIVDROP_CAP_ARGS)
 
 
+# ---------------------------------------------------------------------------
+# Strict-posture hardening lock
+# ---------------------------------------------------------------------------
+# Under ``security.posture: strict`` the hardening above must not be undone by
+# user-supplied ``docker_extra_args`` (appended last, so docker would honour a
+# later flag over ours) or by bind-mounting sensitive host paths. Violations
+# REFUSE container start with DockerHardeningError; nothing is silently
+# dropped. Low-side (non-strict) behaviour is unchanged.
+
+
+class DockerHardeningError(ValueError):
+    """Strict posture refused a docker run configuration."""
+
+
+# Flags refused under strict regardless of value: each one restores privilege,
+# reaches host devices, swaps the isolation runtime, or overrides a resource
+# ceiling / limit set above.
+_STRICT_DENIED_FLAGS: dict[str, str] = {
+    "--privileged": "privileged mode disables every container isolation control",
+    "--cap-add": "adds Linux capabilities back after --cap-drop ALL",
+    "--security-opt": "can disable seccomp/AppArmor/SELinux or no-new-privileges",
+    "--device": "passes a host device into the sandbox",
+    "--device-cgroup-rule": "grants access to host device classes",
+    "--gpus": "passes host GPU devices into the sandbox",
+    "--volumes-from": "inherits another container's mounts",
+    "--runtime": "replaces the container runtime (isolation boundary)",
+    "--isolation": "replaces the container isolation technology",
+    "--cgroup-parent": "moves the sandbox out of its resource-limited cgroup",
+    "--pids-limit": "overrides the sandbox PID limit",
+    "--memory": "overrides the sandbox memory ceiling (terminal.container_memory)",
+    "--memory-swap": "overrides the sandbox memory ceiling",
+    "--memory-reservation": "overrides the sandbox memory ceiling",
+    "--kernel-memory": "overrides the sandbox memory ceiling",
+    "--oom-kill-disable": "lets the sandbox exhaust host memory",
+    "--cpus": "overrides the sandbox CPU ceiling (terminal.container_cpu)",
+    "--cpu-quota": "overrides the sandbox CPU ceiling",
+    "--cpu-period": "overrides the sandbox CPU ceiling",
+    "--cpuset-cpus": "overrides the sandbox CPU ceiling",
+    "--cpu-rt-runtime": "grants real-time CPU scheduling",
+    "--cpu-rt-period": "grants real-time CPU scheduling",
+    "--storage-opt": "overrides the sandbox disk quota",
+    "--publish": "exposes sandbox ports on the host network",
+    "--publish-all": "exposes sandbox ports on the host network",
+}
+
+# Namespace flags refused when they join a host (or another container's)
+# namespace. --network is stricter: only "none" is accepted, because the
+# network mode is owned by terminal.docker_network.
+_STRICT_NAMESPACE_FLAGS = frozenset({"--pid", "--ipc", "--uts", "--userns", "--cgroupns"})
+
+_LONG_FLAG_ALIASES = {"--net": "--network"}
+
+# docker run single-letter flags. Value-taking letters consume the rest of the
+# token (``-v/a:/b``) or the next token; the others are booleans that may be
+# bundled (``-dit``).
+_SHORT_FLAG_ALIASES = {
+    "a": "--attach", "c": "--cpu-shares", "d": "--detach", "e": "--env",
+    "h": "--hostname", "i": "--interactive", "l": "--label", "m": "--memory",
+    "p": "--publish", "P": "--publish-all", "q": "--quiet", "t": "--tty",
+    "u": "--user", "v": "--volume", "w": "--workdir",
+}
+_SHORT_VALUE_FLAGS = frozenset("acehlmpuvw")
+
+# Flags whose VALUE is inspected (all others are judged on name alone).
+_VALUE_CHECKED_FLAGS = _STRICT_NAMESPACE_FLAGS | {"--network", "--volume", "--mount"}
+
+
+def _strict_posture_active() -> bool:
+    """True when the effective Lliam-GOV config is ``security.posture: strict``."""
+    try:
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
+
+        return _pr.is_strict(_cfg.load_config())
+    except Exception:
+        logger.warning(
+            "Docker: could not resolve security posture; strict sandbox lock not applied",
+            exc_info=True,
+        )
+        return False
+
+
+def _sensitive_host_paths() -> tuple[list[str], list[str]]:
+    """Return ``(exact, subtrees)`` host paths a strict sandbox may not bind.
+
+    A bind source is refused when it IS one of these, sits INSIDE one of the
+    subtrees, or is an ANCESTOR of either (``/``, ``/var``, ``~``, the Lliam
+    home), since mounting a parent exposes the child.
+    """
+    home = os.path.expanduser("~")
+    subtrees = [
+        "/etc", "/proc", "/sys", "/dev", "/boot", "/run", "/var/run",
+        "/var/lib/docker", "/var/lib/containerd", "/var/lib/kubelet",
+        "/root", "/usr", "/bin", "/sbin", "/lib", "/lib64",
+        os.path.join(home, ".ssh"),
+        os.path.join(home, ".aws"),
+        os.path.join(home, ".gnupg"),
+        os.path.join(home, ".kube"),
+        os.path.join(home, ".docker"),
+        os.path.join(home, ".azure"),
+        os.path.join(home, ".config", "gh"),
+        os.path.join(home, ".config", "gcloud"),
+    ]
+    exact = [
+        os.path.join(home, ".netrc"),
+        os.path.join(home, ".pgpass"),
+        os.path.join(home, ".npmrc"),
+        os.path.join(home, ".pypirc"),
+        os.path.join(home, ".git-credentials"),
+    ]
+    try:
+        from lliam_constants import get_default_lliam_root, get_lliam_home
+
+        for base in {str(get_lliam_home()), str(get_default_lliam_root())}:
+            subtrees.extend([os.path.join(base, "keys"), os.path.join(base, "mcp-tokens")])
+            exact.extend([
+                os.path.join(base, ".env"),
+                os.path.join(base, ".anthropic_oauth.json"),
+            ])
+    except Exception:
+        pass
+    norm = lambda p: os.path.realpath(os.path.normpath(p))  # noqa: E731
+    return [norm(p) for p in exact], [norm(p) for p in subtrees]
+
+
+def _is_within(path: str, base: str) -> bool:
+    return path == base or path.startswith(base.rstrip(os.sep) + os.sep)
+
+
+def _sensitive_mount_reason(source: str) -> Optional[str]:
+    """Return why binding host *source* is refused under strict, else None."""
+    if not source:
+        return None
+    expanded = os.path.abspath(os.path.expanduser(source))
+    candidates = {os.path.normpath(expanded)}
+    try:
+        candidates.add(os.path.realpath(expanded))
+    except OSError:
+        pass
+    exact, subtrees = _sensitive_host_paths()
+    for cand in candidates:
+        if cand == os.sep:
+            return "binds the host root filesystem"
+        if cand.endswith(".sock"):
+            return "binds a host socket (container runtime / daemon control)"
+        for sub in subtrees:
+            if _is_within(cand, sub):
+                return f"binds sensitive host path {sub}"
+            if _is_within(sub, cand):
+                return f"binds a parent of sensitive host path {sub}"
+        for path in exact:
+            if cand == path or _is_within(path, cand):
+                return f"exposes sensitive host file {path}"
+    return None
+
+
+def _volume_spec_source(spec: str) -> Optional[str]:
+    """Host source of a ``-v`` spec, or None for named/anonymous volumes."""
+    spec = (spec or "").strip()
+    if ":" not in spec:
+        return None  # anonymous volume ("/data") — no host path
+    source = spec.split(":", 1)[0]
+    if source.startswith(("/", "~", ".")):
+        return source
+    return None  # named volume
+
+
+def _mount_spec_violation(spec: str) -> Optional[str]:
+    """Return why a ``--mount`` spec is refused under strict, else None."""
+    fields: dict[str, str] = {}
+    volume_opts: list[str] = []
+    for part in (spec or "").split(","):
+        key, _, val = part.strip().partition("=")
+        key = key.strip().strip('"').lower()
+        val = val.strip().strip('"')
+        if key == "volume-opt":
+            volume_opts.append(val.lower())
+        else:
+            fields[key] = val
+    mount_type = fields.get("type", "volume").lower()
+    if mount_type == "npipe":
+        return "binds a host named pipe (container runtime control)"
+    if any(opt.startswith("device=") for opt in volume_opts):
+        return "volume-opt device= binds an arbitrary host path"
+    if mount_type == "bind":
+        source = fields.get("source") or fields.get("src") or ""
+        return _sensitive_mount_reason(source)
+    return None
+
+
+def _iter_docker_flags(args: list[str]):
+    """Yield ``(flag, value_or_None)`` for every flag-looking token in *args*.
+
+    Values are looked up for value-checked flags only. Tokens are never
+    skipped: a token consumed as a value that itself looks like a flag is
+    still evaluated as a flag, so an unrecognised value-taking flag cannot
+    smuggle a denied flag past the scan (fail closed).
+    """
+    for i, tok in enumerate(args):
+        if not tok.startswith("-") or tok in ("-", "--"):
+            continue
+        nxt = args[i + 1] if i + 1 < len(args) else None
+        if tok.startswith("--"):
+            name, eq, inline = tok.partition("=")
+            name = _LONG_FLAG_ALIASES.get(name, name)
+            if name in _VALUE_CHECKED_FLAGS:
+                yield name, (inline if eq else nxt)
+            else:
+                yield name, None
+            continue
+        # Short flag cluster, e.g. "-v/a:/b", "-v=/a:/b", "-dv", "-m4g".
+        letters = tok[1:]
+        for j, letter in enumerate(letters):
+            name = _SHORT_FLAG_ALIASES.get(letter, f"-{letter}")
+            if letter in _SHORT_VALUE_FLAGS:
+                rest = letters[j + 1:]
+                if rest.startswith("="):
+                    rest = rest[1:]
+                value = rest if rest else nxt
+                yield name, (value if name in _VALUE_CHECKED_FLAGS else None)
+                break
+            yield name, None
+
+
+def _strict_extra_args_violations(args: list[str]) -> list[str]:
+    """Return human-readable violations for *args* under strict posture."""
+    problems: list[str] = []
+    for flag, value in _iter_docker_flags(args):
+        if flag in _STRICT_DENIED_FLAGS:
+            problems.append(f"{flag}: {_STRICT_DENIED_FLAGS[flag]}")
+        elif flag == "--network":
+            if (value or "").strip().lower() != "none":
+                problems.append(
+                    f"--network {value!r}: the sandbox network mode is owned by "
+                    "terminal.docker_network (only 'none' may be repeated here)"
+                )
+        elif flag in _STRICT_NAMESPACE_FLAGS:
+            val = (value or "").strip().lower()
+            if val == "host" or val.startswith("container:"):
+                problems.append(f"{flag} {value!r}: joins a host/foreign namespace")
+        elif flag == "--volume":
+            reason = _sensitive_mount_reason(_volume_spec_source(value or "") or "")
+            if reason:
+                problems.append(f"--volume {value!r}: {reason}")
+        elif flag == "--mount":
+            reason = _mount_spec_violation(value or "")
+            if reason:
+                problems.append(f"--mount {value!r}: {reason}")
+    return problems
+
+
+def _raise_strict_violations(source: str, problems: list[str]) -> None:
+    if not problems:
+        return
+    detail = "\n".join(f"  - {p}" for p in problems)
+    raise DockerHardeningError(
+        "Refusing to start the Docker sandbox under security.posture=strict: "
+        f"{source} would weaken the container hardening:\n{detail}\n"
+        f"Remove the offending entries from terminal.{source}."
+    )
+
+
 def _image_uses_init_entrypoint(docker_exe: str, image: str) -> bool:
     """Return True if ``image``'s entrypoint is the s6-overlay ``/init``.
 
@@ -532,6 +795,7 @@ class DockerEnvironment(BaseEnvironment):
         run_as_host_user: bool = False,
         extra_args: list = None,
         persist_across_processes: bool = True,
+        strict_posture: Optional[bool] = None,
     ):
         if cwd == "~":
             cwd = "/root"
@@ -552,6 +816,44 @@ class DockerEnvironment(BaseEnvironment):
         if volumes is not None and not isinstance(volumes, list):
             logger.warning(f"docker_volumes config is not a list: {volumes!r}")
             volumes = []
+
+        # Strict posture: refuse configurations that would undo the hardening
+        # before touching Docker at all. ``strict_posture=None`` resolves the
+        # effective config's security.posture.
+        self._strict = (
+            _strict_posture_active() if strict_posture is None else bool(strict_posture)
+        )
+        if self._strict:
+            try:
+                unbounded = float(cpu) <= 0 or float(memory) <= 0
+            except (TypeError, ValueError):
+                unbounded = True
+            if unbounded:
+                raise DockerHardeningError(
+                    "Refusing to start the Docker sandbox under security.posture=strict: "
+                    f"resource ceilings are unbounded (container_cpu={cpu!r}, "
+                    f"container_memory={memory!r}). Set positive terminal.container_cpu "
+                    "and terminal.container_memory."
+                )
+            _raise_strict_violations(
+                "docker_extra_args",
+                _strict_extra_args_violations(
+                    [a for a in (extra_args or []) if isinstance(a, str)]
+                ),
+            )
+            volume_problems = []
+            for vol in (volumes or []):
+                if not isinstance(vol, str):
+                    continue
+                reason = _sensitive_mount_reason(_volume_spec_source(vol) or "")
+                if reason:
+                    volume_problems.append(f"{vol.strip()!r}: {reason}")
+            _raise_strict_violations("docker_volumes", volume_problems)
+            if network:
+                logger.warning(
+                    "Docker: sandbox network is enabled under strict posture; set "
+                    "terminal.docker_network: false to cut sandbox egress."
+                )
 
         # Fail fast if Docker is not available.
         _ensure_docker_available()
@@ -604,6 +906,12 @@ class DockerEnvironment(BaseEnvironment):
         )
         if auto_mount_cwd and host_cwd and not os.path.isdir(host_cwd_abs):
             logger.debug(f"Skipping docker cwd mount: host_cwd is not a valid directory: {host_cwd}")
+        if self._strict and bind_host_cwd:
+            reason = _sensitive_mount_reason(host_cwd_abs)
+            if reason:
+                _raise_strict_violations(
+                    "docker_mount_cwd_to_workspace", [f"{host_cwd_abs!r}: {reason}"]
+                )
 
         self._workspace_dir: Optional[str] = None
         self._home_dir: Optional[str] = None
@@ -766,7 +1074,10 @@ class DockerEnvironment(BaseEnvironment):
 
         logger.info(f"Docker volume_args: {volume_args}")
         # User-supplied extra docker run flags (docker_extra_args in config.yaml).
-        # Appended last so they can override defaults if needed.
+        # Appended last so they can override defaults if needed. Under strict
+        # posture they were already validated above, so nothing appended here
+        # can restore privilege, join host namespaces, bind sensitive host
+        # paths or lift the resource ceilings.
         validated_extra = []
         for arg in (extra_args or []):
             if not isinstance(arg, str):
@@ -801,6 +1112,15 @@ class DockerEnvironment(BaseEnvironment):
             "--label", f"hermes-task-id={task_label}",
             "--label", f"hermes-profile={profile_name}",
         ]
+        # Strict: fingerprint the image + hardened run args so cross-process
+        # reuse only attaches to a container started with this exact
+        # configuration (never one created earlier with weaker settings).
+        run_fingerprint = ""
+        if self._strict:
+            run_fingerprint = hashlib.sha256(
+                json.dumps([image, all_run_args]).encode("utf-8")
+            ).hexdigest()[:16]
+            label_args += ["--label", f"hermes-run-sha={run_fingerprint}"]
         # Save args for container recreation on "No such container" recovery.
         self._image = image
         self._container_name = container_name
@@ -812,6 +1132,8 @@ class DockerEnvironment(BaseEnvironment):
             "hermes-task-id": task_label,
             "hermes-profile": profile_name,
         }
+        if run_fingerprint:
+            self._labels["hermes-run-sha"] = run_fingerprint
 
         # Cross-process container reuse (issue #20561 — docs claim "ONE long-lived
         # container shared across sessions").  If a prior Lliam-GOV process
@@ -1120,6 +1442,11 @@ class DockerEnvironment(BaseEnvironment):
         logger.debug("Docker --storage-opt support: %s", _storage_opt_ok)
         return _storage_opt_ok
 
+    def _run_fingerprint_filter(self) -> list[str]:
+        """Strict-posture reuse filter: match the hardened run-args fingerprint."""
+        fingerprint = (getattr(self, "_labels", None) or {}).get("hermes-run-sha")
+        return ["--filter", f"label=hermes-run-sha={fingerprint}"] if fingerprint else []
+
     def _find_reusable_container(self, task_label: str, profile_label: str) -> Optional[tuple[str, str]]:
         """Look for an existing container labeled for this (task, profile).
 
@@ -1140,6 +1467,7 @@ class DockerEnvironment(BaseEnvironment):
                     "--filter", "label=hermes-agent=1",
                     "--filter", f"label=hermes-task-id={task_label}",
                     "--filter", f"label=hermes-profile={profile_label}",
+                    *self._run_fingerprint_filter(),
                     "--format", "{{.ID}}\t{{.State}}",
                 ],
                 capture_output=True,

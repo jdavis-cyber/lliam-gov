@@ -1,7 +1,7 @@
 import { type MutableRefObject, useCallback, useState } from 'react'
 
-import { getLliamConfig, getLliamConfigDefaults } from '@/lliam'
 import { BUILTIN_PERSONALITIES, normalizePersonalityValue, personalityNamesFromConfig } from '@/lib/chat-runtime'
+import { getLliamConfig, getLliamConfigDefaults } from '@/lliam'
 import {
   $currentCwd,
   setAvailablePersonalities,

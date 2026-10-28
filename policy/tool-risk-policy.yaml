@@ -14,18 +14,24 @@
 #   (tools/tool_policy.py). It assigns every tool/action class one of four
 #   graduated dispositions: allow / detect_log / hitl_approve / deny.
 #
-# SCOPE OF THIS STEP (P0.4 — "enablement portion for now")
-#   ACTIVE NOW (enforced this step):
+# SCOPE (updated @ P2.1 — the per-call PDP is now ACTIVE)
+#   ACTIVE SINCE P0.4:
 #     * Least-privilege default toolset profile — computer_use + browser OFF in
 #       the CUI baseline (LG-AZ-03, LG-AZ-11). Enforced via agent.disabled_toolsets
 #       in cli-config.gov.yaml + security.tool_denylist (the tool_policy gate).
 #     * Sandboxed execution backend — terminal.backend: docker (LG-CH-05).
-#     * Prefer narrow purpose-built tools over open-ended shell/SQL (LG-AZ-09) —
-#       declared here; open-ended tools are marked privileged for the Phase-2 PDP.
-#   DECLARED-FOR-PHASE-2 (the per-call PDP that resolves each tier at the
-#   before_call seam — LG-AZ-01/06/07/08/10, LG-RM-08 — lands in Phase 2):
-#     * The action_classes tier table below is the policy of record the PDP will
-#       consult; it is authored now so the posture is one reviewable artifact.
+#     * Prefer narrow purpose-built tools over open-ended shell/SQL (LG-AZ-09).
+#   ACTIVE SINCE P2.1 (LG-AZ-01/06/07/10/12, LG-RM-08):
+#     * The per-call PDP (tools/tool_policy.py evaluate_call/pdp_gate) resolves
+#       EVERY dispatch at the before_call seam (agent/tool_executor.py, both
+#       executors, + the model_tools.handle_function_call direct funnel —
+#       evaluated exactly once per call) against the action_classes below.
+#     * hitl_delegated_to_backend: true marks classes whose HITL gate is the
+#       EXISTING backend approval flow (tools/approval.py, write_approval) —
+#       the PDP does not double-block those (capability preservation). P2.2
+#       binds the remaining hitl classes to authenticated approval gates.
+#     * privileged_functions / zero_standing_privilege / budgets sections below
+#       are enforced by the PDP (force-up, JIT grants, mutating-call caps).
 #
 # ADDITIVE — NO EXISTING PATH RENAMED. Consumed by the NEW tools/tool_policy.py;
 # the existing tool_executor.py before_call seam (L425-427) is the wiring point
@@ -104,11 +110,10 @@ sandbox:
 
 
 # -----------------------------------------------------------------------------
-# 4. TIER LADDER + ACTION-CLASS MAP  [DECLARED — Phase-2 PDP consumes this]
+# 4. TIER LADDER + ACTION-CLASS MAP  [ACTIVE @ P2.1 — the PDP enforces this]
 # -----------------------------------------------------------------------------
-# The four graduated dispositions and the per-class mapping the Phase-2
-# tool-dispatch PDP will enforce at the before_call seam. Authored now so the
-# posture is one reviewable artifact; not yet wired per-call (that is Phase 2).
+# The four graduated dispositions and the per-class mapping the tool-dispatch
+# PDP (tools/tool_policy.py) enforces at the before_call seam on every call.
 tiers:
   allow:        "low-risk idempotent reads — proceed + log; never prompts"
   detect_log:   "medium-risk bounded mutation — proceed + ledger; NO prompt (anti-fatigue)"
@@ -116,19 +121,83 @@ tiers:
   deny:         "categorically unsafe — fail-closed block; terminal, no toggle re-enables"
 
 action_classes:
+  # --- File (split by resolved target — LG-AZ-08 last mile) ------------------
   - {class: file_read, tier: allow}
   - {class: file_write.in_safe_root, tier: detect_log}
   - {class: file_write.outside_safe_root, tier: hitl_approve}
   - {class: file_write.sensitive_path, tier: deny}
+  # --- Shell (split by destructiveness via tools/approval.py guards) ---------
   - {class: shell.non_destructive, tier: detect_log}
-  - {class: shell.destructive, tier: hitl_approve}
+  - {class: shell.destructive, tier: hitl_approve, hitl_delegated_to_backend: true}
+    # ^ the EXISTING tools/approval.py DANGEROUS_PATTERNS flow IS the HITL gate
   - {class: shell.hardline, tier: deny}            # rm -rf /, mkfs, dd-to-raw, fork bomb
   - {class: shell.sudo_stdin, tier: deny}
-  - {class: computer_use.desktop_control, tier: deny}   # CUI baseline disable (LG-AZ-11)
+  # --- Desktop / browser (CUI baseline disable — LG-AZ-11 / LG-AZ-03) --------
+  - {class: computer_use.desktop_control, tier: deny}
   - {class: browser.unlisted_or_action, tier: deny}
+  # --- Memory / skill writes (LG-HO-04 — staged write-approval backend) ------
+  - {class: memory_write, tier: hitl_approve, hitl_delegated_to_backend: true}
+    # ^ tools/write_approval.py evaluate_gate() stages the write for review
+  - {class: skill_write, tier: hitl_approve, hitl_delegated_to_backend: true}
+  # --- Delegation (LG-AZ-08 scope-narrowing; iteration budget bounds it) ------
+  - {class: delegation, tier: detect_log}
+  # --- Network egress (P2.5 splits by egress allowlist; logged until then) ----
+  - {class: network.egress, tier: detect_log}
+  # --- Bounded mutations incl. unknown/MCP tools (P3.3 adds MCP vetting) ------
+  - {class: tool_mutation.bounded, tier: detect_log}
+  # --- Supply chain / providers ----------------------------------------------
   - {class: package_install, tier: deny}           # security.allow_lazy_installs=false
   - {class: provider_call.allowlisted, tier: allow}
-  - {class: provider_call.non_allowlisted, tier: deny}  # CUI spillage (Phase 2/3)
+  - {class: provider_call.non_allowlisted, tier: deny}  # CUI spillage (Phase 3)
+
+
+# -----------------------------------------------------------------------------
+# 4a. PRIVILEGED-FUNCTION GATING  [ACTIVE @ P2.1 — LG-AZ-06]
+# -----------------------------------------------------------------------------
+# Members NEVER resolve below hitl_approve regardless of their class tier; each
+# privileged verdict is recorded to the hash-chained ledger (policy.violation /
+# approval path) with the approver principal once P2.2 binds the gates.
+privileged_functions:
+  members: [shell.destructive, computer_use.desktop_control, memory_write, skill_write]
+  force_disposition: hitl_approve
+  lg: [LG-AZ-06, LG-HO-01]
+
+
+# -----------------------------------------------------------------------------
+# 4b. ZERO-STANDING-PRIVILEGE / JIT GRANTS  [ACTIVE @ P2.1 — LG-AZ-07]
+# -----------------------------------------------------------------------------
+# High-capability classes default OFF: without an approval-backed grant the PDP
+# routes them to hitl_approve; an active grant lets the call proceed with a full
+# ledger record. Grants are per-session, TTL-bounded, die on session reset, and
+# the agent cannot self-extend (grant_capability is called from the approval
+# flow only). A grant NEVER re-enables a deny class (deny is terminal).
+zero_standing_privilege:
+  enabled: true
+  default_off_capabilities: [shell.destructive]
+  grant:
+    ttl_seconds: 1800                # 30 min; tune per mission tempo
+    scope: per_session
+    agent_self_extend: false
+    bind_to_session_reset: true
+  lg: [LG-AZ-07, LG-AZ-03]
+
+
+# -----------------------------------------------------------------------------
+# 4c. ACTION BUDGETS + RUNAWAY CAPS  [ACTIVE @ P2.1 — LG-AZ-10 / LG-AZ-12]
+# -----------------------------------------------------------------------------
+# Throttles the VOLUME of autonomous mutating action; reads are free. On exceed
+# the PDP returns hitl_approve (pause for approval — capability-preserving),
+# not a hard halt. Per-turn resets at each executor turn (pdp_begin_turn);
+# per-session resets only with the session (reset_pdp_state).
+budgets:
+  max_mutating_calls:
+    per_turn: 25                     # generous for normal work
+    per_session: 200
+    on_exceed: hitl_approve
+    counts_only_mutating: true
+  iteration_budget: "agent/iteration_budget.py (existing: 90 / delegation 50)"
+  tool_loop_guardrails: "agent/tool_guardrails.py hard_stop (gov overlay flips ON)"
+  lg: [LG-AZ-10, LG-AZ-12]
 
 
 # -----------------------------------------------------------------------------

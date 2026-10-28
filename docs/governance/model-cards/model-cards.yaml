@@ -1,0 +1,40 @@
+# =============================================================================
+# model-cards.yaml — Lliam-GOV Per-Model Model Card Index  [ACTIVE @ P3.2]
+# =============================================================================
+# LG-MP-05: machine-readable index of the approved models and their cards. A
+# model NOT listed here (with cui_eligible: true) is refused for CUI when
+# security.require_model_card is set. Consumed by agent/attestation.py
+# (model_cui_eligible) and cross-checked against policy/provider-allowlist.yaml.
+# Each entry links to a long-form card under docs/governance/model-cards/.
+# Indexed in the AI-BOM (P3.4). Renames nothing.
+# =============================================================================
+
+metadata:
+  policy_id: "LG-MODEL-CARDS"
+  version: "0.1-DRAFT"
+  classification: "CUI//SP-PRIV"
+  owner: "Lliam-GOV Program"
+  review:
+    cadence_days: 90
+    last_validated: "2026-07-16"
+    next_due: "2026-10-14"
+
+models:
+  - id: "lmstudio/llama-3.1-8b-instruct"
+    provider: lmstudio
+    architecture: "llama-3.1 (8B, decoder-only transformer)"
+    serialization: safetensors        # LG-MP-07 safe format
+    context_window: 128000
+    acceptable_contexts: ["coding", "analysis", "cui"]
+    limits: "Local enclave inference; no external egress. Not for autonomous high-impact actions without HITL."
+    cui_eligible: true
+    card: "docs/governance/model-cards/lmstudio-llama-3.1-8b-instruct.md"
+  - id: "bedrock/anthropic.claude-3-5-sonnet"
+    provider: bedrock
+    architecture: "claude-3.5-sonnet"
+    serialization: "n/a (managed provider endpoint)"
+    context_window: 200000
+    acceptable_contexts: ["coding", "analysis", "cui"]
+    limits: "AWS GovCloud endpoint only; no-train contractual terms required (see provider-allowlist)."
+    cui_eligible: true
+    card: "docs/governance/model-cards/bedrock-claude-3-5-sonnet.md"

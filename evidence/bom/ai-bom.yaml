@@ -1,0 +1,79 @@
+ai_bom_version: lg-aibom/1
+application: lliam-gov
+manifest_signer: lliam-gov-signer
+providers:
+- id: lmstudio
+  class: local
+  residency: local
+  cui_eligible: true
+- id: ollama
+  class: local
+  residency: local
+  cui_eligible: true
+- id: vllm
+  class: local
+  residency: local
+  cui_eligible: true
+- id: bedrock
+  class: gov-cloud
+  residency: us
+  cui_eligible: true
+models:
+- id: lmstudio/llama-3.1-8b-instruct
+  provider: lmstudio
+  serialization: safetensors
+  cui_eligible: true
+  card: docs/governance/model-cards/lmstudio-llama-3.1-8b-instruct.md
+- id: bedrock/anthropic.claude-3-5-sonnet
+  provider: bedrock
+  serialization: n/a (managed provider endpoint)
+  cui_eligible: true
+  card: docs/governance/model-cards/bedrock-claude-3-5-sonnet.md
+mcp_servers:
+- name: gov-filesystem
+  transport: stdio
+  sdl_record: SDL-MCP-0001
+- name: gov-ticketing
+  transport: streamable_http
+  sdl_record: SDL-MCP-0002
+skills:
+- name: pdf
+  source: builtin
+  ast_audit: pass
+  provenance: foreground
+  attestation: builtin
+  content_hash: 'UNPROVISIONED: no skill directory named ''pdf'' in the repository'
+  signed_hash: 'UNPROVISIONED: model_manifest.yaml skill_hashes.pdf is a template
+    value'
+- name: xlsx
+  source: builtin
+  ast_audit: pass
+  provenance: foreground
+  attestation: builtin
+  content_hash: 'UNPROVISIONED: no skill directory named ''xlsx'' in the repository'
+  signed_hash: 'UNPROVISIONED: model_manifest.yaml skill_hashes.xlsx is a template
+    value'
+- name: docx
+  source: builtin
+  ast_audit: pass
+  provenance: foreground
+  attestation: builtin
+  content_hash: 'UNPROVISIONED: no skill directory named ''docx'' in the repository'
+  signed_hash: 'UNPROVISIONED: model_manifest.yaml skill_hashes.docx is a template
+    value'
+attestations:
+  manifest_signature: 'UNPROVISIONED: model_manifest.yaml signature is a template
+    value; re-sign with the provisioned key'
+  model_primary: lmstudio/llama-3.1-8b-instruct
+  model_fallback: bedrock/anthropic.claude-3-5-sonnet
+relationships:
+- model: lmstudio/llama-3.1-8b-instruct
+  provider: lmstudio
+- model: bedrock/anthropic.claude-3-5-sonnet
+  provider: bedrock
+policies:
+  provider_allowlist: policy/provider-allowlist.yaml
+  model_cards: docs/governance/model-cards/model-cards.yaml
+  mcp_allowlist: policy/mcp-allowlist.yaml
+  skills_allowlist: policy/skills-allowlist.yaml
+  vetting_register: docs/governance/supplier-vetting-register.md

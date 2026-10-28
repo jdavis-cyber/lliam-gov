@@ -1,0 +1,173 @@
+# =============================================================================
+# egress-allowlist.yaml — Lliam-GOV Network Egress Allowlist Policy
+# =============================================================================
+#
+# | Field          | Value                                                      |
+# |----------------|------------------------------------------------------------|
+# | Document       | Network Egress Allowlist Policy (egress-allowlist.yaml)     |
+# | Owner          | Lliam-GOV Program                                          |
+# | Classification | CUI//SP-PRIV (template — mark per instance)                |
+# | Version        | 0.1 DRAFT                                                  |
+#
+# WHAT THIS FILE IS  [ACTIVE @ P2.5]
+#   The deny-by-default register of the ONLY network destinations Lliam-GOV
+#   web/browser/provider/MCP egress may reach for a CUI session. It is consumed
+#   by the NEW additive module tools/egress_policy.py (check_egress), which
+#   layers allowlist semantics OVER the existing SSRF guard tools/url_safety.py
+#   and website policy tools/website_policy.py. It renames nothing.
+#
+#   Implements:
+#     LG-NE-01  Deny-by-default egress with a destination allowlist
+#     LG-NE-02  Unconditional SSRF/private-IP/link-local/metadata floor
+#               (tools/url_safety.is_always_blocked_url — CODE is the authority;
+#                this section is a self-describing mirror, never a relaxation)
+#     LG-NE-03  Website allow/deny in allowlist mode, matched per surface
+#     LG-NE-04  Egress-proxy / isolation enclave as the gov DEFAULT
+#               (deploy/docker-compose.gov.override.yml)
+#     LG-NE-05  Connection-level enforcement for 3rd-party SDKs (squid + no-proxy
+#               bypass) — the network-layer companion to this app-layer allowlist
+#     LG-NE-06  Air-gap/CUI profile: security.egress.mode=deny_all, local-only
+#   Supports LG-DP-06 (TLS-only) and LG-DP-10 (CUI-taint egress restriction).
+#
+# HOW IT LOADS
+#   security.egress.{mode, policy_path, new_domain_disposition, fail_closed} in
+#   cli-config.gov.yaml (via HERMES_CONFIG). mode=allowlist enforces this file;
+#   mode=deny_all is the air-gap profile. Resolution order in egress_policy.py:
+#   configured policy_path → $HERMES_HOME/egress-allowlist.yaml → repo policy/.
+# =============================================================================
+
+metadata:
+  policy_id: "LG-EGRESS-ALLOWLIST"
+  version: "0.1-DRAFT"
+  classification: "CUI//SP-PRIV"          # template — mark per instance
+  owner: "Lliam-GOV Program"
+  default_disposition: deny               # [LG-NE-01] DENY-BY-DEFAULT, fail-closed
+  enforce: true                           # mirrors security.egress.mode=allowlist
+  cui_floor: "NIST SP 800-171 r3 / CMMC L2"
+  mappings:
+    nist_800_53r5: [SC-7, "SC-7(5)", "SC-7(8)", "SC-7(11)", AC-4, SC-8, SI-10]
+    nist_800_171r3: ["03.13.01", "03.13.05", "03.13.06", "03.01.03", "03.14.06"]
+    cmmc_l2: ["SC.L2-3.13.1", "SC.L2-3.13.5", "SC.L2-3.13.6"]
+    iso_27001: ["A.8.20", "A.8.22", "A.8.23", "A.8.26"]
+  review:
+    cadence_days: 180
+    last_validated: "2026-10-20"   # owner renewal of all approved_destinations
+    next_due: "2027-04-10"
+    # No separate egress register file exists: approved_destinations below
+    # (rationale / added / expires per entry) is the record.
+
+
+# -----------------------------------------------------------------------------
+# 1. ALWAYS-BLOCKED FLOOR — NON-NEGOTIABLE  [LG-NE-02]
+# -----------------------------------------------------------------------------
+# UNCONDITIONAL. No allowlist entry, no security.allow_private_urls: true, and
+# no HERMES_ALLOW_PRIVATE_URLS=true re-enables these. This mirrors the hard-coded
+# floor in tools/url_safety.py — is_always_blocked_url() is the runtime
+# authority; on any disagreement, CODE wins (deny). Documented here so the
+# policy file is self-assessable, NOT to relax the floor.
+always_blocked:
+  hostnames: ["metadata.google.internal", "metadata.goog"]
+  ips:
+    - "169.254.169.254"        # AWS/GCP/Azure/DO/Oracle IMDS
+    - "169.254.170.2"          # AWS ECS task metadata (task IAM creds)
+    - "169.254.169.253"        # Azure IMDS wire server
+    - "fd00:ec2::254"          # AWS metadata (IPv6)
+    - "100.100.100.200"        # Alibaba Cloud metadata
+  networks:
+    - "169.254.0.0/16"         # link-local
+    - "100.64.0.0/10"          # CGNAT / RFC 6598
+    - "10.0.0.0/8"             # RFC 1918
+    - "172.16.0.0/12"          # RFC 1918
+    - "192.168.0.0/16"         # RFC 1918
+    - "127.0.0.0/8"            # loopback
+    - "::1/128"                # IPv6 loopback
+    - "fc00::/7"               # IPv6 unique-local
+    - "fe80::/10"              # IPv6 link-local
+  allowed_schemes: ["https"]   # http only for in-boundary loopback inference
+  private_urls:
+    security_allow_private_urls: false    # EXISTING key — must stay false for CUI
+    env_HERMES_ALLOW_PRIVATE_URLS: unset  # must remain unset/false for CUI
+
+
+# -----------------------------------------------------------------------------
+# 2. APPROVED EGRESS DESTINATIONS  [LG-NE-01, LG-NE-03, LG-NE-04]
+# -----------------------------------------------------------------------------
+# The deny-by-default allowlist. Host matching follows website_policy semantics
+# (exact host, parent domain, or "*." wildcard). `surfaces` scopes each entry to
+# the tool families it applies to: provider | web | browser | mcp | messaging.
+# `squid_dstdomain` is the network-layer ACL mirror (deploy override).
+approved_destinations:
+
+  # --- Inference providers (US / FedRAMP / authorized) ----------------------
+  # Provider-surface entries MUST be exact hosts that appear in an allowlisted
+  # provider's base_url_hosts in policy/provider-allowlist.yaml (and its id in
+  # security.allowed_providers). tests/governance/test_provider_egress_parity.py
+  # fails on any drift between the two registers.
+  - host: "bedrock-runtime.us-gov-west-1.amazonaws.com"
+    surfaces: [provider]
+    classification_ceiling: "CUI//SP-PRIV"
+    squid_dstdomain: "bedrock-runtime.us-gov-west-1.amazonaws.com"
+    rationale: "AWS Bedrock GovCloud inference endpoint (in-boundary)."
+    added: "2026-07-15"
+    expires: "2027-04-10"
+
+  # --- Code / package / docs hosts (read-oriented research) -----------------
+  - host: "api.github.com"
+    surfaces: [web, mcp]
+    classification_ceiling: "PUBLIC"
+    squid_dstdomain: "api.github.com"
+    rationale: "GitHub API for code/issue research (read)."
+    added: "2026-07-15"
+    expires: "2027-04-10"
+  - host: "github.com"
+    surfaces: [web, browser]
+    classification_ceiling: "PUBLIC"
+    squid_dstdomain: "github.com"
+    rationale: "Public source/documentation browsing."
+    added: "2026-07-15"
+    expires: "2027-04-10"
+
+  # --- Authoritative gov / standards references -----------------------------
+  - host: "*.nist.gov"
+    surfaces: [web, browser]
+    classification_ceiling: "PUBLIC"
+    squid_dstdomain: ".nist.gov"
+    rationale: "NIST publications (800-53/171/172, AI RMF, CSF) reference."
+    added: "2026-07-15"
+    expires: "2027-04-10"
+  - host: "*.cisa.gov"
+    surfaces: [web, browser]
+    classification_ceiling: "PUBLIC"
+    squid_dstdomain: ".cisa.gov"
+    rationale: "CISA advisories / KEV reference."
+    added: "2026-07-15"
+    expires: "2027-04-10"
+
+
+# -----------------------------------------------------------------------------
+# 3. NEW-DOMAIN ADDITIONS  [LG-NE-01]
+# -----------------------------------------------------------------------------
+# A host not listed above is denied by default. Set
+# security.egress.new_domain_disposition: hitl_approve to instead route a new
+# domain to an approver (tools/approval.py); on approval it is appended here
+# with provenance (owner, rationale, added, expires) and mirrored to the squid
+# ACL. deny (the default) is the strictest posture.
+new_domain:
+  disposition: deny                        # deny | hitl_approve (overlay overrides)
+  on_approval_append_to: approved_destinations
+  require_provenance: [owner, rationale, added, expires]
+
+
+# -----------------------------------------------------------------------------
+# 4. AIR-GAP / CUI PROFILE  [LG-NE-06]
+# -----------------------------------------------------------------------------
+# Set security.egress.mode: deny_all in the overlay for a fully air-gapped
+# deployment: ALL egress is denied and only local-only (loopback) inference
+# providers are usable. check_egress() returns deny for every destination in
+# this mode regardless of the allowlist.
+air_gap:
+  mode_key: "security.egress.mode: deny_all"
+  local_only_providers: ["http://127.0.0.1", "http://localhost"]
+
+# Built on Hermes Agent (Nous Research, MIT). Governance overlay is additive and
+# capability-preserving.

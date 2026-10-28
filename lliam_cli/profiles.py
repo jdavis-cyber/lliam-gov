@@ -1066,7 +1066,7 @@ def seed_profile_skills(profile_dir: Path, quiet: bool = False) -> Optional[dict
             [sys.executable, "-c",
              "import json; from tools.skills_sync import sync_skills; "
              "r = sync_skills(quiet=True); print(json.dumps(r))"],
-            env={**os.environ, "HERMES_HOME": str(profile_dir)},
+            env={**os.environ, "HERMES_HOME": str(profile_dir), "LLIAM_HOME": str(profile_dir)},
             cwd=str(project_root),
             capture_output=True, text=True, timeout=60,
         )
@@ -1379,12 +1379,12 @@ def _cleanup_gateway_service(name: str, profile_dir: Path) -> None:
     import platform as _platform
 
     # Derive service name for this profile
-    # Temporarily set HERMES_HOME so _profile_suffix resolves correctly.
-    # (HERMES_HOME remains the internal home-producer name under R.1; the home
-    # resolver's LLIAM_-first precedence is reserved for external opt-in.)
+    # Keep both aliases scoped to the profile while resolving its service.
     old_home = os.environ.get("HERMES_HOME")
+    old_lliam_home = os.environ.get("LLIAM_HOME")
     try:
         os.environ["HERMES_HOME"] = str(profile_dir)
+        os.environ["LLIAM_HOME"] = str(profile_dir)
         from lliam_cli.gateway import get_service_name, get_launchd_plist_path
 
         if _platform.system() == "Linux":
@@ -1422,6 +1422,10 @@ def _cleanup_gateway_service(name: str, profile_dir: Path) -> None:
             os.environ["HERMES_HOME"] = old_home
         elif "HERMES_HOME" in os.environ:
             del os.environ["HERMES_HOME"]
+        if old_lliam_home is not None:
+            os.environ["LLIAM_HOME"] = old_lliam_home
+        else:
+            os.environ.pop("LLIAM_HOME", None)
 
 
 def _stop_gateway_process(profile_dir: Path) -> None:

@@ -54,6 +54,16 @@ _internal_credential: Optional[str] = None
 INTERNAL_USER_ID = "server-internal"
 INTERNAL_PROVIDER = "server-internal"
 
+#: Principal-bound child credentials (JER-73). When an authenticated user
+#: opens ``/api/pty``, the server spawns a TUI child for *that* user; the
+#: child's ``/api/ws`` attach credential is minted here and bound to the
+#: user's identity, so approvals the user makes inside the embedded TUI carry
+#: their dashboard_auth principal instead of the anonymous ``server-internal``
+#: identity. Same delivery channel and threat model as the internal
+#: credential (env of the spawned child only, never HTML/REST), multi-use for
+#: reconnects, revoked when the PTY session ends. Guarded by ``_lock``.
+_child_credentials: Dict[str, Dict[str, Any]] = {}
+
 
 class TicketInvalid(Exception):
     """Ticket missing, expired, or already consumed."""
@@ -143,14 +153,48 @@ def consume_internal_credential(value: str) -> Dict[str, Any]:
     """
     with _lock:
         expected = _internal_credential
-    if not value or expected is None:
+        children = list(_child_credentials.items())
+    if not value:
         raise TicketInvalid("no internal credential")
-    if not secrets.compare_digest(value.encode(), expected.encode()):
+    # Compare against every candidate (no early exit) so timing does not
+    # reveal which kind of credential, if any, matched.
+    matched: Optional[Dict[str, Any]] = None
+    if expected is not None and secrets.compare_digest(value.encode(), expected.encode()):
+        matched = {"user_id": INTERNAL_USER_ID, "provider": INTERNAL_PROVIDER}
+    for cred, info in children:
+        if secrets.compare_digest(value.encode(), cred.encode()) and matched is None:
+            matched = dict(info)
+    if matched is None:
+        if expected is None and not children:
+            raise TicketInvalid("no internal credential")
         raise TicketInvalid("internal credential mismatch")
-    return {
-        "user_id": INTERNAL_USER_ID,
-        "provider": INTERNAL_PROVIDER,
-    }
+    return matched
+
+
+def mint_child_credential(*, user_id: str, provider: str) -> str:
+    """Mint a multi-use internal credential bound to *user_id* (JER-73).
+
+    For a server-spawned child acting for one authenticated user (the
+    embedded-TUI PTY). ``consume_internal_credential`` returns this identity
+    for it. Revoke with :func:`revoke_child_credential` when the child ends.
+    """
+    cred = secrets.token_urlsafe(32)
+    with _lock:
+        _child_credentials[cred] = {
+            "user_id": str(user_id),
+            "provider": str(provider),
+            "minted_at": int(time.time()),
+            "child": True,
+        }
+    return cred
+
+
+def revoke_child_credential(cred: Optional[str]) -> None:
+    """Drop a child credential (no-op if unknown)."""
+    if not cred:
+        return
+    with _lock:
+        _child_credentials.pop(cred, None)
 
 
 def _reset_for_tests() -> None:
@@ -158,4 +202,5 @@ def _reset_for_tests() -> None:
     global _internal_credential
     with _lock:
         _tickets.clear()
+        _child_credentials.clear()
         _internal_credential = None

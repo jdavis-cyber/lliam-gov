@@ -4155,6 +4155,7 @@ def _resolve_runtime_with_fallback(
                     fb_kwargs["explicit_base_url"] = entry["base_url"]
                 if entry.get("api_key"):
                     fb_kwargs["explicit_api_key"] = entry["api_key"]
+                fb_kwargs["governance_path"] = "fallback"
                 runtime = resolve_runtime_provider(**fb_kwargs)
                 import logging
 
@@ -9618,18 +9619,19 @@ def _(rid, params: dict) -> dict:
     if err:
         return err
     try:
-        from tools.approval import resolve_gateway_approval
+        from tools.approval import ApprovalRefused, resolve_gateway_approval
 
-        return _ok(
-            rid,
-            {
-                "resolved": resolve_gateway_approval(
-                    session["session_key"],
-                    params.get("choice", "deny"),
-                    resolve_all=params.get("all", False),
-                )
-            },
-        )
+        try:
+            resolved = resolve_gateway_approval(
+                session["session_key"],
+                params.get("choice", "deny"),
+                resolve_all=params.get("all", False),
+                raise_on_refusal=True,
+            )
+        except ApprovalRefused as e:
+            # LG-GV-05: this connection carries no authenticated approver.
+            return _err(rid, 4033, str(e))
+        return _ok(rid, {"resolved": resolved})
     except Exception as e:
         return _err(rid, 5004, str(e))
 

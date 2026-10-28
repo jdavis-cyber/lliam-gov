@@ -1959,6 +1959,9 @@ def _resolve_custom_runtime() -> Tuple[Optional[str], Optional[str], Optional[st
 
         runtime = resolve_runtime_provider(requested="custom")
     except Exception as exc:
+        from lliam_cli.runtime_provider import is_provider_governance_error
+        if is_provider_governance_error(exc):
+            raise
         logger.debug("Auxiliary client: custom runtime resolution failed: %s", exc)
         runtime = None
 
@@ -3578,7 +3581,7 @@ def _resolve_single_provider(
     )
     return client
 
-def _resolve_auto(
+def _resolve_auto_unchecked(
     main_runtime: Optional[Dict[str, Any]] = None,
     task: Optional[str] = None,
 ) -> Tuple[Optional[OpenAI], Optional[str]]:
@@ -3748,6 +3751,59 @@ def _resolve_auto(
     return None, None
 
 
+def _client_base_url(client: Any) -> str:
+    """Best-effort extraction of the endpoint used by auxiliary adapters."""
+    for obj in (client, getattr(client, "_client", None), getattr(client, "client", None)):
+        value = getattr(obj, "base_url", None) if obj is not None else None
+        if value:
+            return str(value).rstrip("/")
+    return ""
+
+
+def _validate_auxiliary_client(provider: str, client: Any, *, high_sensitivity: bool = False) -> None:
+    if client is None:
+        return
+    from lliam_cli import provider_allowlist as pa
+    base_url = _client_base_url(client)
+    provider_hint = str(provider or "").strip().lower()
+    if provider_hint in {"", "auto", "custom"}:
+        try:
+            from agent.model_metadata import _infer_provider_from_url
+            provider_hint = str(_infer_provider_from_url(base_url) or provider_hint).strip().lower()
+        except Exception:
+            pass
+    decision = pa.validate_provider(
+        provider_hint,
+        base_url,
+        path="auxiliary",
+        cui=True,
+        high_sensitivity=high_sensitivity,
+    )
+    if decision.disposition != "allow":
+        from lliam_cli.auth import AuthError
+        raise AuthError(
+            f"Auxiliary provider blocked by governance: {decision.reason}",
+            code="provider_not_allowlisted",
+        )
+
+
+def _resolve_auto(
+    main_runtime: Optional[Dict[str, Any]] = None,
+    task: Optional[str] = None,
+) -> Tuple[Optional[OpenAI], Optional[str]]:
+    client, model = _resolve_auto_unchecked(main_runtime=main_runtime, task=task)
+    provider = ""
+    base_url = _client_base_url(client)
+    try:
+        from agent.model_metadata import _infer_provider_from_url
+        provider = str(_infer_provider_from_url(base_url) or "")
+    except Exception:
+        pass
+    high_sensitivity = bool((_get_auxiliary_task_config(task) if task else {}).get("high_sensitivity"))
+    _validate_auxiliary_client(provider, client, high_sensitivity=high_sensitivity)
+    return client, model
+
+
 # ── Centralized Provider Router ─────────────────────────────────────────────
 #
 # resolve_provider_client() is the single entry point for creating a properly
@@ -3840,7 +3896,7 @@ def _normalize_resolved_model(model_name: Optional[str], provider: str) -> Optio
         return model_name
 
 
-def resolve_provider_client(
+def _resolve_provider_client_unchecked(
     provider: str,
     model: str = None,
     async_mode: bool = False,
@@ -4467,6 +4523,15 @@ def resolve_provider_client(
             logger.warning("resolve_provider_client: cannot create Bedrock "
                            "client: %s", exc)
             return None, None
+        # The synthetic base_url below is what validate_provider sees; check
+        # the endpoint the AnthropicBedrock client will actually call
+        # (region / ANTHROPIC_BEDROCK_BASE_URL) against the egress policy.
+        try:
+            from agent.provider_egress import enforce_client_egress
+            enforce_client_egress(real_client)
+        except PermissionError as exc:
+            logger.warning("resolve_provider_client: bedrock blocked: %s", exc)
+            return None, None
         client = AnthropicAuxiliaryClient(
             real_client, final_model, api_key="aws-sdk",
             base_url=f"https://bedrock-runtime.{region}.amazonaws.com",
@@ -4491,6 +4556,35 @@ def resolve_provider_client(
     logger.warning("resolve_provider_client: unhandled auth_type %s for %s",
                    pconfig.auth_type, provider)
     return None, None
+
+
+def resolve_provider_client(
+    provider: str,
+    model: str = None,
+    async_mode: bool = False,
+    raw_codex: bool = False,
+    explicit_base_url: str = None,
+    explicit_api_key: str = None,
+    api_mode: str = None,
+    main_runtime: Optional[Dict[str, Any]] = None,
+    is_vision: bool = False,
+    task: Optional[str] = None,
+) -> Tuple[Optional[Any], Optional[str]]:
+    client, resolved_model = _resolve_provider_client_unchecked(
+        provider=provider,
+        model=model,
+        async_mode=async_mode,
+        raw_codex=raw_codex,
+        explicit_base_url=explicit_base_url,
+        explicit_api_key=explicit_api_key,
+        api_mode=api_mode,
+        main_runtime=main_runtime,
+        is_vision=is_vision,
+        task=task,
+    )
+    high_sensitivity = bool((_get_auxiliary_task_config(task) if task else {}).get("high_sensitivity"))
+    _validate_auxiliary_client(provider, client, high_sensitivity=high_sensitivity)
+    return client, resolved_model
 
 
 # ── Public API ──────────────────────────────────────────────────────────────

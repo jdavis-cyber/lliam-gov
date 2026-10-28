@@ -623,6 +623,7 @@ def load_cli_config() -> Dict[str, Any]:
         "docker_volumes": "TERMINAL_DOCKER_VOLUMES",
         "docker_env": "TERMINAL_DOCKER_ENV",
         "docker_extra_args": "TERMINAL_DOCKER_EXTRA_ARGS",
+        "docker_network": "TERMINAL_DOCKER_NETWORK",
         "docker_mount_cwd_to_workspace": "TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE",
         "docker_run_as_host_user": "TERMINAL_DOCKER_RUN_AS_HOST_USER",
         "docker_persist_across_processes": "TERMINAL_DOCKER_PERSIST_ACROSS_PROCESSES",
@@ -11219,13 +11220,14 @@ class LliamCLI(CLIAgentSetupMixin, CLICommandsMixin):
         return ""
 
     def _approval_callback(self, command: str, description: str,
-                           *, allow_permanent: bool = True) -> str:
+                           *, allow_permanent: bool = True, allow_session: bool = True) -> str:
         """
         Prompt for dangerous command approval through the prompt_toolkit UI.
 
         Called from the agent thread. Shows a selection UI similar to clarify
         with choices: once / session / always / deny. When allow_permanent
-        is False (tirith warnings present), the 'always' option is hidden.
+        is False, the 'always' option is hidden. When allow_session is False,
+        the 'session' option is hidden too.
         Long commands also get a 'view' option so the full command can be
         expanded before deciding.
 
@@ -11242,7 +11244,7 @@ class LliamCLI(CLIAgentSetupMixin, CLICommandsMixin):
             self._approval_state = {
                 "command": command,
                 "description": description,
-                "choices": self._approval_choices(command, allow_permanent=allow_permanent),
+                "choices": self._approval_choices(command, allow_permanent=allow_permanent, allow_session=allow_session),
                 "selected": 0,
                 "response_queue": response_queue,
             }
@@ -11288,9 +11290,14 @@ class LliamCLI(CLIAgentSetupMixin, CLICommandsMixin):
             _cprint(f"\n{_DIM}  ⏱ Timeout — denying command{_RST}")
             return "deny"
 
-    def _approval_choices(self, command: str, *, allow_permanent: bool = True) -> list[str]:
+    def _approval_choices(self, command: str, *, allow_permanent: bool = True, allow_session: bool = True) -> list[str]:
         """Return approval choices for a dangerous command prompt."""
-        choices = ["once", "session", "always", "deny"] if allow_permanent else ["once", "session", "deny"]
+        choices = ["once"]
+        if allow_session:
+            choices.append("session")
+        if allow_permanent:
+            choices.append("always")
+        choices.append("deny")
         if len(command) > 70:
             choices.append("view")
         return choices
@@ -15686,4 +15693,9 @@ def main(
 if __name__ == "__main__":
     import fire
 
+    # Direct `python cli.py` launch bypasses lliam_cli.main — run the same
+    # fail-closed strict-posture startup gates (JER-80).
+    from lliam_cli.startup_posture import enforce_startup_posture_or_exit
+
+    enforce_startup_posture_or_exit("cli.py")
     fire.Fire(main)

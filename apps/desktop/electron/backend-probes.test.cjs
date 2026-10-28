@@ -15,9 +15,9 @@ const { canImportLliamCli, lliamRuntimeImportProbe, verifyLliamCli } = require('
 
 // Resolve the host's own Node binary -- guaranteed to be on disk and
 // runnable. We use it as both a stand-in for "a python that doesn't
-// have hermes_cli" (since `node -c "import hermes_cli"` will exit
+// have lliam_cli" (since `node -c "import lliam_cli"` will exit
 // non-zero) and as a way to script verifyLliamCli's success path
-// (a tiny script we write to disk that exits 0 on --version).
+// (a tiny script we write to disk that exits 0 on --help).
 const NODE_BIN = process.execPath
 
 test('canImportLliamCli returns false when path is falsy', () => {
@@ -27,7 +27,7 @@ test('canImportLliamCli returns false when path is falsy', () => {
 })
 
 test('canImportLliamCli returns false when interpreter cannot run -c', () => {
-  // node IS an interpreter, but `node -c "import hermes_cli"` is a
+  // node IS an interpreter, but `node -c "import lliam_cli"` is a
   // SyntaxError -- different exit reason from a real Python's
   // ModuleNotFoundError, but the predicate is "exit 0 or not" and
   // both land on "not", which is exactly what we want for the
@@ -43,7 +43,7 @@ test('canImportLliamCli returns false when binary does not exist', () => {
 test('lliam-gov runtime import probe checks config dependencies', () => {
   const probe = lliamRuntimeImportProbe()
   assert.match(probe, /\bimport yaml\b/)
-  assert.match(probe, /\bimport hermes_cli\.config\b/)
+  assert.match(probe, /\bimport lliam_cli\.config\b/)
 })
 
 test('verifyLliamCli returns false when command is falsy', () => {
@@ -57,7 +57,7 @@ test('verifyLliamCli returns false when binary does not exist', () => {
   assert.equal(verifyLliamCli(ghost), false)
 })
 
-test('verifyLliamCli returns true when --version exits 0', () => {
+test('verifyLliamCli returns true when --help exits 0', () => {
   // Write a tiny script that exits 0 regardless of args, then invoke
   // it through node. This stands in for a working lliam-gov binary --
   // verifyLliamCli only cares about the exit code.
@@ -66,7 +66,7 @@ test('verifyLliamCli returns true when --version exits 0', () => {
   try {
     // Use node as the launcher and our script as the "command". Pass
     // shell:false (default) -- node is a real binary, no shim.
-    // execFileSync passes ['--version'] as args, which node ignores
+    // execFileSync passes ['--help'] as args, which node ignores
     // gracefully (well, it prints its version and exits 0, which is
     // perfect -- exit code 0 is the only signal we read).
     assert.equal(verifyLliamCli(NODE_BIN), true)
@@ -85,4 +85,15 @@ test('verifyLliamCli swallows timeouts (does not throw)', () => {
   // (because the binary is missing) returns false rather than
   // propagating. Same code path the timeout case takes.
   assert.equal(verifyLliamCli('/definitely/not/a/real/binary/anywhere'), false)
+})
+
+test('CLI discovery avoids the network-capable version command', { skip: process.platform === 'win32' }, () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lliam-probe-'))
+  const cli = path.join(home, 'lliam-gov')
+  fs.writeFileSync(cli, '#!/bin/sh\ncase "$1" in\n --version) sleep 8; exit 1 ;;\n --help) exit 0 ;;\n *) exit 1 ;;\nesac\n', { mode: 0o755 })
+  try {
+    assert.equal(verifyLliamCli(cli), true)
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true })
+  }
 })

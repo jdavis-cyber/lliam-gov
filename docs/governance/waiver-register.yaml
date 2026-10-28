@@ -1,0 +1,47 @@
+# waiver-register.yaml — CAIO-controlled waiver / determination register
+# (LG-GV-10, P4.1 / AI-493).
+#
+# Purpose: the ONLY authorized path to non-baseline high-risk enablement.
+# Enforced fail-closed at startup by
+# lliam_cli/security_audit_startup.enforce_governance_artifacts_at_startup:
+# any skill in baseline_denied_skills that is removed from skills.disabled
+# must carry a matching, signed, unexpired waiver here — except the
+# never_waivable set, which blocks regardless of any waiver entry. This
+# preserves capability by providing a tracked, justified, time-boxed route
+# to high-risk function instead of a permanent denial.
+#
+# Only the CAIO (governance.role_bindings.caio) may sign a waiver.
+# Recertification: annual (LG-GV-10); OMB/public reporting date recorded
+# per waiver.
+#
+# Review-by: 2027-07-16 (annual recertification).
+
+schema: lg-gv/1
+owner_role: caio
+classification: CUI//SP-PRIV   # template — mark per instance
+recertification: annual
+
+# Capabilities that can NEVER be waived (mandatory deny, LG-SC-01 / LG-HO-03):
+never_waivable:
+  - godmode        # jailbreak / safety-bypass — overwrites system prompt + prefill
+  - obliteratus    # weight-abliteration / uncensoring
+
+# The baseline-denied high-risk set (mirrors cli-config.gov.yaml
+# skills.disabled). Re-enabling any of these requires a valid waiver below.
+baseline_denied_skills:
+  - godmode
+  - obliteratus
+  - web-pentest    # active web exploitation, dual-use
+  - sherlock       # OSINT account-enumeration, dual-use
+  - oss-forensics  # forensics/IR, dual-use (REVIEW-to-allow)
+
+# Active waivers. Schema per entry:
+#   waiver_id: LG-WVR-<year>-<seq>
+#   capability: <skill/capability name>
+#   justification: <documented mission need>
+#   compensating_controls: [<list>]
+#   signed_by: <CAIO principal>        # must be non-placeholder
+#   granted: <ISO date>
+#   expires: <ISO date>                # unexpired required
+#   omb_report_date: <ISO date>        # OMB/public reporting timestamp
+waivers: []      # no active waivers — the denied set stays denied

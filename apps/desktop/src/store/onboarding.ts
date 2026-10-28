@@ -1,5 +1,6 @@
 import { atom } from 'nanostores'
 
+import { evaluateRuntimeReadiness, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
 import {
   cancelOAuthSession,
   getGlobalModelOptions,
@@ -12,7 +13,6 @@ import {
   submitOAuthCode,
   validateProviderCredential
 } from '@/lliam'
-import { evaluateRuntimeReadiness, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
 import { notify, notifyError } from '@/store/notifications'
 import type { ModelOptionProvider, OAuthProvider, OAuthStartResponse } from '@/types/lliam'
 
@@ -200,7 +200,7 @@ function notifyReady(provider: string) {
 }
 
 // Human-friendly labels for tools auto-routed through the Nous Tool Gateway,
-// mirroring hermes_cli/nous_subscription._GATEWAY_TOOL_LABELS so the GUI and
+// mirroring lliam_cli/nous_subscription._GATEWAY_TOOL_LABELS so the GUI and
 // CLI describe the same thing.
 const GATEWAY_TOOL_LABELS: Record<string, string> = {
   browser: 'browser automation',

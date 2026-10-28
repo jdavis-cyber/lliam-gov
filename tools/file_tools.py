@@ -8,7 +8,7 @@ import os
 import threading
 from pathlib import Path
 
-from agent.file_safety import get_read_block_error
+from agent.file_safety import get_write_block_error, get_read_block_error
 from tools.binary_extensions import has_binary_extension
 from tools.file_operations import (
     ShellFileOperations,
@@ -449,7 +449,13 @@ def _get_lliam_config_resolved() -> str | None:
 
 def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None:
     """Return an error message if the path targets a sensitive system location."""
+    block_error = None
     try:
+        # Preserve the supplied basename as well as the resolved target: a
+        # .env symlink to an ordinary filename is still an environment file.
+        block_error = get_write_block_error(
+            _expand_tilde(filepath), cwd=str(_resolve_base_dir(task_id)),
+        )
         resolved = str(_resolve_path_for_task(filepath, task_id))
     except (OSError, ValueError):
         resolved = filepath
@@ -474,7 +480,7 @@ def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None
             "Agent cannot modify security-sensitive configuration. "
             "Edit ~/.hermes/config.yaml directly or use 'lliam-gov config' instead."
         )
-    return None
+    return block_error
 
 
 def _get_container_mirror_prefix_for_task(task_id: str = "default") -> str | None:
@@ -936,6 +942,7 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
                     "docker_mount_cwd_to_workspace": config.get("docker_mount_cwd_to_workspace", False),
                     "docker_forward_env": config.get("docker_forward_env", []),
                     "docker_run_as_host_user": config.get("docker_run_as_host_user", False),
+                    "docker_network": config.get("docker_network", True),
                 }
 
             ssh_config = None
@@ -1022,16 +1029,46 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
 
         _resolved = _resolve_path_for_task(path, task_id)
 
-        # ── Structured-document extraction ────────────────────────────
-        # Try before the binary-extension guard so .docx/.xlsx can render as text.
-        # Malformed documents fall through to the normal path/binary guard.
-        from tools.read_extract import ExtractionError, extract_document_text, is_extractable_document
+        # Check the supplied name and its target before any content reads,
+        # including document extraction. Anchor at the task cwd without
+        # resolving away an env-named symlink to an ordinary file.
+        block_error = get_read_block_error(
+            str(_resolve_base_dir(task_id) / _expand_tilde(path))
+        )
+        if block_error:
+            return json.dumps({"error": block_error})
 
-        if is_extractable_document(str(_resolved)):
+        # ── Lliam-GOV internal path guard ────────────────────────────────
+        # Prevent prompt injection via catalog or hub metadata files,
+        # and block credential stores under HERMES_HOME.  Pass the
+        # already-resolved path so a relative-path read against
+        # TERMINAL_CWD == HERMES_HOME (e.g. "auth.json") still hits the
+        # denylist — get_read_block_error's own resolve() runs against
+        # the Python process cwd, which can differ.
+        block_error = get_read_block_error(str(_resolved))
+        if block_error:
+            return json.dumps({"error": block_error})
+
+        # ── Structured-document extraction ────────────────────────────
+        # Try before the binary-extension guard so .docx/.xlsx/.pdf render as text.
+        # PDF errors explain why text is unavailable; other malformed documents
+        # fall through to the normal path/binary guard.
+        from tools.read_extract import ExtractionError, extract_document_text, is_extractable_document
+        from tools.terminal_tool import _get_env_config
+
+        missing_pdf = False
+        # Extraction opens host files; remote paths must stay in their backend.
+        # Use the same backend configuration as _get_file_ops.
+        if is_extractable_document(str(_resolved)) and _get_env_config()["env_type"] == "local":
             try:
                 extracted_text = extract_document_text(str(_resolved))
-            except ExtractionError:
+            except ExtractionError as exc:
                 logger.debug("document extraction failed for %s", path, exc_info=True)
+                if _resolved.suffix.lower() == ".pdf":
+                    if isinstance(exc.__cause__, FileNotFoundError):
+                        missing_pdf = True
+                    else:
+                        return json.dumps({"error": str(exc)}, ensure_ascii=False)
             else:
                 file_ops = _get_file_ops(task_id)
                 lines = extracted_text.splitlines()
@@ -1070,7 +1107,9 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
 
         # ── Binary file guard ─────────────────────────────────────────
         # Block binary files by extension (no I/O).
-        if has_binary_extension(str(_resolved)):
+        if not missing_pdf and (
+            has_binary_extension(str(_resolved)) or _resolved.suffix.lower() == ".pdf"
+        ):
             _ext = _resolved.suffix.lower()
             return json.dumps({
                 "error": (
@@ -1078,17 +1117,6 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
                     "Use vision_analyze for images, or terminal to inspect binary files."
                 ),
             })
-
-        # ── Lliam-GOV internal path guard ────────────────────────────────
-        # Prevent prompt injection via catalog or hub metadata files,
-        # and block credential stores under HERMES_HOME.  Pass the
-        # already-resolved path so a relative-path read against
-        # TERMINAL_CWD == HERMES_HOME (e.g. "auth.json") still hits the
-        # denylist — get_read_block_error's own resolve() runs against
-        # the Python process cwd, which can differ.
-        block_error = get_read_block_error(str(_resolved))
-        if block_error:
-            return json.dumps({"error": block_error})
 
         # ── Dedup check ───────────────────────────────────────────────
         # If we already read this exact (path, offset, limit) and the

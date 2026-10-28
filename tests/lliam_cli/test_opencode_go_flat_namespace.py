@@ -108,9 +108,16 @@ def test_openrouter_still_prepends_vendor():
 # ---------------------------------------------------------------------------
 
 
-def _run_switch(raw_input: str, **extra):
+def _run_switch(raw_input: str, live_catalog=None, **extra):
     """Call switch_model with opencode-go as current provider, mocking the
-    live catalog so the test doesn't hit the network."""
+    live catalog so the test doesn't hit the network.
+
+    Both live-catalog lookups are pinned to the same snapshot: the step-d
+    catalog search (``list_provider_models``) and the ``/v1/models`` probe
+    inside ``validate_requested_model`` (``fetch_api_models``).  Leaving the
+    probe live made the result track whatever opencode.ai lists today and
+    let its auto-correct rewrite the requested ID."""
+    catalog = list(_OPENCODE_GO_LIVE if live_catalog is None else live_catalog)
     defaults = dict(
         current_provider="opencode-go",
         current_model="kimi-k2.6",
@@ -122,15 +129,28 @@ def _run_switch(raw_input: str, **extra):
 
     def fake_list_provider_models(provider: str):
         if provider == "opencode-go":
-            return list(_OPENCODE_GO_LIVE)
+            return list(catalog)
         # For other providers, return empty so tests don't depend on them.
         return []
+
+    def fake_fetch_api_models(api_key, base_url, *args, **kwargs):
+        if "opencode.ai/zen/go" in str(base_url or ""):
+            return list(catalog)
+        # Any other endpoint is unreachable in tests.
+        return None
 
     with patch(
         "lliam_cli.model_switch.list_provider_models",
         side_effect=fake_list_provider_models,
-    ):
-        return switch_model(raw_input=raw_input, **defaults)
+    ), patch(
+        "lliam_cli.models.fetch_api_models",
+        side_effect=fake_fetch_api_models,
+    ) as fetch_mock:
+        result = switch_model(raw_input=raw_input, **defaults)
+    # Guard the isolation itself: validation must have consulted the pinned
+    # snapshot rather than a live endpoint.
+    assert fetch_mock.called, "validate_requested_model bypassed the pinned /v1/models probe"
+    return result
 
 
 def test_deepseek_v4_flash_stays_on_opencode_go():
@@ -157,3 +177,31 @@ def test_kimi_k2_6_stays_on_opencode_go():
     result = _run_switch("kimi-k2.6", current_model="deepseek-v4-pro")
     assert result.target_provider == "opencode-go"
     assert result.new_model == "kimi-k2.6"
+
+
+def test_deepseek_v4_flash_exact_id_not_rewritten_to_newer_neighbor():
+    """When opencode-go lists both ``deepseek-v4-flash`` and a newer
+    neighbour ``deepseek-v4.1-flash``, an exact request must keep the exact
+    ID.  Fuzzy auto-correct is only for IDs the catalog does not list."""
+    catalog = _OPENCODE_GO_LIVE + ["deepseek-v4.1-flash"]
+    result = _run_switch("deepseek-v4-flash", live_catalog=catalog)
+    assert result.success
+    assert result.target_provider == "opencode-go"
+    assert result.new_model == "deepseek-v4-flash"
+    assert "Auto-corrected" not in (result.warning_message or "")
+
+
+def test_deepseek_v4_1_flash_exact_id_stays_on_opencode_go():
+    """The newer neighbour also resolves to itself, not back to v4."""
+    catalog = _OPENCODE_GO_LIVE + ["deepseek-v4.1-flash"]
+    result = _run_switch("deepseek-v4.1-flash", live_catalog=catalog)
+    assert result.target_provider == "opencode-go"
+    assert result.new_model == "deepseek-v4.1-flash"
+
+
+def test_deepseek_v4_pro_unaffected_by_flash_neighbor():
+    """Adding a newer flash variant must not disturb the pro alias."""
+    catalog = _OPENCODE_GO_LIVE + ["deepseek-v4.1-flash"]
+    result = _run_switch("deepseek-v4-pro", live_catalog=catalog)
+    assert result.target_provider == "opencode-go"
+    assert result.new_model == "deepseek-v4-pro"

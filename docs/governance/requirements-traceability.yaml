@@ -1,0 +1,122 @@
+# requirements-traceability.yaml — CUI/CMMC requirements captured as testable
+# agent requirements, mapped to controls and verification (LG-SD-02, P4.5).
+#
+# Purpose: the requirements-to-control traceability matrix. Each row is a
+# testable requirement derived from the CUI floor (SP 800-171 r3 / CMMC L2 /
+# M-25-21), the control(s) that realize it, and the verification method that
+# proves it. Controls resolve against docs/governance/control-catalog.yaml.
+#
+# Review-by: at each management review (LG-GV-08).
+
+schema: lg-sd/1
+owner_role: isso
+classification: CUI//SP-PRIV   # template — mark per instance
+
+requirements:
+  - id: REQ-01
+    statement: >-
+      The agent must not route CUI inference to a non-allowlisted provider on
+      any of the five routing paths.
+    controls: [LG-MP-01, LG-MP-02]
+    verification: >-
+      tests/governance/test_p3_capability_corpus.py + provider-allowlist
+      startup gate; the P3.1 5-path conformance matrix.
+
+  - id: REQ-02
+    statement: >-
+      A dangerous action attempted in a non-interactive/headless context must
+      fail closed (deny), not auto-approve.
+    controls: [LG-HO-02, LG-GV-05]
+    verification: >-
+      tests/lliam_cli/test_control_plane_auth.py + P2.2 HITL fail-closed
+      report; deny_on_no_approver enforced.
+
+  - id: REQ-03
+    statement: >-
+      Every consequential tool call must produce a tamper-evident audit record;
+      an unrecordable action must block.
+    controls: [LG-AU-01, LG-AU-02, LG-AU-09]
+    verification: >-
+      ci/governance-ci-gates/audit_chain_selftest.py + P1.1/P1.2 chokepoint
+      coverage; audit.fail_closed.
+
+  - id: REQ-04
+    statement: >-
+      The godmode jailbreak skill must be impossible to enable in a governed
+      profile, including via a waiver.
+    controls: [LG-SC-01, LG-CH-06, LG-GV-10]
+    verification: >-
+      ci/governance-ci-gates/prohibited_skills_gate.sh + the startup waiver
+      gate never_waivable test (tests/governance/test_p41_governance_artifacts.py).
+
+  - id: REQ-05
+    statement: >-
+      A prompt-injection payload must not reach a prohibited action or an
+      external egress sink.
+    controls: [LG-PI-04, LG-PI-06, LG-PI-09, LG-NE-01]
+    verification: >-
+      tests/governance/test_p45_redteam_corpus.py (injection + taint + sink)
+      + the egress allowlist (P2.5).
+
+  - id: REQ-06
+    statement: >-
+      SSRF to cloud-metadata / private-IP endpoints must be blocked
+      unconditionally regardless of posture.
+    controls: [LG-NE-02]
+    verification: >-
+      tests/governance/test_p45_redteam_corpus.py metadata-SSRF cases +
+      tools/url_safety.is_always_blocked_url.
+
+  - id: REQ-07
+    statement: >-
+      A runaway tool loop must halt rather than run unbounded (denial-of-wallet
+      defense).
+    controls: [LG-AZ-12, LG-AZ-10]
+    verification: >-
+      tool_loop_guardrails.hard_stop_enabled + max_mutating_calls (P2.1);
+      halt-event on exceed.
+
+  - id: REQ-08
+    statement: >-
+      PII must be redacted from provider context and excluded from persistent
+      memory by default.
+    controls: [LG-PF-03, LG-DP-04, LG-MC-05]
+    verification: >-
+      privacy.redact_pii + cui_redaction + memory.governance.exclude_pii;
+      redaction test corpus (P2.4).
+
+  - id: REQ-09
+    statement: >-
+      The running configuration must not drift from the approved signed
+      baseline without detection.
+    controls: [LG-CH-01, LG-CH-03]
+    verification: >-
+      ci/governance-ci-gates/baseline_drift_gate.py + path_freeze_gate.py;
+      posture_findings_blocking under strict.
+
+  - id: REQ-10
+    statement: >-
+      A model/provider/prompt change must not merge without a recorded fairness
+      re-evaluation.
+    controls: [LG-PF-07]
+    verification: >-
+      Retired 2026-10-20 by owner decision: the fairness gate and its
+      evaluation record were removed from the repository.
+
+  - id: REQ-11
+    statement: >-
+      Release/deployment must be blocked unless every posture precondition
+      holds (godmode off, allowlist/audit/encryption on, authorization signed).
+    controls: [LG-SD-06, LG-GV-06]
+    verification: >-
+      ci/governance-ci-gates/go_no_go_gate.py +
+      tests/governance/test_p45_secure_dev.py.
+
+  - id: REQ-12
+    statement: >-
+      No frozen upstream/Lliam module, file, CLI, or identifier may be renamed
+      by the governance overlay (path-freeze).
+    controls: [LG-SD-01]
+    verification: >-
+      ci/governance-ci-gates/path_freeze_gate.py + the rename-guard test
+      under tests/rename/ (no Lliam-owned upstream identifiers renamed).

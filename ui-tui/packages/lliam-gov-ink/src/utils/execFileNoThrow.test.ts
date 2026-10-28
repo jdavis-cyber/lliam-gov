@@ -25,12 +25,14 @@ let daemonScript: string
 let sleeperPids: number[]
 
 /** Read the PID file the daemon script writes, and track it for afterEach cleanup. */
-function trackSleeperPid(pidFile: string): void {
+function trackSleeperPid(pidFile: string): number | undefined {
   try {
     const pid = parseInt(readFileSync(pidFile, 'utf8').trim(), 10)
 
     if (pid > 0) {
       sleeperPids.push(pid)
+
+      return pid
     }
   } catch {
     // PID file not written or unreadable — sleeper may have already exited.
@@ -80,24 +82,30 @@ describe.skipIf(onWindows)('execFileNoThrow with daemon-style children', () => {
     expect(result.code).toBe(124)
   })
 
-  it("settles immediately on 'exit' when resolveOnExit is true, regardless of daemon stdio", async () => {
+  it("settles on 'exit' while the background daemon still owns inherited stdio", async () => {
     const pidFile = join(scriptDir, 'sleeper-exit.pid')
-    const start = Date.now()
+    const releaseFile = join(scriptDir, 'release-daemon')
+    // Keep the daemon alive until the test releases it, rather than racing
+    // process startup against a wall-clock deadline or a fixed sleep length.
+    writeFileSync(
+      daemonScript,
+      '#!/bin/sh\n(while [ ! -f "$2" ]; do sleep 0.01; done) &\necho $! > "$1"\nexit 0\n'
+    )
 
-    const result = await execFileNoThrow(daemonScript, [pidFile], {
+    const result = await execFileNoThrow(daemonScript, [pidFile, releaseFile], {
       timeout: 2000,
       resolveOnExit: true
     })
 
-    trackSleeperPid(pidFile)
+    const sleeperPid = trackSleeperPid(pidFile)
 
-    const elapsed = Date.now() - start
-
-    // The shell exits in a few ms. resolveOnExit lets us return on exit
-    // (code 0) instead of waiting for the orphaned sleeper to release
-    // stdio. Should be well under 200ms even on slow CI.
+    // Successful settlement precedes daemon termination. The release latch
+    // remains closed, so an implementation that waits for daemon completion
+    // cannot pass even on a fast machine.
     expect(result.code).toBe(0)
-    expect(elapsed).toBeLessThan(500)
+    expect(sleeperPid).toBeDefined()
+    expect(() => process.kill(sleeperPid!, 0)).not.toThrow()
+    writeFileSync(releaseFile, '')
   })
 
   it("still surfaces the right code when resolveOnExit'd child exits non-zero", async () => {

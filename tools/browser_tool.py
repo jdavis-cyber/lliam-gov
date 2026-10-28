@@ -2486,6 +2486,21 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
                      "Secrets must not be sent in URLs.",
         })
 
+    try:
+        from tools.egress_policy import check_egress
+        egress = check_egress(url, surface="browser", session_id=task_id)
+    except Exception as exc:
+        return json.dumps({
+            "success": False,
+            "error": f"Blocked: egress policy unavailable ({exc})",
+        })
+    if egress.disposition != "allow":
+        return json.dumps({
+            "success": False,
+            "error": f"Blocked by egress policy: {egress.reason}",
+            "blocked_by_egress_policy": {"host": egress.host},
+        })
+
     # SSRF protection — block private/internal addresses before navigating.
     # Skipped for local backends (Camofox, headless Chromium without a cloud
     # provider) because the agent already has full local network access via

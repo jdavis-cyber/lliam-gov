@@ -58,8 +58,6 @@ interface CodingStatusRowProps {
   onConvertBranch?: (branch: string, path?: null | string, isDefault?: boolean) => Promise<void>
   /** List the repo's local branches for the "convert a branch" picker. */
   onListBranches?: () => Promise<LliamGitBranch[]>
-  /** Open the review pane (changed files + diffs). */
-  onOpen?: () => void
   /** Jump into an existing worktree (open a fresh session anchored there). */
   onOpenWorktree?: (path: string) => void
   /** Switch the current repo checkout to another branch. */
@@ -69,15 +67,13 @@ interface CodingStatusRowProps {
 /**
  * The always-on coding-context row, the BASE of the composer status stack:
  * current branch, dirty summary (+/-), and ahead/behind. A touch more prominent
- * than the per-turn rows above it (larger branch label, accent glyph), and the
- * entry point to the review pane. Hidden when the active session isn't in a
- * local git repo (the probe returns null).
+ * than the per-turn rows above it (larger branch label, accent glyph). Hidden
+ * when the active session isn't in a local git repo (the probe returns null).
  */
 export const CodingStatusRow = memo(function CodingStatusRow({
   onBranchOff,
   onConvertBranch,
   onListBranches,
-  onOpen,
   onOpenWorktree,
   onSwitchBranch
 }: CodingStatusRowProps) {
@@ -258,7 +254,6 @@ export const CodingStatusRow = memo(function CodingStatusRow({
         // of an already-loaded repo (window focus, turn settle), reading as an
         // annoying icon "blip" with no first-load value. Refreshes are silent.
         leading={<Codicon className="text-(--ui-green)" name="git-branch" size="0.8rem" />}
-        onActivate={onOpen}
       >
         <div className="flex min-w-0 flex-1 items-center gap-1">
           <span
@@ -279,13 +274,6 @@ export const CodingStatusRow = memo(function CodingStatusRow({
                   aria-label={s.newBranch}
                   className="pointer-events-none size-4 shrink-0 text-muted-foreground/60 opacity-0 transition hover:text-foreground group-hover/status-row:pointer-events-auto group-hover/status-row:opacity-100 group-focus-within/status-row:pointer-events-auto group-focus-within/status-row:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100"
                   onClick={event => event.stopPropagation()}
-                  onKeyDown={event => {
-                    // The row's onActivate also fires on Enter/Space; keep it from
-                    // opening the review pane when the kebab is the focus target.
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.stopPropagation()
-                    }
-                  }}
                   size="icon-xs"
                   variant="ghost"
                 >

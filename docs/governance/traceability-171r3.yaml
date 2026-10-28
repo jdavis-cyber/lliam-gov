@@ -1,0 +1,220 @@
+# traceability-171r3.yaml — NIST SP 800-171 r3 requirement-to-config
+# traceability matrix behind docs/governance/SSP.md (LG-IN-07, P4.3 / AI-495).
+#
+# Purpose: the machine-readable proof that every 800-171 r3 family cites a
+# REAL, enforced config point, reconciled to what P0-P4 actually enforce.
+# Validated fail-closed by ci/governance-ci-gates/ssp_reconciliation_gate.py
+# (same resolver as the LG-GV-03 regulatory gate). 'inherited' families are
+# provided by the hosting boundary (SSP §2); their config points cite the
+# agent-side overlap only.
+#
+# Review-by: with the SSP at each management review (LG-GV-08).
+
+schema: lg-in/1
+owner: Lliam-GOV Program
+classification: CUI//SP-PRIV   # template — mark per instance
+ssp: docs/governance/SSP.md
+
+families:
+  - family: "03.01"
+    title: Access Control
+    status: implemented
+    controls: [LG-AZ-01, LG-AZ-02, LG-AZ-03, LG-AZ-04, LG-AZ-05, LG-AZ-06,
+               LG-AZ-07, LG-AZ-10, LG-AZ-11, LG-AZ-12, LG-HO-01, LG-HO-02,
+               LG-GV-05, LG-IA-03, LG-DP-01]
+    config_points:
+      - {kind: module, path: tools/tool_policy.py}
+      - {kind: file, path: policy/tool-risk-policy.yaml}
+      - {kind: config_key, key: security.tool_denylist}
+      - {kind: config_key, key: security.deny_on_no_approver}
+      - {kind: config_key, key: security.require_authenticated_approver}
+      - {kind: module, path: tools/path_security.py}
+      - {kind: module, path: agent/file_safety.py}
+
+  - family: "03.02"
+    title: Awareness and Training
+    status: inherited
+    controls: [LG-TP-01, LG-GV-04, LG-HO-08]
+    config_points:
+      - {kind: file, path: docs/governance/roles.yaml}
+      - {kind: file, path: docs/governance/roles-raci.md}
+      - {kind: module, path: tools/hitl_oversight.py}
+
+  - family: "03.03"
+    title: Audit and Accountability
+    status: implemented
+    controls: [LG-AU-01, LG-AU-02, LG-AU-03, LG-AU-04, LG-AU-05, LG-AU-06,
+               LG-AU-07, LG-AU-08, LG-AU-09, LG-AU-10, LG-IA-10]
+    config_points:
+      - {kind: config_key, key: audit.ledger_enabled}
+      - {kind: config_key, key: audit.fail_closed}
+      - {kind: config_key, key: audit.chokepoint_required}
+      - {kind: module, path: agent/governance_audit.py}
+      - {kind: module, path: agent/governance_audit_hooks.py}
+      - {kind: module, path: ci/governance-ci-gates/audit_chain_gate.py}
+
+  - family: "03.04"
+    title: Configuration Management
+    status: implemented
+    controls: [LG-CH-01, LG-CH-02, LG-CH-03, LG-CH-04, LG-CH-06, LG-CH-07,
+               LG-CH-08, LG-CH-09, LG-IN-02, LG-IN-04]
+    config_points:
+      - {kind: config_key, key: security.posture}
+      - {kind: config_key, key: security.posture_findings_blocking}
+      - {kind: module, path: lliam_cli/posture_resolver.py}
+      - {kind: module, path: ci/governance-ci-gates/baseline_drift_gate.py}
+      - {kind: file, path: docs/governance/baseline-critical-keys.yaml}
+      - {kind: file, path: docs/governance/deviation-register.yaml}
+      - {kind: config_key, key: skills.disabled}
+
+  - family: "03.05"
+    title: Identification and Authentication
+    status: implemented
+    controls: [LG-IA-01, LG-IA-02, LG-IA-03, LG-IA-04, LG-IA-05, LG-IA-06,
+               LG-IA-07, LG-IA-08, LG-IA-09, LG-IA-10, LG-IA-11]
+    config_points:
+      - {kind: config_key, key: security.accounts}
+      - {kind: config_key, key: security.no_default_credentials}
+      - {kind: config_key, key: security.api_server_key_required}
+      - {kind: config_key, key: security.require_operator_auth}
+      - {kind: config_key, key: security.require_tls}
+      - {kind: module, path: agent/agent_identity.py}
+      - {kind: module, path: agent/secret_scope.py}
+
+  - family: "03.06"
+    title: Incident Response
+    status: implemented
+    controls: [LG-IR-01, LG-IR-02, LG-IR-03, LG-IR-08, LG-RM-09, LG-AZ-12, LG-GV-04]
+    config_points:
+      - {kind: config_key, key: tool_loop_guardrails.hard_stop_enabled}
+      - {kind: config_key, key: incident_response.killswitch.enabled}
+      - {kind: module, path: tools/interrupt.py}
+      - {kind: module, path: agent/killswitch.py}
+      - {kind: file, path: docs/governance/incident-response-plan.md}
+      - {kind: file, path: docs/governance/halt-rollback-runbook.md}
+
+  - family: "03.07"
+    title: Maintenance
+    status: inherited
+    controls: [LG-SS-01, LG-SS-02, LG-SS-07, LG-CH-08]
+    config_points:
+      - {kind: config_key, key: security.require_hashed_install}
+      - {kind: config_key, key: security.allow_lazy_installs}
+      - {kind: file, path: docs/governance/change-record.md}
+
+  - family: "03.08"
+    title: Media Protection
+    status: implemented
+    controls: [LG-DP-02, LG-DP-03, LG-DP-04, LG-DP-07, LG-DP-11, LG-AU-05,
+               LG-MC-05, LG-MC-06]
+    config_points:
+      - {kind: config_key, key: security.data_protection.cui_redaction}
+      - {kind: config_key, key: security.data_protection.at_rest_encryption}
+      - {kind: config_key, key: security.data_protection.result_retention_ttl_seconds}
+      - {kind: config_key, key: privacy.redact_pii}
+      - {kind: module, path: agent/data_protection.py}
+
+  - family: "03.09"
+    title: Personnel Security
+    status: inherited
+    controls: [LG-GV-04, LG-GV-05, LG-IA-01, LG-IA-05]
+    config_points:
+      - {kind: config_key, key: governance.role_bindings}
+      - {kind: config_key, key: security.accounts}
+      - {kind: module, path: ci/governance-ci-gates/sod_check.py}
+
+  - family: "03.10"
+    title: Physical Protection
+    status: inherited
+    controls: [LG-IN-06]
+    config_points:
+      - {kind: file, path: docs/governance/boundary-scope.md}
+
+  - family: "03.11"
+    title: Risk Assessment
+    status: implemented
+    controls: [LG-RM-01, LG-RM-02, LG-SS-02, LG-SS-03, LG-CH-06]
+    config_points:
+      - {kind: config_key, key: security.supply_chain.osv_fail_on}
+      - {kind: module, path: tools/osv_check.py}
+      - {kind: module, path: lliam_cli/security_advisories.py}
+      - {kind: file, path: docs/governance/threat-risk-register.yaml}
+      - {kind: file, path: docs/governance/risk-assessment-process.md}
+
+  - family: "03.12"
+    title: Security Assessment and Monitoring
+    status: implemented
+    controls: [LG-GV-06, LG-GV-10, LG-IN-07, LG-RM-04, LG-RM-07, LG-CH-08]
+    config_points:
+      - {kind: config_key, key: governance.authorization_id}
+      - {kind: file, path: docs/governance/authorization-record.yaml}
+      - {kind: file, path: docs/governance/poam.yaml}
+      - {kind: module, path: ci/governance-ci-gates/soa_gate.py}
+      - {kind: module, path: ci/governance-ci-gates/ssp_reconciliation_gate.py}
+
+  - family: "03.13"
+    title: System and Communications Protection
+    status: implemented
+    controls: [LG-NE-01, LG-NE-02, LG-NE-03, LG-NE-04, LG-NE-06, LG-DP-06,
+               LG-DP-07, LG-DP-09, LG-DP-10, LG-CH-05]
+    config_points:
+      - {kind: config_key, key: security.egress.mode}
+      - {kind: config_key, key: security.egress.fail_closed}
+      - {kind: config_key, key: security.website_policy.mode}
+      - {kind: config_key, key: security.data_protection.dlp_taint_gate}
+      - {kind: config_key, key: terminal.backend}
+      - {kind: file, path: policy/egress-allowlist.yaml}
+      - {kind: module, path: tools/egress_policy.py}
+      - {kind: module, path: tools/url_safety.py}
+      - {kind: file, path: deploy/docker-compose.gov.override.yml}
+
+  - family: "03.14"
+    title: System and Information Integrity
+    status: implemented
+    controls: [LG-PI-01, LG-PI-02, LG-PI-03, LG-PI-04, LG-PI-05, LG-PI-06,
+               LG-PI-07, LG-PI-08, LG-PI-09, LG-AZ-10, LG-AZ-12, LG-SS-03]
+    config_points:
+      - {kind: config_key, key: security.tirith_fail_open}
+      - {kind: config_key, key: security.input_trust}
+      - {kind: config_key, key: security.schema_validation}
+      - {kind: module, path: tools/tirith_security.py}
+      - {kind: module, path: agent/message_sanitization.py}
+      - {kind: module, path: tools/injection_defense.py}
+
+  - family: "03.15"
+    title: Planning
+    status: implemented
+    controls: [LG-IN-01, LG-IN-05, LG-IN-07, LG-GV-01, LG-GV-02, LG-GV-03,
+               LG-GV-09]
+    config_points:
+      - {kind: config_key, key: governance.policy_id}
+      - {kind: file, path: docs/governance/SSP.md}
+      - {kind: file, path: docs/governance/boundary-scope.md}
+      - {kind: file, path: docs/governance/ai-policy.md}
+      - {kind: file, path: docs/governance/intended-use.md}
+
+  - family: "03.16"
+    title: System and Services Acquisition
+    status: implemented
+    controls: [LG-MP-01, LG-MP-02, LG-MP-03, LG-MP-05, LG-MP-06, LG-SC-05,
+               LG-SC-07, LG-TP-03, LG-CH-04]
+    config_points:
+      - {kind: config_key, key: security.provider_allowlist_enforce}
+      - {kind: config_key, key: security.mcp_allowlist_enforce}
+      - {kind: file, path: policy/provider-allowlist.yaml}
+      - {kind: file, path: policy/mcp-allowlist.yaml}
+      - {kind: module, path: lliam_cli/provider_allowlist.py}
+      - {kind: file, path: docs/governance/supplier-vetting-register.md}
+
+  - family: "03.17"
+    title: Supply Chain Risk Management
+    status: implemented
+    controls: [LG-SS-01, LG-SS-02, LG-SS-04, LG-SS-05, LG-SS-06, LG-SS-07,
+               LG-IN-02, LG-IN-03, LG-MP-07]
+    config_points:
+      - {kind: config_key, key: security.require_hashed_install}
+      - {kind: config_key, key: security.supply_chain}
+      - {kind: module, path: ci/governance-ci-gates/supply_chain_gate.py}
+      - {kind: module, path: ci/governance-ci-gates/generate_bom.py}
+      - {kind: module, path: ci/governance-ci-gates/osv_gate.py}
+      - {kind: file, path: model_manifest.yaml}

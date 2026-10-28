@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useState,
   type ReactNode,
@@ -53,13 +54,15 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   // page's "Manage skills & tools" linking to /skills?profile=X) must win
   // over current state — it's an explicit scope request.
   const urlProfile = searchParams.get("profile");
-  useEffect(() => {
-    if (urlProfile !== null && urlProfile !== profile) {
-      setManagementProfile(urlProfile);
-      setProfileState(urlProfile);
+  const [previousUrlProfile, setPreviousUrlProfile] = useState(urlProfile);
+  const [hasExplicitProfile, setHasExplicitProfile] = useState(urlProfile !== null);
+  if (urlProfile !== previousUrlProfile) {
+    setPreviousUrlProfile(urlProfile);
+    if (urlProfile !== null) {
+      setHasExplicitProfile(true);
+      if (urlProfile !== profile) setProfileState(urlProfile);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlProfile]);
+  }
 
   // Re-assert ?profile= after navigations that dropped it (bare nav links).
   // Runs on every pathname/profile change; no-ops when already in sync.
@@ -75,12 +78,19 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       },
       { replace: true },
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, profile]);
+  }, [pathname, profile, searchParams, setSearchParams]);
+
+  // Consult the committed selection when discovery completes, so a slow
+  // initial request cannot overwrite a profile explicitly selected meanwhile.
+  const alignInitialProfile = useEffectEvent((current: string, active: string) => {
+    if (!hasExplicitProfile && urlProfile === null && active !== current) {
+      setManagementProfile(active);
+      setProfileState(active);
+    }
+  });
 
   useEffect(() => {
     let cancelled = false;
-    const urlProfile = searchParams.get("profile");
 
     Promise.all([api.getProfiles(), api.getActiveProfile()])
       .then(([profilesRes, info]) => {
@@ -92,25 +102,18 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         const active = info.active || "default";
         setCurrentProfile(current);
 
-        // Deep links (?profile=) win. Otherwise align the switcher with the
-        // sticky active profile so Chat and management pages match what the
-        // Profiles page shows as "active" (machine dashboard runs as
-        // `current`, usually default).
-        if (urlProfile === null && active !== current) {
-          setManagementProfile(active);
-          setProfileState(active);
-        }
+        alignInitialProfile(current, active);
       })
       .catch(() => {});
 
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setProfile = useCallback(
     (name: string) => {
+      setHasExplicitProfile(true);
       setManagementProfile(name);
       setProfileState(name);
       setSearchParams(

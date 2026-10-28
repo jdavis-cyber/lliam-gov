@@ -151,8 +151,8 @@ def test_moa_slots_routed_through_resolve_runtime_provider(monkeypatch):
 
     resolved = []
 
-    def fake_resolve(*, requested, target_model=None):
-        resolved.append((requested, target_model))
+    def fake_resolve(*, requested, target_model=None, governance_path="primary"):
+        resolved.append((requested, target_model, governance_path))
         return {
             "provider": requested,
             "api_mode": "chat_completions",
@@ -165,7 +165,7 @@ def test_moa_slots_routed_through_resolve_runtime_provider(monkeypatch):
     )
 
     rt = moa_loop._slot_runtime({"provider": "minimax", "model": "MiniMax-M2"})
-    assert ("minimax", "MiniMax-M2") in resolved
+    assert ("minimax", "MiniMax-M2", "moa") in resolved
     assert rt["provider"] == "minimax"
     assert rt["model"] == "MiniMax-M2"
     assert rt["base_url"] == "https://minimax.example/v1"
