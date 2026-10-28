@@ -1,13 +1,14 @@
 """Document-to-text extraction for ``read_file``.
 
 Uses the stdlib for Jupyter notebooks, DOCX, and XLSX, and pypdf for PDFs.
-Malformed documents raise :class:`ExtractionError`; callers can then fall back to
-normal text/binary handling.
+Malformed documents raise :class:`ExtractionError`. PDF errors are returned as clear messages
+by ``read_file``; other document errors fall back to normal text/binary handling.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import posixpath
 import zipfile
 from pathlib import Path
@@ -17,8 +18,11 @@ __all__ = ["EXTRACTABLE_EXTENSIONS", "ExtractionError", "extract_document_text",
 
 EXTRACTABLE_EXTENSIONS = frozenset({".ipynb", ".docx", ".xlsx", ".pdf"})
 MAX_XLSX_BYTES = 50 * 1024 * 1024
+MAX_PDF_BYTES = 50 * 1024 * 1024
+MAX_PDF_PAGES = 2000
 _MAX_XLSX_ROWS_PER_SHEET = 5000
 _MAX_XLSX_COLS = 256
+logger = logging.getLogger(__name__)
 
 _NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 _NS_S = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -53,18 +57,44 @@ def extract_document_text(path: str) -> str:
 
 
 def _extract_pdf(path: str) -> str:
-    from pypdf import PdfReader
-    from pypdf.errors import PyPdfError
+    from pypdf import PasswordType, PdfReader
+    from pypdf.errors import DependencyError, LimitReachedError, PyPdfError
+    from tools.file_tools import _get_max_read_chars
 
     try:
+        if Path(path).stat().st_size > MAX_PDF_BYTES:
+            raise ExtractionError(f"PDF too large: limit is {MAX_PDF_BYTES:,} bytes.")
         with open(path, "rb") as fh:
             reader = PdfReader(fh)
-            if reader.is_encrypted:
+            if reader.is_encrypted and reader.decrypt("") == PasswordType.NOT_DECRYPTED:
                 raise ExtractionError("PDF has no extractable text: the document is encrypted.")
-            # Separate pages even when extract_text() omits the final newline.
-            pages = [(page.extract_text() or "").rstrip("\n") for page in reader.pages]
-    except (OSError, PyPdfError, ValueError) as exc:
-        raise ExtractionError(f"Cannot extract PDF text: {exc}") from exc
+            if len(reader.pages) > MAX_PDF_PAGES:
+                raise ExtractionError(f"PDF has too many pages: limit is {MAX_PDF_PAGES:,} pages.")
+            budget = 8 * _get_max_read_chars()
+            total_chars = 0
+            pages = []
+            for page in reader.pages:
+                page_text = page.extract_text() or ""
+                total_chars += len(page_text)
+                # Separate pages even when extract_text() omits the final newline.
+                pages.append(page_text.rstrip("\n"))
+                if total_chars > budget:
+                    pages.append("[extraction truncated: PDF exceeds processing budget]")
+                    break
+    except (
+        OSError, PyPdfError, ValueError, KeyError, TypeError, AttributeError,
+        IndexError, ZeroDivisionError, RecursionError, DependencyError,
+    ) as exc:
+        logger.debug("PDF extraction failed", exc_info=True)
+        if isinstance(exc, FileNotFoundError):
+            reason = "file not found"
+        elif isinstance(exc, PermissionError):
+            reason = "permission denied"
+        elif isinstance(exc, LimitReachedError):
+            reason = "exceeds processing limits"
+        else:
+            reason = "malformed or unsupported PDF"
+        raise ExtractionError(f"Cannot extract PDF text: {reason}.") from exc
 
     text = "\n".join(pages)
     if not text.strip():

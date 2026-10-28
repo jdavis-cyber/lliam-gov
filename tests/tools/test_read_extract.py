@@ -44,7 +44,7 @@ def _write_docx(path, document_xml):
         z.writestr("word/document.xml", document_xml)
 
 
-def _write_pdf(path, pages=(), *, image_only=False, password=None):
+def _write_pdf(path, pages=(), *, image_only=False, password=None, owner_password=None):
     """Generate a small PDF with compressed text streams or an inline image."""
     writer = PdfWriter()
     font = DictionaryObject({
@@ -71,7 +71,7 @@ def _write_pdf(path, pages=(), *, image_only=False, password=None):
         stream.set_data(content)
         page[NameObject("/Contents")] = stream.flate_encode()
     if password is not None:
-        writer.encrypt(password)
+        writer.encrypt(password, owner_password=owner_password)
     writer.write(path)
 
 
@@ -407,6 +407,159 @@ def test_pdf_respects_character_limit(tmp_path, pdf_task, monkeypatch):
     assert "offset and limit" in oversized["error"]
     smaller = json.loads(read_file_tool(str(path), offset=2, limit=1, task_id=pdf_task))
     assert smaller["content"] == "2|Short line"
+
+
+def test_pdf_size_cap_before_parsing(tmp_path, monkeypatch):
+    path = tmp_path / "oversized.pdf"
+    # Invalid bytes prove the size refusal happens before parsing.
+    path.write_bytes(b"not a PDF" * 20)
+    monkeypatch.setattr("tools.read_extract.MAX_PDF_BYTES", 100, raising=False)
+    with pytest.raises(ExtractionError, match=r"PDF too large.*100 bytes"):
+        extract_document_text(str(path))
+
+
+def test_pdf_page_cap_before_text_extraction(tmp_path, monkeypatch):
+    path = tmp_path / "pages.pdf"
+    # Blank pages would produce the no-text error if extraction started.
+    _write_pdf(path, [[], []])
+    monkeypatch.setattr("tools.read_extract.MAX_PDF_PAGES", 1, raising=False)
+    with pytest.raises(ExtractionError, match=r"PDF has too many pages.*1 pages"):
+        extract_document_text(str(path))
+
+
+def test_pdf_empty_user_password_is_readable(tmp_path):
+    path = tmp_path / "protected.pdf"
+    _write_pdf(path, [["Owner protected text"]], password="", owner_password="owner-secret")
+    assert extract_document_text(str(path)) == "Owner protected text\n"
+    _write_pdf(path, [["Private text"]], password="user-secret", owner_password="owner-secret")
+    with pytest.raises(ExtractionError, match="no extractable text: the document is encrypted"):
+        extract_document_text(str(path))
+
+
+def test_pdf_blocked_path_never_extracted(tmp_path, pdf_task, monkeypatch):
+    from pathlib import Path
+
+    path = Path(os.environ["HERMES_HOME"]) / "skills" / ".hub" / "hidden.pdf"
+    path.parent.mkdir(parents=True)
+    _write_pdf(path, [["Untrusted hub instructions"]])
+    calls = []
+
+    def track_extraction(path):
+        calls.append(path)
+        return "Untrusted hub instructions\n"
+
+    monkeypatch.setattr("tools.read_extract.extract_document_text", track_extraction)
+    result = json.loads(read_file_tool(str(path), task_id=pdf_task))
+    assert "error" in result
+    assert "internal" in result["error"].lower()
+    assert calls == []
+
+
+def test_pdf_broken_page_content_is_extraction_error(tmp_path):
+    path = tmp_path / "broken-content.pdf"
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=300, height=300)
+    page[NameObject("/Resources")] = DictionaryObject({
+        NameObject("/Font"): DictionaryObject({
+            NameObject("/F1"): DictionaryObject({
+                NameObject("/Type"): NameObject("/Font"),
+                NameObject("/Subtype"): NameObject("/Type1"),
+                NameObject("/BaseFont"): NameObject("/Helvetica"),
+            }),
+        }),
+    })
+    # Valid PDF structure, but Tf has an array instead of a font name.
+    stream = DecodedStreamObject()
+    stream.set_data(b"BT [] 12 Tf (text) Tj ET")
+    page[NameObject("/Contents")] = stream
+    writer.write(path)
+    with pytest.raises(ExtractionError, match="Cannot extract PDF text"):
+        extract_document_text(str(path))
+
+
+def test_missing_pdf_uses_normal_not_found(tmp_path, pdf_task):
+    result = json.loads(read_file_tool("missing.pdf", task_id=pdf_task))
+    assert result["error"].startswith("File not found:")
+    assert "Cannot extract PDF" not in result["error"]
+    assert "extracted_document" not in result
+
+
+def test_pdf_total_processing_budget(tmp_path, monkeypatch):
+    path = tmp_path / "shared-stream.pdf"
+    _write_pdf(path, [["12345"]])
+    writer = PdfWriter(clone_from=path)
+    page = writer.pages[0]
+    for _ in range(3):
+        writer.add_page(page)  # Reuse the same content stream across pages.
+    writer.write(path)
+    monkeypatch.setattr("tools.file_tools._max_read_chars_cached", 1)
+    assert extract_document_text(str(path)) == (
+        "12345\n12345\n[extraction truncated: PDF exceeds processing budget]\n"
+    )
+
+
+@pytest.mark.parametrize("backend", ["docker", "ssh", "modal", "daytona", "singularity"])
+def test_remote_task_never_extracts_host_pdf(tmp_path, monkeypatch, backend):
+    from tools.terminal_tool import register_task_env_overrides, clear_task_env_overrides
+
+    path = tmp_path / "host-only.pdf"
+    _write_pdf(path, [["Host private text"]])
+    task_id = f"remote-pdf-{backend}"
+    monkeypatch.setenv("TERMINAL_ENV", backend)
+    register_task_env_overrides(task_id, {"cwd": str(tmp_path)})
+    calls = []
+
+    def track_extraction(path):
+        calls.append(path)
+        raise ExtractionError("Host extraction attempted")
+
+    monkeypatch.setattr("tools.read_extract.extract_document_text", track_extraction)
+    try:
+        result = json.loads(read_file_tool(str(path), task_id=task_id))
+        assert "Cannot read binary file" in result["error"]
+        assert calls == []
+    finally:
+        clear_task_env_overrides(task_id)
+
+
+@pytest.mark.parametrize("error_name, reason", [
+    ("FileNotFoundError", "file not found"),
+    ("PermissionError", "permission denied"),
+    ("LimitReachedError", "exceeds processing limits"),
+    ("PdfReadError", "malformed or unsupported PDF"),
+    ("DependencyError", "malformed or unsupported PDF"),
+    ("ValueError", "malformed or unsupported PDF"),
+    ("KeyError", "malformed or unsupported PDF"),
+    ("TypeError", "malformed or unsupported PDF"),
+    ("AttributeError", "malformed or unsupported PDF"),
+    ("IndexError", "malformed or unsupported PDF"),
+    ("ZeroDivisionError", "malformed or unsupported PDF"),
+    ("RecursionError", "malformed or unsupported PDF"),
+])
+def test_pdf_errors_hide_paths_and_parser_details(
+    tmp_path, pdf_task, monkeypatch, caplog, error_name, reason,
+):
+    import builtins
+    import pypdf.errors
+
+    path = tmp_path / "private.pdf"
+    _write_pdf(path, [["text"]])
+    error_type = getattr(builtins, error_name, None) or getattr(pypdf.errors, error_name)
+
+    def fail_reader(*args, **kwargs):
+        raise error_type(f"private parser detail: {path}")
+
+    monkeypatch.setattr("pypdf.PdfReader", fail_reader)
+    caplog.set_level("DEBUG", logger="tools.read_extract")
+    expected = f"Cannot extract PDF text: {reason}."
+    with pytest.raises(ExtractionError) as caught:
+        extract_document_text(str(path))
+    assert str(path) not in str(caught.value)
+    assert str(caught.value) == expected
+    assert "private parser detail" in caplog.text
+    if error_name != "FileNotFoundError":
+        result = json.loads(read_file_tool(str(path), task_id=pdf_task))
+        assert result["error"] == expected
 
 
 def test_pdf_redacts_credentials(tmp_path, pdf_task, monkeypatch):

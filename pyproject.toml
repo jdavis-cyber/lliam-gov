@@ -77,7 +77,7 @@ dependencies = [
   # Pinned to the version already resolved in uv.lock (no resolution churn).
   "packaging==26.0",
   # Pure-Python PDF text extraction for read_file.
-  "pypdf==6.21.4",
+  "pypdf==6.21.2",
   # Markdown -> HTML conversion for rich message delivery (Matrix
   # `formatted_body`, and the `send_message` tool's HTML path). Now on the
   # DEFAULT delivery path, not matrix-specific: without it both
