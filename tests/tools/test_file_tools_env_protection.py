@@ -25,6 +25,12 @@ def workspace(monkeypatch):
         monkeypatch.setenv("TERMINAL_CWD", str(root))
         monkeypatch.setenv("HERMES_WRITE_SAFE_ROOT", "")
         monkeypatch.setenv("LLIAM_WRITE_SAFE_ROOT", "")
+        # A cwd-only override shares the "default" environment, so isolate the
+        # environment and file-ops caches; otherwise the deleted workspace
+        # leaks into later tests as the default task's cwd.
+        monkeypatch.setattr(terminal_tool, "_active_environments", {})
+        monkeypatch.setattr(file_tools, "_file_ops_cache", {})
+        monkeypatch.setattr(file_tools, "_last_known_cwd", {})
         terminal_tool.register_task_env_overrides("env-protection", {"cwd": str(root)})
         try:
             yield root
