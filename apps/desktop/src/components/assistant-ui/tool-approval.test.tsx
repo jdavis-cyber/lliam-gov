@@ -157,3 +157,19 @@ describe('PendingToolApproval', () => {
     })
   })
 })
+
+it.each([false, true])('honors allowSession=%s in the approval menu', async allowSession => {
+  $activeSessionId.set('sess-1')
+  setApprovalRequest({
+    allowPermanent: false,
+    allowSession,
+    command: 'rm f',
+    description: 'file/directory delete',
+    sessionId: 'sess-1'
+  })
+  render(<PendingToolApproval part={part('terminal')} />)
+  fireEvent.keyDown(screen.getByRole('button', { name: /More approval options/ }), { key: 'Enter' })
+  await screen.findByRole('menuitem', { name: /Reject/ })
+  expect(screen.queryByRole('menuitem', { name: /Allow this session/ }) !== null).toBe(allowSession)
+  expect(screen.queryByRole('menuitem', { name: /Always allow/ })).toBeNull()
+})
