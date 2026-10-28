@@ -193,8 +193,10 @@ class TestReadFile:
         assert "ABSOLUTE_PATH_CONTENT" in result.content
         _assert_clean(result.content)
 
-    def test_tilde_expansion(self, ops):
-        test_path = Path.home() / ".hermes_test_tilde_9f8a7b"
+    def test_tilde_expansion(self, tmp_path):
+        env = LocalEnvironment(cwd=str(tmp_path), env={"HOME": str(tmp_path)})
+        ops = ShellFileOperations(env)
+        test_path = tmp_path / ".hermes_test_tilde_9f8a7b"
         try:
             test_path.write_text("TILDE_EXPANSION_OK\n")
             result = ops.read_file("~/.hermes_test_tilde_9f8a7b")

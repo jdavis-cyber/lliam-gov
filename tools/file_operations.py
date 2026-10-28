@@ -35,7 +35,7 @@ from pathlib import Path
 from tools.binary_extensions import BINARY_EXTENSIONS
 
 from agent.file_safety import (
-    get_env_write_block_error,
+    get_write_block_error,
     build_write_denied_paths,
     build_write_denied_prefixes,
     is_write_denied as _shared_is_write_denied,
@@ -1250,8 +1250,9 @@ class ShellFileOperations(FileOperations):
 
     def _python_delete(self, path: str, recursive: bool) -> WriteResult:
         path = self._expand_path(path)
-        if _is_write_denied(path):
-            return WriteResult(error=f"Delete denied: {path} is a protected path")
+        block_error = self._write_block_error(path)
+        if block_error:
+            return WriteResult(error=block_error)
 
         # We can't shell out to ``rm`` here — it doesn't exist on Windows
         # ``cmd.exe`` or PowerShell, so this code path is what's left when
@@ -1296,11 +1297,9 @@ class ShellFileOperations(FileOperations):
         src = self._expand_path(src)
         dst = self._expand_path(dst)
         for p in (src, dst):
-            env_error = self._env_write_block_error(p)
-            if env_error:
-                return WriteResult(error=env_error)
-            if _is_write_denied(p):
-                return WriteResult(error=f"Move denied: {p} is a protected path")
+            block_error = self._write_block_error(p)
+            if block_error:
+                return WriteResult(error=block_error)
         result = self._exec(
             f"mv {self._escape_shell_arg(src)} {self._escape_shell_arg(dst)}"
         )
@@ -1312,11 +1311,11 @@ class ShellFileOperations(FileOperations):
     # WRITE Implementation
     # =========================================================================
 
-    def _env_write_block_error(self, path: str) -> Optional[str]:
+    def _write_block_error(self, path: str) -> Optional[str]:
         # Relative V4A and direct-operation paths follow the live backend cwd,
         # which can differ from the host process cwd after a terminal cd.
         cwd = getattr(self.env, "cwd", None) or self.cwd
-        return get_env_write_block_error(os.path.join(cwd, path))
+        return get_write_block_error(path, cwd=cwd)
 
     def write_file(self, path: str, content: str) -> WriteResult:
         """
@@ -1344,11 +1343,9 @@ class ShellFileOperations(FileOperations):
         path = self._expand_path(path)
 
         # Block writes to sensitive paths
-        env_error = self._env_write_block_error(path)
-        if env_error:
-            return WriteResult(error=env_error)
-        if _is_write_denied(path):
-            return WriteResult(error=f"Write denied: '{path}' is a protected system/credential file.")
+        block_error = self._write_block_error(path)
+        if block_error:
+            return WriteResult(error=block_error)
 
         # Capture pre-write content.  Two consumers want it:
         #
@@ -1493,11 +1490,9 @@ class ShellFileOperations(FileOperations):
         path = self._expand_path(path)
 
         # Block writes to sensitive paths
-        env_error = self._env_write_block_error(path)
-        if env_error:
-            return PatchResult(error=env_error)
-        if _is_write_denied(path):
-            return PatchResult(error=f"Write denied: '{path}' is a protected system/credential file.")
+        block_error = self._write_block_error(path)
+        if block_error:
+            return PatchResult(error=block_error)
 
         # Read current content
         read_cmd = f"cat {self._escape_shell_arg(path)} 2>/dev/null"
@@ -1632,9 +1627,9 @@ class ShellFileOperations(FileOperations):
         for operation in operations:
             for path in (operation.file_path, operation.new_path):
                 if path is not None:
-                    env_error = self._env_write_block_error(self._expand_path(path))
-                    if env_error:
-                        return PatchResult(error=env_error)
+                    block_error = self._write_block_error(self._expand_path(path))
+                    if block_error:
+                        return PatchResult(error=block_error)
         
         # Apply operations
         result = apply_v4a_operations(operations, self)

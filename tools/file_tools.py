@@ -8,7 +8,7 @@ import os
 import threading
 from pathlib import Path
 
-from agent.file_safety import get_env_write_block_error, get_read_block_error
+from agent.file_safety import get_write_block_error, get_read_block_error
 from tools.binary_extensions import has_binary_extension
 from tools.file_operations import (
     ShellFileOperations,
@@ -449,14 +449,13 @@ def _get_lliam_config_resolved() -> str | None:
 
 def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None:
     """Return an error message if the path targets a sensitive system location."""
+    block_error = None
     try:
         # Preserve the supplied basename as well as the resolved target: a
         # .env symlink to an ordinary filename is still an environment file.
-        env_error = get_env_write_block_error(
-            str(_resolve_base_dir(task_id) / _expand_tilde(filepath))
+        block_error = get_write_block_error(
+            _expand_tilde(filepath), cwd=str(_resolve_base_dir(task_id)),
         )
-        if env_error:
-            return env_error
         resolved = str(_resolve_path_for_task(filepath, task_id))
     except (OSError, ValueError):
         resolved = filepath
@@ -481,7 +480,7 @@ def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None
             "Agent cannot modify security-sensitive configuration. "
             "Edit ~/.hermes/config.yaml directly or use 'lliam-gov config' instead."
         )
-    return None
+    return block_error
 
 
 def _get_container_mirror_prefix_for_task(task_id: str = "default") -> str | None:
@@ -1030,6 +1029,15 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
 
         _resolved = _resolve_path_for_task(path, task_id)
 
+        # Check the supplied name and its target before any content reads,
+        # including document extraction. Anchor at the task cwd without
+        # resolving away an env-named symlink to an ordinary file.
+        block_error = get_read_block_error(
+            str(_resolve_base_dir(task_id) / _expand_tilde(path))
+        )
+        if block_error:
+            return json.dumps({"error": block_error})
+
         # ── Structured-document extraction ────────────────────────────
         # Try before the binary-extension guard so .docx/.xlsx can render as text.
         # Malformed documents fall through to the normal path/binary guard.
@@ -1086,17 +1094,6 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
                     "Use vision_analyze for images, or terminal to inspect binary files."
                 ),
             })
-
-        # ── Lliam-GOV internal path guard ────────────────────────────────
-        # Prevent prompt injection via catalog or hub metadata files,
-        # and block credential stores under HERMES_HOME.  Pass the
-        # already-resolved path so a relative-path read against
-        # TERMINAL_CWD == HERMES_HOME (e.g. "auth.json") still hits the
-        # denylist — get_read_block_error's own resolve() runs against
-        # the Python process cwd, which can differ.
-        block_error = get_read_block_error(str(_resolved))
-        if block_error:
-            return json.dumps({"error": block_error})
 
         # ── Dedup check ───────────────────────────────────────────────
         # If we already read this exact (path, offset, limit) and the
