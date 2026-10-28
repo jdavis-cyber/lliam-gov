@@ -5,6 +5,22 @@ const tar = require('tar')
 const { DOMImplementation, XMLSerializer } = require('@xmldom/xmldom')
 const { expand } = require('brace-expansion')
 const uri = require('fast-uri')
+const path = require('node:path')
+
+test('every locked KaTeX copy rejects inherited trust and preserves normal math', () => {
+  const root = path.resolve(__dirname, '../../..')
+  const lock = require(path.join(root, 'package-lock.json'))
+  const copies = Object.keys(lock.packages).filter(key => key.endsWith('/node_modules/katex') || key === 'node_modules/katex')
+  assert.ok(copies.length > 0)
+  for (const copy of copies) {
+    const katex = require(path.join(root, copy))
+    const expression = String.raw`\href{https://example.test}{safe}`
+    const inherited = katex.renderToString(expression, Object.create({ trust: true }))
+    assert.doesNotMatch(inherited, /href="https:\/\/example\.test"/, copy)
+    assert.match(katex.renderToString(expression, { trust: true }), /href="https:\/\/example\.test"/, copy)
+    assert.match(katex.renderToString('x+y'), /class="katex"/, copy)
+  }
+})
 
 // Preserve normal developer command quoting while rejecting the advisory's
 // comment-token/line-terminator injection pattern. Nothing is executed.
