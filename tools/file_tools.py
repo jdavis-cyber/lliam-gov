@@ -8,7 +8,7 @@ import os
 import threading
 from pathlib import Path
 
-from agent.file_safety import get_read_block_error
+from agent.file_safety import get_write_block_error, get_read_block_error
 from tools.binary_extensions import has_binary_extension
 from tools.file_operations import (
     ShellFileOperations,
@@ -449,7 +449,13 @@ def _get_lliam_config_resolved() -> str | None:
 
 def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None:
     """Return an error message if the path targets a sensitive system location."""
+    block_error = None
     try:
+        # Preserve the supplied basename as well as the resolved target: a
+        # .env symlink to an ordinary filename is still an environment file.
+        block_error = get_write_block_error(
+            _expand_tilde(filepath), cwd=str(_resolve_base_dir(task_id)),
+        )
         resolved = str(_resolve_path_for_task(filepath, task_id))
     except (OSError, ValueError):
         resolved = filepath
@@ -474,7 +480,7 @@ def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None
             "Agent cannot modify security-sensitive configuration. "
             "Edit ~/.hermes/config.yaml directly or use 'lliam-gov config' instead."
         )
-    return None
+    return block_error
 
 
 def _get_container_mirror_prefix_for_task(task_id: str = "default") -> str | None:
@@ -1022,6 +1028,15 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
             })
 
         _resolved = _resolve_path_for_task(path, task_id)
+
+        # Check the supplied name and its target before any content reads,
+        # including document extraction. Anchor at the task cwd without
+        # resolving away an env-named symlink to an ordinary file.
+        block_error = get_read_block_error(
+            str(_resolve_base_dir(task_id) / _expand_tilde(path))
+        )
+        if block_error:
+            return json.dumps({"error": block_error})
 
         # ── Lliam-GOV internal path guard ────────────────────────────────
         # Prevent prompt injection via catalog or hub metadata files,
