@@ -260,8 +260,14 @@ def test_recoverable_dangerous_commands_still_pass_yolo(clean_session, monkeypat
     """Yolo still bypasses the regular DANGEROUS_PATTERNS list.
 
     This confirms we haven't broken the yolo escape hatch — only narrowed it.
+
+    Yolo is frozen at import time, so setting the env var here has no effect;
+    the test previously passed only via the no-approver auto-approve that
+    AI-1172 removed. Patch the frozen flag to simulate a yolo process start.
     """
-    monkeypatch.setenv("HERMES_YOLO_MODE", "1")
+    import tools.approval as approval_module
+
+    monkeypatch.setattr(approval_module, "_YOLO_MODE_FROZEN", True)
 
     # These are dangerous but NOT hardline — yolo should still pass them.
     for cmd in ["rm -rf /tmp/x", "chmod -R 777 .", "git reset --hard", "git push --force"]:

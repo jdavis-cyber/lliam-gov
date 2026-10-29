@@ -24,7 +24,7 @@ from typing import Optional
 from lliam_cli.config import cfg_get
 
 from tools.interrupt import is_interrupted
-from utils import env_var_enabled, is_truthy_value
+from utils import is_truthy_value
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,13 @@ _approval_turn_id: contextvars.ContextVar[str] = contextvars.ContextVar(
 _approval_tool_call_id: contextvars.ContextVar[str] = contextvars.ContextVar(
     "approval_tool_call_id",
     default="",
+)
+# Cron job marker, bound by cron/scheduler.py around each job. Context-local
+# so a gateway that runs cron in-process does not classify its live turns
+# (or concurrent ones) as cron (AI-1172).
+_approval_cron_session: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "approval_cron_session",
+    default=False,
 )
 
 
@@ -102,6 +109,70 @@ def reset_current_session_key(token: contextvars.Token[str]) -> None:
     _approval_session_key.reset(token)
 
 
+def set_cron_session() -> contextvars.Token[bool]:
+    """Mark the current context as running a cron job (approvals.cron_mode applies)."""
+    return _approval_cron_session.set(True)
+
+
+def reset_cron_session(token: contextvars.Token[bool]) -> None:
+    """Restore the cron marker that was active before :func:`set_cron_session`."""
+    _approval_cron_session.reset(token)
+
+
+def cron_session_marked() -> bool:
+    """True when the context-local cron marker is set in the current context.
+
+    Unlike :func:`_is_cron_session` this ignores the ``LLIAM_CRON_SESSION``
+    env flag: it reports only the marker that a thread hop would drop, so a
+    caller can capture it at dispatch time and re-bind it on the worker
+    (tools/async_delegation.py).
+    """
+    return _approval_cron_session.get()
+
+
+# Set by cli.main for a single-query (`chat -q`) run: nobody is present to
+# answer a prompt, whatever surface flags the process inherited from its
+# parent (AI-1172). Process-local on purpose — an env var would leak into
+# every child process the run starts.
+_oneshot_process: bool = False
+
+
+def mark_oneshot_process() -> None:
+    """Mark this process as a one-shot run: dangerous commands are refused."""
+    global _oneshot_process
+    _oneshot_process = True
+
+
+def _approval_surfaces() -> tuple:
+    """Return (is_cron, is_cli, is_gateway, is_ask) for the current call.
+
+    Cron policy beats interactive/exec-ask flags a cron job inherits from its
+    host process (the gateway sets exec-ask process-wide). A one-shot run has
+    no surface at all, so it always takes the no-approver path.
+    """
+    is_cron = _is_cron_session()
+    if is_cron:
+        return True, False, False, False
+    if _oneshot_process:
+        return False, False, False, False
+    return (
+        False,
+        _surface_flag("INTERACTIVE"),
+        _is_gateway_approval_context(),
+        _surface_flag("EXEC_ASK"),
+    )
+
+
+def _is_cron_session() -> bool:
+    """True inside a cron job.
+
+    The context-local marker covers the in-process scheduler (standalone or
+    inside the gateway). The ``LLIAM_CRON_SESSION`` env flag remains for a
+    cron run in a separate process that sets it in its own environment.
+    """
+    return _approval_cron_session.get() or _surface_flag("CRON_SESSION")
+
+
 def set_current_observability_context(
     *,
     turn_id: str = "",
@@ -148,6 +219,57 @@ def _get_session_platform() -> str:
         return getenv_compat("SESSION_PLATFORM", "") or ""
 
 
+def _surface_flag(suffix: str) -> bool:
+    """True when the surface flag ``LLIAM_<suffix>`` (or its legacy name) is truthy.
+
+    The CLI, gateway, cron scheduler, TUI gateway and ACP adapter all set the
+    ``LLIAM_`` name since rename R.8a. Reading only the legacy name made every
+    one of them look like a no-approver session (AI-1172 / DEF-015).
+    """
+    return is_truthy_value(getenv_compat(suffix, ""), default=False)
+
+
+def _no_approver_block_result(command: str, description: str,
+                              pattern_key: str) -> dict:
+    """Refuse a dangerous command when no approver is present (AI-1172).
+
+    Reached only outside interactive, gateway/ask and cron sessions, and only
+    after the explicit opt-ins (--yolo, /yolo, approvals.mode=off, an earlier
+    operator approval) have been checked. Fails closed instead of running the
+    command unreviewed.
+    """
+    logger.warning(
+        "Refused dangerous command in non-interactive non-gateway context "
+        "(pattern: %s): %s",
+        description, command[:200],
+    )
+    try:
+        from tools.hitl_oversight import record_decision
+        record_decision(
+            decision="deny", gate="shell.dangerous", target=command,
+            description=description, origin="non_interactive_no_approver",
+        )
+    except Exception:
+        pass
+    return {
+        "approved": False,
+        "pattern_key": pattern_key,
+        "description": description,
+        "outcome": "blocked",
+        "user_consent": False,
+        "message": (
+            f"BLOCKED: this command is potentially dangerous ({description}) "
+            "and this session has no one present to approve it (for example "
+            "a one-shot `lliam-gov chat -q` run or a script). Nothing was run. "
+            "Do not retry it here: find an approach that avoids the command, "
+            "or ask the operator to run it from the Lliam-GOV desktop app, "
+            "where they can review and approve it. Starting the run with "
+            "--yolo skips this check only when the operator explicitly "
+            "chooses to trust it."
+        ),
+    }
+
+
 def _is_gateway_approval_context() -> bool:
     """True when this call is inside a gateway/API session.
 
@@ -162,9 +284,9 @@ def _is_gateway_approval_context() -> bool:
     fall through to the gateway branch would submit a pending approval
     with no listener and block the job indefinitely.
     """
-    if env_var_enabled("HERMES_CRON_SESSION"):
+    if _is_cron_session():
         return False
-    if env_var_enabled("HERMES_GATEWAY_SESSION"):
+    if _surface_flag("GATEWAY_SESSION"):
         return True
     return bool(_get_session_platform())
 
@@ -233,6 +355,20 @@ _USER_SENSITIVE_WRITE_TARGET = (
 )
 _PROJECT_SENSITIVE_WRITE_TARGET = rf'(?:{_PROJECT_ENV_PATH}|{_PROJECT_CONFIG_PATH})'
 _COMMAND_TAIL = r'(?:\s*(?:&&|\|\||;).*)?$'
+# AI-1183 (DEF-021): the skill library and the pending-approval store change
+# only through skill_manage staging plus operator approval. File tools refuse
+# these paths (agent.file_safety); this pairs that deny with best-effort
+# terminal coverage for the obvious shell writes below. The home-prefix
+# alternation is reused from _LLIAM_CONFIG_PATH (its file name stripped) and
+# extended with the ~/.lliam and $LLIAM_HOME spellings.
+assert _LLIAM_CONFIG_PATH.endswith(r'config\.yaml\b')
+_LLIAM_HOME_PREFIX = _LLIAM_CONFIG_PATH[: -len(r'config\.yaml\b')]
+_SKILL_STORE_PATH = (
+    rf'(?:{_LLIAM_HOME_PREFIX}|'
+    r'(?:~|\$home|\$\{home\})/\.lliam/|'
+    r'(?:\$lliam_home|\$\{lliam_home\})/)'
+    r'(?:skills|pending)(?=/|["\'\s;|&)]|$)'
+)
 
 # =========================================================================
 # Hardline (unconditional) blocklist
@@ -496,6 +632,13 @@ DANGEROUS_PATTERNS = [
     # The trailing `[^\s"\']*` consumes the rest of the destination filename
     # (e.g. `authorized_keys` after the `~/.ssh/` fragment).
     (rf'\b(cp|mv|install)\b.*\s["\']?{_SENSITIVE_WRITE_TARGET}[^\s"\']*["\']?{_COMMAND_TAIL}', "copy/move file into sensitive credential/SSH/shell-rc path"),
+    # AI-1183: shell writes into the skill library / pending-approval store.
+    # Written without a leading \b so their legacy approval keys stay distinct
+    # from the generic tee/redirect/cp keys (see _legacy_pattern_key).
+    (rf'>>?\s*["\']?{_SKILL_STORE_PATH}', "write into skill library or pending approvals via redirection"),
+    (rf'(?<![\w.-])tee\s.*["\']?{_SKILL_STORE_PATH}', "write into skill library or pending approvals via tee"),
+    (rf'(?<![\w.-])(?:cp|mv|install|rsync|ln)\s.*\s["\']?{_SKILL_STORE_PATH}[^\s"\']*["\']?{_COMMAND_TAIL}', "copy/move file into skill library or pending approvals"),
+    (rf'(?<![\w.-])(?:sed\s+(?:-[^\s]*i|--in-place)|(?:perl|ruby)\s+-[^\s]*i)\s.*{_SKILL_STORE_PATH}', "in-place edit in skill library or pending approvals"),
     # In-place edits mutate the target file directly, bypassing redirection,
     # tee, and copy/move/install coverage. Gate the same user-controlled
     # startup/credential files so `sed -i ... ~/.bashrc` and `perl -i ...
@@ -1587,10 +1730,14 @@ def check_dangerous_command(command: str, env_type: str,
     all_keys = [key for key, _ in warnings]
     description = "; ".join(desc for _, desc in warnings)
 
-    is_cli = env_var_enabled("HERMES_INTERACTIVE")
-    is_gateway = _is_gateway_approval_context()
+    # Cron policy beats interactive/exec-ask flags a cron job inherits from
+    # its host process (the gateway sets exec-ask process-wide). Otherwise an
+    # exec-ask surface queues the command for approval below, as in
+    # check_all_command_guards; only a session with no surface at all is a
+    # no-approver session.
+    is_cron, is_cli, is_gateway, is_ask = _approval_surfaces()
 
-    if not is_cli and not is_gateway:
+    if not is_cli and not is_gateway and not is_ask:
         # LG-HO-02 (additive @ P2.2): under strict posture the legacy
         # auto-approve below is fail-closed DENY — a dangerous command with no
         # approver present must not run for CUI (closes the R6 gap). Applies
@@ -1623,7 +1770,7 @@ def check_dangerous_command(command: str, env_type: str,
                 ),
             }
         # Cron sessions: respect cron_mode config
-        if env_var_enabled("HERMES_CRON_SESSION"):
+        if is_cron:
             if _get_cron_approval_mode() == "deny":
                 return {
                     "approved": False,
@@ -1635,14 +1782,13 @@ def check_dangerous_command(command: str, env_type: str,
                         "approvals.cron_mode: approve in config.yaml."
                     ),
                 }
-        logger.warning(
-            "AUTO-APPROVED dangerous command in non-interactive non-gateway context "
-            "(pattern: %s): %s — set HERMES_INTERACTIVE or HERMES_GATEWAY_SESSION to require approval.",
-            description, command[:200],
-        )
-        return {"approved": True, "message": None}
+            # approvals.cron_mode: approve is cron's own explicit opt-in.
+            return {"approved": True, "message": None}
+        # AI-1172 / DEF-015: no approver and no explicit opt-in. Refuse
+        # instead of auto-approving.
+        return _no_approver_block_result(command, description, pattern_key)
 
-    if is_gateway or env_var_enabled("HERMES_EXEC_ASK"):
+    if is_gateway or is_ask:
         submit_pending(session_key, {
             "command": command,
             "pattern_key": pattern_key,
@@ -1936,12 +2082,13 @@ def check_all_command_guards(command: str, env_type: str,
     if not has_delete and _command_matches_permanent_allowlist(command):
         return {"approved": True, "message": None}
 
-    is_cli = env_var_enabled("HERMES_INTERACTIVE")
-    is_gateway = _is_gateway_approval_context()
-    is_ask = env_var_enabled("HERMES_EXEC_ASK")
+    # Cron policy beats interactive/exec-ask flags inherited from the host
+    # process (see check_dangerous_command).
+    is_cron, is_cli, is_gateway, is_ask = _approval_surfaces()
 
-    # Preserve the existing non-interactive behavior: outside CLI/gateway/ask
-    # flows, we do not block on approvals and we skip external guard work.
+    # Outside CLI/gateway/ask flows there is no approver: we skip external
+    # guard work and refuse dangerous commands (AI-1172) unless an explicit
+    # opt-in applies.
     if not is_cli and not is_gateway and not is_ask:
         # LG-HO-02: this is the terminal dispatcher's real guard. Strict
         # sessions must not inherit the shipped headless auto-approve behavior
@@ -1972,7 +2119,7 @@ def check_all_command_guards(command: str, env_type: str,
                 ),
             }
         # Cron sessions: respect cron_mode config
-        if env_var_enabled("HERMES_CRON_SESSION"):
+        if is_cron:
             if _get_cron_approval_mode() == "deny":
                 # Run detection to get a description for the block message
                 is_dangerous, _pk, description = detect_dangerous_command(command)
@@ -1987,6 +2134,20 @@ def check_all_command_guards(command: str, env_type: str,
                             "approvals.cron_mode: approve in config.yaml."
                         ),
                     }
+            # approvals.cron_mode: approve is cron's own explicit opt-in.
+            return {"approved": True, "message": None}
+        # AI-1172 / DEF-015: no approver and no explicit opt-in. An earlier
+        # operator approval (session or "always") still counts; anything else
+        # is refused instead of auto-approved.
+        session_key = get_current_session_key()
+        unapproved = [(key, desc) for key, desc in matches
+                      if not is_approved(session_key, key)]
+        if unapproved:
+            return _no_approver_block_result(
+                command,
+                "; ".join(desc for _, desc in unapproved),
+                unapproved[0][0],
+            )
         return {"approved": True, "message": None}
 
     # --- Phase 1: Gather findings from both checks ---
@@ -2292,11 +2453,11 @@ def check_execute_code_guard(code: str, env_type: str) -> dict:
 
     Scope (documented limitation, #30882): in a purely local non-interactive
     non-gateway session (no TTY, not gateway, not cron-deny) this returns
-    approved — matching the existing terminal auto-approve contract. The
-    hardline floor still blocks catastrophic ``terminal()`` commands the script
-    issues; running arbitrary code headlessly without any approval surface is
-    trusted-by-config (set a gateway/ask surface or ``approvals.cron_mode`` to
-    require approval).
+    approved. The script's own ``terminal()`` calls still pass through
+    ``check_all_command_guards``, which refuses dangerous commands in that
+    context (AI-1172), and the hardline floor still applies. Running arbitrary
+    code headlessly without any approval surface is trusted-by-config (set a
+    gateway/ask surface or ``approvals.cron_mode`` to require approval).
     """
     pattern_key = "execute_code"
     description = (
@@ -2315,11 +2476,10 @@ def check_execute_code_guard(code: str, env_type: str) -> dict:
     if _YOLO_MODE_FROZEN or is_current_session_yolo_enabled() or approval_mode == "off":
         return {"approved": True, "message": None}
 
-    is_gateway = _is_gateway_approval_context()
-    is_ask = env_var_enabled("HERMES_EXEC_ASK")
+    _is_cron, _is_cli, is_gateway, is_ask = _approval_surfaces()
 
     # Cron: no user is present to approve arbitrary code.
-    if env_var_enabled("HERMES_CRON_SESSION"):
+    if _is_cron_session():
         if _get_cron_approval_mode() == "deny":
             return {
                 "approved": False,

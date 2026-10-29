@@ -11,6 +11,9 @@ from tools import skill_manager_tool as manager
 from tools import skills_tool, write_approval
 from tools.skill_provenance import reset_current_write_origin, set_current_write_origin
 
+# AI-1183: skill approvals replay only from an operator review surface.
+OPERATOR = write_approval.issue_operator_capability()
+
 
 CONTENT = "---\nname: local-file-tasks\ndescription: Local file tasks\n---\n# Tasks\nOriginal instructions.\n"
 
@@ -49,7 +52,7 @@ def test_create_requires_operator_approval(library, origin, approval_setting, ca
     assert record["payload"]["content"] == CONTENT
     assert "Skill write approved" not in caplog.text
 
-    reply = handle_pending_subcommand("skills", ["approve", result["pending_id"]])
+    reply = handle_pending_subcommand("skills", ["approve", result["pending_id"]], operator=OPERATOR)
     assert "Approved 1" in reply
     assert (library / "local-file-tasks" / "SKILL.md").read_text(encoding="utf-8") == CONTENT
     assert json.loads(skills_tool.skill_view("local-file-tasks"))["success"] is True
@@ -86,7 +89,7 @@ def test_pending_changes_leave_operator_authored_skill_untouched(library, action
 
     # The same mutation becomes effective only through operator approval.
     proposal = json.loads(manager.skill_manage(action, "local-file-tasks", **kwargs))
-    handle_pending_subcommand("skills", ["approve", proposal["pending_id"]])
+    handle_pending_subcommand("skills", ["approve", proposal["pending_id"]], operator=OPERATOR)
     if action == "delete":
         assert not skill.exists()
     elif action == "remove_file":
@@ -128,7 +131,7 @@ def test_duplicate_proposals_log_the_selected_approval(library, caplog):
     first = json.loads(manager.skill_manage("create", "local-file-tasks", content=CONTENT))
     second = json.loads(manager.skill_manage("create", "local-file-tasks", content=CONTENT))
     caplog.set_level(logging.INFO, logger=manager.__name__)
-    reply = handle_pending_subcommand("skills", ["approve", second["pending_id"]])
+    reply = handle_pending_subcommand("skills", ["approve", second["pending_id"]], operator=OPERATOR)
     assert "Approved 1" in reply
     assert f"Skill write approved: id={second['pending_id']}" in caplog.text
     assert f"Skill write approved: id={first['pending_id']}" not in caplog.text
@@ -144,7 +147,7 @@ def test_staging_does_not_clear_prompt_cache(library, monkeypatch):
     result = json.loads(manager.skill_manage("create", "local-file-tasks", content=CONTENT))
     assert result["staged"] is True
     clear_cache.assert_not_called()
-    handle_pending_subcommand("skills", ["approve", result["pending_id"]])
+    handle_pending_subcommand("skills", ["approve", result["pending_id"]], operator=OPERATOR)
     clear_cache.assert_called_once_with(clear_snapshot=True)
 
 
@@ -201,7 +204,7 @@ def test_real_background_review_stages_before_operator_approval(library, monkeyp
     assert json.loads(skills_tool.skill_view("local-file-tasks"))["success"] is False
     assert "Skill write approved" not in caplog.text
     assert notifications and "pending approval" in str(notifications)
-    handle_pending_subcommand("skills", ["approve", records[0]["id"]])
+    handle_pending_subcommand("skills", ["approve", records[0]["id"]], operator=OPERATOR)
     assert json.loads(skills_tool.skill_view("local-file-tasks"))["success"] is True
     assert "Skill write approved" in caplog.text
 
@@ -253,7 +256,7 @@ def test_approved_consolidation_rewrites_cron_skill_refs(library, cron_jobs, abs
     assert staged["staged"] is True
     assert cron_jobs.get_job(job["id"])["skills"] == ["narrow"]
 
-    reply = handle_pending_subcommand("skills", ["approve", staged["pending_id"]])
+    reply = handle_pending_subcommand("skills", ["approve", staged["pending_id"]], operator=OPERATOR)
     assert "Approved 1" in reply
     assert not (library / "narrow").exists()
     assert cron_jobs.get_job(job["id"])["skills"] == expected

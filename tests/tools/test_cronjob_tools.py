@@ -240,6 +240,7 @@ class TestCronjobRequirements:
         assert check_cronjob_requirements() is False
 
 
+@pytest.mark.usefixtures("unavailable_optional_dependencies")
 class TestUnifiedCronjobTool:
     @pytest.fixture(autouse=True)
     def _setup_cron_dir(self, tmp_path, monkeypatch):
@@ -505,6 +506,7 @@ class TestResolveModelOverride:
         assert model == "gpt-5.4"
 
 
+@pytest.mark.usefixtures("unavailable_optional_dependencies")
 class TestLocalDeliveryNotice:
     """#51568 — TUI/CLI cron jobs are local-only; surface that at create time
     so the agent doesn't promise a delivery that never happens."""

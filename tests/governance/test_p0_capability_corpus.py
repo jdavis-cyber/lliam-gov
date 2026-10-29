@@ -87,7 +87,7 @@ def test_denied_set_is_exactly_the_named_list(p0):
 
 # --- P0.4 / P0.5: mission toolsets resolve and their schemas bind ----------
 
-def test_mission_toolsets_resolve_and_schemas_pass_validation(p0):
+def test_mission_toolsets_resolve_and_schemas_pass_validation(p0, unavailable_optional_dependencies):
     import model_tools
     from lliam_cli.config import load_config
     from lliam_cli.tools_config import _get_platform_tools
@@ -145,7 +145,7 @@ def test_in_root_path_passes_traversal_rejected(p0):
 
 # --- P0.6: installed features usable; runtime installs refused -------------
 
-def test_installed_feature_usable_runtime_install_refused(p0, monkeypatch):
+def test_installed_feature_usable_runtime_install_refused(p0, monkeypatch, allow_lazy_installs):
     from tools import lazy_deps
 
     present = [f for f in lazy_deps.LAZY_DEPS if not lazy_deps.feature_missing(f)]
