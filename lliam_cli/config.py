@@ -2197,17 +2197,9 @@ DEFAULT_CONFIG = {
         # External hub installs (trusted/community sources) are always
         # scanned regardless of this setting.
         "guard_agent_created": False,
-        # Approval gate for skill_manage (create/edit/patch/write_file/delete/
-        # remove_file), applied to BOTH foreground agent turns and the
-        # background self-improvement review fork.
-        #   false (default) — write freely; the gate is off (pre-gate behaviour)
-        #   true            — require approval: stage the write for review
-        #                     instead of committing (a SKILL.md is too large to
-        #                     review inline, so skills always stage rather than
-        #                     prompt). List with /skills pending, inspect with
-        #                     /skills diff <id> (full diff — CLI/dashboard/file,
-        #                     never crammed into a chat bubble), apply with
-        #                     /skills approve <id> or drop with /skills reject <id>.
+        # Deprecated and ignored: agent skill changes always stage for approval.
+        # Review with /skills pending or /skills diff <id>, then
+        # /skills approve <id> or /skills reject <id>.
         "write_approval": False,
     },
 

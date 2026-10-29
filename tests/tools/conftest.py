@@ -67,3 +67,27 @@ def disable_lazy_stt_install():
     """
     with patch("tools.transcription_tools._try_lazy_install_stt", return_value=False):
         yield
+
+
+@pytest.fixture
+def submit_and_approve_skill():
+    """Submit through the model tool, then replay the selected pending record.
+
+    Accept an existing tool result when a test also checks the staged state.
+    Return the replay result so tests can inspect validation errors and metadata.
+    """
+    import json
+    from tools.skill_manager_tool import apply_skill_pending, skill_manage
+    from tools.write_approval import discard_pending, get_pending
+
+    def submit(raw=None, **kwargs):
+        proposal = json.loads(raw if raw is not None else skill_manage(**kwargs))
+        assert proposal["staged"] is True
+        pending_id = proposal["pending_id"]
+        assert get_pending("skills", pending_id) is not None
+        result = apply_skill_pending(pending_id)
+        if json.loads(result).get("success"):
+            assert discard_pending("skills", pending_id)
+        return result
+
+    return submit
