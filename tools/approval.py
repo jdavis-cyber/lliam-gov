@@ -710,18 +710,108 @@ def _ansi_c_quoted(command: str, start: int) -> tuple:
     return None, None
 
 
-# Protected names a glob in a write target is tried against: Bash expands a
-# redirect target that matches one file, so ``> .en?`` can write ``.env``.
-_ENV_GLOB_PROBES = (".env", ".envrc", ".env.local", ".env.development", ".env.production", ".env.test")
+def _glob_elements(pattern: str) -> list:
+    """Split a glob into ``("lit", ch)``, ``("any",)``, ``("star",)`` and
+    ``("class", negated, members)`` elements; an unclosed ``[`` is a literal."""
+    elements: list = []
+    i, n = 0, len(pattern)
+    while i < n:
+        ch = pattern[i]
+        if ch == "*":
+            elements.append(("star",))
+        elif ch == "?":
+            elements.append(("any",))
+        elif ch == "[":
+            j = i + 1
+            negated = j < n and pattern[j] in "!^"
+            if negated:
+                j += 1
+            k = j + 1 if j < n and pattern[j] == "]" else j  # a leading ] is a member
+            while k < n and pattern[k] != "]":
+                k += 1
+            if k >= n:
+                elements.append(("lit", ch))
+            else:
+                body, members, m = pattern[j:k], set(), 0
+                while m < len(body):
+                    if m + 2 < len(body) and body[m + 1] == "-":
+                        low, high = sorted((body[m], body[m + 2]))
+                        members.update(chr(c) for c in range(ord(low), min(ord(high), ord(low) + 4096) + 1))
+                        m += 3
+                    else:
+                        members.add(body[m])
+                        m += 1
+                elements.append(("class", negated, frozenset(members)))
+                i = k
+        else:
+            elements.append(("lit", ch))
+        i += 1
+    return elements
 
 
-def _glob_may_name_env(path: str) -> bool:
-    """True when *path*'s file name is a glob that could match a protected
-    environment file (quoting is gone here, so a quoted ``*`` counts too)."""
-    name = unicodedata.normalize("NFKC", path).replace("\\", "/").rsplit("/", 1)[-1].casefold()
+def _glob_after_prefix(elements: list, prefix: str, dotglob: bool) -> set:
+    """Positions in *elements* the glob may be at after matching *prefix*
+    (case-insensitively). A ``*`` or ``?`` can't match a leading ``.``
+    unless *dotglob*, as in Bash."""
+
+    def closure(states: set) -> set:
+        out, todo = set(states), list(states)
+        while todo:
+            s = todo.pop()
+            if s < len(elements) and elements[s][0] == "star" and s + 1 not in out:
+                out.add(s + 1)
+                todo.append(s + 1)
+        return out
+
+    states = closure({0})
+    for pos, ch in enumerate(prefix):
+        wild_ok = dotglob or not (pos == 0 and ch == ".")
+        step: set = set()
+        for s in states:
+            if s >= len(elements):
+                continue
+            kind = elements[s][0]
+            if kind == "star":
+                if wild_ok:
+                    step.add(s)
+            elif kind == "any":
+                if wild_ok:
+                    step.add(s + 1)
+            elif kind == "lit":
+                if elements[s][1].casefold() == ch:
+                    step.add(s + 1)
+            else:
+                _, negated, members = elements[s]
+                hit = ch in members or ch.upper() in members
+                if hit != negated:
+                    step.add(s + 1)
+        states = closure(step)
+        if not states:
+            break
+    return states
+
+
+def _glob_may_name_env(path: str, dotglob: bool = False) -> bool:
+    """True when *path*'s file name is a glob that may match a protected
+    environment file: ``.env``, ``.envrc`` or any ``.env.<suffix>`` other
+    than the templates (quoting is gone here, so a quoted ``*`` counts too).
+    Bash expands a redirect target that matches one file, so ``> .en?`` or
+    ``> .[e]nv.staging`` can write a protected file. Unsure means True."""
+    name = unicodedata.normalize("NFKC", path).replace("\\", "/").rsplit("/", 1)[-1]
+    name = name.split(":", 1)[0].rstrip(" .")
     if not any(ch in name for ch in "*?["):
         return False
-    return any(fnmatch.fnmatchcase(probe, name) for probe in _ENV_GLOB_PROBES)
+    elements = _glob_elements(name)
+    for exact in (".env", ".envrc"):
+        if len(elements) in _glob_after_prefix(elements, exact, dotglob):
+            return True  # the rest of the glob can be empty
+    for state in _glob_after_prefix(elements, ".env.", dotglob):
+        rest = elements[state:]
+        if any(element[0] != "lit" for element in rest):
+            return True  # some suffix other than a template name fits
+        if _is_protected_env_basename(".env." + "".join(element[1] for element in rest)):
+            return True
+    return False
 
 
 def _shell_tokens(command: str, comments: bool = False,
@@ -1009,6 +1099,91 @@ def _command_word_indices(words: list, scripts: list) -> set:
     return found
 
 
+_FIND_EXEC_ACTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+# xargs' own options (GNU and BSD), so the command it runs is found: short
+# flags without a value, short flags taking a value, short flags whose value
+# is optional and only attached (-i[R], -l[N], -e[E]), long options without a
+# separate value (--replace[=R] takes it only attached), long options taking
+# a value. An unknown option is read both with and without a value.
+_XARGS_SHORT_FLAGS = "0oprtx"
+_XARGS_SHORT_VALUES = "adEIJLnPRSs"
+_XARGS_SHORT_OPTIONAL = "eil"
+_XARGS_LONG_FLAGS = frozenset({
+    "--eof", "--exit", "--help", "--interactive", "--max-lines", "--no-run-if-empty",
+    "--null", "--open-tty", "--replace", "--show-limits", "--verbose", "--version",
+})
+_XARGS_LONG_VALUES = frozenset({
+    "--arg-file", "--delimiter", "--max-args", "--max-chars", "--max-procs", "--process-slot-var",
+})
+
+
+def _xargs_command_starts(args: list) -> set:
+    """Indices in xargs' *args* where the command it runs may start, past
+    xargs' own options (several when an option is unknown)."""
+    starts: set = set()
+
+    def walk(j: int) -> None:
+        if len(starts) >= _MAX_COMMAND_READINGS:
+            return
+        while j < len(args):
+            arg = args[j]
+            if arg == "--":
+                j += 1
+                break
+            if not arg.startswith("-") or arg == "-":
+                break
+            if arg.startswith("--"):
+                key, has_value, _ = arg.partition("=")
+                if key in _XARGS_LONG_VALUES and not has_value:
+                    j += 2
+                    continue
+                if not (has_value or key in _XARGS_LONG_FLAGS or key in _XARGS_LONG_VALUES):
+                    walk(j + 2)  # unknown long option: maybe it takes a value
+                j += 1
+                continue
+            step = 1
+            for k, flag in enumerate(arg[1:]):
+                if flag in _XARGS_SHORT_VALUES:
+                    if k == len(arg) - 2:
+                        step = 2  # the value is the next word
+                    break
+                if flag in _XARGS_SHORT_OPTIONAL:
+                    break  # the rest of the word is the value
+                if flag not in _XARGS_SHORT_FLAGS:
+                    walk(j + 2)  # unknown short flag: maybe it takes a value
+                    break
+            j += step
+        starts.add(j)
+
+    walk(0)
+    return starts
+
+
+def _command_invocations(words: list, scripts: list, depth: int = 0) -> list:
+    """Every command the simple command *words* may run, as ``(words, via)``
+    with the command word first: its own command word (in every wrapper
+    reading), and the command xargs or find -exec/-execdir/-ok/-okdir runs,
+    recursively. *via* is True for those, whose operands xargs/find add."""
+    found: list = []
+    for start in sorted(_command_word_indices(words, scripts)):
+        if start >= len(words):
+            continue
+        found.append((words[start:], depth > 0))
+        if depth >= _MAX_NESTED_SCRIPT_DEPTH:
+            continue
+        base = words[start].rsplit("/", 1)[-1]
+        args = words[start + 1:]
+        if base == "xargs":
+            for j in sorted(_xargs_command_starts(args)):
+                found.extend(_command_invocations(args[j:], scripts, depth + 1))
+        elif base == "find":
+            for j, action in enumerate(args):
+                if action in _FIND_EXEC_ACTIONS:
+                    end = next((k for k in range(j + 1, len(args)) if args[k] in {";", "+"}), len(args))
+                    found.extend(_command_invocations(args[j + 1:end], scripts, depth + 1))
+    return found
+
+
 # A heredoc body is input, not commands, only when it is clearly safe: every
 # command of the pipeline it feeds reads stdin as data and never runs it.
 _HEREDOC_DATA_COMMANDS = frozenset({
@@ -1031,13 +1206,14 @@ _HEREDOC_UNSAFE_ASSIGNMENT = re.compile(r"^(?:PATH|BASH_ENV|ENV|BASH_FUNC_[^=]*|
 
 
 def _heredoc_scripts(tokens: list, heredocs: list) -> list:
-    """The heredoc bodies of *tokens* (from ``_shell_tokens(..., heredocs=)``)
-    to scan as commands. A body is input only when every command of its
-    pipeline is in ``_HEREDOC_DATA_COMMANDS`` and nothing in the whole command
-    is unsafe (see ``_HEREDOC_UNSAFE_WORDS``); otherwise every body counts."""
-    if not heredocs:
-        return []
+    """The heredoc bodies (from ``_shell_tokens(..., heredocs=)``) and
+    here-strings (``<<< WORD``) of *tokens* to scan as commands. A body is
+    input only when every command of its pipeline is in
+    ``_HEREDOC_DATA_COMMANDS`` and nothing in the whole command is unsafe
+    (see ``_HEREDOC_UNSAFE_WORDS``); otherwise every body counts."""
     bodies = iter(heredocs)
+    every_body: list = []  # heredoc bodies and here-strings, in order
+    here_string = False  # the next word is a here-string
     pipelines: list = []  # [bodies fed into the pipeline, all commands read data]
     current: list = [[], True]
     words: list = []  # words of the current simple command
@@ -1065,11 +1241,14 @@ def _heredoc_scripts(tokens: list, heredocs: list) -> list:
 
     for text, is_operator in tokens:
         if not is_operator:
-            if not skip_target:  # a redirect's target is not a command word
+            if here_string:  # ``bash <<< 'cmd'`` feeds cmd to bash's stdin
+                current[0].append(text)
+                every_body.append(text)
+            elif not skip_target:  # a redirect's target is not a command word
                 words.append(text)
-            skip_target = after_pipe = False
+            skip_target = after_pipe = here_string = False
             continue
-        skip_target = False
+        skip_target = here_string = False
         if "(" in text or ")" in text:
             unsafe = True  # subshell, group, function or substitution
         if _is_heredoc_operator(text):
@@ -1078,7 +1257,10 @@ def _heredoc_scripts(tokens: list, heredocs: list) -> list:
                 unsafe = True
             else:
                 current[0].append(body)
+                every_body.append(body)
             skip_target = True
+        elif text.endswith("<<<"):
+            here_string = True
         elif ">" in text or "<" in text:
             skip_target = True
         else:
@@ -1092,7 +1274,7 @@ def _heredoc_scripts(tokens: list, heredocs: list) -> list:
     end_command()
     end_pipeline()
     if unsafe or next(bodies, None) is not None:
-        return list(heredocs)
+        return every_body + list(bodies)
     return [body for fed, data_only in pipelines if not data_only for body in fed]
 
 
@@ -1127,17 +1309,19 @@ def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
     words: list = []  # words of the current simple command
 
     def _flush_segment() -> None:
-        for i in sorted(_command_word_indices(words, nested)):
-            base = words[i].rsplit("/", 1)[-1] if i < len(words) else ""
+        # The command itself, and any command xargs or find -exec runs.
+        for command_words, _via in _command_invocations(words, nested):
+            base = command_words[0].rsplit("/", 1)[-1]
+            args = command_words[1:]
             if base == "tee":
-                targets.extend(w for w in words[i + 1:] if not w.startswith("-"))
+                targets.extend(w for w in args if not w.startswith("-"))
             elif base == "eval":
-                nested.append(" ".join(words[i + 1:]))
+                nested.append(" ".join(args))
             elif base in _NESTED_SHELLS:
-                for j in range(i + 1, len(words) - 1):
-                    flag = words[j]
+                for j in range(len(args) - 1):
+                    flag = args[j]
                     if flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:]:
-                        nested.append(words[j + 1])
+                        nested.append(args[j + 1])
                         break
         words.clear()
 
@@ -1173,10 +1357,12 @@ def detect_env_file_write(command: str) -> tuple:
         (False, None).
     """
     normalized = _normalize_command_for_detection(command, preserve_shell_quotes=True)
+    # dotglob (or a GLOBIGNORE, which sets it) lets * and ? match a leading dot.
+    dotglob = re.search(r"dotglob|globignore", command, re.IGNORECASE) is not None
     for target in _env_write_targets_or_fallback(normalized):
         if _is_protected_env_basename(target):
             return (True, f"shell write into protected environment file {target}")
-        if _glob_may_name_env(target):
+        if _glob_may_name_env(target, dotglob):
             return (True, f"shell write into {target}, a glob that may match a protected .env file")
     return (False, None)
 
