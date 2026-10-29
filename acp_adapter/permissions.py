@@ -151,7 +151,13 @@ def make_approval_callback(
 
         try:
             response = future.result(timeout=timeout)
-        except (FutureTimeout, Exception) as exc:
+        except FutureTimeout:
+            future.cancel()
+            logger.warning("Permission request timed out")
+            from tools.approval import mark_approval_timed_out
+            mark_approval_timed_out()
+            return "deny"
+        except Exception as exc:
             future.cancel()
             logger.warning("Permission request timed out or failed: %s", exc)
             return "deny"

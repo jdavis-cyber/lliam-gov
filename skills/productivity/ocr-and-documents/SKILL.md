@@ -8,13 +8,13 @@ platforms: [linux, macos, windows]
 metadata:
   lliam-gov:
     tags: [PDF, Documents, Research, Arxiv, Text-Extraction, OCR]
-    related_skills: [powerpoint]
+    related_skills: []
 ---
 
 # PDF & Document Extraction
 
 For DOCX: use `python-docx` (parses actual document structure, far better than OCR).
-For PPTX: see the `powerpoint` skill (uses `python-pptx` with full slide/notes support).
+For PPTX: use `python-pptx` (reads slides and speaker notes directly).
 This skill covers **PDFs and scanned documents**.
 
 ## Step 1: Remote URL Available?
@@ -169,4 +169,4 @@ No extra dependencies needed — pymupdf covers split, merge, search, and text e
 - Both helper scripts accept `--help` for full usage
 - marker-pdf downloads ~2.5GB of models to `~/.cache/huggingface/` on first use
 - For Word docs: `pip install python-docx` (better than OCR — parses actual structure)
-- For PowerPoint: see the `powerpoint` skill (uses python-pptx)
+- For PowerPoint: `pip install python-pptx` (reads slides and notes directly)

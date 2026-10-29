@@ -22,6 +22,8 @@ from tools import write_approval as wa
 
 
 def _fmt_state(subsystem: str) -> str:
+    if subsystem == wa.SKILLS:
+        return "Agent skill changes always need approval; skills.write_approval is deprecated and ignored."
     on = wa.write_approval_enabled(subsystem)
     return f"{subsystem}.write_approval = {'on' if on else 'off'}"
 
@@ -124,9 +126,8 @@ def _approve(subsystem: str, rest: List[str], memory_store) -> str:
 
     applied, failed = 0, []
     for rec in targets:
-        ok, msg = _apply_one(subsystem, rec, memory_store)
+        ok, msg = _decide_one(subsystem, rec, "approve", memory_store)
         if ok:
-            wa.discard_pending(subsystem, rec["id"])
             applied += 1
         else:
             failed.append(f"{rec['id']}: {msg}")
@@ -149,10 +150,31 @@ def _apply_one(subsystem: str, rec, memory_store):
             return bool(result.get("success")), result.get("error", "")
         else:
             from tools.skill_manager_tool import apply_skill_pending
-            result = json.loads(apply_skill_pending(payload))
+            result = json.loads(apply_skill_pending(rec["id"]))
             return bool(result.get("success")), result.get("error", "")
     except Exception as e:
         return False, str(e)
+
+
+def _decide_one(subsystem: str, rec, decision: str, memory_store=None):
+    try:
+        audit = wa.record_write_decision(subsystem, rec, decision)
+    except (OSError, ValueError, TypeError) as exc:
+        return False, f"Decision log unavailable; proposal unchanged: {exc}"
+
+    ok, message = True, ""
+    if decision == "approve":
+        ok, message = _apply_one(subsystem, rec, memory_store)
+    if ok and not wa.discard_pending(subsystem, rec["id"]):
+        ok = False
+        message = ("Write applied but pending record could not be removed. Do not reapprove."
+                   if decision == "approve" else "Pending record could not be removed.")
+    result = ("applied" if decision == "approve" else "discarded") if ok else "failed"
+    try:
+        wa.record_write_outcome(audit, result, message)
+    except (OSError, ValueError, TypeError) as exc:
+        return False, f"Decision executed ({result}); outcome log failed: {exc}. {message}"
+    return ok, message
 
 
 def _reject(subsystem: str, rest: List[str]) -> str:
@@ -160,14 +182,24 @@ def _reject(subsystem: str, rest: List[str]) -> str:
     if err or target is None:
         return err or f"Usage: /{subsystem} reject <id>"
     if target.lower() == "all":
-        n = 0
-        for rec in wa.list_pending(subsystem):
-            if wa.discard_pending(subsystem, rec["id"]):
-                n += 1
-        return f"Rejected {n} pending {subsystem} write(s)."
-    if wa.discard_pending(subsystem, target):
-        return f"Rejected pending {subsystem} write '{target}'."
-    return f"No pending {subsystem} write with id '{target}'."
+        targets = wa.list_pending(subsystem)
+    else:
+        rec = wa.get_pending(subsystem, target)
+        if rec is None:
+            return f"No pending {subsystem} write with id '{target}'."
+        targets = [rec]
+    rejected, failed = 0, []
+    for rec in targets:
+        ok, message = _decide_one(subsystem, rec, "reject")
+        if ok:
+            rejected += 1
+        else:
+            failed.append(f"{rec['id']}: {message}")
+    out = [f"Rejected {rejected} pending {subsystem} write(s)."]
+    if failed:
+        out.append("Failed:")
+        out.extend(f"  {message}" for message in failed)
+    return "\n".join(out)
 
 
 def _diff(rest: List[str]) -> str:
@@ -186,6 +218,8 @@ def _set_approval(subsystem: str, rest: List[str], set_mode_fn) -> str:
 
     ``set_mode_fn`` (when provided) persists the new boolean to config.
     """
+    if subsystem == wa.SKILLS:
+        return _fmt_state(subsystem)
     if not rest:
         return (f"{_fmt_state(subsystem)}\n"
                 f"Set with: /{subsystem} approval <on|off>")

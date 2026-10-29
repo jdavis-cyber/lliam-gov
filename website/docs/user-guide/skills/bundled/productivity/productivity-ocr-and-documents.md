@@ -21,7 +21,6 @@ Extract text from PDFs/scans (pymupdf, marker-pdf).
 | License | MIT |
 | Platforms | linux, macos, windows |
 | Tags | `PDF`, `Documents`, `Research`, `Arxiv`, `Text-Extraction`, `OCR` |
-| Related skills | [`powerpoint`](/docs/user-guide/skills/bundled/productivity/productivity-powerpoint) |
 
 ## Reference: full SKILL.md
 
@@ -32,7 +31,7 @@ The following is the complete skill definition that Lliam-GOV loads when this sk
 # PDF & Document Extraction
 
 For DOCX: use `python-docx` (parses actual document structure, far better than OCR).
-For PPTX: see the `powerpoint` skill (uses `python-pptx` with full slide/notes support).
+For PPTX: use `python-pptx` (reads slides and speaker notes directly).
 This skill covers **PDFs and scanned documents**.
 
 ## Step 1: Remote URL Available?
@@ -187,4 +186,4 @@ No extra dependencies needed — pymupdf covers split, merge, search, and text e
 - Both helper scripts accept `--help` for full usage
 - marker-pdf downloads ~2.5GB of models to `~/.cache/huggingface/` on first use
 - For Word docs: `pip install python-docx` (better than OCR — parses actual structure)
-- For PowerPoint: see the `powerpoint` skill (uses python-pptx)
+- For PowerPoint: `pip install python-pptx` (reads slides and notes directly)

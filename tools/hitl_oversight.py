@@ -35,7 +35,9 @@ shipped behavior (capability preserving).
 
 from __future__ import annotations
 
+import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, NamedTuple, Optional, Tuple
 
 logger = logging.getLogger("hermes.governance.hitl_oversight")
@@ -219,6 +221,28 @@ def authorize_approval(
     return ApprovalAuthorization(False, None, UNAUTHENTICATED_APPROVER_REASON)
 
 
+def log_approval_resolution(
+    *, session_id: str, command: str, decision: str, approver: Optional[str],
+) -> None:
+    """Write a completed request to agent.log even when the ledger is off."""
+    try:
+        from agent.redact import redact_sensitive_text
+
+        metadata = json.dumps({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "decision": decision,
+            "approver": approver,
+        })
+        # Escape control characters to keep one physical log line. Keep command
+        # last and outside the JSON: the log formatter redacts again, and its
+        # assignment patterns can consume JSON delimiters after a masked value.
+        command_text = json.dumps(redact_sensitive_text(command, force=True))[1:-1]
+        logger.info("approval.decision %s command=%s", metadata, command_text)
+    except Exception:
+        logger.warning("Approval resolution log failed (non-blocking)", exc_info=True)
+
+
 def record_decision(
     *,
     decision: str,                    # approve | deny | halt | timeout | n/a
@@ -230,6 +254,7 @@ def record_decision(
     justification: str = "",
     approver_authenticated: Optional[bool] = None,
     approver_method: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> None:
     """Emit one ``approval.decision`` record (LG-HO-10). Never raises.
 
@@ -239,7 +264,17 @@ def record_decision(
     ``approver.method`` how it authenticated. A caller that captured the
     principal in another context (the gateway resolver thread) passes
     ``approver_authenticated=True`` and ``approver_method``.
+
+    A completed request supplies ``session_id`` to also record its resolution
+    in agent.log, independently of the ledger. Authorization probes omit it
+    because they may leave the request pending. The supplied approver is the
+    resolver's identity; None means no identified operator answered.
     """
+    if session_id is not None:
+        log_approval_resolution(
+            session_id=session_id, command=target, decision=decision, approver=approver,
+        )
+
     try:
         from agent.governance_audit_hooks import _current_subject, _enabled_ledger
         ledger = _enabled_ledger()
