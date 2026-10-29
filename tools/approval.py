@@ -1618,6 +1618,16 @@ def _simple_command_deletes(words: list, operands_supplied: bool, scripts: list,
         args = words[start + 1:]
         if base in _COMPRESSORS and _compressor_call_deletes(base, args, operands_supplied):
             return True
+        # Literal eval arguments and a shell's -c script run as commands,
+        # as in _env_write_targets; the caller scans *scripts*.
+        if base == "eval":
+            scripts.append(" ".join(args))
+        elif base in _NESTED_SHELLS:
+            for j in range(len(args) - 1):
+                flag = args[j]
+                if flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:]:
+                    scripts.append(args[j + 1])
+                    break
         if depth >= _MAX_NESTED_SCRIPT_DEPTH:
             continue
         if base == "xargs":
