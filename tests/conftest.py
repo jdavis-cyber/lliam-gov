@@ -13,6 +13,10 @@ Hermetic-test invariants enforced here (see AGENTS.md for rationale):
 3. **Deterministic runtime.** TZ=UTC, LANG=C.UTF-8, PYTHONHASHSEED=0.
 4. **No HERMES_SESSION_* inheritance** — the agent's current gateway
    session must not leak into tests.
+5. **No implicit lazy installs.** Mock optional dependencies, or request
+   ``allow_lazy_installs`` to exercise the installer in a temporary target.
+6. **Stable installed packages.** Fail the session if the interpreter's
+   installed package names or versions change, including during collection.
 
 These invariants make the local test run match CI closely. Gaps that
 remain (CPU count, xdist worker count) are addressed by the canonical
@@ -20,9 +24,13 @@ test runner at ``scripts/run_tests.sh``.
 """
 
 import asyncio
+import json
 import os
+import subprocess
 import sys
+import sysconfig
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -46,6 +54,132 @@ if str(PROJECT_ROOT) not in sys.path:
 # isolation (too slow at ~17k tests).
 #
 # See ``scripts/run_tests_parallel.py`` for the runner.
+
+
+# ── Installed-package and lazy-install isolation ───────────────────────────
+
+# Fix the search paths before tests can append temporary install targets.
+_VENV_PACKAGE_PATHS = tuple(sorted({
+    sysconfig.get_path("purelib"), sysconfig.get_path("platlib"),
+}))
+_PACKAGE_SNAPSHOT_SCRIPT = """
+import importlib.metadata as metadata
+import json, re, sys
+packages = sorted(
+    (re.sub(r"[-_.]+", "-", dist.metadata["Name"]).lower(), dist.version)
+    for dist in metadata.distributions(path=json.loads(sys.argv[1]))
+    if dist.metadata["Name"]
+)
+print(json.dumps(packages))
+"""
+
+
+def _installed_packages():
+    # A fresh interpreter avoids importlib caches and test mocks. -I excludes
+    # PYTHONPATH and user site-packages; explicit paths exclude temp targets.
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", _PACKAGE_SNAPSHOT_SCRIPT,
+         json.dumps(_VENV_PACKAGE_PATHS)],
+        check=True, capture_output=True, text=True, timeout=30,
+    )
+    return json.loads(result.stdout)
+
+
+def pytest_sessionstart(session):
+    session.config._installed_packages_before = _installed_packages()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    before = session.config._installed_packages_before
+    after = _installed_packages()
+    if before != after:
+        reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+        if reporter is not None:
+            reporter.write_sep("=", "Installed package list changed during tests")
+            reporter.write_line(f"Removed: {[package for package in before if package not in after]}")
+            reporter.write_line(f"Added: {[package for package in after if package not in before]}")
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+@pytest.fixture(autouse=True)
+def _block_lazy_installs(request, monkeypatch):
+    """Unmocked lazy installs are test defects.
+
+    Block the installer, not ``ensure``: production modules probe optional
+    SDKs at import time (Bedrock, Anthropic, web and platform plugins), and a
+    satisfied probe never reaches the installer.
+    """
+    from tools import lazy_deps
+
+    if "allow_lazy_installs" in request.fixturenames:
+        # Install the target before any other setup fixture can call ensure.
+        request.getfixturevalue("allow_lazy_installs")
+    else:
+        real_run = subprocess.run
+
+        def blocked(command, *args, **kwargs):
+            if "install" in command or "ensurepip" in command:
+                # pytest.fail escapes runtime handlers that catch Exception.
+                pytest.fail(
+                    f"Unexpected lazy install {command!r}: mock the dependency "
+                    "probe or request allow_lazy_installs for a temporary target."
+                )
+            return real_run(command, *args, **kwargs)
+
+        # Tests run as if security.allow_lazy_installs were false: a missing
+        # optional SDK reads as unavailable (FeatureUnavailable) instead of
+        # being installed into the shared venv, e.g. by tool availability
+        # checks during AIAgent setup. Installer tests opt back in.
+        # lazy_deps' own unit tests exercise the real gate with a mocked
+        # installer, so they keep it.
+        if not request.module.__name__.rsplit(".", 1)[-1].startswith("test_lazy_deps"):
+            monkeypatch.setattr(lazy_deps, "_allow_lazy_installs", lambda: False)
+        # Backstop for tests that force installs on: replace only lazy_deps'
+        # subprocess reference; tests that stub subprocess.run still win.
+        monkeypatch.setattr(
+            lazy_deps, "subprocess", SimpleNamespace(**{**vars(subprocess), "run": blocked})
+        )
+
+
+@pytest.fixture
+def unavailable_optional_dependencies(monkeypatch):
+    """Simulate missing optional SDKs in tests of unrelated registry behavior."""
+    from tools import lazy_deps
+
+    def unavailable(feature, *, prompt=True):
+        raise lazy_deps.FeatureUnavailable(feature, (), "optional SDK absent in test")
+
+    monkeypatch.setattr(lazy_deps, "ensure", unavailable)
+
+
+@pytest.fixture
+def allow_lazy_installs(tmp_path, monkeypatch):
+    """Opt in to installer tests, with installs confined to this test's target."""
+    from tools import lazy_deps
+
+    target = tmp_path / "lazy-packages"
+    monkeypatch.setattr(lazy_deps, "_lazy_install_target", lambda: target)
+    real_run = subprocess.run
+
+    def run_in_target(command, *args, **kwargs):
+        # The pip fallback can bootstrap pip into the venv even with --target.
+        # Refuse that path, and any install that loses the temporary target.
+        if "ensurepip" in command or (
+            "install" in command and (
+                "--target" not in command
+                or command[command.index("--target") + 1:][:1] != [str(target)]
+            )
+        ):
+            pytest.fail("Lazy installer attempted a write outside the temporary target")
+        return real_run(command, *args, **kwargs)
+
+    # Replace only lazy_deps' subprocess reference, not the shared stdlib module.
+    monkeypatch.setattr(
+        lazy_deps, "subprocess", SimpleNamespace(**{**vars(subprocess), "run": run_in_target})
+    )
+    # Activation must not leave temporary packages on the next test's path.
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    return target
 
 
 # ── Credential env-var filter ──────────────────────────────────────────────

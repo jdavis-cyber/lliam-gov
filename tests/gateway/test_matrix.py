@@ -251,6 +251,7 @@ def _make_fake_mautrix():
 # Platform & Config
 # ---------------------------------------------------------------------------
 
+@pytest.mark.usefixtures("unavailable_optional_dependencies")
 class TestMatrixConfigLoading:
     def test_apply_env_overrides_with_access_token(self, monkeypatch):
         monkeypatch.setenv("MATRIX_ACCESS_TOKEN", "syt_abc123")
@@ -1826,6 +1827,7 @@ class TestMatrixPasswordLoginDeviceId:
         await adapter.disconnect()
 
 
+@pytest.mark.usefixtures("unavailable_optional_dependencies")
 class TestMatrixDeviceIdConfig:
     """MATRIX_DEVICE_ID should be plumbed through gateway config."""
 

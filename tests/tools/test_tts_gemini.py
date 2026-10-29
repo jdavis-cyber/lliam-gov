@@ -420,6 +420,7 @@ class TestGenerateGeminiTts:
         assert "audio tag rewrite failed" in caplog.text
 
 
+@pytest.mark.usefixtures("unavailable_optional_dependencies")
 class TestGeminiInCheckRequirements:
     def test_gemini_api_key_satisfies_requirements(self, monkeypatch):
         from tools.tts_tool import check_tts_requirements

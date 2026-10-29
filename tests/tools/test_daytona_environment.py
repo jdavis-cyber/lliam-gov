@@ -25,6 +25,7 @@ def _make_sandbox(sandbox_id="sb-123", state="started"):
 
 def _patch_daytona_imports(monkeypatch):
     """Patch the daytona SDK so DaytonaEnvironment can be imported without it."""
+    monkeypatch.setattr("tools.lazy_deps.ensure", lambda *args, **kwargs: None)
     import types as _types
 
     import enum
