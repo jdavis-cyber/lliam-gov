@@ -103,21 +103,34 @@ def pytest_sessionfinish(session, exitstatus):
 
 @pytest.fixture(autouse=True)
 def _block_lazy_installs(request, monkeypatch):
-    """Unmocked lazy installs are test defects, including satisfied probes."""
+    """Unmocked lazy installs are test defects.
+
+    Block the installer, not ``ensure``: production modules probe optional
+    SDKs at import time (Bedrock, Anthropic, web and platform plugins), and a
+    satisfied probe never reaches the installer.
+    """
     from tools import lazy_deps
 
     if "allow_lazy_installs" in request.fixturenames:
         # Install the target before any other setup fixture can call ensure.
         request.getfixturevalue("allow_lazy_installs")
     else:
-        def blocked(feature, *, prompt=True):
-            # pytest.fail escapes runtime handlers that catch Exception.
-            pytest.fail(
-                f"Unexpected lazy_deps.ensure({feature!r}): mock the dependency "
-                "probe or request allow_lazy_installs for a temporary target."
-            )
+        real_run = subprocess.run
 
-        monkeypatch.setattr(lazy_deps, "ensure", blocked)
+        def blocked(command, *args, **kwargs):
+            if "install" in command or "ensurepip" in command:
+                # pytest.fail escapes runtime handlers that catch Exception.
+                pytest.fail(
+                    f"Unexpected lazy install {command!r}: mock the dependency "
+                    "probe or request allow_lazy_installs for a temporary target."
+                )
+            return real_run(command, *args, **kwargs)
+
+        # Replace only lazy_deps' subprocess reference; tests that stub
+        # subprocess.run themselves still take precedence.
+        monkeypatch.setattr(
+            lazy_deps, "subprocess", SimpleNamespace(**{**vars(subprocess), "run": blocked})
+        )
 
 
 @pytest.fixture

@@ -114,11 +114,17 @@ def test_opt_in_installs_only_into_tmp_target(allow_lazy_installs, tmp_path, mon
     assert not (tmp_path / "wrong-target").exists()
 
 
-def test_unmocked_ensure_is_a_test_defect(monkeypatch):
-    # Even a satisfied feature must not make tests depend on host packages.
-    monkeypatch.setattr(ld, "feature_missing", lambda feature: ())
-    with pytest.raises(pytest.fail.Exception, match="Unexpected lazy_deps.ensure"):
+def test_unmocked_lazy_install_is_a_test_defect(monkeypatch):
+    monkeypatch.setattr(ld, "feature_missing", lambda feature: ("zzzfake>=1",))
+    monkeypatch.setattr(ld, "_allow_lazy_installs", lambda: True)
+    with pytest.raises(pytest.fail.Exception, match="Unexpected lazy install"):
         ld.ensure("stt.faster_whisper", prompt=False)
+
+
+def test_satisfied_probe_does_not_reach_installer(monkeypatch):
+    # Import-time probes (e.g. agent.bedrock_adapter) must keep working.
+    monkeypatch.setattr(ld, "feature_missing", lambda feature: ())
+    ld.ensure("stt.faster_whisper", prompt=False)
 
 
 # ---------------------------------------------------------------------------
