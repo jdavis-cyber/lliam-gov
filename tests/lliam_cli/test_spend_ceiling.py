@@ -289,3 +289,29 @@ def test_child_shares_parent_tracker():
     child._spend_tracker = tracker
     tracker.record(10, None)
     assert mcg.ensure_spend_tracker(child).tokens == 10
+
+
+def test_cli_prompt_approval_reads_lliam_interactive(monkeypatch):
+    """AI-1187: the renamed LLIAM_INTERACTIVE flag alone reaches the CLI prompt."""
+    from tools import terminal_tool
+
+    _use(monkeypatch, _cfg())
+    for name in ("LLIAM_INTERACTIVE", "LLIAM_GATEWAY_SESSION", "LLIAM_EXEC_ASK"):
+        monkeypatch.delenv(name, raising=False)
+    seen = []
+
+    def _cb(command, description, *, allow_permanent=True):
+        seen.append(command)
+        return "once"
+
+    terminal_tool.set_approval_callback(_cb)
+    try:
+        agent = _agent()
+        assert mcg.request_spend_approval(agent, "spend ceiling", "d") == (False, "no_approver")
+        assert seen == []
+
+        monkeypatch.setenv("LLIAM_INTERACTIVE", "1")
+        assert mcg.request_spend_approval(agent, "spend ceiling", "d") == (True, "interactive_prompt")
+        assert seen == ["spend ceiling"]
+    finally:
+        terminal_tool.set_approval_callback(None)

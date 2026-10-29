@@ -404,8 +404,9 @@ def request_spend_approval(agent: Any, summary: str, description: str) -> Tuple[
         # approval must not be auto-resolved by it.
         return False, "subagent_no_approver"
     try:
+        from lliam_cli.env_compat import getenv_compat
         from tools import approval as _ap
-        from utils import env_var_enabled
+        from utils import is_truthy_value
     except Exception:
         return False, "approval_unavailable"
 
@@ -427,7 +428,7 @@ def request_spend_approval(agent: Any, summary: str, description: str) -> Tuple[
             )
             approved = bool(decision.get("resolved")) and decision.get("choice") in _APPROVED_CHOICES
             return approved, "gateway"
-        if env_var_enabled("HERMES_INTERACTIVE"):
+        if is_truthy_value(getenv_compat("INTERACTIVE", ""), default=False):
             try:
                 from tools.terminal_tool import _get_approval_callback
 
