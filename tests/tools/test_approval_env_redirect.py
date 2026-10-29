@@ -437,3 +437,12 @@ def test_quoted_operator_read_runs_under_yolo(monkeypatch, guard, command):
 
 def test_container_backend_unchanged():
     assert check_all_command_guards("echo K=v > .env", "docker")["approved"] is True
+
+
+def test_over_limit_brace_description_is_printable():
+    # An over-limit brace group is shown as * in the refusal, not as the
+    # internal private-use marker.
+    blocked, description = detect_env_file_write("tee .env{1..2000} < secrets")
+    assert blocked is True
+    assert "\ue000" not in description
+    assert ".env*" in description

@@ -1601,7 +1601,8 @@ def detect_env_file_write(command: str) -> tuple:
         if _is_protected_env_basename(target):
             return (True, f"shell write into protected environment file {target}")
         if _glob_may_name_env(target, dotglob):
-            return (True, f"shell write into {target}, a glob that may match a protected .env file")
+            shown = target.replace(_BRACE_ANY, "*")  # the marker is not printable text
+            return (True, f"shell write into {shown}, a glob that may match a protected .env file")
     return (False, None)
 
 
