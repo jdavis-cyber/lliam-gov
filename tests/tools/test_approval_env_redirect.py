@@ -209,6 +209,27 @@ BLOCKED = [
     "bash --unknown-option -c x 'echo k > .env'",
     "busybox sh -c -- 'tee .env'",
     "sudo bash -c -- 'tee .env'",
+    # GitHub Codex P1/P2 on #147/#145 (round 9): unquoted brace alternatives
+    # are expanded before the name checks.
+    "tee .env{,.local} <<< K=v",
+    "tee .env{,rc} <<< K=v",
+    "tee .e{n,x}v < secrets",
+    "tee .{e,f}nv < secrets",
+    "tee .env.{a,b} < secrets",
+    "tee {a,{b,.env}} < secrets",
+    "echo K=v > {.env,}",
+    "echo K=v >> {a,.envrc}",
+    "tee .env{1..2000} < secrets",
+    # GitHub Codex P2 on #145 (round 9): env -S words join the invocation.
+    "env -S tee .env <<< K=v",
+    "env -S 'bash -c' 'echo K=v > .env'",
+    "env -S 'tee -a' .env.local < secrets",
+    "env -iS tee .env < secrets",
+    "env -Stee .env < secrets",
+    "env --split-string=tee .env < secrets",
+    "env -S 'FOO=1 tee' .env < secrets",
+    "env -u X -S tee .env < secrets",
+    "sudo env -S tee .env < secrets",
 ]
 
 ALLOWED = [
@@ -292,6 +313,15 @@ ALLOWED = [
     "bash -c -- 'cat .env'",
     "bash -c 'cat .env' -- '> .env'",
     "bash script.sh -c 'echo k > .env'",
+    "tee '.env{,.local}' < secrets",
+    "tee .env\\{,.local\\} < secrets",
+    "tee notes{,2}.txt < secrets",
+    "tee x{,.env} < secrets",
+    "tee {a..z}.env < secrets",
+    "echo {.env,x}",
+    "echo K=v > {a,b}",
+    "env -S cat .env",
+    "env -S 'grep KEY' .env",
 ]
 
 

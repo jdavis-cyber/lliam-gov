@@ -16,6 +16,7 @@ import logging
 import os
 from lliam_cli.env_compat import getenv_compat
 import re
+import shlex
 import sys
 import threading
 import time
@@ -774,6 +775,8 @@ def _glob_elements(pattern: str) -> list:
         ch = pattern[i]
         if ch == "*":
             elements.append(("star",))
+        elif ch == _BRACE_ANY:
+            elements.append(("anything",))
         elif ch == "?":
             elements.append(("any",))
         elif ch == "[":
@@ -813,7 +816,7 @@ def _glob_after_prefix(elements: list, prefix: str, dotglob: bool) -> set:
         out, todo = set(states), list(states)
         while todo:
             s = todo.pop()
-            if s < len(elements) and elements[s][0] == "star" and s + 1 not in out:
+            if s < len(elements) and elements[s][0] in ("star", "anything") and s + 1 not in out:
                 out.add(s + 1)
                 todo.append(s + 1)
         return out
@@ -826,7 +829,9 @@ def _glob_after_prefix(elements: list, prefix: str, dotglob: bool) -> set:
             if s >= len(elements):
                 continue
             kind = elements[s][0]
-            if kind == "star":
+            if kind == "anything":
+                step.add(s)
+            elif kind == "star":
                 if wild_ok:
                     step.add(s)
             elif kind == "any":
@@ -854,7 +859,7 @@ def _glob_may_name_env(path: str, dotglob: bool = False) -> bool:
     ``> .[e]nv.staging`` can write a protected file. Unsure means True."""
     name = unicodedata.normalize("NFKC", path).replace("\\", "/").rsplit("/", 1)[-1]
     name = name.split(":", 1)[0].rstrip(" .")
-    if not any(ch in name for ch in "*?["):
+    if not any(ch in name for ch in "*?[" + _BRACE_ANY):
         return False
     elements = _glob_elements(name)
     for exact in (".env", ".envrc"):
@@ -867,6 +872,112 @@ def _glob_may_name_env(path: str, dotglob: bool = False) -> bool:
         if _is_protected_env_basename(".env." + "".join(element[1] for element in rest)):
             return True
     return False
+
+
+_BRACE_LIMIT = 64  # more alternatives than this: fall back to a glob
+_BRACE_ANY = "\ue000"  # stands for an unresolved brace group: matches anything
+_BRACE_SEQUENCE_RE = re.compile(r"^(-?\d+|[A-Za-z])\.\.(-?\d+|[A-Za-z])(?:\.\.(-?\d+))?$")
+
+
+def _brace_groups(chars: list, bare: list) -> list:
+    """``(open, close)`` of each outermost unquoted ``{...}`` in *chars*,
+    skipping ``${...}`` parameter expansions."""
+    groups: list = []
+    k, n = 0, len(chars)
+    while k < n:
+        if bare[k] and chars[k] == "{":
+            depth, m = 1, k + 1
+            while m < n and depth:
+                if bare[m] and chars[m] == "{":
+                    depth += 1
+                elif bare[m] and chars[m] == "}":
+                    depth -= 1
+                m += 1
+            if depth == 0:
+                if not (k and bare[k - 1] and chars[k - 1] == "$"):
+                    groups.append((k, m - 1))
+                k = m
+                continue
+        k += 1
+    return groups
+
+
+def _brace_alternatives(chars: list, bare: list, start: int, end: int) -> Optional[list]:
+    """The alternatives of the brace group ``chars[start:end+1]`` as
+    ``(chars, bare)`` pairs, or None when it is not brace syntax (``{x}``,
+    ``{}``)."""
+    body, body_bare = chars[start + 1:end], bare[start + 1:end]
+    parts, depth, last = [], 0, 0
+    for k, (ch, b) in enumerate(zip(body, body_bare)):
+        if b and ch == "{":
+            depth += 1
+        elif b and ch == "}":
+            depth -= 1
+        elif b and ch == "," and depth == 0:
+            parts.append((body[last:k], body_bare[last:k]))
+            last = k + 1
+    if parts:
+        parts.append((body[last:], body_bare[last:]))
+        return parts
+    text = "".join(body)
+    match = _BRACE_SEQUENCE_RE.match(text) if all(body_bare) else None
+    if not match:
+        return None
+    first, last_, step = match.group(1), match.group(2), abs(int(match.group(3) or 1)) or 1
+    if first.lstrip("-").isdigit() != last_.lstrip("-").isdigit():
+        return None
+    if first.lstrip("-").isdigit():
+        a, z = int(first), int(last_)
+        if abs(z - a) // step + 1 > _BRACE_LIMIT:
+            return [([_BRACE_ANY], [False])]
+        width = max(len(first), len(last_)) if (first.lstrip("-").startswith("0") or last_.lstrip("-").startswith("0")) else 0
+        values = range(a, z + (1 if z >= a else -1), step if z >= a else -step)
+        return [(list(str(v).zfill(width) if width else str(v)), [False] * len(str(v).zfill(width) if width else str(v))) for v in values]
+    a, z = ord(first), ord(last_)
+    values = range(a, z + (1 if z >= a else -1), step if z >= a else -step)
+    return [([chr(v)], [False]) for v in values]
+
+
+def _brace_expand(pieces: list, pieces_bare: list) -> list:
+    """The words Bash's brace expansion makes of a word given as *pieces*
+    with, per piece, whether it was unquoted. Empty results are dropped. Past
+    ``_BRACE_LIMIT`` words, each brace group becomes ``_BRACE_ANY`` (which the
+    glob check reads as "anything"), so detection fails closed."""
+    chars: list = []
+    bare: list = []
+    for piece, is_bare in zip(pieces, pieces_bare):
+        chars.extend(piece)
+        bare.extend([is_bare] * len(piece))
+    if "{" not in [c for c, b in zip(chars, bare) if b]:
+        return ["".join(chars)]
+    results: list = []
+
+    def expand(chars: list, bare: list) -> bool:
+        for start, end in _brace_groups(chars, bare):
+            alternatives = _brace_alternatives(chars, bare, start, end)
+            if alternatives is None:
+                continue
+            for alt_chars, alt_bare in alternatives:
+                if not expand(chars[:start] + alt_chars + chars[end + 1:],
+                              bare[:start] + alt_bare + bare[end + 1:]):
+                    return False
+            return True
+        if len(results) >= _BRACE_LIMIT:
+            return False
+        results.append("".join(chars))
+        return True
+
+    if expand(chars, bare):
+        words = [word for word in results if word]
+        return words or [""]
+    approx: list = []
+    last = 0
+    for start, end in _brace_groups(chars, bare):
+        approx.extend(chars[last:start])
+        approx.append(_BRACE_ANY)
+        last = end + 1
+    approx.extend(chars[last:])
+    return ["".join(approx)]
 
 
 def _shell_tokens(command: str, comments: bool = False,
@@ -891,9 +1002,13 @@ def _shell_tokens(command: str, comments: bool = False,
     unquoted heredoc body is appended to it, so the caller can scan it. An
     unquoted ``$(`` already splits into tokens. A substitution whose end is
     unsure (see ``_substitution_end``) makes the command untokenizable.
+
+    Unquoted brace alternatives are expanded as Bash does (``.env{,.local}``
+    is two words, see ``_brace_expand``); quoted braces stay literal.
     """
     tokens: list = []
-    word: list = []
+    word: list = []  # pieces of the current word
+    word_bare: list = []  # per piece: unquoted and unescaped (brace syntax)
     in_word = False
     word_quoted = False  # the current word has a quote or backslash
     operator: list = []
@@ -901,15 +1016,32 @@ def _shell_tokens(command: str, comments: bool = False,
     want = None  # strip_tabs of a heredoc operator still awaiting its delimiter
     i, n = 0, len(command)
 
+    def add(piece: str, bare: bool = False) -> None:
+        word.append(piece)
+        word_bare.append(bare)
+
     def end_word() -> None:
         nonlocal in_word, word_quoted, want
         if in_word:
             text = "".join(word)
-            tokens.append((text, False))
-            if want is not None:
+            if want is not None:  # a heredoc delimiter is not brace-expanded
+                tokens.append((text, False))
                 pending.append((text, word_quoted, want))
                 want = None
+            else:
+                alternatives = _brace_expand(word, word_bare)
+                redirect = tokens[-1][0] if tokens and tokens[-1][1] else ""
+                if len(alternatives) > 1 and ("<" in redirect or ">" in redirect) \
+                        and "(" not in redirect and not _is_heredoc_operator(redirect):
+                    # Bash refuses an ambiguous redirect, other shells write
+                    # each word: keep every alternative a redirect target.
+                    tokens.append((alternatives[0], False))
+                    for alternative in alternatives[1:]:
+                        tokens.extend(((redirect, True), (alternative, False)))
+                else:
+                    tokens.extend((alternative, False) for alternative in alternatives)
             word.clear()
+            word_bare.clear()
             in_word = False
         word_quoted = False
 
@@ -988,27 +1120,27 @@ def _shell_tokens(command: str, comments: bool = False,
             decoded, end = _ansi_c_quoted(command, i + 2)
             if end is None:
                 return None
-            word.append(decoded)
+            add(decoded)
             i = end
             continue
         if ch == "\\":
             if i + 1 >= n:
                 return None
             if command[i + 1] != "\n":  # backslash-newline continues the line
-                word.append(command[i + 1])
+                add(command[i + 1])
             i += 2
         elif ch == "'":
             close = command.find("'", i + 1)
             if close < 0:
                 return None
-            word.append(command[i + 1:close])
+            add(command[i + 1:close])
             i = close + 1
         elif ch == '"':
             j = i + 1
             while j < n and command[j] != '"':
                 if command[j] == "\\" and j + 1 < n and command[j + 1] in '\\"$`\n':
                     if command[j + 1] != "\n":
-                        word.append(command[j + 1])
+                        add(command[j + 1])
                     j += 2
                     continue
                 if substitutions is not None and (command[j] == "`" or command.startswith("$(", j)):
@@ -1017,10 +1149,10 @@ def _shell_tokens(command: str, comments: bool = False,
                         return None
                     skip = 1 if command[j] == "`" else 2
                     substitutions.append(command[j + skip:end - 1])
-                    word.append(command[j:end])
+                    add(command[j:end])
                     j = end
                     continue
-                word.append(command[j])
+                add(command[j])
                 j += 1
             if j >= n:
                 return None
@@ -1030,10 +1162,10 @@ def _shell_tokens(command: str, comments: bool = False,
             if end is None:
                 return None
             substitutions.append(command[i + 1:end - 1])
-            word.append(command[i:end])
+            add(command[i:end])
             i = end
         else:
-            word.append(ch)
+            add(ch, True)
             i += 1
     end_operator()
     end_word()
@@ -1214,28 +1346,76 @@ def _xargs_command_starts(args: list) -> set:
     return starts
 
 
-def _command_invocations(words: list, scripts: list, depth: int = 0) -> list:
+def _env_split_words(words: list, k: int) -> Optional[list]:
+    """*words* with the ``env`` at *k*'s ``-S STRING`` / ``--split-string``
+    replaced by the words STRING splits into, so they join the rest of the
+    invocation (``env -S tee .env`` runs ``tee .env``); None without -S."""
+    j = k + 1
+    while j < len(words):
+        word = words[j]
+        value = rest = None
+        if word == "--" or not word.startswith("-") or word == "-":
+            if _ASSIGNMENT_RE.match(word):
+                j += 1
+                continue
+            return None
+        if word == "--split-string" or word.startswith("--split-string="):
+            attached = word.partition("=")[2] if "=" in word else None
+            value = attached if attached is not None else (words[j + 1] if j + 1 < len(words) else "")
+            rest = j + (1 if attached is not None else 2)
+            prefix = []
+        elif word.startswith("--"):
+            j += 2 if word in ("--unset", "--chdir") else 1
+            continue
+        else:
+            flags = word[1:]
+            at = flags.find("S")
+            if at < 0:
+                j += 2 if flags[-1:] in ("u", "C") else 1
+                continue
+            attached = flags[at + 1:]
+            value = attached or (words[j + 1] if j + 1 < len(words) else "")
+            rest = j + (1 if attached else 2)
+            prefix = ["-" + flags[:at]] if at else []
+        try:
+            split = shlex.split(value)
+        except ValueError:
+            split = value.split()
+        return words[:j] + prefix + split + words[rest:]
+    return None
+
+
+def _command_invocations(words: list, scripts: list, depth: int = 0, via: bool = False) -> list:
     """Every command the simple command *words* may run, as ``(words, via)``
     with the command word first: its own command word (in every wrapper
-    reading), and the command xargs or find -exec/-execdir/-ok/-okdir runs,
-    recursively. *via* is True for those, whose operands xargs/find add."""
+    reading, with ``env -S``'s split words joined to the rest), and the
+    command xargs or find -exec/-execdir/-ok/-okdir runs, recursively. *via*
+    is True for those last ones, whose operands xargs/find add."""
     found: list = []
+    if depth < _MAX_NESTED_SCRIPT_DEPTH:
+        # env -S's words join the rest of its invocation; any ``env`` word
+        # is tried (an argument named env only widens detection).
+        for k, word in enumerate(words):
+            if word.rsplit("/", 1)[-1] == "env":
+                split = _env_split_words(words, k)
+                if split is not None:
+                    found.extend(_command_invocations(split, scripts, depth + 1, via))
     for start in sorted(_command_word_indices(words, scripts)):
         if start >= len(words):
             continue
-        found.append((words[start:], depth > 0))
+        found.append((words[start:], via))
         if depth >= _MAX_NESTED_SCRIPT_DEPTH:
             continue
         base = words[start].rsplit("/", 1)[-1]
         args = words[start + 1:]
         if base == "xargs":
             for j in sorted(_xargs_command_starts(args)):
-                found.extend(_command_invocations(args[j:], scripts, depth + 1))
+                found.extend(_command_invocations(args[j:], scripts, depth + 1, True))
         elif base == "find":
             for j, action in enumerate(args):
                 if action in _FIND_EXEC_ACTIONS:
                     end = next((k for k in range(j + 1, len(args)) if args[k] in {";", "+"}), len(args))
-                    found.extend(_command_invocations(args[j + 1:end], scripts, depth + 1))
+                    found.extend(_command_invocations(args[j + 1:end], scripts, depth + 1, True))
     return found
 
 
