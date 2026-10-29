@@ -1095,6 +1095,7 @@ def _shell_tokens(command: str, comments: bool = False,
             if ch in "<>" and in_word and not word_quoted and "".join(word).isdigit():
                 operator.extend(word)  # fd number: ``2>`` is one operator
                 word.clear()
+                word_bare.clear()
                 in_word = False
             end_word()
             operator.append(ch)
@@ -1847,7 +1848,7 @@ DANGEROUS_PATTERNS = [
      "file/directory delete via tar"),
     # AI-1181: compressors replace (delete) the original file unless told to
     # keep it. detect_all_dangerous_commands decides this from the tool's own
-    # arguments with _compressor_replaces_input (case-sensitive, per tool,
+    # arguments with _command_delete_kinds (case-sensitive, per tool,
     # zstd/lz4 only with --rm); this case-folded pattern is only the fallback
     # for a command that can't be tokenized.
     (rf'{_DELETE_COMMAND_START}(?:gzip|gunzip|xz|unxz|bzip2|bunzip2|lzma|unlzma)(?=\s)'
@@ -1971,28 +1972,114 @@ def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> 
     return removes if family == "rm" else True
 
 
-def _simple_command_deletes(words: list, operands_supplied: bool, scripts: list) -> bool:
-    """True when the simple command *words* runs a compressor that deletes
-    its inputs, directly or as the command xargs or find -exec runs (see
-    ``_command_invocations``, shared with ``_env_write_targets``)."""
+_TRASH_DELETE = "file/directory delete via trash"
+_STASH_DELETE = "file/directory delete via git stash of untracked files"
+_FINDER_DELETE = "file/directory delete via osascript Finder"
+_TRASH_COMMANDS = frozenset({"trash", "trash-put", "trash-rm", "trash-empty"})
+# git's global options that take a value word (unless written --opt=value).
+_GIT_GLOBAL_VALUES = frozenset({
+    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--super-prefix",
+    "--attr-source", "--list-cmds",
+})
+_FINDER_DELETE_RE = re.compile(
+    r"\bfinder\b.*?\b(?:delete|empty\s+(?:the\s+)?trash|move\b.*?\bto\s+(?:the\s+)?trash)\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _git_subcommand_starts(args: list) -> set:
+    """Indices in git's *args* where the subcommand may be, past git's
+    global options; an unknown option is read both with and without a value."""
+    starts: set = set()
+
+    def walk(j: int) -> None:
+        if len(starts) >= _MAX_COMMAND_READINGS:
+            return
+        while j < len(args) and args[j].startswith("-") and args[j] != "-":
+            key = args[j].partition("=")[0]
+            if key in _GIT_GLOBAL_VALUES and "=" not in args[j]:
+                j += 2
+                continue
+            walk(j + 2)  # fail closed: any other option may take a value word
+            j += 1
+        starts.add(j)
+
+    walk(0)
+    return starts
+
+
+def _stash_keeps_untracked_out(args: list) -> bool:
+    """True when ``git stash`` with *args* stashes untracked files (-u/-a,
+    --include-untracked/--all), which removes them from the working tree."""
+    if args and not args[0].startswith("-"):
+        if args[0] not in ("push", "save"):
+            return False  # list, show, pop, apply, drop, ...
+        args = args[1:]
+    j = 0
+    while j < len(args):
+        arg = args[j]
+        j += 1
+        if arg == "--":
+            break
+        if arg in ("--include-untracked", "--all"):
+            return True
+        if arg in ("-m", "--message"):
+            j += 1
+            continue
+        if arg.startswith("--") or not arg.startswith("-"):
+            continue
+        for flag in arg[1:]:
+            if flag == "m":
+                break  # the rest of the word is the message
+            if flag in "ua":
+                return True
+    return False
+
+
+def _invocation_delete_kinds(base: str, args: list, operands_supplied: bool) -> set:
+    """The once-only delete kinds one command invocation performs."""
+    kinds: set = set()
+    if base in _COMPRESSORS and _compressor_call_deletes(base, args, operands_supplied):
+        kinds.add(_COMPRESSOR_DELETE)
+    if base in _TRASH_COMMANDS or (base == "gio" and args[:1] in (["trash"], ["remove"])):
+        kinds.add(_TRASH_DELETE)
+    if base == "git":
+        for j in _git_subcommand_starts(args):
+            if j < len(args) and args[j] == "stash" and _stash_keeps_untracked_out(args[j + 1:]):
+                kinds.add(_STASH_DELETE)
+    if base == "osascript" and _FINDER_DELETE_RE.search(" ".join(args)):
+        kinds.add(_FINDER_DELETE)
+    return kinds
+
+
+def _simple_command_delete_kinds(words: list, scripts: list) -> set:
+    """The delete kinds the simple command *words* performs, at every command
+    position ``_command_invocations`` finds (shared with ``_env_write_targets``):
+    after reserved words and wrappers, and as the command xargs or find -exec
+    runs (which supply its operands)."""
+    kinds: set = set()
     for command_words, via in _command_invocations(words, scripts):
         base = command_words[0].rsplit("/", 1)[-1]
         args = command_words[1:]
-        # xargs and find supply operands to the command they run.
-        if base in _COMPRESSORS and _compressor_call_deletes(base, args, operands_supplied or via):
-            return True
+        kinds |= _invocation_delete_kinds(base, args, via)
         # Literal eval arguments and a shell's -c script run as commands,
         # as in _env_write_targets; the caller scans *scripts*.
         if base == "eval":
             scripts.append(" ".join(args))
         elif base in _NESTED_SHELLS:
             scripts.extend(_shell_c_scripts(base, args))
-    return False
+    return kinds
 
 
-def _compressor_replaces_input(command: str, depth: int = 0) -> Optional[bool]:
-    """True when *command* runs a compressor that deletes its input files;
-    None when the command can't be tokenized."""
+# The delete rules decided from the tokenized command; their patterns are a
+# fallback (the compressor's only for a command that can't be tokenized).
+_TOKENIZED_DELETE_KINDS = frozenset({_COMPRESSOR_DELETE, _TRASH_DELETE, _STASH_DELETE, _FINDER_DELETE})
+
+
+def _command_delete_kinds(command: str, depth: int = 0) -> Optional[set]:
+    """The tokenized delete kinds *command* performs, including nested
+    scripts; None when it (or, with nothing found, a nested script) can't
+    be tokenized."""
     command = re.sub(r"\$\{IFS\}|\$IFS\b", " ", command, flags=re.IGNORECASE)
     heredocs: list = []
     nested: list = []  # "$(...)" / `...` scripts and heredoc bodies that run
@@ -2013,18 +2100,19 @@ def _compressor_replaces_input(command: str, depth: int = 0) -> Optional[bool]:
             segments.append([])  # separator, pipe, subshell
         else:
             skip_target = True
-    scripts: list = []  # env -S command lines
+    scripts: list = []  # eval, sh -c and env -S command lines
+    kinds: set = set()
     for words in segments:
-        if _simple_command_deletes(words, False, scripts):
-            return True
+        kinds |= _simple_command_delete_kinds(words, scripts)
     unknown = False
     if depth < _MAX_NESTED_SCRIPT_DEPTH:
         for script in scripts + nested:
-            reading = _compressor_replaces_input(script, depth + 1)
-            if reading:
-                return True
-            unknown = unknown or reading is None
-    return None if unknown else False
+            reading = _command_delete_kinds(script, depth + 1)
+            if reading is None:
+                unknown = True
+            else:
+                kinds |= reading
+    return None if unknown and not kinds else kinds
 
 
 def _legacy_pattern_key(pattern: str) -> str:
@@ -2265,12 +2353,18 @@ def detect_all_dangerous_commands(command: str) -> list[tuple[str, str]]:
     # Compressor flags are case-sensitive, so read them from the unfolded command.
     unfolded = _normalize_command_for_detection(command, preserve_shell_quotes=True)
     unfolded_contexts = [unfolded, *_script_bodies(unfolded, r"(?:bash|sh|zsh|ksh)", r"-[^\s]*c")]
+    delete_kinds = None  # tokenized delete kinds per context, computed once
     matches = []
     for pattern_re, description in DANGEROUS_PATTERNS_COMPILED:
-        if description == _COMPRESSOR_DELETE:
-            readings = [_compressor_replaces_input(context) for context in unfolded_contexts]
-            # The pattern is only the fallback for a command that can't be tokenized.
-            if any(readings) or (None in readings and any(pattern_re.search(c) for c in delete_contexts)):
+        if description in _TOKENIZED_DELETE_KINDS:
+            if delete_kinds is None:
+                delete_kinds = [_command_delete_kinds(context) for context in unfolded_contexts]
+            found = any(kinds and description in kinds for kinds in delete_kinds)
+            # The compressor pattern is only the fallback for a command that
+            # can't be tokenized; the others still match on their own.
+            if description != _COMPRESSOR_DELETE or None in delete_kinds:
+                found = found or any(pattern_re.search(c) for c in delete_contexts)
+            if found:
                 matches.append((description, description))
             continue
         candidates = delete_contexts if description.startswith("file/directory delete") else contexts
