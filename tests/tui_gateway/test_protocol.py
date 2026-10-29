@@ -19,8 +19,12 @@ def _restore_stdout():
     sys.stdout = _original_stdout
 
 
-@pytest.fixture()
-def server():
+@pytest.fixture(scope="module")
+def _server_module():
+    # Import the gateway once per file. A function-scoped patch.dict re-imported
+    # tui_gateway.server (and everything it pulls in) for every test, which
+    # pushed this file past the CI per-file time cap. patch.dict still restores
+    # sys.modules when the module scope ends, so nothing leaks to other files.
     with patch.dict("sys.modules", {
         "lliam_constants": MagicMock(get_lliam_home=MagicMock(return_value="/tmp/hermes_test")),
         "lliam_cli.env_loader": MagicMock(),
@@ -28,19 +32,27 @@ def server():
         "lliam_state": MagicMock(),
     }):
         import importlib
-        mod = importlib.import_module("tui_gateway.server")
-        yield mod
-        # Reset module-level session state without re-importing. importlib.reload
-        # would re-register the module's atexit hooks (ThreadPoolExecutor
-        # shutdown, _shutdown_sessions); the duplicates race the stderr
-        # buffer at interpreter shutdown and surface as Fatal Python error:
-        # _enter_buffered_busy. Clearing the per-session dicts gives the
-        # next test a clean slate; _methods is NOT cleared because it's
-        # populated at module import time and re-registration only happens
-        # via reload (which we don't do).
-        mod._sessions.clear()
-        mod._pending.clear()
-        mod._answers.clear()
+        yield importlib.import_module("tui_gateway.server")
+
+
+@pytest.fixture()
+def server(_server_module):
+    mod = _server_module
+    real_stdout = mod._real_stdout
+    yield mod
+    # Reset module-level session state without re-importing. importlib.reload
+    # would re-register the module's atexit hooks (ThreadPoolExecutor
+    # shutdown, _shutdown_sessions); the duplicates race the stderr
+    # buffer at interpreter shutdown and surface as Fatal Python error:
+    # _enter_buffered_busy. Clearing the per-session dicts gives the
+    # next test a clean slate; _methods is NOT cleared because it's
+    # populated at module import time and re-registration only happens
+    # via reload (which we don't do). Several tests swap _real_stdout
+    # directly, so put the original back too.
+    mod._real_stdout = real_stdout
+    mod._sessions.clear()
+    mod._pending.clear()
+    mod._answers.clear()
 
 
 @pytest.fixture()
