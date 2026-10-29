@@ -453,6 +453,143 @@ def _hardline_block_result(description: str) -> dict:
     }
 
 
+# =========================================================================
+# Environment-file write floor (AI-1178 / DEF-018)
+# =========================================================================
+# A shell redirect or tee into a project/user environment file is refused
+# outright, like the hardline list: no prompt, and yolo, approvals.mode=off,
+# cron approve mode and stored approvals do not lift it. Reads are untouched.
+# The name rule mirrors agent/file_safety.is_project_env_basename (#141):
+# .env, .envrc, and every .env.<suffix> except .env.example / .env.sample.
+# cp/mv/sed -i/dd and interpreter writes into .env stay approval-gated in
+# DANGEROUS_PATTERNS; this floor covers redirection and tee only.
+
+_ENV_TEMPLATE_BASENAMES = frozenset({".env.example", ".env.sample"})
+_SHELL_PUNCTUATION = "();<>|&\n"
+_COMMAND_WRAPPERS = frozenset({
+    "sudo", "doas", "env", "command", "builtin", "exec", "nohup", "time",
+    "nice", "ionice", "stdbuf", "setsid",
+})
+_WRAPPER_FLAGS_WITH_VALUE = frozenset({"-u", "-g", "-n", "-c"})
+_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# Fallback when the command cannot be tokenized (unbalanced quotes, e.g. a
+# heredoc body containing an apostrophe): look for a redirect operator or a
+# tee word followed by a token whose basename looks like an env file.
+_ENV_TOKEN = r"""["']?(?P<target>[^\s;|&<>()"'`]*\.env[^\s;|&<>()"'`]*)["']?"""
+_ENV_REDIRECT_FALLBACK_RE = re.compile(r"(?:>>?\|?|&>>?|>&)\s*" + _ENV_TOKEN)
+_ENV_TEE_FALLBACK_RE = re.compile(r"(?<![\w.-])tee\b[^;&|\n]*?\s" + _ENV_TOKEN)
+
+
+def _is_protected_env_basename(path: str) -> bool:
+    """True when *path* names a protected environment file (see block above)."""
+    name = unicodedata.normalize("NFKC", path).replace("\\", "/")
+    name = name.rsplit("/", 1)[-1].split(":", 1)[0].rstrip(" .").casefold()
+    if name in _ENV_TEMPLATE_BASENAMES:
+        return False
+    return name in {".env", ".envrc"} or name.startswith(".env.")
+
+
+def _shell_tokens(command: str) -> Optional[list]:
+    """Split *command* into shell words and operator runs, or None on error."""
+    import shlex
+
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=_SHELL_PUNCTUATION)
+    lexer.whitespace_split = True
+    lexer.whitespace = " \t\r"
+    lexer.commenters = ""
+    try:
+        return list(lexer)
+    except ValueError:
+        return None
+
+
+def _env_write_targets(command: str) -> Optional[list]:
+    """Return the redirect/tee targets of *command*, or None if untokenizable."""
+    tokens = _shell_tokens(command)
+    if tokens is None:
+        return None
+    targets: list = []
+    words: list = []  # words of the current simple command
+
+    def _flush_segment() -> None:
+        # Find the real command word after wrappers, assignments and flags.
+        i = 0
+        while i < len(words):
+            word = words[i]
+            base = word.rsplit("/", 1)[-1]
+            if _ASSIGNMENT_RE.match(word) or base in _COMMAND_WRAPPERS:
+                i += 1
+            elif word.startswith("-") and i > 0:
+                i += 2 if word in _WRAPPER_FLAGS_WITH_VALUE else 1
+            elif word.isdigit() and i > 0:
+                i += 1
+            else:
+                break
+        if i < len(words) and words[i].rsplit("/", 1)[-1] == "tee":
+            targets.extend(w for w in words[i + 1:] if not w.startswith("-"))
+        words.clear()
+
+    pending_redirect = None  # operator awaiting its target word
+    for token in tokens:
+        is_operator = bool(token) and all(ch in _SHELL_PUNCTUATION for ch in token)
+        if pending_redirect is not None:
+            if not is_operator:
+                fd_dup = pending_redirect.endswith("&") and (token.isdigit() or token == "-")
+                if ">" in pending_redirect and not fd_dup:
+                    targets.append(token)
+                pending_redirect = None
+                continue
+            pending_redirect = None
+        if not is_operator:
+            words.append(token)
+            continue
+        if token.endswith("(") or (">" not in token and "<" not in token):
+            _flush_segment()  # separator, subshell or process substitution
+            continue
+        pending_redirect = token
+    _flush_segment()
+    return targets
+
+
+def detect_env_file_write(command: str) -> tuple:
+    """Detect a shell redirect or tee into a protected environment file.
+
+    Returns:
+        (True, description) when a target is a protected env file, else
+        (False, None).
+    """
+    normalized = _normalize_command_for_detection(command, preserve_shell_quotes=True)
+    targets = _env_write_targets(normalized)
+    if targets is None:
+        folded = _normalize_command_for_detection(command)
+        targets = [
+            match.group("target")
+            for regex in (_ENV_REDIRECT_FALLBACK_RE, _ENV_TEE_FALLBACK_RE)
+            for match in regex.finditer(folded)
+        ]
+    for target in targets:
+        if _is_protected_env_basename(target):
+            return (True, f"shell write into protected environment file {target}")
+    return (False, None)
+
+
+def _env_write_block_result(description: str) -> dict:
+    """Build the block result for a shell write into a protected env file."""
+    return {
+        "approved": False,
+        "hardline": True,
+        "description": description,
+        "message": (
+            f"BLOCKED (protected environment file): {description}. "
+            "Writing an environment file through shell redirection or tee is "
+            "refused without a prompt — not even --yolo, /yolo, "
+            "approvals.mode=off, or cron approve mode lifts it. Reading the "
+            "file is still allowed. If the file genuinely needs to change, "
+            "edit it yourself outside the agent."
+        ),
+    }
+
+
 def _sudo_stdin_block_result(description: str) -> dict:
     """Build the standard block result for sudo stdin guard."""
     return {
@@ -1647,6 +1784,13 @@ def check_dangerous_command(command: str, env_type: str,
         logger.warning("Hardline block: %s (command: %s)", hardline_desc, command[:200])
         return _hardline_block_result(hardline_desc)
 
+    # Env-file write floor (AI-1178): redirect/tee into .env is refused with
+    # no prompt, before any yolo / mode=off / cron / stored-approval bypass.
+    is_env_write, env_write_desc = detect_env_file_write(command)
+    if is_env_write:
+        logger.warning("Env-file write block: %s (command: %s)", env_write_desc, command[:200])
+        return _env_write_block_result(env_write_desc)
+
     # --yolo: bypass all approval prompts. Gateway /yolo is session-scoped;
     # CLI --yolo remains process-scoped via the env var for local use.
     if _YOLO_MODE_FROZEN or is_current_session_yolo_enabled():
@@ -1997,6 +2141,13 @@ def check_all_command_guards(command: str, env_type: str,
     if is_hardline:
         logger.warning("Hardline block: %s (command: %s)", hardline_desc, command[:200])
         return _hardline_block_result(hardline_desc)
+
+    # Env-file write floor (AI-1178): redirect/tee into .env is refused with
+    # no prompt, before any yolo / mode=off / cron / stored-approval bypass.
+    is_env_write, env_write_desc = detect_env_file_write(command)
+    if is_env_write:
+        logger.warning("Env-file write block: %s (command: %s)", env_write_desc, command[:200])
+        return _env_write_block_result(env_write_desc)
 
     # == Sudo stdin guard ==
     # Like the hardline floor above, this is unconditional: there is never a
