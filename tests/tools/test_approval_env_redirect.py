@@ -119,6 +119,29 @@ BLOCKED = [
     "x=`echo k >.env`",
     'echo "`echo k > .env`"',
     'echo "$(printf "%s" ")" > .env)"',
+    # Codex P1/P2 on #145 (round 5): a heredoc body is input only when its
+    # whole pipeline clearly reads data; subshells and groups don't count.
+    "cat <<'EOF' | (sh)\necho K=v > .env\nEOF",
+    "cat <<'EOF' | { sh; }\necho K=v > .env\nEOF",
+    "cat <<'EOF' | (bash -s)\necho K=v > .env\nEOF",
+    "cat <<'EOF' | (true; sh)\necho K=v > .env\nEOF",
+    "(cat <<'EOF') | sh\necho K=v > .env\nEOF",
+    "{ cat <<'EOF'; } | sh\necho K=v > .env\nEOF",
+    "cat <<'EOF' | xargs -I{} sh -c '{}'\necho K=v > .env\nEOF",
+    "cat <<'EOF' | sed e\necho K=v > .env\nEOF",
+    "cat() { sh; }; cat <<'EOF'\necho K=v > .env\nEOF",
+    "hash -p /bin/sh cat; cat <<'EOF'\necho K=v > .env\nEOF",
+    "PATH=/tmp/x cat <<'EOF'\necho K=v > .env\nEOF",
+    "while read l; do eval \"$l\"; done <<'EOF'\necho K=v > .env\nEOF",
+    # Codex P2 on #145 (round 5): an unquoted body expands $(...) and `...`
+    # even after # and inside ' characters.
+    "cat <<EOF\n# $(echo K=v > .env)\nEOF",
+    "cat <<EOF > README.md\n'$(echo K=v > .env)'\nEOF",
+    "cat <<EOF > README.md\n# `echo K=v > .env`\nEOF",
+    "cat <<EOF > README.md\nx $(echo $(echo K=v > .env))\nEOF",
+    # A substitution whose end is unsure falls back to the raw-text check.
+    "cat <<EOF > README.md\n$(true # )\necho K=v > .env\n)\nEOF",
+    "cat <<EOF > README.md\n$(case x in a) echo K=v > .env;; esac)\nEOF",
 ]
 
 ALLOWED = [
@@ -176,6 +199,13 @@ ALLOWED = [
     "cat <<<'echo k > .env'",
     "echo '$(echo k > .env)'",
     'echo "$(cat .env)"',
+    # Still input (round 5): a data-only pipeline, an escaped or quoted-off $(.
+    "cat <<EOF > README.md\n\\$(echo K=v > .env)\nEOF",
+    "cat <<'EOF' > README.md\n# $(echo K=v > .env)\nEOF",
+    "cat <<EOF > README.md\nit's $(date) > .env\nEOF",
+    "mkdir -p docs && cat <<'EOF' > docs/README.md\necho K=v > .env\nEOF",
+    "cat <<'EOF' | sudo tee docs/README.md\necho K=v > .env\nEOF",
+    "cat <<'EOF' | grep K | sort\necho K=v > .env\nEOF",
 ]
 
 
