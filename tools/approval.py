@@ -585,7 +585,9 @@ def _is_heredoc_operator(text: str) -> bool:
 
 def _substitution_end(command: str, start: int) -> Optional[int]:
     """Index just past the ``$(...)`` or backquoted command substitution that
-    begins at *start*, or None when it is not closed."""
+    begins at *start*, or None when it is not closed or its end is unsure: a
+    ``$(...)`` holding ``#`` (a comment can hide a ``)``), ``<<`` (a nested
+    heredoc) or ``case`` (a pattern's bare ``)``)."""
     n = len(command)
     if command[start] == "`":
         k = start + 1
@@ -616,9 +618,33 @@ def _substitution_end(command: str, start: int) -> Optional[int]:
         elif ch == ")":
             depth -= 1
             if depth == 0:
+                span = command[start + 2:k]
+                if "#" in span or "<<" in span or re.search(r"(?<![\w-])case(?![\w-])", span):
+                    return None
                 return k + 1
         k += 1
     return None
+
+
+def _heredoc_substitutions(body: str) -> Optional[list]:
+    """The scripts of the command substitutions an unquoted heredoc *body*
+    expands, or None when unsure. In such a body only a backslash escapes:
+    ``#`` and ``'`` are plain text, so ``# $(cmd)`` and ``'$(cmd)'`` run cmd."""
+    scripts: list = []
+    i, n = 0, len(body)
+    while i < n:
+        if body[i] == "\\":
+            i += 2
+            continue
+        if body[i] == "`" or body.startswith("$(", i):
+            end = _substitution_end(body, i)
+            if end is None:
+                return None
+            scripts.append(body[i + (1 if body[i] == "`" else 2):end - 1])
+            i = end
+            continue
+        i += 1
+    return scripts
 
 
 def _shell_tokens(command: str, comments: bool = False,
@@ -633,15 +659,15 @@ def _shell_tokens(command: str, comments: bool = False,
 
     With *heredocs*, a here-document body (the lines after the line holding
     ``<<WORD``, up to the line ``WORD``) is not tokenized. It is appended to
-    *heredocs* as ``(body, literal)``, one entry per ``<<`` / ``<<-`` operator,
-    in order. *literal* is True when the delimiter is quoted (``<<'EOF'``,
-    ``<<"EOF"``, ``<<\\EOF``), so the shell expands nothing in the body, or
-    when an unquoted body holds no command substitution (``$(`` or a
-    backquote). Without *heredocs* the body is tokenized like other lines.
+    *heredocs*, one entry per ``<<`` / ``<<-`` operator, in order;
+    ``_heredoc_scripts`` decides whether it runs. Without *heredocs* the body
+    is tokenized like other lines.
 
     With *substitutions*, the script of each command substitution the lexer
-    keeps inside a word (``"$(...)"`` or a backquoted one) is appended to it,
-    so the caller can scan it. An unquoted ``$(`` already splits into tokens.
+    keeps inside a word (``"$(...)"`` or a backquoted one) or finds in an
+    unquoted heredoc body is appended to it, so the caller can scan it. An
+    unquoted ``$(`` already splits into tokens. A substitution whose end is
+    unsure (see ``_substitution_end``) makes the command untokenizable.
     """
     tokens: list = []
     word: list = []
@@ -674,9 +700,10 @@ def _shell_tokens(command: str, comments: bool = False,
             if heredocs is not None and _is_heredoc_operator(text):
                 want = text.endswith("-")
 
-    def read_bodies(i: int) -> int:
+    def read_bodies(i: int) -> Optional[int]:
         """Skip the pending heredoc bodies, which start at *i*; return the
-        index just past the last delimiter line (or the end)."""
+        index just past the last delimiter line (or the end), or None when an
+        unquoted body's substitutions can't be read."""
         for delimiter, delimiter_quoted, strip_tabs in pending:
             start, end = i, n  # an unterminated body runs to the end
             while i < n:
@@ -690,8 +717,13 @@ def _shell_tokens(command: str, comments: bool = False,
                 if at_delimiter:
                     break
             body = command[start:end]
-            literal = delimiter_quoted or ("$(" not in body and "`" not in body)
-            heredocs.append((body, literal))
+            heredocs.append(body)
+            if not delimiter_quoted:  # the shell expands $(...) and `...` in it
+                scripts = _heredoc_substitutions(body)
+                if scripts is None or (scripts and substitutions is None):
+                    return None
+                if scripts:
+                    substitutions.extend(scripts)
         pending.clear()
         return i
 
@@ -709,6 +741,8 @@ def _shell_tokens(command: str, comments: bool = False,
             if ch == "\n" and pending:
                 end_operator()
                 i = read_bodies(i)
+                if i is None:
+                    return None
             continue
         if ch == "-" and heredocs is not None and _is_heredoc_operator("".join(operator)) \
                 and not "".join(operator).endswith("-"):
@@ -864,44 +898,59 @@ def _command_word_indices(words: list, scripts: list) -> set:
     return found
 
 
-# Commands that run their standard input as a script, so a heredoc fed to
-# them (directly or through a pipe) is scanned as commands: ``bash <<'EOF'``
-# and ``cat <<'EOF' | sh`` run the body. ``su``, ``sudo -s`` and a bare
-# ``sudo`` read a shell from stdin; ``ssh host`` hands it to a remote shell.
-_STDIN_SCRIPT_COMMANDS = _NESTED_SHELLS | {"su", "ssh", "source", "."}
-
-
-def _runs_stdin_script(words: list) -> bool:
-    """True when the simple command *words* may run its stdin as a script,
-    in any reading of its wrappers (a wrapper with no command counts)."""
-    for i in _command_word_indices(words, []):
-        if i >= len(words) or words[i].rsplit("/", 1)[-1] in _STDIN_SCRIPT_COMMANDS:
-            return True
-    return False
+# A heredoc body is input, not commands, only when it is clearly safe: every
+# command of the pipeline it feeds reads stdin as data and never runs it.
+_HEREDOC_DATA_COMMANDS = frozenset({
+    "base64", "cat", "cksum", "cmp", "column", "comm", "cut", "diff", "egrep", "expand",
+    "fgrep", "fmt", "fold", "grep", "head", "iconv", "md5sum", "nl", "od", "paste", "rev",
+    "sha1sum", "sha256sum", "sha512sum", "sort", "tac", "tail", "tee", "tr", "unexpand",
+    "uniq", "wc", "xxd",
+})
+# Anything that can change what a later command name runs, or hide which
+# pipeline a heredoc feeds, makes every heredoc body count as commands:
+# a ( ) operator (subshell, function definition, substitution), these words
+# as a command, and these assignments.
+_HEREDOC_UNSAFE_WORDS = frozenset({
+    "!", "{", "}", "[[", "case", "coproc", "do", "done", "elif", "else", "esac", "fi",
+    "for", "function", "if", "select", "then", "until", "while",
+    "alias", "bind", "declare", "enable", "eval", "export", "hash", "local", "readonly",
+    "set", "shopt", "source", ".", "trap", "typeset", "unalias", "unset",
+})
+_HEREDOC_UNSAFE_ASSIGNMENT = re.compile(r"^(?:PATH|BASH_ENV|ENV|BASH_FUNC_[^=]*|IFS|SHELLOPTS|BASHOPTS)\+?=")
 
 
 def _heredoc_scripts(tokens: list, heredocs: list) -> list:
     """The heredoc bodies of *tokens* (from ``_shell_tokens(..., heredocs=)``)
-    that run as commands: every body fed into a pipeline holding a stdin
-    script runner (``bash <<'EOF'``, ``cat <<'EOF' | sh``), and an unquoted
-    body holding a command substitution. Other bodies are input only."""
-    scripts: list = []
-    words: list = []  # words of the current simple command
-    pipeline: list = []  # (body, literal) fed into the current pipeline
+    to scan as commands. A body is input only when every command of its
+    pipeline is in ``_HEREDOC_DATA_COMMANDS`` and nothing in the whole command
+    is unsafe (see ``_HEREDOC_UNSAFE_WORDS``); otherwise every body counts."""
+    if not heredocs:
+        return []
     bodies = iter(heredocs)
-    runs_stdin = after_pipe = skip_target = False
+    pipelines: list = []  # [bodies fed into the pipeline, all commands read data]
+    current: list = [[], True]
+    words: list = []  # words of the current simple command
+    unsafe = skip_target = after_pipe = False
 
     def end_command() -> None:
-        nonlocal runs_stdin
-        if words and _runs_stdin_script(words):
-            runs_stdin = True
+        nonlocal unsafe
+        if not words:
+            return
+        if words[0] in _HEREDOC_UNSAFE_WORDS or any(_HEREDOC_UNSAFE_ASSIGNMENT.match(w) for w in words):
+            unsafe = True
+        for i in _command_word_indices(words, []):
+            name = words[i].rsplit("/", 1)[-1] if i < len(words) else ""
+            if name in _HEREDOC_UNSAFE_WORDS:
+                unsafe = True
+            if name not in _HEREDOC_DATA_COMMANDS:
+                current[1] = False
         words.clear()
 
     def end_pipeline() -> None:
-        nonlocal runs_stdin
-        scripts.extend(body for body, literal in pipeline if runs_stdin or not literal)
-        pipeline.clear()
-        runs_stdin = False
+        nonlocal current
+        if current[0]:
+            pipelines.append(current)
+        current = [[], True]
 
     for text, is_operator in tokens:
         if not is_operator:
@@ -910,7 +959,18 @@ def _heredoc_scripts(tokens: list, heredocs: list) -> list:
             skip_target = after_pipe = False
             continue
         skip_target = False
-        if text.endswith("(") or (">" not in text and "<" not in text):
+        if "(" in text or ")" in text:
+            unsafe = True  # subshell, group, function or substitution
+        if _is_heredoc_operator(text):
+            body = next(bodies, None)
+            if body is None:
+                unsafe = True
+            else:
+                current[0].append(body)
+            skip_target = True
+        elif ">" in text or "<" in text:
+            skip_target = True
+        else:
             end_command()
             separator = text.strip("\n")
             if separator in ("|", "|&"):
@@ -918,15 +978,11 @@ def _heredoc_scripts(tokens: list, heredocs: list) -> list:
             elif separator or not after_pipe:
                 end_pipeline()
                 after_pipe = False
-            continue
-        if _is_heredoc_operator(text):
-            body = next(bodies, None)
-            if body is not None:
-                pipeline.append(body)
-        skip_target = True
     end_command()
     end_pipeline()
-    return scripts
+    if unsafe or next(bodies, None) is not None:
+        return list(heredocs)
+    return [body for fed, data_only in pipelines if not data_only for body in fed]
 
 
 def _env_write_targets_or_fallback(command: str, depth: int = 0) -> list:
