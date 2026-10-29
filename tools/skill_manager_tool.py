@@ -1199,7 +1199,10 @@ def _stage_skill_proposal(action, name, **payload_kwargs):
 def apply_skill_pending(pending_id: str) -> str:
     """Replay the selected staged record after the operator handler logs approval.
 
-    Returns the tool result JSON string. This is not a model tool.
+    Requires an approval recorded by ``write_approval.record_write_decision``
+    in this process for the same payload sha256 (single use), so agent code
+    that imports and calls this directly is refused. Returns the tool result
+    JSON string. This is not a model tool.
     """
     from tools import write_approval as wa
     from tools.skill_provenance import set_current_write_origin, reset_current_write_origin
@@ -1209,7 +1212,12 @@ def apply_skill_pending(pending_id: str) -> str:
         return tool_error("No pending skill proposal matches this approval.", success=False)
 
     payload = record["payload"]
-    # The operator handler already persisted the authorization before replay.
+    # AI-1183: replay only what the operator handler just approved and logged
+    # in this process, and only if the re-read payload still has that sha256.
+    refusal = wa.consume_approval(wa.SKILLS, pending_id, payload)
+    if refusal:
+        logger.warning("Skill write replay refused: id=%s: %s", pending_id, refusal)
+        return tool_error(refusal, success=False)
     logger.info("Skill write approved: id=%s action=%s name=%s origin=%s",
                 record["id"], payload.get("action"), payload.get("name"), record["origin"])
     origin_token = set_current_write_origin(record["origin"])
