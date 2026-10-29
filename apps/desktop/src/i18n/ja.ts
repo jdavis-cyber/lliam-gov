@@ -975,7 +975,6 @@ export const ja = defineLocale({
       newChat: { title: '新しいセッション', detail: '新しいセッションを開始' },
       settings: { title: '設定', detail: 'Lliam-GOV デスクトップを設定' },
       skills: { title: 'スキルとツール', detail: 'スキル、ツールセット、プロバイダーを有効化' },
-      messaging: { title: 'メッセージング', detail: 'Telegram、Slack、Discord などを設定' },
       artifacts: { title: 'アーティファクト', detail: '生成された出力を閲覧' }
     },
     sectionEntries: {
@@ -993,11 +992,7 @@ export const ja = defineLocale({
     exportSession: 'セッションをエクスポート',
     deleteSession: 'セッションを削除',
     noSessions: 'セッションはまだありません。',
-    gatewayRunning: 'メッセージングゲートウェイが実行中',
-    gatewayStopped: 'メッセージングゲートウェイが停止中',
     lliamActiveSessions: (version, count) => `Lliam-GOV ${version} · アクティブセッション ${count}`,
-    restartGateway: 'ゲートウェイを再起動',
-    gatewayRestartFailed: 'ゲートウェイの再起動に失敗しました。',
     updateLliam: 'Lliam-GOV を更新',
     actionRunning: '実行中',
     actionDone: '完了',
@@ -1026,145 +1021,6 @@ export const ja = defineLocale({
     actions: count => `${count} アクション`
   },
 
-  messaging: {
-    search: 'メッセージングを検索...',
-    loading: 'メッセージングプラットフォームを読み込み中...',
-    loadFailed: 'メッセージングプラットフォームの読み込みに失敗しました',
-    states: {
-      connected: '接続済み',
-      connecting: '接続中',
-      disabled: '無効',
-      fatal: 'エラー',
-      gateway_stopped: 'メッセージングゲートウェイが停止中',
-      not_configured: '設定が必要',
-      pending_restart: '再起動が必要',
-      retrying: '再試行中',
-      startup_failed: '起動失敗'
-    },
-    unknown: '不明',
-    hintPendingRestart: 'この変更を適用するにはステータスバーからゲートウェイを再起動してください。',
-    hintGatewayStopped: 'ステータスバーからゲートウェイを起動して接続してください。',
-    credentialsSet: '認証情報を設定しました',
-    needsSetup: '設定が必要',
-    gatewayStopped: 'メッセージングゲートウェイが停止中',
-    getCredentials: '認証情報を取得',
-    openSetupGuide: 'セットアップガイドを開く',
-    required: '必須',
-    recommended: '推奨',
-    advanced: count => `詳細設定 (${count})`,
-    noTokenNeeded:
-      'このプラットフォームはここでトークンが必要ありません。上のセットアップガイドを使用してから、以下で有効にしてください。',
-    enabled: '有効',
-    disabled: '無効',
-    unsavedChanges: '未保存の変更',
-    saving: '保存中...',
-    saveChanges: '変更を保存',
-    saved: '保存しました',
-    replaceValue: '現在の値を置き換え',
-    openDocs: 'ドキュメントを開く',
-    clearField: key => `${key} をクリア`,
-    enableAria: name => `${name} を有効にする`,
-    disableAria: name => `${name} を無効にする`,
-    platformEnabled: name => `${name} を有効にしました`,
-    platformDisabled: name => `${name} を無効にしました`,
-    restartToApply: 'この変更はゲートウェイの再起動後に有効になります。',
-    setupSaved: name => `${name} の設定を保存しました`,
-    restartToReconnect: '新しい認証情報はゲートウェイの再起動後に有効になります。',
-    keyCleared: key => `${key} をクリアしました`,
-    setupUpdated: name => `${name} の設定が更新されました。`,
-    failedUpdate: name => `${name} の更新に失敗しました`,
-    failedSave: name => `${name} の保存に失敗しました`,
-    failedClear: key => `${key} のクリアに失敗しました`,
-    fieldCopy: {
-      TELEGRAM_BOT_TOKEN: {
-        label: 'ボットトークン',
-        help: '@BotFather でボットを作成し、表示されたトークンを貼り付けてください。',
-        placeholder: 'Telegram ボットトークンを貼り付け'
-      },
-      TELEGRAM_ALLOWED_USERS: {
-        label: '許可する Telegram ユーザー ID',
-        help: '推奨。@userinfobot の数値 ID をカンマ区切りで。設定しないと誰でもボットに DM できます。'
-      },
-      TELEGRAM_PROXY: { label: 'プロキシ URL', help: 'Telegram がブロックされているネットワークでのみ必要です。' },
-      DISCORD_BOT_TOKEN: {
-        label: 'ボットトークン',
-        help: 'Discord Developer Portal でアプリケーションを作成し、ボットを追加してからトークンを貼り付けてください。'
-      },
-      DISCORD_ALLOWED_USERS: {
-        label: '許可する Discord ユーザー ID',
-        help: '推奨。カンマ区切りの Discord ユーザー ID。'
-      },
-      DISCORD_REPLY_TO_MODE: { label: '返信スタイル', help: 'first、all、または off。' },
-      DISCORD_ALLOW_ALL_USERS: {
-        label: 'すべての Discord ユーザーを許可',
-        help: '開発用のみ。true にすると、許可リストなしで誰でもボットに DM できます。'
-      },
-      DISCORD_HOME_CHANNEL: {
-        label: 'ホームチャンネル ID',
-        help: 'ボットがプロアクティブなメッセージを送信するチャンネル（Cron 出力、リマインダー）。'
-      },
-      DISCORD_HOME_CHANNEL_NAME: {
-        label: 'ホームチャンネル名',
-        help: 'ログやステータス出力でのホームチャンネルの表示名。'
-      },
-      BLUEBUBBLES_ALLOW_ALL_USERS: {
-        label: 'すべての iMessage ユーザーを許可',
-        help: 'true にすると BlueBubbles の許可リストをスキップします。'
-      },
-      MATTERMOST_ALLOW_ALL_USERS: { label: 'すべての Mattermost ユーザーを許可' },
-      MATTERMOST_HOME_CHANNEL: { label: 'ホームチャンネル' },
-      QQ_ALLOW_ALL_USERS: { label: 'すべての QQ ユーザーを許可' },
-      QQBOT_HOME_CHANNEL: { label: 'QQ ホームチャンネル', help: 'Cron 配信のデフォルトチャンネルまたはグループ。' },
-      QQBOT_HOME_CHANNEL_NAME: { label: 'QQ ホームチャンネル名' },
-      SLACK_BOT_TOKEN: {
-        label: 'Slack ボットトークン',
-        help: 'Slack アプリをインストール後、OAuth & Permissions のボットトークンを使用してください。',
-        placeholder: 'Slack ボットトークンを貼り付け'
-      },
-      SLACK_APP_TOKEN: {
-        label: 'Slack アプリトークン',
-        help: 'Socket Mode に必要なアプリレベルのトークンを使用してください。',
-        placeholder: 'Slack アプリトークンを貼り付け'
-      },
-      SLACK_ALLOWED_USERS: {
-        label: '許可する Slack ユーザー ID',
-        help: '推奨。カンマ区切りの Slack ユーザー ID。'
-      },
-      MATTERMOST_URL: { label: 'サーバー URL', placeholder: 'https://mattermost.example.com' },
-      MATTERMOST_TOKEN: { label: 'ボットトークン' },
-      MATTERMOST_ALLOWED_USERS: {
-        label: '許可するユーザー ID',
-        help: '推奨。カンマ区切りの Mattermost ユーザー ID。'
-      },
-      MATRIX_HOMESERVER: { label: 'ホームサーバー URL', placeholder: 'https://matrix.org' },
-      MATRIX_ACCESS_TOKEN: { label: 'アクセストークン' },
-      MATRIX_USER_ID: { label: 'ボットユーザー ID', placeholder: '@hermes:example.org' },
-      MATRIX_ALLOWED_USERS: {
-        label: '許可する Matrix ユーザー ID',
-        help: '推奨。@user:server 形式のカンマ区切りユーザー ID。'
-      },
-      SIGNAL_HTTP_URL: {
-        label: 'Signal ブリッジ URL',
-        placeholder: 'http://127.0.0.1:8080',
-        help: '実行中の signal-cli REST ブリッジの URL。'
-      },
-      SIGNAL_ACCOUNT: { label: '電話番号', help: 'signal-cli ブリッジに登録した番号。' },
-      SIGNAL_ALLOWED_USERS: {
-        label: '許可する Signal ユーザー',
-        help: '推奨。カンマ区切りの Signal 識別子。'
-      },
-      WHATSAPP_ENABLED: {
-        label: 'WhatsApp ブリッジを有効にする',
-        help: '以下のトグルで自動的に設定されます。必要な場合を除いてそのままにしてください。'
-      },
-      WHATSAPP_MODE: { label: 'ブリッジモード' },
-      WHATSAPP_ALLOWED_USERS: {
-        label: '許可する WhatsApp ユーザー',
-        help: '推奨。カンマ区切りの電話番号または WhatsApp ID。'
-      }
-    },
-    platformIntro: {}
-  },
 
   profiles: {
     close: 'プロファイルを閉じる',
@@ -1255,13 +1111,6 @@ export const ja = defineLocale({
       error: 'エラー',
       completed: '完了'
     },
-    deliveryLabels: {
-      local: 'このデスクトップ',
-      telegram: 'Telegram',
-      discord: 'Discord',
-      slack: 'Slack',
-      email: 'メール'
-    },
     scheduleLabels: {
       daily: '毎日',
       weekdays: '平日',
@@ -1343,7 +1192,6 @@ export const ja = defineLocale({
     promptLabel: 'プロンプト',
     promptPlaceholder: '実行ごとにエージェントが行う内容は？',
     frequencyLabel: '頻度',
-    deliverLabel: '配信先',
     customScheduleLabel: 'カスタムスケジュール',
     customPlaceholder: '0 9 * * * または weekdays at 9am',
     customHint: 'Cron 式、または「every hour」「weekdays at 9am」のようなフレーズ。',
@@ -1392,7 +1240,6 @@ export const ja = defineLocale({
     nav: {
       'new-session': '新しいセッション',
       skills: 'スキルとツール',
-      messaging: 'メッセージング',
       artifacts: 'アーティファクト'
     },
     searchAria: 'セッションを検索',
@@ -1893,7 +1740,6 @@ export const ja = defineLocale({
       connection: label => `接続: ${label}`,
       recentActivity: '最近のアクティビティ',
       viewAllLogs: 'すべてのログを見る →',
-      messagingPlatforms: 'メッセージングプラットフォーム'
     },
     statusbar: {
       unknown: '不明',
@@ -1917,7 +1763,6 @@ export const ja = defineLocale({
       gatewayChecking: '確認中',
       gatewayConnecting: '接続中',
       gatewayOffline: 'オフライン',
-      gatewayRestarting: '再起動中…',
       gatewayTitle: 'Lliam-GOV 推論ゲートウェイのステータス',
       agents: 'エージェント',
       closeAgents: 'エージェントを閉じる',
@@ -2308,13 +2153,6 @@ export const ja = defineLocale({
     noClipboardImage: 'クリップボードに画像が見つかりません',
     clipboardPasteFailed: 'クリップボードからの貼り付けに失敗しました',
     dropFiles: 'ファイルをドロップ',
-    handoff: {
-      pickPlatform: '送信先を選択',
-      success: platform => `${platform} に引き継ぎました。いつでもここで再開できます。`,
-      systemNote: platform => `↻ ${platform} に引き継ぎました — いつでもここで再開できます。`,
-      failed: error => `引き継ぎに失敗しました: ${error}`,
-      timedOut: 'ゲートウェイの待機がタイムアウトしました。`lliam-gov gateway` は起動していますか？'
-    }
   },
 
   errors: {

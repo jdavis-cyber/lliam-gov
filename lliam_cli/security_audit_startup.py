@@ -279,69 +279,16 @@ def _plaintext_env_secrets_of_record(
 
 
 def _network_listener_without_auth(config: Optional[dict]) -> list[str]:
-    """Warn about network-accessible gateway listeners with no auth.
+    """Warn about network-accessible agent listeners with no auth (LG-IA-11).
 
-    Covers the API server (no API_SERVER_KEY) and the dashboard (non-loopback
-    bind with no auth provider). Read-only against config + env; overlaps the
-    hard fail-closed guards but surfaces the posture proactively at startup.
+    This used to detect the messaging gateway's OpenAI-compatible API server
+    bound to a network address without a strong ``API_SERVER_KEY``. The
+    messaging gateway and its API server were removed (JER-198): Lliam-GOV
+    has no inbound agent API listener any more, so there is nothing to
+    report. The dashboard's own non-loopback bind is refused/gated by the
+    dashboard auth guards in ``lliam_cli/web_server.py``.
     """
-    findings: list[str] = []
-    try:
-        from gateway.platforms.base import is_network_accessible
-    except Exception:
-        return findings
-
-    cfg = config or {}
-
-    # API server. IMPORTANT: at runtime the API server is configured from ENV
-    # (API_SERVER_ENABLED / API_SERVER_KEY / API_SERVER_HOST — see
-    # gateway/config.py:1534-1554), NOT from the load_config() dict, which does
-    # not carry a `platforms` block. Reading only cfg["platforms"] made this
-    # check inert in production (the config dict's api block is None). Detect the
-    # server from EITHER source: the (rare) config platforms block OR — the real
-    # trigger — the environment the gateway itself reads.
-    try:
-        plats = (cfg.get("platforms") or {})
-        api = plats.get("api_server") if isinstance(plats, dict) else None
-        extra = (api.get("extra") or {}) if isinstance(api, dict) else {}
-
-        # Mirror the gateway's own enablement predicate EXACTLY
-        # (gateway/config.py:1539 — ``api_server_enabled or api_server_key``,
-        # with enabled ∈ {true,1,yes}). A broader predicate (e.g. treating a
-        # stray API_SERVER_HOST as enablement) would spuriously refuse startup
-        # for a server the gateway never actually starts.
-        env_enabled = os.environ.get("API_SERVER_ENABLED", "").strip().lower() in {
-            "true", "1", "yes"
-        }
-        cfg_enabled = bool(isinstance(api, dict) and api.get("enabled"))
-        # A set API_SERVER_KEY alone also activates the server (config.py:1539).
-        key = str(extra.get("key") or os.environ.get("API_SERVER_KEY", "")).strip()
-        enabled = env_enabled or cfg_enabled or bool(key)
-        if enabled:
-            host = extra.get("host") or os.environ.get("API_SERVER_HOST", "127.0.0.1")
-            if is_network_accessible(str(host)):
-                # Parity with the adapter's own trust boundary
-                # (APIServerAdapter.connect refuses a network bind unless the
-                # key clears the entropy floor) — a weak-but-nonempty key like
-                # "x" must not slip this gate either.
-                try:
-                    from lliam_cli.auth import has_usable_secret
-                    strong = has_usable_secret(key, min_length=16)
-                except Exception:
-                    strong = bool(key)
-                if not strong:
-                    detail = ("with NO API_SERVER_KEY" if not key
-                              else "with a WEAK API_SERVER_KEY (<16 chars)")
-                    findings.append(
-                        f"OpenAI-compatible API server is network-accessible ({host}) "
-                        f"{detail}. It dispatches terminal-capable agent work — an "
-                        "unauthenticated network endpoint is remote code execution. "
-                        "Set a strong (≥16-char, high-entropy) API_SERVER_KEY."
-                    )
-    except Exception:
-        pass
-
-    return findings
+    return []
 
 
 def _tls_verification_disabled() -> list[str]:

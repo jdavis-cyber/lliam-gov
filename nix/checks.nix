@@ -111,7 +111,7 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
           export HOME=$(mktemp -d)
 
           echo "=== Checking lliam-gov --help ==="
-          ${lliam-gov-agent}/bin/lliam-gov --help 2>&1 | grep -q "gateway" || (echo "FAIL: gateway subcommand missing"; exit 1)
+          ${lliam-gov-agent}/bin/lliam-gov --help 2>&1 | grep -q "dashboard" || (echo "FAIL: dashboard subcommand missing"; exit 1)
           ${lliam-gov-agent}/bin/lliam-gov --help 2>&1 | grep -q "config" || (echo "FAIL: config subcommand missing"; exit 1)
           echo "PASS: All subcommands accessible"
 
@@ -140,16 +140,16 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
           echo "ok" > $out/result
         '';
 
-        # Verify bundled plugins (platforms, memory, context_engine) are present
+        # Verify bundled plugins (web, memory, context_engine) are present
         bundled-plugins = pkgs.runCommand "lliam-bundled-plugins" { } ''
           set -e
           echo "=== Checking bundled plugins ==="
           test -d ${lliam-gov-agent}/share/lliam-gov-agent/plugins || (echo "FAIL: plugins directory missing"; exit 1)
           echo "PASS: plugins directory exists"
 
-          test -f ${lliam-gov-agent}/share/lliam-gov-agent/plugins/platforms/irc/plugin.yaml || \
-            (echo "FAIL: irc plugin manifest missing"; exit 1)
-          echo "PASS: irc plugin manifest present"
+          test -f ${lliam-gov-agent}/share/lliam-gov-agent/plugins/web/ddgs/plugin.yaml || \
+            (echo "FAIL: ddgs web plugin manifest missing"; exit 1)
+          echo "PASS: ddgs web plugin manifest present"
 
           grep -q "HERMES_BUNDLED_PLUGINS" ${lliam-gov-agent}/bin/lliam-gov || \
             (echo "FAIL: HERMES_BUNDLED_PLUGINS not in wrapper"; exit 1)
@@ -319,19 +319,6 @@ json.dump(sorted(leaf_paths(DEFAULT_CONFIG)), sys.stdout, indent=2)
           echo "PASS: extraDependencyGroups override evaluates cleanly"
 
           echo "=== All extraDependencyGroups checks passed ==="
-          mkdir -p $out
-          echo "ok" > $out/result
-        '';
-
-        # Regression guard: messaging deps live outside [all], so the
-        # #messaging variant must actually ship discord.py — otherwise
-        # `nix profile install .#messaging` regresses to the broken default.
-        messaging-variant = pkgs.runCommand "lliam-messaging-variant" { } ''
-          set -e
-          echo "=== Checking discord.py importable from messaging variant ==="
-          ${self'.packages.messaging.lliamVenv}/bin/python3 -c \
-            "import discord; print(discord.__version__)"
-          echo "PASS: discord.py importable from messaging variant venv"
           mkdir -p $out
           echo "ok" > $out/result
         '';

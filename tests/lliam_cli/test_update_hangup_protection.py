@@ -161,23 +161,6 @@ class TestUpdateOutputStream:
 
 
 class TestInstallHangupProtection:
-    def test_gateway_mode_is_noop(self):
-        """In gateway mode the process is already detached — don't touch stdio or signals."""
-        prev_out, prev_err = sys.stdout, sys.stderr
-        prev_sighup = signal.getsignal(signal.SIGHUP) if hasattr(signal, "SIGHUP") else None
-
-        state = _install_hangup_protection(gateway_mode=True)
-
-        try:
-            assert sys.stdout is prev_out
-            assert sys.stderr is prev_err
-            assert state["log_file"] is None
-            assert state["installed"] is False
-            if hasattr(signal, "SIGHUP"):
-                assert signal.getsignal(signal.SIGHUP) == prev_sighup
-        finally:
-            _finalize_update_output(state)
-
     @pytest.mark.skipif(
         not hasattr(signal, "SIGHUP"), reason="SIGHUP not available on this platform"
     )
@@ -190,7 +173,7 @@ class TestInstallHangupProtection:
             _cfg._LLIAM_HOME_CACHE = None  # type: ignore[attr-defined]
 
         original_handler = signal.getsignal(signal.SIGHUP)
-        state = _install_hangup_protection(gateway_mode=False)
+        state = _install_hangup_protection()
 
         try:
             assert signal.getsignal(signal.SIGHUP) == signal.SIG_IGN
@@ -207,7 +190,7 @@ class TestInstallHangupProtection:
             _cfg._LLIAM_HOME_CACHE = None  # type: ignore[attr-defined]
 
         prev_out, prev_err = sys.stdout, sys.stderr
-        state = _install_hangup_protection(gateway_mode=False)
+        state = _install_hangup_protection()
 
         try:
             # On Windows (no SIGHUP) we still wrap stdio and create the log.
@@ -239,7 +222,7 @@ class TestInstallHangupProtection:
         # No logs/ dir yet.
         assert not (tmp_path / "logs").exists()
 
-        state = _install_hangup_protection(gateway_mode=False)
+        state = _install_hangup_protection()
         try:
             assert (tmp_path / "logs").is_dir()
             assert (tmp_path / "logs" / "update.log").exists()
@@ -262,7 +245,7 @@ class TestInstallHangupProtection:
             signal.getsignal(signal.SIGHUP) if hasattr(signal, "SIGHUP") else None
         )
 
-        state = _install_hangup_protection(gateway_mode=False)
+        state = _install_hangup_protection()
 
         try:
             assert sys.stdout is prev_out
@@ -293,7 +276,7 @@ class TestFinalizeUpdateOutput:
             _cfg._LLIAM_HOME_CACHE = None  # type: ignore[attr-defined]
 
         prev_out = sys.stdout
-        state = _install_hangup_protection(gateway_mode=False)
+        state = _install_hangup_protection()
         log_file = state["log_file"]
 
         assert sys.stdout is not prev_out

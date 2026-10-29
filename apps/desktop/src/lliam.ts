@@ -20,9 +20,6 @@ import type {
   LogsResponse,
   MemoryProviderConfig,
   MemoryProviderOAuthStatus,
-  MessagingPlatformsResponse,
-  MessagingPlatformTestResponse,
-  MessagingPlatformUpdate,
   MoaConfigResponse,
   ModelAssignmentRequest,
   ModelAssignmentResponse,
@@ -80,12 +77,6 @@ export type {
   LogsResponse,
   MemoryProviderConfig,
   MemoryProviderOAuthStatus,
-  MessagingEnvVarInfo,
-  MessagingHomeChannel,
-  MessagingPlatformInfo,
-  MessagingPlatformsResponse,
-  MessagingPlatformTestResponse,
-  MessagingPlatformUpdate,
   MoaConfigResponse,
   MoaModelSlot,
   ModelAssignmentRequest,
@@ -560,30 +551,6 @@ export function grantComputerUsePermissions(): Promise<ActionResponse> {
   })
 }
 
-export function getMessagingPlatforms(): Promise<MessagingPlatformsResponse> {
-  return window.lliamDesktop.api<MessagingPlatformsResponse>({
-    path: '/api/messaging/platforms'
-  })
-}
-
-export function updateMessagingPlatform(
-  platformId: string,
-  body: MessagingPlatformUpdate
-): Promise<{ ok: boolean; platform: string }> {
-  return window.lliamDesktop.api<{ ok: boolean; platform: string }>({
-    path: `/api/messaging/platforms/${encodeURIComponent(platformId)}`,
-    method: 'PUT',
-    body
-  })
-}
-
-export function testMessagingPlatform(platformId: string): Promise<MessagingPlatformTestResponse> {
-  return window.lliamDesktop.api<MessagingPlatformTestResponse>({
-    path: `/api/messaging/platforms/${encodeURIComponent(platformId)}/test`,
-    method: 'POST'
-  })
-}
-
 export function getCronJobs(): Promise<CronJob[]> {
   return window.lliamDesktop.api<CronJob[]>({
     path: '/api/cron/jobs'
@@ -773,14 +740,6 @@ export function setModelAssignment(body: ModelAssignmentRequest): Promise<ModelA
     path: '/api/model/set',
     method: 'POST',
     body
-  })
-}
-
-export function restartGateway(): Promise<ActionResponse> {
-  return window.lliamDesktop.api<ActionResponse>({
-    ...profileScoped(),
-    path: '/api/gateway/restart',
-    method: 'POST'
   })
 }
 

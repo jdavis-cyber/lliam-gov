@@ -43,7 +43,7 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
-# Async-from-sync bridge (matches the pattern in homeassistant_tool.py)
+# Async-from-sync bridge
 # ---------------------------------------------------------------------------
 
 

@@ -255,7 +255,7 @@ def _get_enabled_plugins() -> Optional[set]:
 # Data classes
 # ---------------------------------------------------------------------------
 
-_VALID_PLUGIN_KINDS: Set[str] = {"standalone", "backend", "exclusive", "platform", "model-provider"}
+_VALID_PLUGIN_KINDS: Set[str] = {"standalone", "backend", "exclusive", "model-provider"}
 
 
 @dataclass
@@ -281,11 +281,6 @@ class PluginManifest:
     #              Selection via ``<category>.provider`` config key; the
     #              category's own discovery system handles loading and the
     #              general scanner skips these.
-    # ``platform``: gateway messaging platform adapter (e.g. IRC). Bundled
-    #              platform plugins auto-load so every shipped platform is
-    #              available out of the box; user-installed platform plugins
-    #              in ~/.hermes/plugins/ still gated by ``plugins.enabled``
-    #              (untrusted code).
     kind: str = "standalone"
     # Registry key — path-derived, used by ``plugins.enabled``/``disabled``
     # lookups and by ``lliam-gov plugins list``. For a flat plugin at
@@ -813,120 +808,6 @@ class PluginContext:
             self.manifest.name, provider.name,
         )
 
-    # -- platform adapter registration ---------------------------------------
-
-    def register_platform(
-        self,
-        name: str,
-        label: str,
-        adapter_factory: Callable,
-        check_fn: Callable,
-        validate_config: Callable | None = None,
-        required_env: list | None = None,
-        install_hint: str = "",
-        **entry_kwargs: Any,
-    ) -> None:
-        """Register a gateway platform adapter.
-
-        The adapter_factory receives a ``PlatformConfig`` and returns a
-        ``BasePlatformAdapter`` subclass instance.  The gateway calls
-        ``check_fn()`` before instantiation to verify dependencies.
-
-        Extra keyword arguments are forwarded to ``PlatformEntry`` (e.g.
-        ``setup_fn``, ``emoji``, ``allowed_users_env``, ``platform_hint``).
-        Unknown keys raise TypeError from the dataclass constructor.
-
-        Example::
-
-            ctx.register_platform(
-                name="irc",
-                label="IRC",
-                adapter_factory=lambda cfg: IRCAdapter(cfg),
-                check_fn=lambda: True,
-                emoji="💬",
-                setup_fn=irc_interactive_setup,
-            )
-        """
-        from gateway.platform_registry import platform_registry, PlatformEntry
-
-        entry_kwargs.setdefault("plugin_name", self.manifest.name)
-        entry = PlatformEntry(
-            name=name,
-            label=label,
-            adapter_factory=adapter_factory,
-            check_fn=check_fn,
-            validate_config=validate_config,
-            required_env=required_env or [],
-            install_hint=install_hint,
-            source="plugin",
-            **entry_kwargs,
-        )
-        platform_registry.register(entry)
-        self._manager._plugin_platform_names.add(name)
-        logger.debug(
-            "Plugin %s registered platform: %s",
-            self.manifest.name,
-            name,
-        )
-
-    # -- slack action handler registration ----------------------------------
-
-    def register_slack_action_handler(
-        self,
-        action_id: Any,
-        callback: Callable,
-    ) -> None:
-        """Register a Slack Block Kit action handler from a plugin.
-
-        Lliam-GOV' Slack adapter wires registered handlers into its
-        ``slack_bolt.AsyncApp`` at connect time. The callback is invoked
-        when a user clicks a button (or interacts with another Block Kit
-        action element) whose ``action_id`` matches.
-
-        Callback signature follows the slack_bolt convention::
-
-            async def handler(ack, body, action) -> None:
-                await ack()  # required, within 3 seconds
-                ...
-
-        Args:
-            action_id: Whatever ``slack_bolt.App.action()`` accepts —
-                a literal ``action_id`` string, a compiled ``re.Pattern``
-                for matching multiple ids, or a constraint dict
-                (e.g. ``{"action_id": "...", "block_id": "..."}``).
-            callback: Async callable receiving ``(ack, body, action)``.
-
-        Raises:
-            ValueError: if ``callback`` is not callable, or ``action_id``
-                is empty/None.
-
-        Example::
-
-            async def _on_approve(ack, body, action):
-                await ack()
-                # apply some workflow keyed on action["value"]
-
-            ctx.register_slack_action_handler("inbox_sweep_approve", _on_approve)
-        """
-        if not callable(callback):
-            raise ValueError(
-                f"Plugin '{self.manifest.name}' tried to register a Slack "
-                f"action handler with a non-callable callback."
-            )
-        if action_id is None or (isinstance(action_id, str) and not action_id.strip()):
-            raise ValueError(
-                f"Plugin '{self.manifest.name}' tried to register a Slack "
-                f"action handler with an empty action_id."
-            )
-        self._manager._slack_action_handlers.append(
-            (action_id, callback, self.manifest.name)
-        )
-        logger.debug(
-            "Plugin %s registered Slack action handler: %s",
-            self.manifest.name,
-            action_id,
-        )
-
     # -- hook registration --------------------------------------------------
 
     # -- auxiliary task registration ---------------------------------------
@@ -1140,7 +1021,6 @@ class PluginManager:
         self._hooks: Dict[str, List[Callable]] = {}
         self._middleware: Dict[str, List[Callable]] = {}
         self._plugin_tool_names: Set[str] = set()
-        self._plugin_platform_names: Set[str] = set()
         self._cli_commands: Dict[str, dict] = {}
         self._context_engine = None  # Set by a plugin via register_context_engine()
         self._plugin_commands: Dict[str, dict] = {}  # Slash commands registered by plugins
@@ -1151,13 +1031,6 @@ class PluginManager:
         # Plugin-registered auxiliary tasks: key → {key, display_name,
         # description, defaults, plugin}. See PluginContext.register_auxiliary_task.
         self._aux_tasks: Dict[str, Dict[str, Any]] = {}
-        # Slack Block Kit action handlers registered by plugins. Each entry
-        # is (matcher, callback, plugin_name); the Slack adapter wires them
-        # into its slack_bolt App at connect() time. ``matcher`` is whatever
-        # ``app.action()`` accepts (a literal action_id string, a compiled
-        # ``re.Pattern``, or a constraint dict); ``callback`` is an async
-        # function with the slack_bolt signature ``(ack, body, action)``.
-        self._slack_action_handlers: List[tuple] = []
 
     # -----------------------------------------------------------------------
     # Public
@@ -1185,12 +1058,10 @@ class PluginManager:
             self._hooks.clear()
             self._middleware.clear()
             self._plugin_tool_names.clear()
-            self._plugin_platform_names.clear()
             self._cli_commands.clear()
             self._plugin_commands.clear()
             self._plugin_skills.clear()
             self._aux_tasks.clear()
-            self._slack_action_handlers.clear()
             self._context_engine = None
         # Set the flag up front as a re-entrancy guard (a plugin's register()
         # can transitively trigger discovery again), but reset it if the sweep
@@ -1219,9 +1090,7 @@ class PluginManager:
         #
         # ``memory/``, ``context_engine/``, and ``model-providers/`` are
         # skipped at the top level — they have their own discovery systems
-        # (plugins/memory/__init__.py, providers/__init__.py). ``platforms/``
-        # is a category holding platform adapters (scanned one level deeper
-        # below).
+        # (plugins/memory/__init__.py, providers/__init__.py).
         repo_plugins = get_bundled_plugins_dir()
         logger.debug("Scanning bundled plugins: %s", repo_plugins)
         bundled = self._scan_directory(
@@ -1231,11 +1100,6 @@ class PluginManager:
         )
         logger.debug("  bundled (top-level): %d manifest(s)", len(bundled))
         manifests.extend(bundled)
-        bundled_platforms = self._scan_directory(
-            repo_plugins / "platforms", source="bundled"
-        )
-        logger.debug("  bundled/platforms: %d manifest(s)", len(bundled_platforms))
-        manifests.extend(bundled_platforms)
 
         # 2. User plugins (~/.hermes/plugins/)
         user_dir = get_lliam_home() / "plugins"
@@ -1319,11 +1183,7 @@ class PluginManager:
             # just work. Selection among them (e.g. which image_gen backend
             # services calls) is driven by ``<category>.provider`` config,
             # enforced by the tool wrapper.
-            #
-            # Bundled platform plugins (gateway adapters like IRC) auto-load
-            # for the same reason: every platform Lliam-GOV ships must be
-            # available out of the box without the user having to opt in.
-            if manifest.source == "bundled" and manifest.kind in {"backend", "platform"}:
+            if manifest.source == "bundled" and manifest.kind == "backend":
                 self._load_plugin(manifest)
                 continue
 
@@ -1774,18 +1634,6 @@ class PluginManager:
     # -----------------------------------------------------------------------
     # Slack action handler accessor
     # -----------------------------------------------------------------------
-
-    def get_slack_action_handlers(self) -> List[tuple]:
-        """Return the list of plugin-registered Slack action handlers.
-
-        Each entry is a ``(action_id, callback, plugin_name)`` tuple.
-        Consumed by the Slack adapter at connect time to wire callbacks
-        into its ``slack_bolt.AsyncApp``.
-
-        Plugins register handlers via
-        :meth:`PluginContext.register_slack_action_handler`.
-        """
-        return list(self._slack_action_handlers)
 
     # -----------------------------------------------------------------------
     # Introspection

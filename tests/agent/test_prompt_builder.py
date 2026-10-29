@@ -984,15 +984,8 @@ class TestPromptBuilderConstants:
         assert len(DEFAULT_AGENT_IDENTITY) > 50
 
     def test_platform_hints_known_platforms(self):
-        assert "whatsapp" in PLATFORM_HINTS
-        assert "whatsapp_cloud" in PLATFORM_HINTS
-        assert "telegram" in PLATFORM_HINTS
-        assert "discord" in PLATFORM_HINTS
-        assert "cron" in PLATFORM_HINTS
-        assert "cli" in PLATFORM_HINTS
-        assert "tui" in PLATFORM_HINTS
-        assert "api_server" in PLATFORM_HINTS
-        assert "webui" in PLATFORM_HINTS
+        # Only the local surfaces remain (chat platforms removed, JER-198).
+        assert set(PLATFORM_HINTS) == {"cron", "cli", "tui", "webui"}
 
     def test_cli_and_tui_hints_flag_local_only_cron(self):
         """#51568 — cron jobs from CLI/TUI sessions don't deliver back into
@@ -1002,34 +995,6 @@ class TestPromptBuilderConstants:
             assert "LOCAL-ONLY" in hint
             assert "deliver" in hint
 
-    def test_whatsapp_cloud_hint_mentions_24h_window(self):
-        """The Cloud API's 24-hour conversation window is a hard rule the
-        agent should know about. Phase 5 (template fallback) was deferred,
-        so the model needs to know free-form replies outside the window
-        will fail with Graph error 131047 — otherwise it'll cheerfully
-        try to schedule delayed messages that silently break."""
-        hint = PLATFORM_HINTS["whatsapp_cloud"]
-        assert "24-hour" in hint or "24h" in hint or "24 hour" in hint
-        assert "131047" in hint
-
-    def test_whatsapp_cloud_hint_advertises_media(self):
-        """Cloud adapter supports the same MEDIA:/path/ convention as
-        Baileys for outbound attachments."""
-        hint = PLATFORM_HINTS["whatsapp_cloud"]
-        assert "MEDIA:" in hint
-
-    def test_markdown_converting_platform_hints_do_not_forbid_markdown(self):
-        """#12224 — WhatsApp (Baileys) and Signal adapters actively convert
-        markdown to native formatting (gateway/platforms/whatsapp_common.py
-        format_message + signal_format.markdown_to_signal: bold, italic,
-        strikethrough, headers, bullets). Their hints previously told the
-        agent "do not use markdown", which made it strip bullets/bold the
-        adapter would have rendered. The hint must affirm markdown, not
-        forbid it."""
-        for key in ("whatsapp", "signal"):
-            hint = PLATFORM_HINTS[key]
-            assert "do not use markdown" not in hint.lower()
-            assert "markdown" in hint.lower()
 
     def test_cli_hint_does_not_suggest_media_tags(self):
         # Regression: MEDIA:/path tags are intercepted only by messaging
@@ -1045,44 +1010,10 @@ class TestPromptBuilderConstants:
             marker in cli_hint.lower()
             for marker in ("do not emit media", "not intercepted", "do not", "don't")
         ), "CLI hint should explicitly discourage MEDIA: tags."
-        # Messaging hints should still advertise MEDIA: positively (sanity
-        # check that this test is calibrated correctly).
-        assert "include MEDIA:" in PLATFORM_HINTS["telegram"]
+        # The WebUI hint still advertises MEDIA: positively (sanity check
+        # that this test is calibrated correctly).
+        assert "include" in PLATFORM_HINTS["webui"] and "MEDIA:" in PLATFORM_HINTS["webui"]
 
-    def test_telegram_hint_encourages_rich_markdown(self):
-        # Telegram Bot API 10.1 rich messages are default-on, so the hint must
-        # encourage native structured markdown instead of forbidding tables.
-        hint = PLATFORM_HINTS["telegram"]
-        lowered = hint.lower()
-        assert "Telegram has NO table syntax" not in hint
-        assert "rich markdown" in lowered
-        assert "table" in lowered
-        assert "task list" in lowered
-        assert "math" in lowered
-        # Hint should proactively steer toward structured formatting, not just
-        # permit it: bullet + numbered lists for scannable, structured output.
-        assert "bullet" in lowered
-        assert "numbered" in lowered
-        # Local media delivery guidance must remain intact.
-        assert "include MEDIA:" in hint
-
-    def test_platform_hints_mattermost(self):
-        hint = PLATFORM_HINTS["mattermost"]
-        assert "Mattermost" in hint
-        assert "MEDIA:" in hint
-        assert "Markdown" in hint
-
-    def test_platform_hints_matrix(self):
-        hint = PLATFORM_HINTS["matrix"]
-        assert "Matrix" in hint
-        assert "MEDIA:" in hint
-        assert "Markdown" in hint
-
-    def test_platform_hints_feishu(self):
-        hint = PLATFORM_HINTS["feishu"]
-        assert "Feishu" in hint
-        assert "MEDIA:" in hint
-        assert "Markdown" in hint
 
     def test_platform_hints_webui(self):
         hint = PLATFORM_HINTS["webui"]

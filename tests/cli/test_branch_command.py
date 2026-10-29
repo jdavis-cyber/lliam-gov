@@ -169,7 +169,7 @@ class TestBranchCommandCLI:
     def test_branch_rotates_lliam_session_id_env_and_context(self, cli_instance, session_db):
         """Branching must update process-local session-id readers too."""
         from cli import LliamCLI
-        from gateway.session_context import _UNSET, _VAR_MAP, get_session_env
+        from agent.session_context import _UNSET, _VAR_MAP, get_session_env
 
         old_session_id = cli_instance.session_id
         # rename R.8a: producer writes LLIAM_SESSION_ID; _VAR_MAP is keyed by

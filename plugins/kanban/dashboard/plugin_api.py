@@ -1728,34 +1728,12 @@ def get_config():
 
 
 def _configured_home_channels() -> list[dict]:
-    """Return every platform that has a home_channel set, fully hydrated.
+    """Return every platform that has a home_channel set.
 
-    Reads the live GatewayConfig so env-var overlays (``TELEGRAM_HOME_CHANNEL``
-    etc.) are honored alongside config.yaml. Returns platforms in a stable
-    order and drops platforms without a home.
+    Chat-platform integrations were removed (JER-198), so there are no home
+    channels to notify; always returns an empty list.
     """
-    try:
-        from gateway.config import load_gateway_config
-    except Exception:
-        return []
-    try:
-        gw_cfg = load_gateway_config()
-    except Exception:
-        return []
-    result: list[dict] = []
-    for platform, pcfg in gw_cfg.platforms.items():
-        if not pcfg or not pcfg.home_channel:
-            continue
-        hc = pcfg.home_channel
-        result.append({
-            "platform": platform.value,
-            "chat_id": hc.chat_id,
-            "thread_id": hc.thread_id or "",
-            "name": hc.name or "Home",
-        })
-    # Stable order for deterministic UI — platform name alphabetical.
-    result.sort(key=lambda r: r["platform"])
-    return result
+    return []
 
 
 def _active_profile_name() -> str:

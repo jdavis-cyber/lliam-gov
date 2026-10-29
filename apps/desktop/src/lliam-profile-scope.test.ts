@@ -4,15 +4,13 @@ import {
   checkLliamUpdate,
   getActionStatus,
   getStatus,
-  restartGateway,
   setApiRequestProfile,
   updateLliam
 } from './lliam'
 
 // Contract: every backend-targeted action helper must carry the active gateway
-// profile, so a multi-profile / global-remote user's restart, status poll, and
-// update hit the backend they're actually on — not the primary/default. The
-// System-panel "restart does nothing" bug was these helpers dropping it.
+// profile, so a multi-profile / global-remote user's status poll and update
+// hit the backend they're actually on — not the primary/default.
 describe('backend action helpers are profile-scoped', () => {
   const api = vi.fn(async (_req: { path: string; profile?: string }) => ({}) as never)
 
@@ -37,10 +35,9 @@ describe('backend action helpers are profile-scoped', () => {
     setApiRequestProfile('coder')
 
     void getStatus()
-    void restartGateway()
     void updateLliam()
     void checkLliamUpdate()
-    void getActionStatus('gateway-restart')
+    void getActionStatus('hermes-update')
 
     for (const call of api.mock.calls) {
       expect(call[0].profile).toBe('coder')

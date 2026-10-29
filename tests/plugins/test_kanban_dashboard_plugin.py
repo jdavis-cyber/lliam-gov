@@ -1354,7 +1354,6 @@ def test_event_dict_includes_run_id(client):
     assert comp[0]["run_id"] == run_id
 
 
-
 # ---------------------------------------------------------------------------
 # Per-task force-loaded skills via REST
 # ---------------------------------------------------------------------------
@@ -1405,7 +1404,6 @@ def test_create_task_with_toolset_name_in_skills_is_rejected(client):
     )
     assert r.status_code == 400, r.text
     assert "toolset name" in r.json()["detail"]
-
 
 
 # ---------------------------------------------------------------------------
@@ -1555,7 +1553,6 @@ def test_create_task_probe_error_does_not_break_create(client, monkeypatch):
     assert r.json()["task"]["title"] == "resilient"
 
 
-
 # ---------------------------------------------------------------------------
 # Home-channel subscription endpoints (#19534 follow-up: GUI opt-in)
 # ---------------------------------------------------------------------------
@@ -1578,170 +1575,6 @@ def with_home_channels(monkeypatch):
     monkeypatch.setenv("DISCORD_HOME_CHANNEL_NAME", "Main Discord")
     # Slack has a token but NO home — should be excluded from the list.
     monkeypatch.setenv("SLACK_BOT_TOKEN", "slack_fake")
-
-
-def test_home_channels_lists_only_platforms_with_home(client, with_home_channels):
-    """GET /home-channels returns entries only for platforms where the
-    user has set a home; untoggled-subscribed bool is false by default."""
-    r = client.get("/api/plugins/kanban/home-channels")
-    assert r.status_code == 200
-    platforms = {h["platform"] for h in r.json()["home_channels"]}
-    assert platforms == {"telegram", "discord"}, (
-        f"slack has a token but no home — must not appear. got {platforms}"
-    )
-    for h in r.json()["home_channels"]:
-        assert h["subscribed"] is False
-
-
-def test_home_channels_no_task_id_all_unsubscribed(client, with_home_channels):
-    """Without task_id, every entry's subscribed=false (UI "no task" state)."""
-    r = client.get("/api/plugins/kanban/home-channels")
-    assert r.status_code == 200
-    assert all(not h["subscribed"] for h in r.json()["home_channels"])
-
-
-def test_home_subscribe_creates_notify_sub_row(client, with_home_channels):
-    """POST .../home-subscribe/telegram writes a kanban_notify_subs row
-    keyed to the telegram home's (chat_id, thread_id)."""
-    from lliam_cli import kanban_db as kb
-    t = client.post("/api/plugins/kanban/tasks", json={"title": "x"}).json()["task"]
-
-    r = client.post(f"/api/plugins/kanban/tasks/{t['id']}/home-subscribe/telegram")
-    assert r.status_code == 200
-    assert r.json()["ok"] is True
-
-    conn = kb.connect()
-    try:
-        subs = kb.list_notify_subs(conn, t["id"])
-    finally:
-        conn.close()
-    assert len(subs) == 1
-    assert subs[0]["platform"] == "telegram"
-    assert subs[0]["chat_id"] == "1234567"
-    assert subs[0]["thread_id"] == "42"
-    assert subs[0]["notifier_profile"] == "default"
-
-
-def test_home_subscribe_flips_subscribed_flag_in_subsequent_get(client, with_home_channels):
-    """After subscribe, the GET endpoint reports subscribed=true for that
-    platform and false for the others."""
-    t = client.post("/api/plugins/kanban/tasks", json={"title": "x"}).json()["task"]
-    client.post(f"/api/plugins/kanban/tasks/{t['id']}/home-subscribe/telegram")
-
-    r = client.get(f"/api/plugins/kanban/home-channels?task_id={t['id']}")
-    flags = {h["platform"]: h["subscribed"] for h in r.json()["home_channels"]}
-    assert flags == {"telegram": True, "discord": False}
-
-
-def test_home_subscribe_is_idempotent(client, with_home_channels):
-    """Re-subscribing keeps a single row at the DB layer."""
-    from lliam_cli import kanban_db as kb
-    t = client.post("/api/plugins/kanban/tasks", json={"title": "x"}).json()["task"]
-    client.post(f"/api/plugins/kanban/tasks/{t['id']}/home-subscribe/telegram")
-    client.post(f"/api/plugins/kanban/tasks/{t['id']}/home-subscribe/telegram")
-    client.post(f"/api/plugins/kanban/tasks/{t['id']}/home-subscribe/telegram")
-    conn = kb.connect()
-    try:
-        assert len(kb.list_notify_subs(conn, t["id"])) == 1
-    finally:
-        conn.close()
-
-
-def test_home_subscribe_backfills_owner_on_legacy_row(client, with_home_channels):
-    """Re-subscribing should backfill notifier ownership on ownerless rows."""
-    from lliam_cli import kanban_db as kb
-    t = client.post("/api/plugins/kanban/tasks", json={"title": "x"}).json()["task"]
-
-    conn = kb.connect()
-    try:
-        kb.add_notify_sub(
-            conn,
-            task_id=t["id"],
-            platform="telegram",
-            chat_id="1234567",
-            thread_id="42",
-        )
-    finally:
-        conn.close()
-
-    r = client.post(f"/api/plugins/kanban/tasks/{t['id']}/home-subscribe/telegram")
-    assert r.status_code == 200
-
-    conn = kb.connect()
-    try:
-        subs = kb.list_notify_subs(conn, t["id"])
-    finally:
-        conn.close()
-
-    assert len(subs) == 1
-    assert subs[0]["notifier_profile"] == "default"
-
-
-def test_home_subscribe_unknown_platform_returns_404(client, with_home_channels):
-    """Platforms without a home configured (slack in the fixture) return 404."""
-    t = client.post("/api/plugins/kanban/tasks", json={"title": "x"}).json()["task"]
-    r = client.post(f"/api/plugins/kanban/tasks/{t['id']}/home-subscribe/slack")
-    assert r.status_code == 404
-    assert "slack" in r.json()["detail"]
-
-
-def test_home_subscribe_unknown_task_returns_404(client, with_home_channels):
-    r = client.post("/api/plugins/kanban/tasks/t_nonexistent/home-subscribe/telegram")
-    assert r.status_code == 404
-
-
-def test_home_unsubscribe_removes_notify_sub_row(client, with_home_channels):
-    """DELETE .../home-subscribe/telegram removes the matching row."""
-    from lliam_cli import kanban_db as kb
-    t = client.post("/api/plugins/kanban/tasks", json={"title": "x"}).json()["task"]
-    client.post(f"/api/plugins/kanban/tasks/{t['id']}/home-subscribe/telegram")
-    r = client.delete(f"/api/plugins/kanban/tasks/{t['id']}/home-subscribe/telegram")
-    assert r.status_code == 200
-
-    conn = kb.connect()
-    try:
-        assert kb.list_notify_subs(conn, t["id"]) == []
-    finally:
-        conn.close()
-
-
-def test_home_subscribe_multiple_platforms_independent(client, with_home_channels):
-    """Subscribing on telegram does not affect discord and vice versa."""
-    from lliam_cli import kanban_db as kb
-    t = client.post("/api/plugins/kanban/tasks", json={"title": "x"}).json()["task"]
-
-    client.post(f"/api/plugins/kanban/tasks/{t['id']}/home-subscribe/telegram")
-    client.post(f"/api/plugins/kanban/tasks/{t['id']}/home-subscribe/discord")
-
-    conn = kb.connect()
-    try:
-        subs = {s["platform"]: s for s in kb.list_notify_subs(conn, t["id"])}
-    finally:
-        conn.close()
-    assert set(subs) == {"telegram", "discord"}
-
-    # Unsubscribe telegram only.
-    client.delete(f"/api/plugins/kanban/tasks/{t['id']}/home-subscribe/telegram")
-    conn = kb.connect()
-    try:
-        subs = {s["platform"]: s for s in kb.list_notify_subs(conn, t["id"])}
-    finally:
-        conn.close()
-    assert set(subs) == {"discord"}
-
-
-def test_home_channels_empty_when_no_homes_configured(client, monkeypatch):
-    """Zero platforms with a home -> empty list (UI hides the section)."""
-    # No BOT_TOKEN env vars set → load_gateway_config().platforms is empty.
-    for var in [
-        "TELEGRAM_BOT_TOKEN", "TELEGRAM_HOME_CHANNEL",
-        "DISCORD_BOT_TOKEN", "DISCORD_HOME_CHANNEL",
-        "SLACK_BOT_TOKEN",
-    ]:
-        monkeypatch.delenv(var, raising=False)
-    r = client.get("/api/plugins/kanban/home-channels")
-    assert r.status_code == 200
-    assert r.json()["home_channels"] == []
 
 
 # ---------------------------------------------------------------------------

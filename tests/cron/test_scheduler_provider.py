@@ -39,38 +39,6 @@ def _wait_until(predicate, timeout=10.0, interval=0.005):
     return predicate()
 
 
-def test_ticker_calls_tick_at_least_once_then_stops():
-    """The gateway in-process ticker loop calls cron.scheduler.tick repeatedly
-    and exits promptly once the stop_event is set."""
-    from gateway.run import _start_cron_ticker
-
-    calls = []
-    stop = threading.Event()
-
-    def fake_tick(*args, **kwargs):
-        calls.append(kwargs)
-        return 0
-
-    with patch("cron.scheduler.tick", side_effect=fake_tick):
-        # interval=0 keeps the loop tight; stop after the first observed tick.
-        t = threading.Thread(
-            target=_start_cron_ticker,
-            args=(stop,),
-            kwargs={"interval": 0},
-            daemon=True,
-        )
-        t.start()
-        assert _wait_until(lambda: len(calls) >= 1), "ticker never called tick()"
-        stop.set()
-        t.join(timeout=5)
-
-    assert not t.is_alive(), "ticker did not exit after stop_event was set"
-    assert len(calls) >= 1, "ticker never called tick()"
-    # Contract: the ticker invokes tick with sync=False (fire-and-forget from
-    # the background thread, never the synchronous CLI path).
-    assert calls[0].get("sync") is False
-
-
 def test_desktop_ticker_calls_tick_then_stops():
     """The desktop dashboard ticker loop calls cron.scheduler.tick and exits
     once the stop_event is set. Desktop has no live adapters, so it ticks with
@@ -533,7 +501,6 @@ def test_cron_status_reports_alive_but_failing(tmp_path, monkeypatch, capsys):
     import cron.jobs as jobs
     from lliam_cli import cron as cron_cli
 
-    monkeypatch.setattr("lliam_cli.gateway.find_gateway_pids", lambda: [4321])
     monkeypatch.setattr(jobs, "get_ticker_heartbeat_age", lambda: 5.0)      # fresh
     monkeypatch.setattr(jobs, "get_ticker_success_age", lambda: 9_999.0)    # stale
     monkeypatch.setattr("cron.jobs.list_jobs", lambda **k: [])
@@ -548,7 +515,6 @@ def test_cron_status_healthy_when_both_fresh(tmp_path, monkeypatch, capsys):
     import cron.jobs as jobs
     from lliam_cli import cron as cron_cli
 
-    monkeypatch.setattr("lliam_cli.gateway.find_gateway_pids", lambda: [4321])
     monkeypatch.setattr(jobs, "get_ticker_heartbeat_age", lambda: 5.0)
     monkeypatch.setattr(jobs, "get_ticker_success_age", lambda: 5.0)
     monkeypatch.setattr("cron.jobs.list_jobs", lambda **k: [])
@@ -562,12 +528,11 @@ def test_cron_status_reports_stalled_when_no_heartbeat(tmp_path, monkeypatch, ca
     import cron.jobs as jobs
     from lliam_cli import cron as cron_cli
 
-    monkeypatch.setattr("lliam_cli.gateway.find_gateway_pids", lambda: [4321])
     monkeypatch.setattr(jobs, "get_ticker_heartbeat_age", lambda: 9_999.0)  # dead
     monkeypatch.setattr(jobs, "get_ticker_success_age", lambda: 9_999.0)
     monkeypatch.setattr("cron.jobs.list_jobs", lambda **k: [])
 
     cron_cli.cron_status()
     out = capsys.readouterr().out
-    assert "STALLED" in out
+    assert "will NOT fire" in out
     assert "will fire automatically" not in out

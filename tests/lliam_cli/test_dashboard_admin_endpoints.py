@@ -1,5 +1,5 @@
-"""Tests for the dashboard admin API endpoints (MCP, pairing, webhooks,
-credential pool, memory, gateway lifecycle, ops, skills hub).
+"""Tests for the dashboard admin API endpoints (MCP, credential pool, memory,
+ops, skills hub).
 
 These endpoints turn the web dashboard into an administration panel for
 operators without CLI access to the host. The tests assert the request
@@ -125,7 +125,6 @@ class TestMcpEndpoints:
         assert r.status_code == 404
 
 
-
 class TestCredentialPoolEndpoints:
     @pytest.fixture(autouse=True)
     def _setup(self, _isolate_lliam_home):
@@ -196,117 +195,6 @@ class TestMemoryEndpoints:
         assert self.client.post(
             "/api/memory/reset", json={"target": "bogus"}
         ).status_code == 400
-
-
-class TestPairingEndpoints:
-    @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_lliam_home):
-        self.client, _ = _client()
-
-    def test_list_and_bad_approve(self):
-        data = self.client.get("/api/pairing").json()
-        assert data == {"pending": [], "approved": []}
-        r = self.client.post(
-            "/api/pairing/approve", json={"platform": "telegram", "code": "NOPE99"}
-        )
-        assert r.status_code == 404
-
-
-class TestWebhookEndpoints:
-    @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_lliam_home):
-        self.client, _ = _client()
-
-    def test_list_disabled_and_create_blocked(self):
-        data = self.client.get("/api/webhooks").json()
-        assert data["enabled"] is False
-        r = self.client.post("/api/webhooks", json={"name": "gh", "deliver": "log"})
-        assert r.status_code == 400
-
-    def test_enable_platform_starts_gateway_restart(self, monkeypatch):
-        import lliam_cli.web_server as ws
-        from lliam_cli.config import load_config
-
-        ws._ACTION_PROCS.pop("gateway-restart", None)
-        restart_calls = []
-
-        class FakeRestartProc:
-            pid = 4242
-
-        def fake_spawn_action(subcommand, name):
-            restart_calls.append((subcommand, name))
-            return FakeRestartProc()
-
-        monkeypatch.setattr(ws, "_spawn_lliam_action", fake_spawn_action)
-
-        r = self.client.post("/api/webhooks/enable")
-
-        assert r.status_code == 200
-        assert r.json() == {
-            "ok": True,
-            "platform": "webhook",
-            "enabled": True,
-            "needs_restart": False,
-            "restart_started": True,
-            "restart_action": "gateway-restart",
-            "restart_pid": 4242,
-        }
-        assert restart_calls == [(["gateway", "restart"], "gateway-restart")]
-        assert load_config()["platforms"]["webhook"]["enabled"] is True
-        assert self.client.get("/api/webhooks").json()["enabled"] is True
-
-    def test_enable_platform_reports_restart_failure_after_save(self, monkeypatch):
-        import lliam_cli.web_server as ws
-        from lliam_cli.config import load_config
-
-        ws._ACTION_PROCS.pop("gateway-restart", None)
-
-        def fail_spawn_action(subcommand, name):
-            assert subcommand == ["gateway", "restart"]
-            assert name == "gateway-restart"
-            raise RuntimeError("supervisor unavailable")
-
-        monkeypatch.setattr(ws, "_spawn_lliam_action", fail_spawn_action)
-
-        r = self.client.post("/api/webhooks/enable")
-
-        assert r.status_code == 200
-        data = r.json()
-        assert data["ok"] is True
-        assert data["platform"] == "webhook"
-        assert data["enabled"] is True
-        assert data["needs_restart"] is True
-        assert data["restart_started"] is False
-        assert "supervisor unavailable" in data["restart_error"]
-        assert load_config()["platforms"]["webhook"]["enabled"] is True
-
-    def test_enable_platform_reuses_inflight_gateway_restart(self, monkeypatch):
-        import lliam_cli.web_server as ws
-        from lliam_cli.config import load_config
-
-        ws._ACTION_PROCS.pop("gateway-restart", None)
-
-        class FakeRunningProc:
-            pid = 5151
-
-            def poll(self):
-                return None
-
-        monkeypatch.setitem(ws._ACTION_PROCS, "gateway-restart", FakeRunningProc())
-
-        def fail_spawn_action(subcommand, name):
-            raise AssertionError("must not spawn a second concurrent restart")
-
-        monkeypatch.setattr(ws, "_spawn_lliam_action", fail_spawn_action)
-
-        r = self.client.post("/api/webhooks/enable")
-
-        assert r.status_code == 200
-        data = r.json()
-        assert data["needs_restart"] is False
-        assert data["restart_started"] is True
-        assert data["restart_pid"] == 5151
-        assert load_config()["platforms"]["webhook"]["enabled"] is True
 
 
 class TestOpsEndpoints:
@@ -667,37 +555,6 @@ class TestSkillsHubScanEndpoint:
         assert r.status_code == 404
 
 
-
-
-class TestWebhookToggleEndpoint:
-    @pytest.fixture(autouse=True)
-    def _setup(self, _isolate_lliam_home):
-        self.client, _ = _client()
-        # Enable the webhook platform so a subscription can be created.
-        from lliam_cli.config import load_config, save_config
-
-        cfg = load_config()
-        cfg.setdefault("platforms", {})["webhook"] = {
-            "enabled": True,
-            "extra": {"host": "0.0.0.0", "port": 8644},
-        }
-        save_config(cfg)
-
-    def test_create_toggle_disable(self):
-        r = self.client.post(
-            "/api/webhooks", json={"name": "hook1", "deliver": "log", "events": ["push"]}
-        )
-        assert r.status_code == 200 and r.json()["enabled"] is True
-        r = self.client.put("/api/webhooks/hook1/enabled", json={"enabled": False})
-        assert r.status_code == 200 and r.json()["enabled"] is False
-        subs = self.client.get("/api/webhooks").json()["subscriptions"]
-        assert subs[0]["enabled"] is False
-        assert self.client.put(
-            "/api/webhooks/nope/enabled", json={"enabled": True}
-        ).status_code == 404
-
-
-
 class TestAdminEndpointsAuthGate:
     """Every admin endpoint must sit behind the dashboard session-token gate."""
 
@@ -713,8 +570,6 @@ class TestAdminEndpointsAuthGate:
         "path",
         [
             "/api/mcp/servers",
-            "/api/pairing",
-            "/api/webhooks",
             "/api/credentials/pool",
             "/api/memory",
             "/api/ops/hooks",
@@ -727,10 +582,6 @@ class TestAdminEndpointsAuthGate:
     )
     def test_gated(self, path):
         resp = self.client.get(path)
-        assert resp.status_code in (401, 403)
-
-    def test_webhooks_enable_post_gated(self):
-        resp = self.client.post("/api/webhooks/enable")
         assert resp.status_code in (401, 403)
 
 

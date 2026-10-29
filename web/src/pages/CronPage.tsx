@@ -8,7 +8,6 @@ import { H2 } from "@nous-research/ui/ui/components/typography/h2";
 import { api } from "@/lib/api";
 import type {
   CronJob,
-  CronDeliveryTarget,
   ModelOptionsResponse,
   ProfileInfo,
   SkillInfo,
@@ -125,7 +124,6 @@ interface CronJobFormResources {
   availableSkills: SkillInfo[];
   availableToolsets: ToolsetInfo[];
   modelOptions: ModelOptionsResponse | null;
-  deliveryTargets: CronDeliveryTarget[];
 }
 
 function emptyCronJobForm(): CronJobEditorState {
@@ -330,28 +328,13 @@ function CronJobFormFields({
   onChange,
 }: CronJobFormFieldsProps) {
   const { t } = useI18n();
-  const { availableSkills, availableToolsets, deliveryTargets, modelOptions } = resources;
+  const { availableSkills, availableToolsets, modelOptions } = resources;
   const update = <K extends keyof CronJobEditorState,>(
     key: K,
     next: CronJobEditorState[K],
   ) => {
     onChange({ ...form, [key]: next });
   };
-  const onlyLocalAvailable =
-    deliveryTargets.filter((target) => target.id !== "local").length === 0;
-
-  const deliveryOptions = selectOptions(
-    form.deliver,
-    deliveryTargets.map((target) => {
-      const base = target.id === "local" ? t.cron.delivery.local : target.name;
-      if (target.id !== "local" && !target.home_target_set) {
-        const hint = t.cron.delivery.needsHomeChannel ?? "set a home channel first";
-        return { value: target.id, label: `${base} — ${hint}` };
-      }
-      return { value: target.id, label: base };
-    }),
-  );
-
   return (
     <>
       <div className="grid gap-2">
@@ -380,23 +363,6 @@ function CronJobFormFields({
         value={form.scheduleState}
         onChange={(state) => update("scheduleState", state)}
       />
-
-      <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}-deliver`}>{t.cron.deliverTo}</Label>
-        <Select
-          id={`${idPrefix}-deliver`}
-          value={form.deliver}
-          onValueChange={(v) => update("deliver", v)}
-        >
-          {deliveryOptions}
-        </Select>
-        {onlyLocalAvailable && (
-          <p className="text-xs text-muted-foreground">
-            {t.cron.delivery.noneConfigured ??
-              "No messaging platforms configured. Set one up under Channels to deliver reports."}
-          </p>
-        )}
-      </div>
 
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-skills`}>Skills (optional)</Label>
@@ -544,9 +510,6 @@ export default function CronPage() {
     open: createModalOpen,
     onClose: closeCreateModal,
   });
-  const [deliveryTargets, setDeliveryTargets] = useState<CronDeliveryTarget[]>([
-    { id: "local", name: "Local", home_target_set: true, home_env_var: null },
-  ]);
   const [creating, setCreating] = useState(false);
 
   // Edit job modal state
@@ -589,18 +552,6 @@ export default function CronPage() {
       .getProfiles()
       .then((res) => setProfiles(res.profiles))
       .catch(() => setProfiles([]));
-  }, []);
-
-  useEffect(() => {
-    api
-      .getCronDeliveryTargets()
-      .then((res) => setDeliveryTargets(res.targets))
-      .catch(() =>
-        // Fall back to local-only so the modal still works if the endpoint fails.
-        setDeliveryTargets([
-          { id: "local", name: "Local", home_target_set: true, home_env_var: null },
-        ]),
-      );
   }, []);
 
   useEffect(() => {
@@ -865,7 +816,6 @@ export default function CronPage() {
                   availableSkills,
                   availableToolsets,
                   modelOptions,
-                  deliveryTargets,
                 }}
               />
 
@@ -925,7 +875,6 @@ export default function CronPage() {
                   availableSkills,
                   availableToolsets,
                   modelOptions,
-                  deliveryTargets,
                 }}
               />
 

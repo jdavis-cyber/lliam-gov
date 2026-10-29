@@ -32,14 +32,6 @@ _STRICT = {"security": {"posture": "strict", "api_server_key_required": True,
                         "require_tls": True}}
 
 
-def test_network_api_without_key_blocks_under_strict(monkeypatch):
-    monkeypatch.setenv("API_SERVER_ENABLED", "true")
-    monkeypatch.setenv("API_SERVER_HOST", "0.0.0.0")  # network-accessible bind
-    monkeypatch.setattr("lliam_cli.config.load_config", lambda: _STRICT)
-    with pytest.raises(sas.ControlPlaneAuthError, match="API_SERVER_KEY|API server"):
-        sas.enforce_control_plane_auth_at_startup(config=_STRICT)
-
-
 def test_network_api_with_key_passes(monkeypatch):
     monkeypatch.setenv("API_SERVER_ENABLED", "true")
     monkeypatch.setenv("API_SERVER_HOST", "0.0.0.0")
@@ -68,39 +60,6 @@ def test_host_alone_does_not_over_block(monkeypatch):
     monkeypatch.setenv("API_SERVER_HOST", "0.0.0.0")  # host only, not enabled
     monkeypatch.setattr("lliam_cli.config.load_config", lambda: _STRICT)
     assert sas.enforce_control_plane_auth_at_startup(config=_STRICT) is None
-
-
-def test_advisory_when_not_strict(monkeypatch):
-    monkeypatch.setenv("API_SERVER_ENABLED", "true")
-    monkeypatch.setenv("API_SERVER_HOST", "0.0.0.0")
-    cfg = {"security": {"api_server_key_required": True}}  # no strict posture
-    monkeypatch.setattr("lliam_cli.config.load_config", lambda: cfg)
-    result = sas.enforce_control_plane_auth_at_startup(config=cfg)
-    assert result and any("API_SERVER_KEY" in f for f in result)
-
-
-def test_raw_config_still_blocks_when_merged_is_strict(monkeypatch):
-    """Recurring-pattern regression: the gateway passes a config that may lack
-    the overlay-injected strict posture; the gate must re-resolve posture from
-    the merged load_config() and still block on the real env trigger."""
-    monkeypatch.setenv("API_SERVER_ENABLED", "true")
-    monkeypatch.setenv("API_SERVER_HOST", "0.0.0.0")
-    merged = {"security": {"posture": "strict", "api_server_key_required": True}}
-    monkeypatch.setattr("lliam_cli.config.load_config", lambda: merged)
-    raw = {"some": "home-config"}  # neither posture nor api block
-    with pytest.raises(sas.ControlPlaneAuthError):
-        sas.enforce_control_plane_auth_at_startup(config=raw)
-
-
-def test_weak_key_still_blocks_under_strict(monkeypatch):
-    """A weak-but-nonempty key must not slip the RCE gate (entropy floor,
-    parity with the adapter's connect() guard)."""
-    monkeypatch.setenv("API_SERVER_ENABLED", "true")
-    monkeypatch.setenv("API_SERVER_HOST", "0.0.0.0")
-    monkeypatch.setenv("API_SERVER_KEY", "x")  # nonempty but weak
-    monkeypatch.setattr("lliam_cli.config.load_config", lambda: _STRICT)
-    with pytest.raises(sas.ControlPlaneAuthError, match="WEAK|API_SERVER_KEY"):
-        sas.enforce_control_plane_auth_at_startup(config=_STRICT)
 
 
 def test_strict_coerces_fail_closed_switches(monkeypatch):

@@ -148,22 +148,16 @@ class TestYoloEnvVar:
 class TestAcceptHooksOnAgentSubparsers:
     """Verify --accept-hooks is accepted at every agent-subcommand
     position (before the subcommand, between group/subcommand, and
-    after the leaf subcommand) for gateway/cron/mcp/acp.  Regression
+    after the leaf subcommand) for cron/acp.  Regression
     against prior behaviour where the flag only worked on the root
     parser and `chat`, so `lliam-gov gateway run --accept-hooks` failed
     with `unrecognized arguments`."""
 
     @pytest.mark.parametrize("argv", [
-        ["--accept-hooks", "gateway", "run", "--help"],
-        ["gateway", "--accept-hooks", "run", "--help"],
-        ["gateway", "run", "--accept-hooks", "--help"],
         ["--accept-hooks", "cron", "tick", "--help"],
         ["cron", "--accept-hooks", "tick", "--help"],
         ["cron", "tick", "--accept-hooks", "--help"],
         ["cron", "run", "--accept-hooks", "dummy-id", "--help"],
-        ["--accept-hooks", "mcp", "serve", "--help"],
-        ["mcp", "--accept-hooks", "serve", "--help"],
-        ["mcp", "serve", "--accept-hooks", "--help"],
         ["acp", "--accept-hooks", "--help"],
     ])
     def test_accepted_at_every_position(self, argv):

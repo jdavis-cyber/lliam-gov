@@ -308,17 +308,6 @@ class TestSteerCommandRegistry:
         assert cmd.category == "Session"
         assert cmd.args_hint == "<prompt>"
 
-    def test_steer_in_bypass_set(self):
-        """When the agent is running, /steer MUST bypass the Level-1
-        base-adapter queue so it reaches the gateway runner's /steer
-        handler. Otherwise it would be queued as user text and only
-        delivered at turn end — defeating the whole point.
-        """
-        from lliam_cli.commands import ACTIVE_SESSION_BYPASS_COMMANDS, should_bypass_active_session
-
-        assert "steer" in ACTIVE_SESSION_BYPASS_COMMANDS
-        assert should_bypass_active_session("steer") is True
-
 
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-v"])

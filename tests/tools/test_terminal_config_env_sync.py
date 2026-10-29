@@ -77,15 +77,6 @@ def _cli_env_map_keys() -> set[str]:
     return _extract_dict_keys(source, "env_mappings")
 
 
-def _gateway_env_map_keys() -> set[str]:
-    """terminal config keys bridged by gateway/run.py at module load."""
-    # gateway/run.py builds the dict at module top-level (not inside a
-    # function), so inspect the whole module source.
-    import gateway.run as gr
-    source = inspect.getsource(gr)
-    return _extract_dict_keys(source, "_terminal_env_map")
-
-
 def _save_config_env_sync_keys() -> set[str]:
     """terminal config keys bridged by ``lliam-gov config set foo bar``.
 
@@ -126,38 +117,6 @@ def _terminal_tool_env_var_names() -> set[str]:
     import re
     pat = re.compile(r'["\'](TERMINAL_[A-Z0-9_]+)["\']')
     return set(pat.findall(source))
-
-
-def test_cli_and_gateway_env_maps_agree():
-    """cli.py and gateway/run.py must bridge the same set of terminal keys.
-
-    Both feed the same downstream consumer (terminal_tool).  Drift between
-    them means a config.yaml setting that "works in CLI mode but not gateway
-    mode" (or vice-versa) — the bug class that shipped twice already.
-    """
-    cli_keys = _cli_env_map_keys() - _CLI_ONLY_OK
-    gw_keys = _gateway_env_map_keys()
-
-    # Normalize the legacy `env_type` alias: cli.py accepts both `env_type`
-    # and `backend` as source keys for TERMINAL_ENV; gateway only accepts
-    # `backend`.  Since cli.py copies `backend` → `env_type` before the
-    # lookup, they're equivalent.  Remove `backend` from the gateway side
-    # to avoid a spurious "backend missing from cli" failure.
-    gw_keys = gw_keys - {"backend"}
-
-    missing_in_gateway = cli_keys - gw_keys
-    missing_in_cli = gw_keys - cli_keys
-
-    assert not missing_in_gateway, (
-        f"Keys in cli.py env_mappings but missing from gateway/run.py "
-        f"_terminal_env_map: {sorted(missing_in_gateway)}.  Add them to "
-        f"both maps (same bug class as docker_run_as_host_user shipping "
-        f"wired in cli but not gateway in April 2026)."
-    )
-    assert not missing_in_cli, (
-        f"Keys in gateway/run.py _terminal_env_map but missing from cli.py "
-        f"env_mappings: {sorted(missing_in_cli)}.  Add them to both maps."
-    )
 
 
 def test_save_config_set_supports_critical_bridged_keys():
@@ -201,7 +160,6 @@ def test_docker_run_as_host_user_is_bridged_everywhere():
     impossible to reintroduce silently.
     """
     assert "docker_run_as_host_user" in _cli_env_map_keys()
-    assert "docker_run_as_host_user" in _gateway_env_map_keys()
     assert "docker_run_as_host_user" in _save_config_env_sync_keys()
     assert "TERMINAL_DOCKER_RUN_AS_HOST_USER" in _terminal_tool_env_var_names()
 
@@ -212,7 +170,6 @@ def test_docker_mount_cwd_to_workspace_is_bridged_everywhere():
     audit caught it.
     """
     assert "docker_mount_cwd_to_workspace" in _cli_env_map_keys()
-    assert "docker_mount_cwd_to_workspace" in _gateway_env_map_keys()
     assert "docker_mount_cwd_to_workspace" in _save_config_env_sync_keys()
     assert "TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE" in _terminal_tool_env_var_names()
 
@@ -228,7 +185,6 @@ def test_docker_env_is_bridged_everywhere():
     this cannot regress.
     """
     assert "docker_env" in _cli_env_map_keys()
-    assert "docker_env" in _gateway_env_map_keys()
     assert "docker_env" in _save_config_env_sync_keys()
     assert "TERMINAL_DOCKER_ENV" in _terminal_tool_env_var_names()
 
@@ -249,7 +205,6 @@ def test_docker_extra_args_is_bridged_everywhere():
     all four bridging points so this cannot regress.
     """
     assert "docker_extra_args" in _cli_env_map_keys()
-    assert "docker_extra_args" in _gateway_env_map_keys()
     assert "docker_extra_args" in _save_config_env_sync_keys()
     assert "TERMINAL_DOCKER_EXTRA_ARGS" in _terminal_tool_env_var_names()
 
@@ -269,7 +224,6 @@ def test_docker_persist_across_processes_is_bridged_everywhere():
     shared across sessions" behavior.
     """
     assert "docker_persist_across_processes" in _cli_env_map_keys()
-    assert "docker_persist_across_processes" in _gateway_env_map_keys()
     assert "docker_persist_across_processes" in _save_config_env_sync_keys()
     assert "TERMINAL_DOCKER_PERSIST_ACROSS_PROCESSES" in _terminal_tool_env_var_names()
 
@@ -285,7 +239,6 @@ def test_docker_orphan_reaper_is_bridged_everywhere():
     or fails to run when they enabled it.
     """
     assert "docker_orphan_reaper" in _cli_env_map_keys()
-    assert "docker_orphan_reaper" in _gateway_env_map_keys()
     assert "docker_orphan_reaper" in _save_config_env_sync_keys()
     assert "TERMINAL_DOCKER_ORPHAN_REAPER" in _terminal_tool_env_var_names()
 
@@ -299,7 +252,6 @@ def test_docker_network_is_bridged_everywhere():
     direct route out that bypasses the egress enclave.
     """
     assert "docker_network" in _cli_env_map_keys()
-    assert "docker_network" in _gateway_env_map_keys()
     assert "docker_network" in _save_config_env_sync_keys()
     assert "TERMINAL_DOCKER_NETWORK" in _terminal_tool_env_var_names()
 
@@ -317,7 +269,6 @@ def test_docker_volumes_is_bridged_everywhere():
     invariant as docker_env / docker_run_as_host_user.
     """
     assert "docker_volumes" in _cli_env_map_keys()
-    assert "docker_volumes" in _gateway_env_map_keys()
     assert "docker_volumes" in _save_config_env_sync_keys()
     assert "TERMINAL_DOCKER_VOLUMES" in _terminal_tool_env_var_names()
 
@@ -333,6 +284,5 @@ def test_docker_forward_env_is_bridged_everywhere():
     effect on the running process until restart.
     """
     assert "docker_forward_env" in _cli_env_map_keys()
-    assert "docker_forward_env" in _gateway_env_map_keys()
     assert "docker_forward_env" in _save_config_env_sync_keys()
     assert "TERMINAL_DOCKER_FORWARD_ENV" in _terminal_tool_env_var_names()

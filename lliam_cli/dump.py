@@ -91,24 +91,6 @@ def _redact(value: str) -> str:
     return mask_secret(value)
 
 
-def _gateway_status() -> str:
-    """Return a short gateway status string."""
-    try:
-        from lliam_cli.gateway import get_gateway_runtime_snapshot
-
-        snapshot = get_gateway_runtime_snapshot()
-        if snapshot.running:
-            mode = snapshot.manager
-            if snapshot.has_process_service_mismatch:
-                mode = "manual"
-            return f"running ({mode}, pid {snapshot.gateway_pids[0]})"
-        if snapshot.service_installed and not snapshot.service_running:
-            return f"stopped ({snapshot.manager})"
-        return f"stopped ({snapshot.manager})"
-    except Exception:
-        return "unknown" if sys.platform.startswith(("linux", "darwin")) else "N/A"
-
-
 def _count_skills(lliam_home: Path) -> int:
     """Count installed skills."""
     skills_dir = lliam_home / "skills"
@@ -142,29 +124,6 @@ def _cron_summary(lliam_home: Path) -> str:
         return f"{active} active / {len(jobs)} total"
     except Exception:
         return "(error reading)"
-
-
-def _configured_platforms() -> list[str]:
-    """Return list of configured messaging platform names."""
-    checks = {
-        "telegram": "TELEGRAM_BOT_TOKEN",
-        "discord": "DISCORD_BOT_TOKEN",
-        "slack": "SLACK_BOT_TOKEN",
-        "whatsapp": "WHATSAPP_ENABLED",
-        "signal": "SIGNAL_HTTP_URL",
-        "email": "EMAIL_ADDRESS",
-        "sms": "TWILIO_ACCOUNT_SID",
-        "matrix": "MATRIX_HOMESERVER_URL",
-        "mattermost": "MATTERMOST_URL",
-        "homeassistant": "HASS_TOKEN",
-        "dingtalk": "DINGTALK_CLIENT_ID",
-        "feishu": "FEISHU_APP_ID",
-        "wecom": "WECOM_BOT_ID",
-        "wecom_callback": "WECOM_CALLBACK_CORP_ID",
-        "weixin": "WEIXIN_ACCOUNT_ID",
-        "qqbot": "QQ_APP_ID",
-    }
-    return [name for name, env in checks.items() if os.getenv(env)]
 
 
 def _memory_provider(config: dict) -> str:
@@ -382,10 +341,6 @@ def run_dump(args):
     lines.append(f"  toolsets:           {', '.join(toolsets) if toolsets else '(default)'}")
     lines.append(f"  mcp_servers:        {_count_mcp_servers(config)}")
     lines.append(f"  memory_provider:    {_memory_provider(config)}")
-    lines.append(f"  gateway:            {_gateway_status()}")
-
-    platforms = _configured_platforms()
-    lines.append(f"  platforms:          {', '.join(platforms) if platforms else 'none'}")
     lines.append(f"  cron_jobs:          {_cron_summary(lliam_home)}")
     lines.append(f"  skills:             {_count_skills(lliam_home)}")
 

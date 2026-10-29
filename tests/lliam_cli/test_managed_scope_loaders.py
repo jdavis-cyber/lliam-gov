@@ -38,32 +38,6 @@ def _seed(home, managed, *, user, mgd):
     managed_scope.invalidate_managed_cache()
 
 
-def test_gateway_run_loader_honors_managed(homes, monkeypatch):
-    home, managed = homes
-    _seed(home, managed, user="model:\n  default: user/m\n", mgd="model:\n  default: org/m\n")
-    import gateway.run as gr
-
-    monkeypatch.setattr(gr, "_lliam_home", home, raising=False)
-    cfg = gr._load_gateway_config()
-    assert (cfg.get("model") or {}).get("default") == "org/m"
-
-
-def test_gateway_config_loader_honors_managed(homes, monkeypatch):
-    home, managed = homes
-    _seed(
-        home,
-        managed,
-        user="group_sessions_per_user: false\n",
-        mgd="group_sessions_per_user: true\n",
-    )
-    import gateway.config as gc
-
-    # load_gateway_config resolves home via get_lliam_home() (HERMES_HOME env).
-    cfg = gc.load_gateway_config()
-    # Managed value should have flowed into the GatewayConfig.
-    assert cfg.group_sessions_per_user is True
-
-
 def test_tui_loader_honors_managed(homes, monkeypatch):
     home, managed = homes
     _seed(home, managed, user="display:\n  skin: user\n", mgd="display:\n  skin: charizard\n")

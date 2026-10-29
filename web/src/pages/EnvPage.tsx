@@ -4,7 +4,6 @@ import {
   EyeOff,
   ExternalLink,
   KeyRound,
-  MessageSquare,
   Pencil,
   Save,
   Settings,
@@ -88,7 +87,6 @@ interface ProviderGroup {
 const CATEGORY_META_ICONS: Record<string, typeof KeyRound> = {
   provider: Zap,
   tool: KeyRound,
-  messaging: MessageSquare,
   setting: Settings,
 };
 
@@ -510,15 +508,14 @@ export default function EnvPage() {
       { id: "section-providers", label: "Providers" },
     ];
     if (vars) {
-      const categories = ["tool", "messaging", "setting"];
+      const categories = ["tool", "setting"];
       const CATEGORY_LABELS: Record<string, string> = {
         tool: "Tools",
-        messaging: t.common.gateway ?? "Gateway",
         setting: "Settings",
       };
       for (const cat of categories) {
         const hasEntries = Object.values(vars).some(
-          (info) => info.category === cat && !info.channel_managed,
+          (info) => info.category === cat,
         );
         if (hasEntries) {
           items.push({ id: `section-${cat}`, label: CATEGORY_LABELS[cat] ?? cat });
@@ -526,7 +523,7 @@ export default function EnvPage() {
       }
     }
     return items;
-  }, [vars, t]);
+  }, [vars]);
 
   useLayoutEffect(() => {
     if (!vars) {
@@ -681,33 +678,22 @@ export default function EnvPage() {
       }))
       .sort((a, b) => a.priority - b.priority);
 
-    // Non-provider categories — use translated labels. Platform credentials
-    // (channel_managed) are configured on the Channels page, so the messaging
-    // category here is trimmed down to cross-cutting gateway / API / proxy
-    // settings and relabelled accordingly.
+    // Non-provider categories — use translated labels.
     const CATEGORY_META_LABELS: Record<string, string> = {
       tool: t.app.nav.keys,
-      messaging: t.common.gateway ?? "Gateway",
       setting: t.app.nav.config,
     };
-    const CATEGORY_META_HINTS: Record<string, string | undefined> = {
-      messaging:
-        t.common.gatewayHint ??
-        "Messaging platforms, the API server and webhooks are configured on the Channels page. These are gateway-wide settings (proxy/relay mode and the global allowlist).",
-    };
-    const otherCategories = ["tool", "messaging", "setting"];
+    const otherCategories = ["tool", "setting"];
     const nonProvider = otherCategories.map((cat) => {
       const entries = Object.entries(vars).filter(
         ([, info]) =>
           info.category === cat &&
-          !info.channel_managed &&
           (showAdvanced || !info.advanced),
       );
       const setEntries = entries.filter(([, info]) => info.is_set);
       const unsetEntries = entries.filter(([, info]) => !info.is_set);
       return {
         label: CATEGORY_META_LABELS[cat] ?? cat,
-        hint: CATEGORY_META_HINTS[cat],
         icon: CATEGORY_META_ICONS[cat] ?? KeyRound,
         category: cat,
         setEntries,
@@ -834,7 +820,7 @@ export default function EnvPage() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  EnvCategoryCard — keys / messaging / settings sections             */
+/*  EnvCategoryCard — keys / settings sections             */
 /* ------------------------------------------------------------------ */
 
 function EnvCategoryCard({

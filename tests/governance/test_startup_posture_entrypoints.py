@@ -1,10 +1,10 @@
 """Fail-closed startup gates run on EVERY entrypoint (JER-80).
 
-The five strict-posture startup gates used to run only from
-``gateway/run.py:start_gateway``. They now live in the shared
+The five strict-posture startup gates used to run only from the messaging
+gateway's ``start_gateway`` (removed in JER-198). They now live in the shared
 ``lliam_cli.startup_posture.enforce_startup_posture`` sequence, and every
-console script in ``pyproject.toml [project.scripts]`` (plus the gateway, the
-TUI backend and the desktop app's dashboard backend) must reach it.
+console script in ``pyproject.toml [project.scripts]`` (plus the TUI backend
+and the desktop app's dashboard backend) must reach it.
 
 Covers:
   * the shared sequence keeps the gateway's semantics — order, merged-config
@@ -34,8 +34,13 @@ import lliam_cli.startup_posture as sp
 
 _REPO = Path(__file__).resolve().parents[2]
 
-_STRICT = {"security": {"posture": "strict", "api_server_key_required": True,
-                        "require_tls": True}}
+# The control-plane gate's only trigger was the messaging gateway's API
+# server, removed in JER-198, so the real block is the provider allowlist
+# (second gate in order): strict + enforce with an unapproved primary route.
+_STRICT = {"security": {"posture": "strict", "provider_allowlist_enforce": True},
+           "model": {"provider": "not-an-approved-provider",
+                     "base_url": "https://inference.invalid/v1",
+                     "default": "probe-model"}}
 
 
 class _AgentStarted(Exception):
@@ -69,10 +74,9 @@ def _block_with_stub(monkeypatch):
 
 
 def _block_with_real_gate(monkeypatch):
-    """Trip the REAL control-plane gate (first in order) under strict posture."""
-    monkeypatch.setenv("API_SERVER_ENABLED", "true")
-    monkeypatch.setenv("API_SERVER_HOST", "0.0.0.0")
+    """Trip the REAL provider-allowlist gate under strict posture."""
     monkeypatch.setattr(sp, "_merged_config", lambda _fallback: dict(_STRICT))
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **k: dict(_STRICT))
 
 
 def _low_side(monkeypatch):
@@ -201,7 +205,7 @@ def test_real_gates_low_side_is_noop(monkeypatch):
 
 def test_real_gates_strict_block(monkeypatch):
     _block_with_real_gate(monkeypatch)
-    with pytest.raises(sas.ControlPlaneAuthError):
+    with pytest.raises(sas.ProviderAllowlistError):
         sp.enforce_startup_posture()
 
 
@@ -212,7 +216,7 @@ def test_or_exit_refuses_on_stderr_only(monkeypatch, capsys):
     assert exc.value.code == sp.STARTUP_POSTURE_EXIT_CODE != 0
     out, err = capsys.readouterr()
     assert out == ""
-    assert "refusing to start" in err and "ControlPlaneAuthError" in err
+    assert "refusing to start" in err and "ProviderAllowlistError" in err
 
 
 def test_or_exit_does_not_swallow_unrelated_errors(monkeypatch):
@@ -319,7 +323,7 @@ def test_console_script_refuses_on_real_strict_gate(monkeypatch, name, target):
     with pytest.raises(SystemExit) as exc:
         _ENTRYPOINT_RUNNERS[target](monkeypatch)
     assert exc.value.code == sp.STARTUP_POSTURE_EXIT_CODE
-    assert isinstance(exc.value.__cause__, sas.ControlPlaneAuthError)
+    assert isinstance(exc.value.__cause__, sas.ProviderAllowlistError)
 
 
 @pytest.mark.parametrize("name,target", sorted(_console_scripts().items()))
@@ -331,25 +335,8 @@ def test_console_script_low_side_unaffected(monkeypatch, name, target):
 
 
 # ---------------------------------------------------------------------------
-# Non-console-script entrypoints: gateway, TUI backend, desktop backend
+# Non-console-script entrypoints: TUI backend, desktop backend
 # ---------------------------------------------------------------------------
-
-def test_gateway_uses_shared_sequence_only():
-    # gateway/run.py is ~19k lines; slice out start_gateway textually and parse
-    # just that function rather than the whole module.
-    src = (_REPO / "gateway" / "run.py").read_text(encoding="utf-8")
-    start = src.index("\nasync def start_gateway(")
-    nxt = re.search(r"\n(?:async def |def |class )", src[start + 1:])
-    body = src[start + 1: start + 1 + nxt.start()] if nxt else src[start + 1:]
-    fn = ast.parse(body).body[0]
-    calls = {
-        (c.func.id if isinstance(c.func, ast.Name) else getattr(c.func, "attr", None))
-        for c in ast.walk(fn) if isinstance(c, ast.Call)
-    }
-    assert "enforce_startup_posture" in calls
-    # Single source of truth: no gate is invoked directly from the gateway.
-    assert not (calls & set(_GATES))
-
 
 def test_tui_backend_refuses_when_gate_blocks(monkeypatch):
     from tui_gateway import entry as tui_entry
@@ -408,7 +395,7 @@ def test_dashboard_command_refuses_when_gate_blocks(monkeypatch):
 # built-in not here must be in _STARTUP_POSTURE_EXEMPT_COMMANDS — a new
 # subcommand forces a conscious gated-or-exempt decision.
 _EXPECTED_GATED_BUILTINS = {
-    "chat", "dashboard", "desktop", "gui", "proxy", "send", "kanban", "curator",
+    "chat", "dashboard", "desktop", "gui", "proxy", "kanban", "curator",
 }
 
 
@@ -430,7 +417,6 @@ def test_every_builtin_subcommand_is_classified():
     (Namespace(command="cron", cron_command="list"), False),
     (Namespace(command="mcp", mcp_action="serve"), True),
     (Namespace(command="mcp", mcp_action="add"), False),
-    (Namespace(command="gateway", gateway_command="run"), False),  # self-gated
     (Namespace(command="acp"), False),                             # self-gated
     (Namespace(command="setup"), False),
     (Namespace(command="doctor"), False),

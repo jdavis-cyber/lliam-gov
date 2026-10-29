@@ -53,7 +53,6 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str | None]]]] = [
         ("user-guide/sessions", "Sessions", None),
         ("user-guide/profiles", "Profiles", None),
         ("user-guide/git-worktrees", "Git Worktrees", None),
-        ("user-guide/docker", "Docker Backend", None),
         ("user-guide/security", "Security", None),
         ("user-guide/checkpoints-and-rollback", "Checkpoints & Rollback", None),
     ]),
