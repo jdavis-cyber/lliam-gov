@@ -71,6 +71,7 @@ def handle_pending_subcommand(
     *,
     memory_store=None,
     set_mode_fn=None,
+    operator: Optional["wa.OperatorCapability"] = None,
 ) -> Optional[str]:
     """Dispatch a /memory or /skills subcommand.
 
@@ -83,6 +84,9 @@ def handle_pending_subcommand(
         set_mode_fn: optional callable ``(enabled: bool) -> None`` that
             persists the new write_approval boolean to config (gateway provides
             this; CLI uses its own ``save_config_value`` and passes a closure).
+        operator: the caller's ``write_approval.OperatorCapability``. Skill
+            approvals apply only when it is present (AI-1183); without it the
+            decision is logged but the staged write is not replayed.
 
     Returns a text string to show the user. Returns None when the args are not
     a write-approval subcommand (caller falls through to its other handling,
@@ -99,7 +103,7 @@ def handle_pending_subcommand(
         return _fmt_pending_list(subsystem)
 
     if sub in {"approve", "apply"}:
-        return _approve(subsystem, rest, memory_store)
+        return _approve(subsystem, rest, memory_store, operator)
 
     if sub in {"reject", "deny", "drop"}:
         return _reject(subsystem, rest)
@@ -119,7 +123,7 @@ def _resolve_one(subsystem: str, rest: List[str]):
     return rest[0], None
 
 
-def _approve(subsystem: str, rest: List[str], memory_store) -> str:
+def _approve(subsystem: str, rest: List[str], memory_store, operator=None) -> str:
     target, err = _resolve_one(subsystem, rest)
     if err or target is None:
         return err or f"Usage: /{subsystem} approve <id>"
@@ -138,7 +142,7 @@ def _approve(subsystem: str, rest: List[str], memory_store) -> str:
 
     applied, failed = 0, []
     for rec in targets:
-        ok, msg = _decide_one(subsystem, rec, "approve", memory_store)
+        ok, msg = _decide_one(subsystem, rec, "approve", memory_store, operator)
         if ok:
             applied += 1
         else:
@@ -168,7 +172,7 @@ def _apply_one(subsystem: str, rec, memory_store):
         return False, str(e)
 
 
-def _decide_one(subsystem: str, rec, decision: str, memory_store=None):
+def _decide_one(subsystem: str, rec, decision: str, memory_store=None, operator=None):
     if decision == "approve":
         shown = _shown_sha256.get((subsystem, rec["id"]))
         current = wa.payload_sha256(rec.get("payload", {}))
@@ -176,7 +180,7 @@ def _decide_one(subsystem: str, rec, decision: str, memory_store=None):
             return False, (f"changed since it was shown (shown sha256 {shown[:12]}, "
                            f"now {current[:12]}); review it again before approving.")
     try:
-        audit = wa.record_write_decision(subsystem, rec, decision)
+        audit = wa.record_write_decision(subsystem, rec, decision, operator=operator)
     except (OSError, ValueError, TypeError) as exc:
         return False, f"Decision log unavailable; proposal unchanged: {exc}"
 

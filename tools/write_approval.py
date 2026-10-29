@@ -44,6 +44,7 @@ import logging
 import os
 import time
 import uuid
+import weakref
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -243,13 +244,44 @@ def payload_sha256(payload: Dict[str, Any]) -> str:
     ).encode("utf-8")).hexdigest()
 
 
+class OperatorCapability:
+    """Opaque, in-memory proof that the caller is an operator review surface.
+
+    The CLI and gateway /skills handlers each issue one when they first run
+    and keep it on their own instance. It is never written to env, files or
+    logs, cannot be pickled, and is not inherited by child processes.
+    """
+
+    __slots__ = ("__weakref__",)
+
+    def __repr__(self) -> str:
+        return "<OperatorCapability>"
+
+    def __reduce__(self):
+        raise TypeError("OperatorCapability cannot be serialized")
+
+
+_operator_capabilities: "weakref.WeakSet[OperatorCapability]" = weakref.WeakSet()
+
+
+def issue_operator_capability() -> OperatorCapability:
+    """Issue an operator capability. Only operator review surfaces call this."""
+    capability = OperatorCapability()
+    _operator_capabilities.add(capability)
+    return capability
+
+
+def _is_operator(capability: Any) -> bool:
+    return isinstance(capability, OperatorCapability) and capability in _operator_capabilities
+
+
 # Approvals logged by record_write_decision in THIS process, keyed by
 # (subsystem, pending_id) -> approved payload sha256. AI-1183: replaying a
-# staged skill write consumes one of these, so apply_skill_pending called from
-# agent code (python -c, execute_code, a fresh interpreter) finds nothing to
-# consume and refuses. The only public way to add an entry is the durable
-# operator decision path below, which first appends + fsyncs the decision to
-# write-approvals.jsonl and records the HITL decision.
+# staged skill write consumes one of these, and one is registered only when
+# the decision is recorded with an OperatorCapability issued in this process.
+# A fresh interpreter (python -c, execute_code) that calls
+# record_write_decision itself logs a decision line but gets no replay token,
+# so apply_skill_pending refuses.
 _approved_payloads: Dict[Tuple[str, str], str] = {}
 
 
@@ -262,8 +294,8 @@ def consume_approval(subsystem: str, pending_id: str,
     """
     expected = _approved_payloads.pop((subsystem, pending_id), None)
     if expected is None:
-        return ("No operator approval is recorded for this proposal. "
-                f"Approve it with /{subsystem} approve {pending_id}.")
+        return ("No operator approval is recorded for this proposal in this "
+                f"process. Approve it with /{subsystem} approve {pending_id}.")
     actual = payload_sha256(payload)
     if not hmac.compare_digest(expected, actual):
         return (f"Proposal {pending_id} changed after it was approved "
@@ -273,7 +305,8 @@ def consume_approval(subsystem: str, pending_id: str,
 
 
 def record_write_decision(subsystem: str, pending: Dict[str, Any],
-                          decision: str) -> Dict[str, Any]:
+                          decision: str, *,
+                          operator: Optional[OperatorCapability] = None) -> Dict[str, Any]:
     """Persist authorization BEFORE applying/discarding a staged payload.
 
     ``result=pending`` means execution has not occurred. A second line records
@@ -305,7 +338,7 @@ def record_write_decision(subsystem: str, pending: Dict[str, Any],
     )
     if subsystem == SKILLS:
         key = (subsystem, pending["id"])
-        if decision == "approve":
+        if decision == "approve" and _is_operator(operator):
             _approved_payloads[key] = record["sha256"]
         else:
             _approved_payloads.pop(key, None)

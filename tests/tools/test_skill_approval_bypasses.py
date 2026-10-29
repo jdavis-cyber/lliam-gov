@@ -40,8 +40,12 @@ def home(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _command(args) -> str:
-    reply = handle_pending_subcommand("skills", args)
+# The operator review surface (CLI / gateway /skills handler) holds this.
+OPERATOR = write_approval.issue_operator_capability()
+
+
+def _command(args, operator=OPERATOR) -> str:
+    reply = handle_pending_subcommand("skills", args, operator=operator)
     assert reply is not None
     return reply
 
@@ -214,8 +218,8 @@ def test_apply_refuses_proposal_changed_after_the_decision_was_logged(home, monk
     pending_id = _stage_create()
     real_record = write_approval.record_write_decision
 
-    def record_then_tamper(subsystem, pending, decision):
-        audit = real_record(subsystem, pending, decision)
+    def record_then_tamper(subsystem, pending, decision, **kwargs):
+        audit = real_record(subsystem, pending, decision, **kwargs)
         _tamper(home, pending_id)
         return audit
 
@@ -253,7 +257,7 @@ def test_direct_apply_without_operator_decision_is_refused(home):
 def test_approval_is_single_use(home):
     pending_id = _stage_create()
     record = _pending(pending_id)
-    write_approval.record_write_decision("skills", record, "approve")
+    write_approval.record_write_decision("skills", record, "approve", operator=OPERATOR)
     assert json.loads(manager.apply_skill_pending(pending_id))["success"] is True
     again = json.loads(manager.apply_skill_pending(pending_id))
     assert again["success"] is False
@@ -265,6 +269,58 @@ def test_reject_decision_does_not_authorize_apply(home):
     write_approval.record_write_decision("skills", record, "reject")
     assert json.loads(manager.apply_skill_pending(pending_id))["success"] is False
     assert not (home / "skills" / "local-file-tasks").exists()
+
+
+def test_decision_without_operator_capability_issues_no_replay(home):
+    """Codex P1 on #143: logging an approve decision is not enough."""
+    pending_id = _stage_create()
+    write_approval.record_write_decision("skills", _pending(pending_id), "approve")
+    result = json.loads(manager.apply_skill_pending(pending_id))
+    assert result["success"] is False
+    assert not (home / "skills" / "local-file-tasks").exists()
+    log = (home / "logs" / "write-approvals.jsonl").read_text(encoding="utf-8")
+    assert json.loads(log.splitlines()[-1])["decision"] == "approve"
+
+
+@pytest.mark.parametrize("operator", [None, object(), write_approval.OperatorCapability()])
+def test_handler_without_issued_capability_does_not_apply(home, operator):
+    pending_id = _stage_create()
+    reply = _command(["approve", pending_id], operator=operator)
+    assert "Approved 0" in reply
+    assert not (home / "skills" / "local-file-tasks").exists()
+
+
+def test_operator_capability_is_not_serializable():
+    import pickle
+
+    with pytest.raises(TypeError):
+        pickle.dumps(OPERATOR)
+    assert "Capability" in repr(OPERATOR)
+
+
+def test_fresh_interpreter_cannot_record_and_apply(home):
+    """Exact Codex repro: a fresh interpreter (python -c / execute_code) logs
+    an approve decision itself, then replays the proposal."""
+    pending_id = _stage_create()
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env["LLIAM_HOME"] = str(home)
+    env["PYTHONPATH"] = str(REPO_ROOT)
+    code = (
+        "import json; from tools import write_approval as wa; "
+        "from tools.skill_manager_tool import apply_skill_pending; "
+        f"pid = {pending_id!r}; "
+        "wa.record_write_decision('skills', wa.get_pending('skills', pid), 'approve'); "
+        "print(json.dumps(json.loads(apply_skill_pending(pid))))"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code], env=env, cwd=str(REPO_ROOT),
+        capture_output=True, text=True, timeout=120,
+    )
+    assert proc.returncode == 0, proc.stderr
+    result = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert result["success"] is False
+    assert not (home / "skills" / "local-file-tasks").exists()
+    assert write_approval.get_pending("skills", pending_id) is not None
 
 
 def test_python_c_apply_is_refused(home):

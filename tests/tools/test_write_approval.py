@@ -214,7 +214,7 @@ def test_skill_gate_on_then_apply_writes_file(lliam_home):
     _set_approval("skills", True)
     r = json.loads(smt.skill_manage("create", "applied-skill", content=_SKILL))
     rec = wa.get_pending("skills", r["pending_id"])
-    wa.record_write_decision("skills", rec, "approve")
+    wa.record_write_decision("skills", rec, "approve", operator=wa.issue_operator_capability())
     res = json.loads(smt.apply_skill_pending(rec["id"]))
     assert res["success"] is True
     assert smt._find_skill("applied-skill") is not None
@@ -524,7 +524,8 @@ def test_decisions_are_durable_before_mutation(lliam_home, monkeypatch, subsyste
     monkeypatch.setattr(Path, "unlink", unlink)
     monkeypatch.setattr(Path, "write_text", write)
     monkeypatch.setattr(os, "replace", replace)
-    handle_pending_subcommand(subsystem, [decision, rec["id"]], memory_store=store)
+    handle_pending_subcommand(subsystem, [decision, rec["id"]], memory_store=store,
+                              operator=wa.issue_operator_capability())
     assert observed
     assert wa.get_pending(subsystem, rec["id"]) is None
     entries = [json.loads(line) for line in log.read_text().splitlines()]
