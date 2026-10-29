@@ -214,6 +214,7 @@ def test_skill_gate_on_then_apply_writes_file(lliam_home):
     _set_approval("skills", True)
     r = json.loads(smt.skill_manage("create", "applied-skill", content=_SKILL))
     rec = wa.get_pending("skills", r["pending_id"])
+    wa.record_write_decision("skills", rec, "approve")
     res = json.loads(smt.apply_skill_pending(rec["id"]))
     assert res["success"] is True
     assert smt._find_skill("applied-skill") is not None

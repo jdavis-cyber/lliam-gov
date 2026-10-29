@@ -174,6 +174,12 @@ def get_write_block_error(path: str, *, cwd: str) -> Optional[str]:
                 return denied
         except Exception:
             pass
+        if _in_skill_store(resolved, base_real):
+            return (
+                f"Write denied: '{path}' is in the skill library or the "
+                "pending-approval store. Propose skill changes with "
+                "skill_manage; they apply after operator approval."
+            )
         try:
             # LG-DP-08 (P2.4): the at-rest encryption key store lives at
             # <lliam_home>/keys and must be unreachable by the agent's own
@@ -198,6 +204,26 @@ def get_write_block_error(path: str, *, cwd: str) -> Optional[str]:
             return denied
 
     return None
+
+
+# AI-1183 (DEF-021): skills and pending approvals change only through
+# skill_manage staging plus operator approval, in every profile.
+_SKILL_STORE_AREAS = ("skills", "pending")
+
+
+def _in_skill_store(resolved: str, base_real: str) -> bool:
+    """True when *resolved* is in <base>/{skills,pending} or the same areas
+    of any <base>/profiles/<name>/. Case-folded for the APFS reason above."""
+    try:
+        rel = os.path.relpath(resolved.casefold(), base_real.casefold())
+    except ValueError:  # different drive on Windows
+        return False
+    parts = Path(rel).parts
+    if not parts or parts[0] == os.pardir:
+        return False
+    if parts[0] in _SKILL_STORE_AREAS:
+        return True
+    return len(parts) >= 3 and parts[0] == "profiles" and parts[2] in _SKILL_STORE_AREAS
 
 
 def is_write_denied(path: str) -> bool:

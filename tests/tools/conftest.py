@@ -75,16 +75,19 @@ def submit_and_approve_skill():
 
     Accept an existing tool result when a test also checks the staged state.
     Return the replay result so tests can inspect validation errors and metadata.
+    The operator decision is logged first: replay requires it (AI-1183).
     """
     import json
     from tools.skill_manager_tool import apply_skill_pending, skill_manage
-    from tools.write_approval import discard_pending, get_pending
+    from tools.write_approval import discard_pending, get_pending, record_write_decision
 
     def submit(raw=None, **kwargs):
         proposal = json.loads(raw if raw is not None else skill_manage(**kwargs))
         assert proposal["staged"] is True
         pending_id = proposal["pending_id"]
-        assert get_pending("skills", pending_id) is not None
+        record = get_pending("skills", pending_id)
+        assert record is not None
+        record_write_decision("skills", record, "approve")
         result = apply_skill_pending(pending_id)
         if json.loads(result).get("success"):
             assert discard_pending("skills", pending_id)

@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import getpass
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -45,7 +46,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from lliam_constants import get_lliam_home
 
@@ -231,6 +232,46 @@ def _append_decision(record: Dict[str, Any]) -> None:
             _unlock_file(stream)
 
 
+def payload_sha256(payload: Dict[str, Any]) -> str:
+    """SHA-256 of a staged payload: UTF-8 JSON, sorted keys, compact separators.
+
+    This is the hash recorded in write-approvals.jsonl and shown to the
+    operator by the pending list and diff handlers.
+    """
+    return hashlib.sha256(json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode("utf-8")).hexdigest()
+
+
+# Approvals logged by record_write_decision in THIS process, keyed by
+# (subsystem, pending_id) -> approved payload sha256. AI-1183: replaying a
+# staged skill write consumes one of these, so apply_skill_pending called from
+# agent code (python -c, execute_code, a fresh interpreter) finds nothing to
+# consume and refuses. The only public way to add an entry is the durable
+# operator decision path below, which first appends + fsyncs the decision to
+# write-approvals.jsonl and records the HITL decision.
+_approved_payloads: Dict[Tuple[str, str], str] = {}
+
+
+def consume_approval(subsystem: str, pending_id: str,
+                     payload: Dict[str, Any]) -> Optional[str]:
+    """Consume the logged approval for ``pending_id``; single use.
+
+    Returns None when an operator approval for exactly this payload was
+    recorded in this process, else the reason to refuse the replay.
+    """
+    expected = _approved_payloads.pop((subsystem, pending_id), None)
+    if expected is None:
+        return ("No operator approval is recorded for this proposal. "
+                f"Approve it with /{subsystem} approve {pending_id}.")
+    actual = payload_sha256(payload)
+    if not hmac.compare_digest(expected, actual):
+        return (f"Proposal {pending_id} changed after it was approved "
+                f"(approved sha256 {expected[:12]}, now {actual[:12]}); "
+                "it was not applied. Review it again.")
+    return None
+
+
 def record_write_decision(subsystem: str, pending: Dict[str, Any],
                           decision: str) -> Dict[str, Any]:
     """Persist authorization BEFORE applying/discarding a staged payload.
@@ -251,9 +292,7 @@ def record_write_decision(subsystem: str, pending: Dict[str, Any],
         "name": payload.get("name", payload.get("target", "")),
         "origin": pending.get("origin", "foreground"),
         "summary": pending.get("summary", ""),
-        "sha256": hashlib.sha256(json.dumps(
-            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-        ).encode("utf-8")).hexdigest(),
+        "sha256": payload_sha256(payload),
         "approver": hitl_oversight.authenticated_principal() or getpass.getuser(),
         "result": "pending",
     }
@@ -264,6 +303,12 @@ def record_write_decision(subsystem: str, pending: Dict[str, Any],
         description=record["summary"], approver=record["approver"],
         origin=record["origin"], justification=f"sha256:{record['sha256']}",
     )
+    if subsystem == SKILLS:
+        key = (subsystem, pending["id"])
+        if decision == "approve":
+            _approved_payloads[key] = record["sha256"]
+        else:
+            _approved_payloads.pop(key, None)
     return record
 
 
