@@ -79,6 +79,19 @@ def _fire_approval_hook(hook_name: str, **kwargs) -> None:
 
 
 
+_approval_timed_out = threading.local()
+
+
+def mark_approval_timed_out() -> None:
+    """Called by an approval callback that returns 'deny' because nobody answered.
+
+    The callback contract stays 'deny' (fail closed); this only lets the
+    resolution record say 'timeout' instead of attributing a refusal to the
+    bound operator.
+    """
+    _approval_timed_out.value = True
+
+
 def set_current_session_key(session_key: str) -> contextvars.Token[str]:
     """Bind the active approval session key to the current context."""
     return _approval_session_key.set(session_key or "")
@@ -1239,7 +1252,10 @@ def prompt_dangerous_approval(command: str, description: str,
                     param.kind == inspect.Parameter.VAR_KEYWORD for param in parameters.values()
                 ):
                     scope["allow_session"] = False
+            _approval_timed_out.value = False
             choice = approval_callback(command, description, **scope)
+            if choice == "deny" and getattr(_approval_timed_out, "value", False):
+                return resolved("deny", timed_out=True)
             return resolved("once" if not allow_session and choice in {"session", "always"} else choice)
         except Exception as e:
             logger.error("Approval callback failed: %s", e, exc_info=True)

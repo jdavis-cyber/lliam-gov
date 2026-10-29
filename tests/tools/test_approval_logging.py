@@ -206,3 +206,32 @@ def test_cli_resolution_writes_one_record(approval_log, monkeypatch, guard, choi
     assert record["decision"] == decision
     assert record["session_id"] == SESSION
     assert record["approver"] == (APPROVER if choice else None)
+
+
+def test_callback_timeout_is_recorded_as_timeout(approval_log, monkeypatch):
+    # The CLI and ACP callbacks return "deny" when nobody answers; the record
+    # must not attribute that refusal to the bound operator.
+    monkeypatch.delenv("HERMES_GATEWAY_SESSION")
+    monkeypatch.setenv("HERMES_INTERACTIVE", "1")
+
+    def unanswered(*args, **kwargs):
+        approval.mark_approval_timed_out()
+        return "deny"
+
+    governance_audit_hooks.set_operator_subject(APPROVER, auth=LOCAL_OPERATOR_AUTH)
+    try:
+        result = approval.check_dangerous_command(
+            "rm -rf ./build", "local", approval_callback=unanswered
+        )
+        approval.check_dangerous_command(
+            "rm -rf ./dist", "local", approval_callback=lambda *a, **k: "deny"
+        )
+    finally:
+        governance_audit_hooks.set_operator_subject(None)
+
+    assert result["approved"] is False
+    records = [parse_record(line) for line in approval_log.read_text().splitlines()
+               if "approval.decision " in line]
+    assert [(r["decision"], r["approver"]) for r in records] == [
+        ("timeout", None), ("deny", APPROVER),
+    ]

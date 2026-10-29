@@ -11288,6 +11288,8 @@ class LliamCLI(CLIAgentSetupMixin, CLICommandsMixin):
             self._approval_deadline = 0
             self._paint_now()
             _cprint(f"\n{_DIM}  ⏱ Timeout — denying command{_RST}")
+            from tools.approval import mark_approval_timed_out
+            mark_approval_timed_out()
             return "deny"
 
     def _approval_choices(self, command: str, *, allow_permanent: bool = True, allow_session: bool = True) -> list[str]:
