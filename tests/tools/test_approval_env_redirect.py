@@ -193,6 +193,22 @@ BLOCKED = [
     "echo K=v > .envr?",
     "echo K=v > .env.sampl?",
     "shopt -s dotglob; echo K=v > ?env",
+    # GitHub Codex P1 on #147 (round 8): the shell's -c script is the first
+    # word after all its options; -- and - end them.
+    "bash -c -- 'tee .env'",
+    "bash -c - 'tee .env'",
+    "bash -ec 'tee .env'",
+    "bash -xc 'echo k > .env'",
+    "bash -c -e 'echo k > .env'",
+    "bash -o pipefail -c 'echo k > .env'",
+    "bash -c -o pipefail 'echo k > .env'",
+    "bash +o histexpand -c 'echo k > .env'",
+    "bash -O extglob -c 'echo k > .env'",
+    "bash --norc --noprofile -c 'echo k > .env'",
+    "bash --rcfile /dev/null -c 'echo k > .env'",
+    "bash --unknown-option -c x 'echo k > .env'",
+    "busybox sh -c -- 'tee .env'",
+    "sudo bash -c -- 'tee .env'",
 ]
 
 ALLOWED = [
@@ -273,6 +289,9 @@ ALLOWED = [
     "echo K=v > *",
     "echo K=v > .[x]nv",
     "echo K=v > notes[12].txt",
+    "bash -c -- 'cat .env'",
+    "bash -c 'cat .env' -- '> .env'",
+    "bash script.sh -c 'echo k > .env'",
 ]
 
 
