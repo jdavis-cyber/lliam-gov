@@ -116,7 +116,7 @@ def get_write_block_error(path: str, *, cwd: str) -> Optional[str]:
     expanded = os.path.join(cwd, os.path.expanduser(str(path)))
     resolved = os.path.realpath(expanded)
     if any(
-        _is_project_env_basename(os.path.basename(candidate))
+        is_project_env_basename(os.path.basename(candidate))
         for candidate in (expanded, resolved)
     ):
         return (
@@ -187,6 +187,13 @@ def get_write_block_error(path: str, *, cwd: str) -> Optional[str]:
         except Exception:
             pass
 
+    if _in_skill_store((resolved, os.path.abspath(expanded))):
+        return (
+            f"Write denied: '{path}' is in the skill library or the "
+            "pending-approval store. Propose skill changes with "
+            "skill_manage; they apply after operator approval."
+        )
+
     safe_roots = get_safe_write_roots()
     if safe_roots:
         allowed = False
@@ -198,6 +205,75 @@ def get_write_block_error(path: str, *, cwd: str) -> Optional[str]:
             return denied
 
     return None
+
+
+# AI-1183 (DEF-021): skills and pending approvals change only through
+# skill_manage staging plus operator approval, in every profile.
+_SKILL_STORE_AREAS = ("skills", "pending")
+
+
+def _store_bases() -> set[str]:
+    """Literal and resolved Lliam-GOV home and root paths."""
+    bases: set[str] = set()
+    for base in (_lliam_home_path(), _lliam_root_path()):
+        try:
+            bases.update({os.path.abspath(base), os.path.realpath(base)})
+        except Exception:
+            continue
+    return bases
+
+
+def _skill_store_roots(bases: set[str]) -> list[str]:
+    """Case-folded skill and pending-approval store roots, for every profile.
+
+    Each store is listed by its literal path and by its realpath, so a store
+    that is a symlink to a directory outside the home is still protected
+    (Codex P1 on #143): the incoming target is already resolved.
+    """
+    homes = set(bases)
+    for base in bases:
+        try:
+            with os.scandir(os.path.join(base, "profiles")) as entries:
+                homes.update(e.path for e in entries if e.is_dir())
+        except OSError:
+            continue
+    roots: set[str] = set()
+    for home in homes:
+        for area in _SKILL_STORE_AREAS:
+            store = os.path.join(home, area)
+            roots.add(os.path.abspath(store).casefold())
+            try:
+                roots.add(os.path.realpath(store).casefold())
+            except (OSError, ValueError):
+                pass
+    return sorted(roots)
+
+
+def _in_skill_store(candidates) -> bool:
+    """True when any candidate path is in a skill or pending-approval store.
+
+    Also matches <base>/profiles/<name>/{skills,pending} for profiles that
+    do not exist yet. Case-folded for the APFS reason above."""
+    bases = _store_bases()
+    roots = _skill_store_roots(bases)
+    for candidate in candidates:
+        folded = candidate.casefold()
+        if any(folded == root or folded.startswith(root + os.sep) for root in roots):
+            return True
+        for base in bases:
+            try:
+                rel = os.path.relpath(folded, base.casefold())
+            except ValueError:  # different drive on Windows
+                continue
+            parts = Path(rel).parts
+            if not parts or parts[0] == os.pardir:
+                continue
+            if parts[0] in _SKILL_STORE_AREAS or (
+                len(parts) >= 3 and parts[0] == "profiles"
+                and parts[2] in _SKILL_STORE_AREAS
+            ):
+                return True
+    return False
 
 
 def is_write_denied(path: str) -> bool:
@@ -219,7 +295,7 @@ _BLOCKED_PROJECT_ENV_BASENAMES: set[str] = {
 }
 
 
-def _is_project_env_basename(name: str) -> bool:
+def is_project_env_basename(name: str) -> bool:
     """Block normalized .env / .env.* / .envrc names, except example shapes."""
     name = unicodedata.normalize("NFKC", name)
     name = name.replace("\\", "/").rsplit("/", 1)[-1]
@@ -366,7 +442,7 @@ def get_read_block_error(path: str) -> Optional[str]:
     # terminal tool can still ``cat .env``; this is defense-in-depth, not a
     # boundary (see get_read_block_error's docstring).
     if any(
-        _is_project_env_basename(name)
+        is_project_env_basename(name)
         for name in (Path(path).name, resolved.name)
     ):
         return (

@@ -13,6 +13,8 @@ import os
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("unavailable_optional_dependencies")
+
 
 # ---------------------------------------------------------------------------
 # Gating

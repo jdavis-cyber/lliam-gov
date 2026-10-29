@@ -87,7 +87,9 @@ jobs:
         # `uv venv` step is needed.
         uses: ./.github/actions/retry
         with:
-          command: uv sync --locked --python 3.11 --extra all --extra dev
+          # --all-extras: tests no longer install optional SDKs at run time
+          # (AI-1184), so every optional extra is installed up front here.
+          command: uv sync --locked --python 3.11 --all-extras
 
       - name: Minimize uv cache
         # Optimized for CI: prunes pre-built wheels that are cheap to
@@ -197,7 +199,9 @@ jobs:
         # `uv venv` step is needed.
         uses: ./.github/actions/retry
         with:
-          command: uv sync --locked --python 3.11 --extra all --extra dev
+          # --all-extras: tests no longer install optional SDKs at run time
+          # (AI-1184), so every optional extra is installed up front here.
+          command: uv sync --locked --python 3.11 --all-extras
 
       - name: Minimize uv cache
         # Optimized for CI: prunes pre-built wheels that are cheap to
