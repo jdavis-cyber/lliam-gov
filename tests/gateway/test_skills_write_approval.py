@@ -50,4 +50,4 @@ def test_skills_slack_route_preserves_existing_native_commands(tmp_path, monkeyp
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     (tmp_path / "config.yaml").write_text("skills:\n  write_approval: false\n", encoding="utf-8")
     assert slack_subcommand_map()["skills"] == "/skills"
-    assert {"version", "hermes"} <= {name for name, _, _ in slack_native_slashes()}
+    assert {"version", "approve", "curator"} <= {name for name, _, _ in slack_native_slashes()}
