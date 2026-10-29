@@ -986,15 +986,16 @@ def check_cronjob_requirements() -> bool:
 
     Session env vars must hold an explicit truthy string (``1``, ``true``,
     ``yes``, ``on``) — false-like values (``0``, ``false``, ``no``, ``off``)
-    leave the tool disabled. Uses the shared ``env_var_enabled`` helper so
-    every consumer of these flags agrees on the truthy set.
+    leave the tool disabled. Uses the shared ``is_truthy_value`` helper so
+    every consumer of these flags agrees on the truthy set, and reads the
+    current ``LLIAM_`` name first via ``getenv_compat`` (AI-1187).
     """
-    from utils import env_var_enabled
+    from lliam_cli.env_compat import getenv_compat
+    from utils import is_truthy_value
 
-    return (
-        env_var_enabled("HERMES_INTERACTIVE")
-        or env_var_enabled("HERMES_GATEWAY_SESSION")
-        or env_var_enabled("HERMES_EXEC_ASK")
+    return any(
+        is_truthy_value(getenv_compat(suffix, ""), default=False)
+        for suffix in ("INTERACTIVE", "GATEWAY_SESSION", "EXEC_ASK")
     )
 
 
