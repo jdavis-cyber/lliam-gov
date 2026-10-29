@@ -514,6 +514,15 @@ _FINDER = "file/directory delete via osascript Finder"
     ("cat <<'EOF' | sh\ngzip notes.txt\nEOF", _COMPRESS),
     ('echo "$(gzip notes.txt)"', _COMPRESS),
     ("echo `gzip notes.txt`", _COMPRESS),
+    # Codex P2 on #147 (round 5): subshells and groups keep the heredoc's
+    # pipeline; an unquoted body expands $(...) after # and inside '.
+    ("cat <<'EOF' | (sh)\ngzip notes.txt\nEOF", _COMPRESS),
+    ("cat <<'EOF' | { sh; }\ngzip notes.txt\nEOF", _COMPRESS),
+    ("cat <<'EOF' | (bash -s)\ngzip notes.txt\nEOF", _COMPRESS),
+    ("cat <<EOF\n# $(gzip notes.txt)\nEOF", _COMPRESS),
+    ("cat <<EOF > README.md\n'$(gzip notes.txt)'\nEOF", _COMPRESS),
+    ("cat <<EOF > README.md\n# `gzip notes.txt`\nEOF", _COMPRESS),
+    ("cat <<EOF > README.md\n$(true # )\ngzip notes.txt\n)\nEOF", _COMPRESS),
     ("trash notes.txt", _TRASH),
     ("trash-put notes.txt", _TRASH),
     ("trash-rm notes.txt", _TRASH),
@@ -599,6 +608,8 @@ def test_residual_deleters_are_once_only_deletes(command, delete_description):
     # Codex P2 on #147 (round 4): a heredoc body is input, not commands.
     "cat <<'EOF' > README.md\ngzip notes.txt\nEOF",
     "cat <<'EOF' | grep gzip\ngzip notes.txt\nEOF",
+    "cat <<'EOF' > README.md\n# $(gzip notes.txt)\nEOF",
+    "cat <<EOF > README.md\ngzip notes.txt\nEOF",
     "zcat notes.txt.gz",
     "trash-list",
     "echo trash notes.txt",
