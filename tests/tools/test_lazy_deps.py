@@ -24,6 +24,32 @@ import tools.lazy_deps as ld
 pytest_plugins = ["pytester"]
 
 
+@pytest.fixture
+def installer_called_during_setup(monkeypatch):
+    """An SDK fixture can invoke ensure before the test's opt-in argument."""
+    monkeypatch.setitem(ld.LAZY_DEPS, "test.setup", ("ai1184-setup==1.0",))
+    monkeypatch.setattr(ld, "_is_satisfied", lambda spec: False)
+    monkeypatch.setattr(ld, "_allow_lazy_installs", lambda: True)
+    commands = []
+
+    def capture_run(command, **kwargs):
+        # No process is launched, including in the failing version of this test.
+        commands.append(command)
+        return ld.subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(ld.subprocess, "run", capture_run)
+    with pytest.raises(ld.FeatureUnavailable, match="still not importable"):
+        ld.ensure("test.setup", prompt=False)
+    return [command for command in commands if "install" in command]
+
+
+def test_fixture_setup_installs_use_tmp_target(installer_called_during_setup, allow_lazy_installs):
+    assert installer_called_during_setup
+    for command in installer_called_during_setup:
+        assert "--target" in command, "fixture setup attempted a venv install"
+        assert command[command.index("--target") + 1] == str(allow_lazy_installs)
+
+
 @pytest.mark.parametrize("change", ["add", "remove", "upgrade"])
 def test_package_changes_fail_the_run(pytester, monkeypatch, change):
     """Exercise a complete pytest run against disposable distribution metadata."""

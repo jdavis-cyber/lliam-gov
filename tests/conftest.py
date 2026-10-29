@@ -106,7 +106,10 @@ def _block_lazy_installs(request, monkeypatch):
     """Unmocked lazy installs are test defects, including satisfied probes."""
     from tools import lazy_deps
 
-    if "allow_lazy_installs" not in request.fixturenames:
+    if "allow_lazy_installs" in request.fixturenames:
+        # Install the target before any other setup fixture can call ensure.
+        request.getfixturevalue("allow_lazy_installs")
+    else:
         def blocked(feature, *, prompt=True):
             # pytest.fail escapes runtime handlers that catch Exception.
             pytest.fail(
