@@ -200,31 +200,55 @@ def _guarded_entry(path, *, dir_mtime=False):
     return ("file", st.st_size, st.st_mtime_ns, digest)
 
 
+def _snapshot_protected(snapshot, path, *, walk, walked, dir_mtime=False):
+    """Record ``path`` and, when it is a symlink, its referent too.
+
+    A symlinked home or config file is written through: the link entry stays
+    the same while the referent changes, so the referent is recorded (and,
+    for a directory, walked) as well. ``realpath`` resolves chains and stops
+    on cycles, and ``walked`` keeps two roots that resolve to one directory
+    from being walked twice.
+    """
+    entry = _guarded_entry(path, dir_mtime=dir_mtime)
+    if entry is None:
+        return
+    snapshot[str(path)] = entry
+    target = path
+    if entry[0] == "link":
+        # A missing referent is not recorded, so one created through the
+        # link shows up as created.
+        target = os.path.realpath(path)
+        entry = _guarded_entry(target, dir_mtime=dir_mtime)
+        if entry is None:
+            return
+        snapshot[str(target)] = entry
+    if not walk or entry[0] != "dir":
+        return
+    real_root = os.path.realpath(target)
+    if real_root in walked:
+        return
+    walked.add(real_root)
+    for dirpath, dirnames, filenames in os.walk(target):
+        for name in dirnames + filenames:
+            child = os.path.join(dirpath, name)
+            child_entry = _guarded_entry(child)
+            if child_entry is not None:
+                snapshot[child] = child_entry
+        dirnames[:] = [
+            name for name in dirnames
+            if name not in _HOME_GUARD_UNWALKED_DIRS
+            and not os.path.lexists(os.path.join(dirpath, name, ".git"))
+        ]
+
+
 def _real_home_snapshot():
     snapshot = {}
+    walked = set()
     for root in _real_home_roots():
-        entry = _guarded_entry(root)
-        if entry is None:
-            continue
-        snapshot[str(root)] = entry
-        if entry[0] != "dir":
-            continue
-        for dirpath, dirnames, filenames in os.walk(root):
-            for name in dirnames + filenames:
-                path = os.path.join(dirpath, name)
-                entry = _guarded_entry(path)
-                if entry is not None:
-                    snapshot[path] = entry
-            dirnames[:] = [
-                name for name in dirnames
-                if name not in _HOME_GUARD_UNWALKED_DIRS
-                and not os.path.lexists(os.path.join(dirpath, name, ".git"))
-            ]
+        _snapshot_protected(snapshot, root, walk=True, walked=walked)
     for name in _REPO_GUARDED_FILES + _REPO_GUARDED_DIRS:
-        path = PROJECT_ROOT / name
-        entry = _guarded_entry(path, dir_mtime=True)
-        if entry is not None:
-            snapshot[str(path)] = entry
+        _snapshot_protected(snapshot, PROJECT_ROOT / name, walk=False,
+                            walked=walked, dir_mtime=True)
     return snapshot
 
 
