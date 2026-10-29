@@ -577,31 +577,123 @@ def _is_protected_env_basename(path: str) -> bool:
     return name in {".env", ".envrc"} or name.startswith(".env.")
 
 
-def _shell_tokens(command: str, comments: bool = False) -> Optional[list]:
+def _is_heredoc_operator(text: str) -> bool:
+    """True for a here-document operator (``<<`` or ``<<-``), not ``<<<``."""
+    text = text[:-1] if text.endswith("<<-") else text
+    return text.endswith("<<") and not text.endswith("<<<")
+
+
+def _substitution_end(command: str, start: int) -> Optional[int]:
+    """Index just past the ``$(...)`` or backquoted command substitution that
+    begins at *start*, or None when it is not closed."""
+    n = len(command)
+    if command[start] == "`":
+        k = start + 1
+        while k < n:
+            if command[k] == "\\":
+                k += 2
+                continue
+            if command[k] == "`":
+                return k + 1
+            k += 1
+        return None
+    depth, k = 1, start + 2
+    while k < n:
+        ch = command[k]
+        if ch == "\\":
+            k += 2
+            continue
+        if ch in "'\"":
+            close = k + 1
+            while close < n and command[close] != ch:
+                close += 2 if ch == '"' and command[close] == "\\" else 1
+            if close >= n:
+                return None
+            k = close + 1
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return k + 1
+        k += 1
+    return None
+
+
+def _shell_tokens(command: str, comments: bool = False,
+                  heredocs: Optional[list] = None,
+                  substitutions: Optional[list] = None) -> Optional[list]:
     """Split *command* into ``(text, is_operator)`` pairs, or None on error.
 
     Quotes and backslash escapes are removed from words, as the shell does,
     and only unquoted, unescaped punctuation forms an operator: ``grep '>'``
     passes ``>`` as an argument, it does not redirect. With *comments*, an
     unquoted ``#`` that starts a word comments out the rest of the line.
+
+    With *heredocs*, a here-document body (the lines after the line holding
+    ``<<WORD``, up to the line ``WORD``) is not tokenized. It is appended to
+    *heredocs* as ``(body, literal)``, one entry per ``<<`` / ``<<-`` operator,
+    in order. *literal* is True when the delimiter is quoted (``<<'EOF'``,
+    ``<<"EOF"``, ``<<\\EOF``), so the shell expands nothing in the body, or
+    when an unquoted body holds no command substitution (``$(`` or a
+    backquote). Without *heredocs* the body is tokenized like other lines.
+
+    With *substitutions*, the script of each command substitution the lexer
+    keeps inside a word (``"$(...)"`` or a backquoted one) is appended to it,
+    so the caller can scan it. An unquoted ``$(`` already splits into tokens.
     """
     tokens: list = []
     word: list = []
     in_word = False
+    word_quoted = False  # the current word has a quote or backslash
     operator: list = []
+    pending: list = []  # heredocs opened on this line: (delimiter, quoted, strip_tabs)
+    want = None  # strip_tabs of a heredoc operator still awaiting its delimiter
     i, n = 0, len(command)
 
     def end_word() -> None:
-        nonlocal in_word
+        nonlocal in_word, word_quoted, want
         if in_word:
-            tokens.append(("".join(word), False))
+            text = "".join(word)
+            tokens.append((text, False))
+            if want is not None:
+                pending.append((text, word_quoted, want))
+                want = None
             word.clear()
             in_word = False
+        word_quoted = False
 
     def end_operator() -> None:
+        nonlocal want
         if operator:
-            tokens.append(("".join(operator), True))
+            text = "".join(operator)
+            tokens.append((text, True))
             operator.clear()
+            want = None
+            if heredocs is not None and _is_heredoc_operator(text):
+                want = text.endswith("-")
+
+    def read_bodies(i: int) -> int:
+        """Skip the pending heredoc bodies, which start at *i*; return the
+        index just past the last delimiter line (or the end)."""
+        for delimiter, delimiter_quoted, strip_tabs in pending:
+            start, end = i, n  # an unterminated body runs to the end
+            while i < n:
+                newline = command.find("\n", i)
+                line_end = n if newline < 0 else newline
+                line = command[i:line_end]
+                at_delimiter = (line.lstrip("\t") if strip_tabs else line) == delimiter
+                if at_delimiter:
+                    end = i
+                i = n if newline < 0 else newline + 1
+                if at_delimiter:
+                    break
+            body = command[start:end]
+            literal = delimiter_quoted or ("$(" not in body and "`" not in body)
+            heredocs.append((body, literal))
+        pending.clear()
+        return i
 
     while i < n:
         ch = command[i]
@@ -614,6 +706,14 @@ def _shell_tokens(command: str, comments: bool = False) -> Optional[list]:
             end_word()
             operator.append(ch)
             i += 1
+            if ch == "\n" and pending:
+                end_operator()
+                i = read_bodies(i)
+            continue
+        if ch == "-" and heredocs is not None and _is_heredoc_operator("".join(operator)) \
+                and not "".join(operator).endswith("-"):
+            operator.append(ch)  # ``<<-``: the body's leading tabs are stripped
+            i += 1
             continue
         end_operator()
         if comments and ch == "#" and not in_word:
@@ -621,6 +721,8 @@ def _shell_tokens(command: str, comments: bool = False) -> Optional[list]:
             i = n if newline < 0 else newline
             continue
         in_word = True
+        if ch in "\\'\"":
+            word_quoted = True
         if ch == "\\":
             if i + 1 >= n:
                 return None
@@ -641,11 +743,27 @@ def _shell_tokens(command: str, comments: bool = False) -> Optional[list]:
                         word.append(command[j + 1])
                     j += 2
                     continue
+                if substitutions is not None and (command[j] == "`" or command.startswith("$(", j)):
+                    end = _substitution_end(command, j)
+                    if end is None:
+                        return None
+                    skip = 1 if command[j] == "`" else 2
+                    substitutions.append(command[j + skip:end - 1])
+                    word.append(command[j:end])
+                    j = end
+                    continue
                 word.append(command[j])
                 j += 1
             if j >= n:
                 return None
             i = j + 1
+        elif ch == "`" and substitutions is not None:
+            end = _substitution_end(command, i)
+            if end is None:
+                return None
+            substitutions.append(command[i + 1:end - 1])
+            word.append(command[i:end])
+            i = end
         else:
             word.append(ch)
             i += 1
@@ -746,6 +864,71 @@ def _command_word_indices(words: list, scripts: list) -> set:
     return found
 
 
+# Commands that run their standard input as a script, so a heredoc fed to
+# them (directly or through a pipe) is scanned as commands: ``bash <<'EOF'``
+# and ``cat <<'EOF' | sh`` run the body. ``su``, ``sudo -s`` and a bare
+# ``sudo`` read a shell from stdin; ``ssh host`` hands it to a remote shell.
+_STDIN_SCRIPT_COMMANDS = _NESTED_SHELLS | {"su", "ssh", "source", "."}
+
+
+def _runs_stdin_script(words: list) -> bool:
+    """True when the simple command *words* may run its stdin as a script,
+    in any reading of its wrappers (a wrapper with no command counts)."""
+    for i in _command_word_indices(words, []):
+        if i >= len(words) or words[i].rsplit("/", 1)[-1] in _STDIN_SCRIPT_COMMANDS:
+            return True
+    return False
+
+
+def _heredoc_scripts(tokens: list, heredocs: list) -> list:
+    """The heredoc bodies of *tokens* (from ``_shell_tokens(..., heredocs=)``)
+    that run as commands: every body fed into a pipeline holding a stdin
+    script runner (``bash <<'EOF'``, ``cat <<'EOF' | sh``), and an unquoted
+    body holding a command substitution. Other bodies are input only."""
+    scripts: list = []
+    words: list = []  # words of the current simple command
+    pipeline: list = []  # (body, literal) fed into the current pipeline
+    bodies = iter(heredocs)
+    runs_stdin = after_pipe = skip_target = False
+
+    def end_command() -> None:
+        nonlocal runs_stdin
+        if words and _runs_stdin_script(words):
+            runs_stdin = True
+        words.clear()
+
+    def end_pipeline() -> None:
+        nonlocal runs_stdin
+        scripts.extend(body for body, literal in pipeline if runs_stdin or not literal)
+        pipeline.clear()
+        runs_stdin = False
+
+    for text, is_operator in tokens:
+        if not is_operator:
+            if not skip_target:  # a redirect's target is not a command word
+                words.append(text)
+            skip_target = after_pipe = False
+            continue
+        skip_target = False
+        if text.endswith("(") or (">" not in text and "<" not in text):
+            end_command()
+            separator = text.strip("\n")
+            if separator in ("|", "|&"):
+                after_pipe = True  # newlines after a pipe continue the pipeline
+            elif separator or not after_pipe:
+                end_pipeline()
+                after_pipe = False
+            continue
+        if _is_heredoc_operator(text):
+            body = next(bodies, None)
+            if body is not None:
+                pipeline.append(body)
+        skip_target = True
+    end_command()
+    end_pipeline()
+    return scripts
+
+
 def _env_write_targets_or_fallback(command: str, depth: int = 0) -> list:
     """Return redirect/tee targets, using the regex fallback if untokenizable."""
     targets = _env_write_targets(command, depth)
@@ -767,12 +950,14 @@ def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
     ``_MAX_NESTED_SCRIPT_DEPTH`` levels deep.
     """
     # A commented-out redirect writes nothing: ``cat .env # > .env`` is a read.
-    tokens = _shell_tokens(command, comments=True)
+    heredocs: list = []
+    nested: list = []  # scripts: sh -c, eval, "$(...)", `...`, heredocs that run
+    tokens = _shell_tokens(command, comments=True, heredocs=heredocs, substitutions=nested)
     if tokens is None:
         return None
+    nested.extend(_heredoc_scripts(tokens, heredocs))
     targets: list = []
     words: list = []  # words of the current simple command
-    nested: list = []  # scripts handed to sh -c / eval
 
     def _flush_segment() -> None:
         for i in sorted(_command_word_indices(words, nested)):

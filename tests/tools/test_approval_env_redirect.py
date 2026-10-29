@@ -98,6 +98,27 @@ BLOCKED = [
     "echo hi > .env # note",
     "echo hi # note\necho k > .env",
     "bash -c 'echo k > .env # note'",
+    # Heredocs (Codex P2 on #145, round 4): the heredoc's own line is still
+    # checked, and so is a body a shell runs or one with a command substitution.
+    "cat <<'EOF' > .env\nK=v\nEOF",
+    "cat > .env <<'EOF'\nK=v\nEOF",
+    "cat <<'EOF' | tee .env\nK=v\nEOF",
+    "cat <<'EOF' > README.md\nx\nEOF\necho k > .env",
+    "cat <<'EOF' > README.md\nx\nEOF\ntee .env < README.md",
+    "cat <<EOF > README.md\n$(echo k > .env)\nEOF",
+    "cat <<EOF > README.md\n`echo k > .env`\nEOF",
+    "bash <<'EOF'\necho k > .env\nEOF",
+    "sudo bash <<'EOF'\necho k > .env\nEOF",
+    "sudo -s <<'EOF'\necho k > .env\nEOF",
+    "cat <<'EOF' | sh\necho k > .env\nEOF",
+    "cat <<'EOF' |\necho k > .env\nEOF\nbash",
+    "cat <<'A' > out; bash <<'B'\necho k > .env\nA\necho j > .env\nB",
+    # A command substitution inside double quotes or backquotes still runs.
+    'echo "$(echo k > .env)"',
+    "echo `echo k > .env`",
+    "x=`echo k >.env`",
+    'echo "`echo k > .env`"',
+    'echo "$(printf "%s" ")" > .env)"',
 ]
 
 ALLOWED = [
@@ -141,6 +162,20 @@ ALLOWED = [
     "grep KEY .env # | tee .env",
     "ls\n# echo x > .env",
     "bash -c 'cat .env # > .env'",
+    # A heredoc body is input, not commands (Codex P2 on #145, round 4).
+    "cat <<'EOF' > README.md\necho K=v > .env\nEOF",
+    'cat <<"EOF" > README.md\necho K=v > .env\nEOF',
+    "cat <<\\EOF > README.md\necho K=v > .env\nEOF",
+    "cat <<EOF > README.md\necho K=v > .env\nEOF",
+    "cat <<-'EOF' > README.md\n\techo K=v > .env\n\tEOF",
+    "cat <<'EOF' > README.md\nit's fine > .env\nEOF\necho done",
+    "cat <<'EOF' > README.md # docs\necho K=v > .env\nEOF",
+    "cat <<'EOF' | grep x\necho k > .env\nEOF",
+    "cat <<'A' <<'B' > out\necho k > .env\nA\necho j > .env\nB",
+    "bash -c \"cat <<'EOF' > README.md\necho K=v > .env\nEOF\"",
+    "cat <<<'echo k > .env'",
+    "echo '$(echo k > .env)'",
+    'echo "$(cat .env)"',
 ]
 
 
@@ -241,7 +276,10 @@ def test_reads_still_run_under_yolo(monkeypatch):
 
 
 @pytest.mark.parametrize("guard", [check_all_command_guards, check_dangerous_command])
-@pytest.mark.parametrize("command", ["grep '>' .env", 'grep ">>" .env', "grep \\| .env"])
+@pytest.mark.parametrize("command", [
+    "grep '>' .env", 'grep ">>" .env', "grep \\| .env",
+    "cat <<'EOF' > README.md\necho K=v > .env\nEOF",
+])
 def test_quoted_operator_read_runs_under_yolo(monkeypatch, guard, command):
     # Codex P2 on #145: a quoted > made both guards hard-block a plain read.
     monkeypatch.setattr(approval_module, "_YOLO_MODE_FROZEN", True)
