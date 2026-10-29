@@ -256,15 +256,16 @@ class TestCronModeInteractions:
             result = check_dangerous_command("rm -rf /tmp/stuff", "local")
             assert result["approved"]
 
-    def test_non_cron_non_interactive_still_auto_approves(self, monkeypatch):
-        """Non-cron, non-interactive sessions (e.g. scripted usage) still auto-approve."""
+    def test_non_cron_non_interactive_refuses(self, monkeypatch):
+        """Non-cron, non-interactive sessions (e.g. scripted usage) refuse (AI-1172)."""
         monkeypatch.delenv("HERMES_CRON_SESSION", raising=False)
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         result = check_dangerous_command("rm -rf /tmp/stuff", "local")
-        assert result["approved"]
+        assert not result["approved"]
+        assert "desktop app" in result["message"]
 
 
 class TestCronWithGatewayOrigin:

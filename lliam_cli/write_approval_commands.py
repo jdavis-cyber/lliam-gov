@@ -16,9 +16,20 @@ platform the gateway truncates it and points the user at the dashboard / file.
 from __future__ import annotations
 
 import json
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from tools import write_approval as wa
+
+# AI-1183: the payload sha256 last shown to the operator for each proposal in
+# this process, keyed by (subsystem, pending_id). Approval refuses a proposal
+# whose payload no longer has the hash the operator was shown.
+_shown_sha256: Dict[Tuple[str, str], str] = {}
+
+
+def _remember_shown(subsystem: str, record) -> str:
+    digest = wa.payload_sha256(record.get("payload", {}))
+    _shown_sha256[(subsystem, record["id"])] = digest
+    return digest
 
 
 def _fmt_state(subsystem: str) -> str:
@@ -40,7 +51,8 @@ def _fmt_pending_list(subsystem: str) -> str:
     for r in records:
         origin = r.get("origin", "foreground")
         tag = " [auto]" if origin == "background_review" else ""
-        lines.append(f"  {r['id']}{tag}  {r.get('summary', '')}")
+        digest = _remember_shown(subsystem, r)
+        lines.append(f"  {r['id']}{tag}  {r.get('summary', '')}  [sha256:{digest[:12]}]")
     where = "/{s} approve <id>".format(s=subsystem)
     lines.append("")
     lines.append(f"Apply: {where}   Reject: /{subsystem} reject <id>")
@@ -59,6 +71,7 @@ def handle_pending_subcommand(
     *,
     memory_store=None,
     set_mode_fn=None,
+    operator: Optional["wa.OperatorCapability"] = None,
 ) -> Optional[str]:
     """Dispatch a /memory or /skills subcommand.
 
@@ -71,6 +84,9 @@ def handle_pending_subcommand(
         set_mode_fn: optional callable ``(enabled: bool) -> None`` that
             persists the new write_approval boolean to config (gateway provides
             this; CLI uses its own ``save_config_value`` and passes a closure).
+        operator: the caller's ``write_approval.OperatorCapability``. Skill
+            approvals apply only when it is present (AI-1183); without it the
+            decision is logged but the staged write is not replayed.
 
     Returns a text string to show the user. Returns None when the args are not
     a write-approval subcommand (caller falls through to its other handling,
@@ -87,7 +103,7 @@ def handle_pending_subcommand(
         return _fmt_pending_list(subsystem)
 
     if sub in {"approve", "apply"}:
-        return _approve(subsystem, rest, memory_store)
+        return _approve(subsystem, rest, memory_store, operator)
 
     if sub in {"reject", "deny", "drop"}:
         return _reject(subsystem, rest)
@@ -107,7 +123,7 @@ def _resolve_one(subsystem: str, rest: List[str]):
     return rest[0], None
 
 
-def _approve(subsystem: str, rest: List[str], memory_store) -> str:
+def _approve(subsystem: str, rest: List[str], memory_store, operator=None) -> str:
     target, err = _resolve_one(subsystem, rest)
     if err or target is None:
         return err or f"Usage: /{subsystem} approve <id>"
@@ -126,7 +142,7 @@ def _approve(subsystem: str, rest: List[str], memory_store) -> str:
 
     applied, failed = 0, []
     for rec in targets:
-        ok, msg = _decide_one(subsystem, rec, "approve", memory_store)
+        ok, msg = _decide_one(subsystem, rec, "approve", memory_store, operator)
         if ok:
             applied += 1
         else:
@@ -156,9 +172,15 @@ def _apply_one(subsystem: str, rec, memory_store):
         return False, str(e)
 
 
-def _decide_one(subsystem: str, rec, decision: str, memory_store=None):
+def _decide_one(subsystem: str, rec, decision: str, memory_store=None, operator=None):
+    if decision == "approve":
+        shown = _shown_sha256.get((subsystem, rec["id"]))
+        current = wa.payload_sha256(rec.get("payload", {}))
+        if shown is not None and shown != current:
+            return False, (f"changed since it was shown (shown sha256 {shown[:12]}, "
+                           f"now {current[:12]}); review it again before approving.")
     try:
-        audit = wa.record_write_decision(subsystem, rec, decision)
+        audit = wa.record_write_decision(subsystem, rec, decision, operator=operator)
     except (OSError, ValueError, TypeError) as exc:
         return False, f"Decision log unavailable; proposal unchanged: {exc}"
 
@@ -170,6 +192,8 @@ def _decide_one(subsystem: str, rec, decision: str, memory_store=None):
         message = ("Write applied but pending record could not be removed. Do not reapprove."
                    if decision == "approve" else "Pending record could not be removed.")
     result = ("applied" if decision == "approve" else "discarded") if ok else "failed"
+    if ok:
+        _shown_sha256.pop((subsystem, rec["id"]), None)
     try:
         wa.record_write_outcome(audit, result, message)
     except (OSError, ValueError, TypeError) as exc:
@@ -209,7 +233,9 @@ def _diff(rest: List[str]) -> str:
     if not rec:
         return f"No pending skill write with id '{rest[0]}'."
     diff = wa.skill_pending_diff(rec)
-    header = f"# Pending skill write {rec['id']}: {rec.get('summary', '')}\n"
+    digest = _remember_shown(wa.SKILLS, rec)
+    header = (f"# Pending skill write {rec['id']}: {rec.get('summary', '')}\n"
+              f"# sha256: {digest}\n")
     return header + "\n" + diff
 
 

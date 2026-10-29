@@ -73,14 +73,17 @@ def test_terminal_dispatch_guard_denies_strict_noninteractive_command(strict_cfg
     assert "fail-closed" in (result.get("message") or "").lower()
 
 
-def test_low_side_non_interactive_auto_approve_preserved(clean_env, monkeypatch):
+def test_low_side_non_interactive_refuses_without_approver(clean_env, monkeypatch):
     monkeypatch.setattr(
         "lliam_cli.config.load_config", lambda *a, **kw: {"security": {}}
     )
     from tools.approval import check_dangerous_command
 
     result = check_dangerous_command("rm -rf ./build", "local")
-    assert result["approved"] is True  # shipped behavior untouched (capability)
+    # AI-1172: low side no longer auto-approves; it refuses with its own
+    # message (strict keeps the LG-HO-02 fail-closed wording).
+    assert result["approved"] is False
+    assert "desktop app" in (result.get("message") or "")
 
 
 def test_strict_cron_dangerous_command_denied_even_in_approve_mode(strict_cfg, monkeypatch):

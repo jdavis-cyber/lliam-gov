@@ -888,6 +888,25 @@ def _isolate_lliam_home(_hermetic_environment):
     return None
 
 
+@pytest.fixture(autouse=True)
+def _reset_oneshot_process_mark():
+    """Clear the process-local one-shot approval mark around every test.
+
+    ``cli.main`` sets ``tools.approval._oneshot_process`` for a single-query
+    run (AI-1172). It is a plain module global, so a test that drives
+    ``cli.main(query=...)`` would otherwise make every later test in the
+    same file refuse dangerous commands. The module is only touched when it
+    is already imported, so tests that never load it pay nothing.
+    """
+    approval = sys.modules.get("tools.approval")
+    if approval is not None:
+        approval._oneshot_process = False
+    yield
+    approval = sys.modules.get("tools.approval")
+    if approval is not None:
+        approval._oneshot_process = False
+
+
 # ── Module-level state reset — replaced by per-file process isolation ──────
 #
 # Each test FILE runs in a freshly-spawned ``python -m pytest <file>``

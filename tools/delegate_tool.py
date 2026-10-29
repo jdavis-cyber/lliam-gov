@@ -16,6 +16,7 @@ The parent's context only sees the delegation call and the summary result,
 never the child's intermediate tool calls or reasoning.
 """
 
+import contextvars
 import enum
 import json
 import logging
@@ -1849,7 +1850,12 @@ def _run_single_child(
                 stream_callback=_relay_child_text,
             )
 
-        _child_future = _timeout_executor.submit(_run_with_thread_capture)
+        # Carry the caller's context into the worker (AI-1172): the cron
+        # approval marker and gateway session/approval ContextVars are
+        # context-local, and a bare executor thread starts with none of them.
+        _child_future = _timeout_executor.submit(
+            contextvars.copy_context().run, _run_with_thread_capture,
+        )
         try:
             result = _child_future.result(timeout=child_timeout)
         except Exception as _timeout_exc:
@@ -2484,7 +2490,11 @@ def delegate_task(
             with ThreadPoolExecutor(max_workers=max_children) as executor:
                 futures = {}
                 for i, t, child in children:
+                    # One context copy per child (a Context cannot be
+                    # entered by two threads at once); see the single-child
+                    # hop in _run_single_child (AI-1172).
                     future = executor.submit(
+                        contextvars.copy_context().run,
                         _run_single_child,
                         task_index=i,
                         goal=t["goal"],
