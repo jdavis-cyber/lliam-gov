@@ -200,15 +200,16 @@ def _guarded_entry(path, *, dir_mtime=False):
     return ("file", st.st_size, st.st_mtime_ns, digest)
 
 
-def _snapshot_protected(snapshot, path, *, walk, walked, dir_mtime=False):
+def _snapshot_protected(snapshot, path, *, walk, walked, dir_mtime=False,
+                        explicit=True):
     """Record ``path`` and, when it is a symlink, its referent too.
 
     A symlinked home or config file is written through: the link entry stays
     the same while the referent changes, so the referent is recorded (and,
     for a directory, walked) as well. ``realpath`` resolves chains and stops
     on cycles, and ``walked`` keeps two roots that resolve to one directory
-    from being walked twice. Links found during the walk come back here, so
-    a link at any depth is followed the same way.
+    from being walked twice. Links found during the walk come back here
+    (``explicit=False``), so a link at any depth is followed the same way.
     """
     entry = _guarded_entry(path, dir_mtime=dir_mtime)
     if entry is None:
@@ -224,7 +225,19 @@ def _snapshot_protected(snapshot, path, *, walk, walked, dir_mtime=False):
             return
         snapshot[target] = entry
     if walk and entry[0] == "dir":
-        _walk_protected(snapshot, target, walked)
+        _walk_protected(snapshot, target, walked, explicit=explicit)
+
+
+def _is_within(path, parent, _paths=os.path):
+    """True when ``path`` is ``parent`` or below it.
+
+    Paths on different Windows drives share no common path, so
+    ``commonpath`` raises ``ValueError``; they are unrelated.
+    """
+    try:
+        return _paths.commonpath((path, parent)) == parent
+    except ValueError:
+        return False
 
 
 def _walkable_dir(path):
@@ -238,18 +251,24 @@ def _walkable_dir(path):
             and not os.path.lexists(os.path.join(path, ".git")))
 
 
-def _walk_protected(snapshot, root, walked):
+def _walk_protected(snapshot, root, walked, *, explicit):
     """Record everything under ``root``, following links below it as well.
 
     ``os.walk`` lists a link but does not follow it, so each descendant link
     gets the same referent handling as a protected root. ``walked`` holds the
-    resolved directories already walked: it stops cycles, and a referent
-    that contains one of them (a link back to ``~`` or ``/``) is recorded
-    but not walked, since that would walk far outside the guarded home.
+    resolved directories already walked, and a subdirectory that resolves to
+    one of them is recorded but not walked again, which also stops cycles.
+
+    A protected root (``explicit``) is always walked unless that exact
+    directory was walked already. A referent reached through a link below a
+    root is skipped when it is, or contains, an already walked directory: a
+    link back to ``~`` or ``/`` would otherwise walk far outside the guarded
+    home.
     """
     real_root = os.path.realpath(root)
-    if any(real_root == done or os.path.commonpath((real_root, done)) == real_root
-           for done in walked):
+    if real_root in walked:
+        return
+    if not explicit and any(_is_within(done, real_root) for done in walked):
         return
     walked.add(real_root)
     for dirpath, dirnames, filenames in os.walk(root):
@@ -261,10 +280,11 @@ def _walk_protected(snapshot, root, walked):
             snapshot[child] = child_entry
             if child_entry[0] == "link":
                 _snapshot_protected(snapshot, child, walk=_walkable_dir(child),
-                                    walked=walked)
+                                    walked=walked, explicit=False)
         dirnames[:] = [
             name for name in dirnames
             if _walkable_dir(os.path.join(dirpath, name))
+            and os.path.realpath(os.path.join(dirpath, name)) not in walked
         ]
 
 

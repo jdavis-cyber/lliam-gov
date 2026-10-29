@@ -6,6 +6,7 @@ Windows USERPROFILE, LOCALAPPDATA, APPDATA, HOMEDRIVE/HOMEPATH) pointed at a
 temporary directory, so nothing here touches the operator's real home.
 """
 
+import ntpath
 import os
 import subprocess
 import sys
@@ -271,6 +272,47 @@ def test_snapshot_handles_cycles_and_exclusions_below_the_home(isolated_guard, t
         (modules / "pkg.json").write_text("{}")
 
     assert _changes_after(write_unguarded) == ([], [], [])
+
+
+def test_snapshot_walks_a_protected_root_that_holds_another_roots_referent(isolated_guard):
+    lliam_home, legacy_home = guard._real_home_roots()
+    work = legacy_home / "profiles" / "work"
+    work.mkdir(parents=True)
+    (legacy_home / "auth.json").write_text(f'{{"token": "{SECRET}"}}')
+    lliam_home.parent.mkdir(parents=True, exist_ok=True)
+    _symlink(lliam_home, work, target_is_directory=True)
+
+    def write_both():
+        (legacy_home / "auth.json").write_text('{"token": "other"}')
+        (work / "new.json").write_text("{}")
+
+    created, changed, removed = _changes_after(write_both)
+    assert changed == [str(legacy_home / "auth.json")]
+    # The shared subtree is walked once, under the referent's resolved path.
+    assert created == [str(Path(os.path.realpath(work)) / "new.json")]
+    assert removed == []
+
+
+def test_paths_on_different_windows_drives_are_unrelated():
+    assert guard._is_within(r"D:\state\lliam", r"C:\Users\me", _paths=ntpath) is False
+    assert guard._is_within(r"C:\Users\me\.lliam", r"C:\Users\me", _paths=ntpath) is True
+    assert guard._is_within(r"C:\Users\me", r"C:\Users\me\.lliam", _paths=ntpath) is False
+
+
+def test_snapshot_survives_a_link_to_another_drive(isolated_guard, tmp_path, monkeypatch):
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "state.json").write_text("{}")
+    isolated_guard.lliam_home.mkdir(parents=True)
+    _symlink(isolated_guard.lliam_home / "elsewhere", other, target_is_directory=True)
+
+    def commonpath_across_drives(paths):
+        return ntpath.commonpath([r"C:\Users\me", r"D:\state"])
+
+    with monkeypatch.context() as patched:
+        patched.setattr(guard.os.path, "commonpath", commonpath_across_drives)
+        snapshot = guard._real_home_snapshot()
+    assert str(Path(os.path.realpath(other)) / "state.json") in snapshot
 
 
 _ORDER_BODY = """
