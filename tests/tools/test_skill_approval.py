@@ -221,3 +221,39 @@ def test_background_notification_describes_pending_change(library, mode):
     assert "local-file-tasks" in actions[0]
     assert "/skills" in actions[0]
     assert "created" not in actions[0]
+
+
+@pytest.fixture
+def cron_jobs(library, monkeypatch):
+    import cron.jobs as jobs_mod
+    cron_dir = library.parent / "cron"
+    (cron_dir / "output").mkdir(parents=True)
+    monkeypatch.setattr(jobs_mod, "HERMES_DIR", library.parent)
+    monkeypatch.setattr(jobs_mod, "CRON_DIR", cron_dir)
+    monkeypatch.setattr(jobs_mod, "JOBS_FILE", cron_dir / "jobs.json")
+    monkeypatch.setattr(jobs_mod, "OUTPUT_DIR", cron_dir / "output")
+    return jobs_mod
+
+
+def _write_skill(library, name):
+    skill_dir = library / name
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        f"---\nname: {name}\ndescription: {name}\n---\n# {name}\n", encoding="utf-8"
+    )
+
+
+@pytest.mark.parametrize("absorbed_into, expected", [("umbrella", ["umbrella"]), ("", [])])
+def test_approved_consolidation_rewrites_cron_skill_refs(library, cron_jobs, absorbed_into, expected):
+    _write_skill(library, "narrow")
+    _write_skill(library, "umbrella")
+    job = cron_jobs.create_job(prompt="run", schedule="every 1h", skills=["narrow"])
+
+    staged = json.loads(manager.skill_manage("delete", "narrow", absorbed_into=absorbed_into))
+    assert staged["staged"] is True
+    assert cron_jobs.get_job(job["id"])["skills"] == ["narrow"]
+
+    reply = handle_pending_subcommand("skills", ["approve", staged["pending_id"]])
+    assert "Approved 1" in reply
+    assert not (library / "narrow").exists()
+    assert cron_jobs.get_job(job["id"])["skills"] == expected

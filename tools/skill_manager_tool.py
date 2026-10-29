@@ -1198,7 +1198,7 @@ def apply_skill_pending(pending_id: str) -> str:
     origin_token = set_current_write_origin(record["origin"])
     token = _replaying_approved_skill.set(True)
     try:
-        return skill_manage(
+        result = skill_manage(
             action=payload.get("action", ""),
             name=payload.get("name", ""),
             content=payload.get("content"),
@@ -1213,6 +1213,33 @@ def apply_skill_pending(pending_id: str) -> str:
     finally:
         _replaying_approved_skill.reset(token)
         reset_current_write_origin(origin_token)
+    _rewrite_cron_refs_after_approved_delete(payload, result)
+    return result
+
+
+def _rewrite_cron_refs_after_approved_delete(payload: Dict[str, Any], result: str) -> None:
+    """Point cron jobs at the umbrella once an approved consolidation lands.
+
+    The curator's run report rewrites cron references only for skills it
+    removed during the run. Staged deletes are still on disk at that point,
+    so the rewrite has to happen here, when the delete actually applies.
+    Best-effort, like the curator's own rewrite.
+    """
+    absorbed_into = payload.get("absorbed_into")
+    if payload.get("action") != "delete" or not isinstance(absorbed_into, str):
+        return
+    try:
+        if not json.loads(result).get("success"):
+            return
+        name = payload.get("name", "")
+        target = absorbed_into.strip()
+        from cron.jobs import rewrite_skill_refs
+        rewrite_skill_refs(
+            consolidated={name: target} if target else {},
+            pruned=[] if target else [name],
+        )
+    except Exception as e:
+        logger.debug("Cron skill rewrite after approved delete failed: %s", e, exc_info=True)
 
 
 def skill_manage(
