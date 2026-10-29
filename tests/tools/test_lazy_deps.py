@@ -6,16 +6,125 @@ which only installs from a strict allowlist, refuses anything that looks
 like a URL / file path, runs venv-scoped, and respects the
 ``security.allow_lazy_installs`` config flag.
 
-These tests cover the security boundary and the public API. The real pip
-call is mocked — we never actually shell out during unit tests.
+These tests cover the security boundary and the public API. Installer
+tests use a temporary target; the offline integration check installs a
+local fixture wheel without contacting PyPI.
 """
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
 import tools.lazy_deps as ld
+
+pytest_plugins = ["pytester"]
+
+
+@pytest.fixture
+def installer_called_during_setup(monkeypatch):
+    """An SDK fixture can invoke ensure before the test's opt-in argument."""
+    monkeypatch.setitem(ld.LAZY_DEPS, "test.setup", ("ai1184-setup==1.0",))
+    monkeypatch.setattr(ld, "_is_satisfied", lambda spec: False)
+    monkeypatch.setattr(ld, "_allow_lazy_installs", lambda: True)
+    commands = []
+
+    def capture_run(command, **kwargs):
+        # No process is launched, including in the failing version of this test.
+        commands.append(command)
+        return ld.subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(ld.subprocess, "run", capture_run)
+    with pytest.raises(ld.FeatureUnavailable, match="still not importable"):
+        ld.ensure("test.setup", prompt=False)
+    return [command for command in commands if "install" in command]
+
+
+def test_fixture_setup_installs_use_tmp_target(installer_called_during_setup, allow_lazy_installs):
+    assert installer_called_during_setup
+    for command in installer_called_during_setup:
+        assert "--target" in command, "fixture setup attempted a venv install"
+        assert command[command.index("--target") + 1] == str(allow_lazy_installs)
+
+
+@pytest.mark.parametrize("change", ["add", "remove", "upgrade"])
+def test_package_changes_fail_the_run(pytester, monkeypatch, change):
+    """Exercise a complete pytest run against disposable distribution metadata."""
+    root = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv("PYTHONPATH", str(root))
+    packages = pytester.path / "site-packages"
+    metadata = packages / "fixture_package-1.0.dist-info" / "METADATA"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text("Name: fixture-package\nVersion: 1.0\n")
+    pytester.makeconftest(
+        (root / "tests/conftest.py").read_text()
+        + f"\n_VENV_PACKAGE_PATHS = ({str(packages)!r},)\n"
+    )
+    actions = {
+        "add": "p = p.parent.parent / 'new_package-1.0.dist-info' / 'METADATA'; "
+               "p.parent.mkdir(); p.write_text('Name: new-package\\nVersion: 1.0\\n')",
+        "remove": "p.unlink()",
+        "upgrade": "p.write_text('Name: fixture-package\\nVersion: 2.0\\n')",
+    }
+    pytester.makepyfile(
+        "from pathlib import Path\n"
+        "def test_mutates_packages():\n"
+        f"    p = Path({str(metadata)!r})\n"
+        f"    {actions[change]}\n"
+    )
+    result = pytester.runpytest_subprocess("-q")
+    result.assert_outcomes(passed=1)
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+    result.stdout.fnmatch_lines(["*Installed package list changed during tests*"])
+
+
+def test_opt_in_rejects_venv_bootstrap(allow_lazy_installs):
+    with pytest.raises(pytest.fail.Exception, match="outside the temporary target"):
+        ld.subprocess.run([sys.executable, "-m", "ensurepip", "--upgrade"])
+
+
+def test_opt_in_installs_only_into_tmp_target(allow_lazy_installs, tmp_path, monkeypatch):
+    """Install a local fixture wheel through ensure(), without contacting PyPI."""
+    if ld.shutil.which("uv") is None:
+        pytest.skip("offline real-install check requires uv")
+    wheel = tmp_path / "ai1184_fixture-1.0-py3-none-any.whl"
+    with ZipFile(wheel, "w") as archive:
+        archive.writestr("ai1184_fixture.py", "VALUE = 1184\n")
+        archive.writestr(
+            "ai1184_fixture-1.0.dist-info/METADATA",
+            "Metadata-Version: 2.1\nName: ai1184-fixture\nVersion: 1.0\n",
+        )
+        archive.writestr(
+            "ai1184_fixture-1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        archive.writestr("ai1184_fixture-1.0.dist-info/RECORD", "")
+    monkeypatch.setenv("UV_NO_INDEX", "1")
+    monkeypatch.setenv("UV_FIND_LINKS", str(tmp_path))
+    monkeypatch.setitem(ld.LAZY_DEPS, "test.offline", ("ai1184-fixture==1.0",))
+    monkeypatch.setattr(ld, "_allow_lazy_installs", lambda: True)
+    # Ambient production targets must not override the opt-in fixture.
+    monkeypatch.setenv(ld._LAZY_TARGET_ENV, str(tmp_path / "wrong-target"))
+    ld.ensure("test.offline", prompt=False)
+    assert (allow_lazy_installs / "ai1184_fixture.py").read_text() == "VALUE = 1184\n"
+    assert ld.feature_missing("test.offline") == ()
+    assert not (tmp_path / "wrong-target").exists()
+
+
+def test_unmocked_lazy_install_is_a_test_defect(monkeypatch):
+    monkeypatch.setattr(ld, "feature_missing", lambda feature: ("zzzfake>=1",))
+    monkeypatch.setattr(ld, "_allow_lazy_installs", lambda: True)
+    with pytest.raises(pytest.fail.Exception, match="Unexpected lazy install"):
+        ld.ensure("stt.faster_whisper", prompt=False)
+
+
+def test_satisfied_probe_does_not_reach_installer(monkeypatch):
+    # Import-time probes (e.g. agent.bedrock_adapter) must keep working.
+    monkeypatch.setattr(ld, "feature_missing", lambda feature: ())
+    ld.ensure("stt.faster_whisper", prompt=False)
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +183,7 @@ class TestSpecSafety:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("allow_lazy_installs")
 class TestAllowlist:
     def test_unknown_feature_raises(self, monkeypatch):
         monkeypatch.setattr(ld, "_allow_lazy_installs", lambda: True)
@@ -110,6 +220,7 @@ class TestAllowlist:
 
 
 class TestSecurityGating:
+    @pytest.mark.usefixtures("allow_lazy_installs")
     def test_disabled_via_config_raises(self, monkeypatch):
         # Pretend honcho is missing AND lazy installs are disabled.
         monkeypatch.setitem(ld.LAZY_DEPS, "test.feat", ("packageX>=1.0,<2",))
@@ -151,6 +262,7 @@ class TestSecurityGating:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("allow_lazy_installs")
 class TestEnsure:
     def test_already_satisfied_is_noop(self, monkeypatch):
         # If the package is importable, ensure() returns without calling pip.
@@ -327,6 +439,7 @@ class TestActiveFeatures:
         assert "stt.faster_whisper" in ld.active_features()
 
 
+@pytest.mark.usefixtures("allow_lazy_installs")
 class TestRefreshActiveFeatures:
     def test_no_active_features_returns_empty(self, monkeypatch):
         monkeypatch.setattr(ld, "active_features", lambda: [])

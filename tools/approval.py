@@ -11,10 +11,12 @@ This module is the single source of truth for the dangerous command system:
 import contextvars
 import fnmatch
 import functools
+import inspect
 import logging
 import os
 from lliam_cli.env_compat import getenv_compat
 import re
+import shlex
 import sys
 import threading
 import time
@@ -23,7 +25,7 @@ from typing import Optional
 from lliam_cli.config import cfg_get
 
 from tools.interrupt import is_interrupted
-from utils import env_var_enabled, is_truthy_value
+from utils import is_truthy_value
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,13 @@ _approval_turn_id: contextvars.ContextVar[str] = contextvars.ContextVar(
 _approval_tool_call_id: contextvars.ContextVar[str] = contextvars.ContextVar(
     "approval_tool_call_id",
     default="",
+)
+# Cron job marker, bound by cron/scheduler.py around each job. Context-local
+# so a gateway that runs cron in-process does not classify its live turns
+# (or concurrent ones) as cron (AI-1172).
+_approval_cron_session: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "approval_cron_session",
+    default=False,
 )
 
 
@@ -78,6 +87,19 @@ def _fire_approval_hook(hook_name: str, **kwargs) -> None:
 
 
 
+_approval_timed_out = threading.local()
+
+
+def mark_approval_timed_out() -> None:
+    """Called by an approval callback that returns 'deny' because nobody answered.
+
+    The callback contract stays 'deny' (fail closed); this only lets the
+    resolution record say 'timeout' instead of attributing a refusal to the
+    bound operator.
+    """
+    _approval_timed_out.value = True
+
+
 def set_current_session_key(session_key: str) -> contextvars.Token[str]:
     """Bind the active approval session key to the current context."""
     return _approval_session_key.set(session_key or "")
@@ -86,6 +108,70 @@ def set_current_session_key(session_key: str) -> contextvars.Token[str]:
 def reset_current_session_key(token: contextvars.Token[str]) -> None:
     """Restore the prior approval session key context."""
     _approval_session_key.reset(token)
+
+
+def set_cron_session() -> contextvars.Token[bool]:
+    """Mark the current context as running a cron job (approvals.cron_mode applies)."""
+    return _approval_cron_session.set(True)
+
+
+def reset_cron_session(token: contextvars.Token[bool]) -> None:
+    """Restore the cron marker that was active before :func:`set_cron_session`."""
+    _approval_cron_session.reset(token)
+
+
+def cron_session_marked() -> bool:
+    """True when the context-local cron marker is set in the current context.
+
+    Unlike :func:`_is_cron_session` this ignores the ``LLIAM_CRON_SESSION``
+    env flag: it reports only the marker that a thread hop would drop, so a
+    caller can capture it at dispatch time and re-bind it on the worker
+    (tools/async_delegation.py).
+    """
+    return _approval_cron_session.get()
+
+
+# Set by cli.main for a single-query (`chat -q`) run: nobody is present to
+# answer a prompt, whatever surface flags the process inherited from its
+# parent (AI-1172). Process-local on purpose — an env var would leak into
+# every child process the run starts.
+_oneshot_process: bool = False
+
+
+def mark_oneshot_process() -> None:
+    """Mark this process as a one-shot run: dangerous commands are refused."""
+    global _oneshot_process
+    _oneshot_process = True
+
+
+def _approval_surfaces() -> tuple:
+    """Return (is_cron, is_cli, is_gateway, is_ask) for the current call.
+
+    Cron policy beats interactive/exec-ask flags a cron job inherits from its
+    host process (the gateway sets exec-ask process-wide). A one-shot run has
+    no surface at all, so it always takes the no-approver path.
+    """
+    is_cron = _is_cron_session()
+    if is_cron:
+        return True, False, False, False
+    if _oneshot_process:
+        return False, False, False, False
+    return (
+        False,
+        _surface_flag("INTERACTIVE"),
+        _is_gateway_approval_context(),
+        _surface_flag("EXEC_ASK"),
+    )
+
+
+def _is_cron_session() -> bool:
+    """True inside a cron job.
+
+    The context-local marker covers the in-process scheduler (standalone or
+    inside the gateway). The ``LLIAM_CRON_SESSION`` env flag remains for a
+    cron run in a separate process that sets it in its own environment.
+    """
+    return _approval_cron_session.get() or _surface_flag("CRON_SESSION")
 
 
 def set_current_observability_context(
@@ -134,6 +220,57 @@ def _get_session_platform() -> str:
         return getenv_compat("SESSION_PLATFORM", "") or ""
 
 
+def _surface_flag(suffix: str) -> bool:
+    """True when the surface flag ``LLIAM_<suffix>`` (or its legacy name) is truthy.
+
+    The CLI, gateway, cron scheduler, TUI gateway and ACP adapter all set the
+    ``LLIAM_`` name since rename R.8a. Reading only the legacy name made every
+    one of them look like a no-approver session (AI-1172 / DEF-015).
+    """
+    return is_truthy_value(getenv_compat(suffix, ""), default=False)
+
+
+def _no_approver_block_result(command: str, description: str,
+                              pattern_key: str) -> dict:
+    """Refuse a dangerous command when no approver is present (AI-1172).
+
+    Reached only outside interactive, gateway/ask and cron sessions, and only
+    after the explicit opt-ins (--yolo, /yolo, approvals.mode=off, an earlier
+    operator approval) have been checked. Fails closed instead of running the
+    command unreviewed.
+    """
+    logger.warning(
+        "Refused dangerous command in non-interactive non-gateway context "
+        "(pattern: %s): %s",
+        description, command[:200],
+    )
+    try:
+        from tools.hitl_oversight import record_decision
+        record_decision(
+            decision="deny", gate="shell.dangerous", target=command,
+            description=description, origin="non_interactive_no_approver",
+        )
+    except Exception:
+        pass
+    return {
+        "approved": False,
+        "pattern_key": pattern_key,
+        "description": description,
+        "outcome": "blocked",
+        "user_consent": False,
+        "message": (
+            f"BLOCKED: this command is potentially dangerous ({description}) "
+            "and this session has no one present to approve it (for example "
+            "a one-shot `lliam-gov chat -q` run or a script). Nothing was run. "
+            "Do not retry it here: find an approach that avoids the command, "
+            "or ask the operator to run it from the Lliam-GOV desktop app, "
+            "where they can review and approve it. Starting the run with "
+            "--yolo skips this check only when the operator explicitly "
+            "chooses to trust it."
+        ),
+    }
+
+
 def _is_gateway_approval_context() -> bool:
     """True when this call is inside a gateway/API session.
 
@@ -148,9 +285,9 @@ def _is_gateway_approval_context() -> bool:
     fall through to the gateway branch would submit a pending approval
     with no listener and block the job indefinitely.
     """
-    if env_var_enabled("HERMES_CRON_SESSION"):
+    if _is_cron_session():
         return False
-    if env_var_enabled("HERMES_GATEWAY_SESSION"):
+    if _surface_flag("GATEWAY_SESSION"):
         return True
     return bool(_get_session_platform())
 
@@ -219,6 +356,20 @@ _USER_SENSITIVE_WRITE_TARGET = (
 )
 _PROJECT_SENSITIVE_WRITE_TARGET = rf'(?:{_PROJECT_ENV_PATH}|{_PROJECT_CONFIG_PATH})'
 _COMMAND_TAIL = r'(?:\s*(?:&&|\|\||;).*)?$'
+# AI-1183 (DEF-021): the skill library and the pending-approval store change
+# only through skill_manage staging plus operator approval. File tools refuse
+# these paths (agent.file_safety); this pairs that deny with best-effort
+# terminal coverage for the obvious shell writes below. The home-prefix
+# alternation is reused from _LLIAM_CONFIG_PATH (its file name stripped) and
+# extended with the ~/.lliam and $LLIAM_HOME spellings.
+assert _LLIAM_CONFIG_PATH.endswith(r'config\.yaml\b')
+_LLIAM_HOME_PREFIX = _LLIAM_CONFIG_PATH[: -len(r'config\.yaml\b')]
+_SKILL_STORE_PATH = (
+    rf'(?:{_LLIAM_HOME_PREFIX}|'
+    r'(?:~|\$home|\$\{home\})/\.lliam/|'
+    r'(?:\$lliam_home|\$\{lliam_home\})/)'
+    r'(?:skills|pending)(?=/|["\'\s;|&)]|$)'
+)
 
 # =========================================================================
 # Hardline (unconditional) blocklist
@@ -361,6 +512,1154 @@ def _hardline_block_result(description: str) -> dict:
     }
 
 
+# =========================================================================
+# Environment-file write floor (AI-1178 / DEF-018)
+# =========================================================================
+# A shell redirect or tee into a project/user environment file is refused
+# outright, like the hardline list: no prompt, and yolo, approvals.mode=off,
+# cron approve mode and stored approvals do not lift it. Reads are untouched.
+# The name rule mirrors agent/file_safety.is_project_env_basename (#141):
+# .env, .envrc, and every .env.<suffix> except .env.example / .env.sample.
+# cp/mv/sed -i/dd and interpreter writes into .env stay approval-gated in
+# DANGEROUS_PATTERNS; this floor covers redirection and tee only, including
+# inside a literal ``sh -c`` / ``bash -c`` script or ``eval`` argument.
+
+_ENV_TEMPLATE_BASENAMES = frozenset({".env.example", ".env.sample"})
+_SHELL_PUNCTUATION = "();<>|&\n"
+# The operators Bash reads from adjacent punctuation, longest first by
+# maximal munch; every prefix of one is itself an operator. Any other run
+# (``;>``, ``|>``, ``)>``) is several operators: ``true;>/dev/null tee .env``
+# is ``true``, ``;``, then a redirect, then ``tee``. ``>(`` and ``<(`` open a
+# process substitution.
+_SHELL_OPERATORS = frozenset({
+    "(", ")", ";", ";;", ";&", ";;&", "<", ">", "|", "&", "\n",
+    "&&", "||", "|&", ">>", "<<", "<<<", ">|", "&>", "&>>", ">&", "<&", "<>",
+    ">(", "<(",
+})
+# Command wrappers and their options, so the wrapped command is found:
+# (short flags without a value, short flags taking a value, long options
+# without a value, long options taking a value, positional words before the
+# command). An option a table does not know is read both ways (with and
+# without a value), so an unknown flag can only widen detection.
+_WRAPPER_OPTIONS = {
+    "sudo": ("AbBEeHiKklNnPSsVv", "CDghpRrTtUu",
+             {"--askpass", "--background", "--bell", "--edit", "--help", "--list", "--login",
+              "--non-interactive", "--preserve-env", "--preserve-groups", "--remove-timestamp",
+              "--reset-timestamp", "--set-home", "--shell", "--stdin", "--validate", "--version"},
+             {"--chdir", "--chroot", "--close-from", "--command-timeout", "--group", "--host",
+              "--other-user", "--prompt", "--role", "--type", "--user"}, 0),
+    "doas": ("Lns", "Cu", set(), set(), 0),
+    "env": ("0iv", "CSu", {"--debug", "--ignore-environment", "--null"},
+            {"--chdir", "--split-string", "--unset"}, 0),
+    "nice": ("", "n", set(), {"--adjustment"}, 0),
+    "ionice": ("t", "cnpPu", {"--ignore"}, {"--class", "--classdata", "--pid", "--pgid", "--uid"}, 0),
+    "timeout": ("fpv", "ks", {"--foreground", "--preserve-status", "--verbose"},
+                {"--kill-after", "--signal"}, 1),
+    "stdbuf": ("", "eio", set(), {"--error", "--input", "--output"}, 0),
+    "setsid": ("cfw", "", {"--ctty", "--fork", "--wait"}, set(), 0),
+    "nohup": ("", "", set(), set(), 0),
+    "time": ("apqv", "fo", {"--append", "--portability", "--quiet", "--verbose"},
+             {"--format", "--output"}, 0),
+    "command": ("pVv", "", set(), set(), 0),
+    "builtin": ("", "", set(), set(), 0),
+    "exec": ("cl", "a", set(), set(), 0),
+}
+_COMMAND_WRAPPERS = frozenset(_WRAPPER_OPTIONS)
+_MAX_COMMAND_READINGS = 64
+_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# Shells whose ``-c`` script (and ``eval``'s arguments) are scanned as a
+# nested command, so ``bash -c "echo k > .env"`` is refused too.
+_NESTED_SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "busybox"})
+_MAX_NESTED_SCRIPT_DEPTH = 3
+# Shell invocation options: long options taking a value, and long options
+# known to take none. Short -o/+o and -O/+O take a value word.
+_SHELL_LONG_VALUES = frozenset({"--rcfile", "--init-file"})
+_SHELL_LONG_FLAGS = frozenset({
+    "--debug", "--debugger", "--dump-po-strings", "--dump-strings", "--help", "--login",
+    "--noediting", "--noprofile", "--norc", "--posix", "--pretty-print", "--protected",
+    "--restricted", "--verbose", "--version", "--wordexp",
+})
+
+
+def _shell_c_scripts(name: str, args: list) -> list:
+    """The ``-c`` script that shell *name* run with *args* executes, as
+    Bash reads its invocation: options may come before and after ``-c``
+    (``-ec``, ``-c -e``, ``-o opt``, ``+o opt``, ``-O shopt``), ``--`` or ``-``
+    ends them, and the first word after them is the script. With no ``-c``
+    there is none. When the position is unsure (an unknown long option, an
+    option missing its value), every word after ``-c`` is returned."""
+    if name == "busybox":  # ``busybox sh -c ...``: the applet comes first
+        if args and args[0].rsplit("/", 1)[-1] in _NESTED_SHELLS - {"busybox"}:
+            return _shell_c_scripts(args[0].rsplit("/", 1)[-1], args[1:])
+        return []
+    has_c = unsure = False
+    first_c = None  # index of the word holding -c
+    i = 0
+    while i < len(args):
+        word = args[i]
+        if word in ("--", "-"):
+            i += 1
+            break
+        if word.startswith("--"):
+            key = word.partition("=")[0]
+            if key in _SHELL_LONG_VALUES and "=" not in word:
+                i += 2
+                unsure = unsure or i > len(args)
+            else:
+                unsure = unsure or key not in _SHELL_LONG_FLAGS | _SHELL_LONG_VALUES
+                i += 1
+            continue
+        if len(word) < 2 or word[0] not in "-+":
+            break
+        i += 1
+        for flag in word[1:]:
+            if flag == "c" and word[0] == "-":
+                has_c = True
+                first_c = i if first_c is None else first_c
+            elif flag in "oO":
+                i += 1  # -o / +o / -O / +O name the option in the next word
+                unsure = unsure or i > len(args)
+    if not has_c:
+        return []
+    if unsure or i >= len(args):
+        return list(args[first_c:])
+    return [args[i]]
+
+
+# Fallback when the command cannot be tokenized (unbalanced quotes, e.g. a
+# heredoc body containing an apostrophe): look for a redirect operator or a
+# tee word followed by a token whose basename looks like an env file.
+_ENV_TOKEN = r"""["']?(?P<target>[^\s;|&<>()"'`]*\.env[^\s;|&<>()"'`]*)["']?"""
+_ENV_REDIRECT_FALLBACK_RE = re.compile(r"(?:>>?\|?|&>>?|>&)\s*" + _ENV_TOKEN)
+_ENV_TEE_FALLBACK_RE = re.compile(r"(?<![\w.-])tee\b[^;&|\n]*?\s" + _ENV_TOKEN)
+
+
+def _is_protected_env_basename(path: str) -> bool:
+    """True when *path* names a protected environment file (see block above)."""
+    name = unicodedata.normalize("NFKC", path).replace("\\", "/")
+    name = name.rsplit("/", 1)[-1].split(":", 1)[0].rstrip(" .").casefold()
+    if name in _ENV_TEMPLATE_BASENAMES:
+        return False
+    return name in {".env", ".envrc"} or name.startswith(".env.")
+
+
+def _is_heredoc_operator(text: str) -> bool:
+    """True for a here-document operator (``<<`` or ``<<-``), not ``<<<``."""
+    text = text[:-1] if text.endswith("<<-") else text
+    return text.endswith("<<") and not text.endswith("<<<")
+
+
+def _substitution_end(command: str, start: int) -> Optional[int]:
+    """Index just past the ``$(...)`` or backquoted command substitution that
+    begins at *start*, or None when it is not closed or its end is unsure: a
+    ``$(...)`` holding ``#`` (a comment can hide a ``)``), ``<<`` (a nested
+    heredoc) or ``case`` (a pattern's bare ``)``)."""
+    n = len(command)
+    if command[start] == "`":
+        k = start + 1
+        while k < n:
+            if command[k] == "\\":
+                k += 2
+                continue
+            if command[k] == "`":
+                return k + 1
+            k += 1
+        return None
+    depth, k = 1, start + 2
+    while k < n:
+        ch = command[k]
+        if ch == "\\":
+            k += 2
+            continue
+        if ch in "'\"":
+            close = k + 1
+            while close < n and command[close] != ch:
+                close += 2 if ch == '"' and command[close] == "\\" else 1
+            if close >= n:
+                return None
+            k = close + 1
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                span = command[start + 2:k]
+                if "#" in span or "<<" in span or re.search(r"(?<![\w-])case(?![\w-])", span):
+                    return None
+                return k + 1
+        k += 1
+    return None
+
+
+def _heredoc_substitutions(body: str) -> Optional[list]:
+    """The scripts of the command substitutions an unquoted heredoc *body*
+    expands, or None when unsure. In such a body only a backslash escapes:
+    ``#`` and ``'`` are plain text, so ``# $(cmd)`` and ``'$(cmd)'`` run cmd."""
+    scripts: list = []
+    i, n = 0, len(body)
+    while i < n:
+        if body[i] == "\\":
+            i += 2
+            continue
+        if body[i] == "`" or body.startswith("$(", i):
+            end = _substitution_end(body, i)
+            if end is None:
+                return None
+            scripts.append(body[i + (1 if body[i] == "`" else 2):end - 1])
+            i = end
+            continue
+        i += 1
+    return scripts
+
+
+_ANSI_C_ESCAPES = {
+    "a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r",
+    "t": "\t", "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?",
+}
+
+
+def _ansi_c_quoted(command: str, start: int) -> tuple:
+    """Decode the ``$'...'`` string whose text begins at *start*, as Bash
+    does; return ``(text, index past the closing quote)`` or ``(None, None)``
+    when it is not closed. A NUL ends the value, as in Bash."""
+    out: list = []
+    ended = False  # a NUL was decoded: Bash drops the rest of the value
+    k, n = start, len(command)
+
+    def emit(text: str) -> None:
+        nonlocal ended
+        if not ended:
+            if "\0" in text:
+                text, ended = text.split("\0", 1)[0], True
+            out.append(text)
+
+    while k < n:
+        ch = command[k]
+        if ch == "'":
+            return "".join(out), k + 1
+        if ch != "\\":
+            emit(ch)
+            k += 1
+            continue
+        if k + 1 >= n:
+            return None, None
+        esc = command[k + 1]
+        k += 2
+        if esc in _ANSI_C_ESCAPES:
+            emit(_ANSI_C_ESCAPES[esc])
+        elif esc in "01234567":
+            digits = esc
+            while len(digits) < 3 and k < n and command[k] in "01234567":
+                digits += command[k]
+                k += 1
+            emit(chr(int(digits, 8) & 0xFF))
+        elif esc in "xuU":
+            width = {"x": 2, "u": 4, "U": 8}[esc]
+            digits = ""
+            while len(digits) < width and k < n and command[k] in "0123456789abcdefABCDEF":
+                digits += command[k]
+                k += 1
+            if not digits:
+                emit("\\" + esc)
+            elif int(digits, 16) > 0x10FFFF:
+                return None, None
+            else:
+                emit(chr(int(digits, 16)))
+        elif esc == "c":
+            if k >= n:
+                return None, None
+            emit(chr(ord(command[k]) & 0x1F))
+            k += 1
+        else:
+            emit("\\" + esc)  # an unknown escape stays as written
+    return None, None
+
+
+def _glob_elements(pattern: str) -> list:
+    """Split a glob into ``("lit", ch)``, ``("any",)``, ``("star",)`` and
+    ``("class", negated, members)`` elements; an unclosed ``[`` is a literal."""
+    elements: list = []
+    i, n = 0, len(pattern)
+    while i < n:
+        ch = pattern[i]
+        if ch == "*":
+            elements.append(("star",))
+        elif ch == _BRACE_ANY:
+            elements.append(("anything",))
+        elif ch == "?":
+            elements.append(("any",))
+        elif ch == "[":
+            j = i + 1
+            negated = j < n and pattern[j] in "!^"
+            if negated:
+                j += 1
+            k = j + 1 if j < n and pattern[j] == "]" else j  # a leading ] is a member
+            while k < n and pattern[k] != "]":
+                k += 1
+            if k >= n:
+                elements.append(("lit", ch))
+            else:
+                body, members, m = pattern[j:k], set(), 0
+                while m < len(body):
+                    if m + 2 < len(body) and body[m + 1] == "-":
+                        low, high = sorted((body[m], body[m + 2]))
+                        members.update(chr(c) for c in range(ord(low), min(ord(high), ord(low) + 4096) + 1))
+                        m += 3
+                    else:
+                        members.add(body[m])
+                        m += 1
+                elements.append(("class", negated, frozenset(members)))
+                i = k
+        else:
+            elements.append(("lit", ch))
+        i += 1
+    return elements
+
+
+def _glob_after_prefix(elements: list, prefix: str, dotglob: bool) -> set:
+    """Positions in *elements* the glob may be at after matching *prefix*
+    (case-insensitively). A ``*`` or ``?`` can't match a leading ``.``
+    unless *dotglob*, as in Bash."""
+
+    def closure(states: set) -> set:
+        out, todo = set(states), list(states)
+        while todo:
+            s = todo.pop()
+            if s < len(elements) and elements[s][0] in ("star", "anything") and s + 1 not in out:
+                out.add(s + 1)
+                todo.append(s + 1)
+        return out
+
+    states = closure({0})
+    for pos, ch in enumerate(prefix):
+        wild_ok = dotglob or not (pos == 0 and ch == ".")
+        step: set = set()
+        for s in states:
+            if s >= len(elements):
+                continue
+            kind = elements[s][0]
+            if kind == "anything":
+                step.add(s)
+            elif kind == "star":
+                if wild_ok:
+                    step.add(s)
+            elif kind == "any":
+                if wild_ok:
+                    step.add(s + 1)
+            elif kind == "lit":
+                if elements[s][1].casefold() == ch:
+                    step.add(s + 1)
+            else:
+                _, negated, members = elements[s]
+                hit = ch in members or ch.upper() in members
+                if hit != negated:
+                    step.add(s + 1)
+        states = closure(step)
+        if not states:
+            break
+    return states
+
+
+def _glob_may_name_env(path: str, dotglob: bool = False) -> bool:
+    """True when *path*'s file name is a glob that may match a protected
+    environment file: ``.env``, ``.envrc`` or any ``.env.<suffix>`` other
+    than the templates (quoting is gone here, so a quoted ``*`` counts too).
+    Bash expands a redirect target that matches one file, so ``> .en?`` or
+    ``> .[e]nv.staging`` can write a protected file. Unsure means True."""
+    name = unicodedata.normalize("NFKC", path).replace("\\", "/").rsplit("/", 1)[-1]
+    name = name.split(":", 1)[0].rstrip(" .")
+    if not any(ch in name for ch in "*?[" + _BRACE_ANY):
+        return False
+    elements = _glob_elements(name)
+    for exact in (".env", ".envrc"):
+        if len(elements) in _glob_after_prefix(elements, exact, dotglob):
+            return True  # the rest of the glob can be empty
+    for state in _glob_after_prefix(elements, ".env.", dotglob):
+        rest = elements[state:]
+        if any(element[0] != "lit" for element in rest):
+            return True  # some suffix other than a template name fits
+        if _is_protected_env_basename(".env." + "".join(element[1] for element in rest)):
+            return True
+    return False
+
+
+_BRACE_LIMIT = 64  # more alternatives than this: fall back to a glob
+_BRACE_ANY = "\ue000"  # stands for an unresolved brace group: matches anything
+_BRACE_SEQUENCE_RE = re.compile(r"^(-?\d+|[A-Za-z])\.\.(-?\d+|[A-Za-z])(?:\.\.(-?\d+))?$")
+
+
+def _brace_groups(chars: list, bare: list) -> list:
+    """``(open, close)`` of each outermost unquoted ``{...}`` in *chars*,
+    skipping ``${...}`` parameter expansions."""
+    groups: list = []
+    k, n = 0, len(chars)
+    while k < n:
+        if bare[k] and chars[k] == "{":
+            depth, m = 1, k + 1
+            while m < n and depth:
+                if bare[m] and chars[m] == "{":
+                    depth += 1
+                elif bare[m] and chars[m] == "}":
+                    depth -= 1
+                m += 1
+            if depth == 0:
+                if not (k and bare[k - 1] and chars[k - 1] == "$"):
+                    groups.append((k, m - 1))
+                k = m
+                continue
+        k += 1
+    return groups
+
+
+def _brace_alternatives(chars: list, bare: list, start: int, end: int) -> Optional[list]:
+    """The alternatives of the brace group ``chars[start:end+1]`` as
+    ``(chars, bare)`` pairs, or None when it is not brace syntax (``{x}``,
+    ``{}``)."""
+    body, body_bare = chars[start + 1:end], bare[start + 1:end]
+    parts, depth, last = [], 0, 0
+    for k, (ch, b) in enumerate(zip(body, body_bare)):
+        if b and ch == "{":
+            depth += 1
+        elif b and ch == "}":
+            depth -= 1
+        elif b and ch == "," and depth == 0:
+            parts.append((body[last:k], body_bare[last:k]))
+            last = k + 1
+    if parts:
+        parts.append((body[last:], body_bare[last:]))
+        return parts
+    text = "".join(body)
+    match = _BRACE_SEQUENCE_RE.match(text) if all(body_bare) else None
+    if not match:
+        return None
+    first, last_, step = match.group(1), match.group(2), abs(int(match.group(3) or 1)) or 1
+    if first.lstrip("-").isdigit() != last_.lstrip("-").isdigit():
+        return None
+    if first.lstrip("-").isdigit():
+        a, z = int(first), int(last_)
+        if abs(z - a) // step + 1 > _BRACE_LIMIT:
+            return [([_BRACE_ANY], [False])]
+        width = max(len(first), len(last_)) if (first.lstrip("-").startswith("0") or last_.lstrip("-").startswith("0")) else 0
+        values = range(a, z + (1 if z >= a else -1), step if z >= a else -step)
+        return [(list(str(v).zfill(width) if width else str(v)), [False] * len(str(v).zfill(width) if width else str(v))) for v in values]
+    a, z = ord(first), ord(last_)
+    values = range(a, z + (1 if z >= a else -1), step if z >= a else -step)
+    return [([chr(v)], [False]) for v in values]
+
+
+def _brace_expand(pieces: list, pieces_bare: list) -> list:
+    """The words Bash's brace expansion makes of a word given as *pieces*
+    with, per piece, whether it was unquoted. Empty results are dropped. Past
+    ``_BRACE_LIMIT`` words, each brace group becomes ``_BRACE_ANY`` (which the
+    glob check reads as "anything"), so detection fails closed."""
+    chars: list = []
+    bare: list = []
+    for piece, is_bare in zip(pieces, pieces_bare):
+        chars.extend(piece)
+        bare.extend([is_bare] * len(piece))
+    if "{" not in [c for c, b in zip(chars, bare) if b]:
+        return ["".join(chars)]
+    results: list = []
+
+    def expand(chars: list, bare: list) -> bool:
+        for start, end in _brace_groups(chars, bare):
+            alternatives = _brace_alternatives(chars, bare, start, end)
+            if alternatives is None:
+                continue
+            for alt_chars, alt_bare in alternatives:
+                if not expand(chars[:start] + alt_chars + chars[end + 1:],
+                              bare[:start] + alt_bare + bare[end + 1:]):
+                    return False
+            return True
+        if len(results) >= _BRACE_LIMIT:
+            return False
+        results.append("".join(chars))
+        return True
+
+    if expand(chars, bare):
+        words = [word for word in results if word]
+        return words or [""]
+    approx: list = []
+    last = 0
+    for start, end in _brace_groups(chars, bare):
+        approx.extend(chars[last:start])
+        approx.append(_BRACE_ANY)
+        last = end + 1
+    approx.extend(chars[last:])
+    return ["".join(approx)]
+
+
+def _shell_tokens(command: str, comments: bool = False,
+                  heredocs: Optional[list] = None,
+                  substitutions: Optional[list] = None) -> Optional[list]:
+    """Split *command* into ``(text, is_operator)`` pairs, or None on error.
+
+    Quotes and backslash escapes are removed from words, as the shell does
+    (``$'...'`` is decoded and ``$"..."`` reads as ``"..."``),
+    and only unquoted, unescaped punctuation forms an operator: ``grep '>'``
+    passes ``>`` as an argument, it does not redirect. With *comments*, an
+    unquoted ``#`` that starts a word comments out the rest of the line.
+    Unquoted digits written right before ``<`` or ``>`` (``2>``, ``1>&2``,
+    ``3<>``) are the redirect's fd number and belong to the operator.
+
+    With *heredocs*, a here-document body (the lines after the line holding
+    ``<<WORD``, up to the line ``WORD``) is not tokenized. It is appended to
+    *heredocs*, one entry per ``<<`` / ``<<-`` operator, in order;
+    ``_heredoc_scripts`` decides whether it runs. Without *heredocs* the body
+    is tokenized like other lines.
+
+    With *substitutions*, the script of each command substitution the lexer
+    keeps inside a word (``"$(...)"`` or a backquoted one) or finds in an
+    unquoted heredoc body is appended to it, so the caller can scan it. An
+    unquoted ``$(`` already splits into tokens. A substitution whose end is
+    unsure (see ``_substitution_end``) makes the command untokenizable.
+
+    Unquoted brace alternatives are expanded as Bash does (``.env{,.local}``
+    is two words, see ``_brace_expand``); quoted braces stay literal.
+    """
+    tokens: list = []
+    word: list = []  # pieces of the current word
+    word_bare: list = []  # per piece: unquoted and unescaped (brace syntax)
+    in_word = False
+    word_quoted = False  # the current word has a quote or backslash
+    operator: list = []
+    pending: list = []  # heredocs opened on this line: (delimiter, quoted, strip_tabs)
+    want = None  # strip_tabs of a heredoc operator still awaiting its delimiter
+    i, n = 0, len(command)
+
+    def add(piece: str, bare: bool = False) -> None:
+        word.append(piece)
+        word_bare.append(bare)
+
+    def end_word() -> None:
+        nonlocal in_word, word_quoted, want
+        if in_word:
+            text = "".join(word)
+            if want is not None:  # a heredoc delimiter is not brace-expanded
+                tokens.append((text, False))
+                pending.append((text, word_quoted, want))
+                want = None
+            else:
+                alternatives = _brace_expand(word, word_bare)
+                redirect = tokens[-1][0] if tokens and tokens[-1][1] else ""
+                if len(alternatives) > 1 and ("<" in redirect or ">" in redirect) \
+                        and "(" not in redirect and not _is_heredoc_operator(redirect):
+                    # Bash refuses an ambiguous redirect, other shells write
+                    # each word: keep every alternative a redirect target.
+                    tokens.append((alternatives[0], False))
+                    for alternative in alternatives[1:]:
+                        tokens.extend(((redirect, True), (alternative, False)))
+                else:
+                    tokens.extend((alternative, False) for alternative in alternatives)
+            word.clear()
+            word_bare.clear()
+            in_word = False
+        word_quoted = False
+
+    def end_operator() -> None:
+        nonlocal want
+        if operator:
+            text = "".join(operator)
+            tokens.append((text, True))
+            operator.clear()
+            want = None
+            if heredocs is not None and _is_heredoc_operator(text):
+                want = text.endswith("-")
+
+    def read_bodies(i: int) -> Optional[int]:
+        """Skip the pending heredoc bodies, which start at *i*; return the
+        index just past the last delimiter line (or the end), or None when an
+        unquoted body's substitutions can't be read."""
+        for delimiter, delimiter_quoted, strip_tabs in pending:
+            start, end = i, n  # an unterminated body runs to the end
+            while i < n:
+                newline = command.find("\n", i)
+                line_end = n if newline < 0 else newline
+                line = command[i:line_end]
+                at_delimiter = (line.lstrip("\t") if strip_tabs else line) == delimiter
+                if at_delimiter:
+                    end = i
+                i = n if newline < 0 else newline + 1
+                if at_delimiter:
+                    break
+            body = command[start:end]
+            heredocs.append(body)
+            if not delimiter_quoted:  # the shell expands $(...) and `...` in it
+                scripts = _heredoc_substitutions(body)
+                if scripts is None or (scripts and substitutions is None):
+                    return None
+                if scripts:
+                    substitutions.extend(scripts)
+        pending.clear()
+        return i
+
+    while i < n:
+        ch = command[i]
+        if ch in " \t\r":
+            end_operator()
+            end_word()
+            i += 1
+            continue
+        if ch in _SHELL_PUNCTUATION:
+            if ch in "<>" and in_word and not word_quoted and "".join(word).isdigit():
+                operator.extend(word)  # fd number: ``2>`` is one operator
+                word.clear()
+                word_bare.clear()
+                in_word = False
+            end_word()
+            if "".join(operator).lstrip("0123456789") + ch not in _SHELL_OPERATORS:
+                end_operator()  # ``;>`` is ``;`` then ``>``; ``2>`` keeps its fd
+            operator.append(ch)
+            i += 1
+            if ch == "\n" and pending:
+                end_operator()
+                i = read_bodies(i)
+                if i is None:
+                    return None
+            continue
+        if ch == "-" and heredocs is not None and _is_heredoc_operator("".join(operator)) \
+                and not "".join(operator).endswith("-"):
+            operator.append(ch)  # ``<<-``: the body's leading tabs are stripped
+            i += 1
+            continue
+        end_operator()
+        if comments and ch == "#" and not in_word:
+            newline = command.find("\n", i)
+            i = n if newline < 0 else newline
+            continue
+        in_word = True
+        if ch in "\\'\"":
+            word_quoted = True
+        if ch == "$" and i + 1 < n and command[i + 1] in "'\"":
+            word_quoted = True
+            if command[i + 1] == '"':
+                i += 1  # $"..." (locale translation) reads like "..."
+                continue
+            decoded, end = _ansi_c_quoted(command, i + 2)
+            if end is None:
+                return None
+            add(decoded)
+            i = end
+            continue
+        if ch == "\\":
+            if i + 1 >= n:
+                return None
+            if command[i + 1] != "\n":  # backslash-newline continues the line
+                add(command[i + 1])
+            i += 2
+        elif ch == "'":
+            close = command.find("'", i + 1)
+            if close < 0:
+                return None
+            add(command[i + 1:close])
+            i = close + 1
+        elif ch == '"':
+            j = i + 1
+            while j < n and command[j] != '"':
+                if command[j] == "\\" and j + 1 < n and command[j + 1] in '\\"$`\n':
+                    if command[j + 1] != "\n":
+                        add(command[j + 1])
+                    j += 2
+                    continue
+                if substitutions is not None and (command[j] == "`" or command.startswith("$(", j)):
+                    end = _substitution_end(command, j)
+                    if end is None:
+                        return None
+                    skip = 1 if command[j] == "`" else 2
+                    substitutions.append(command[j + skip:end - 1])
+                    add(command[j:end])
+                    j = end
+                    continue
+                add(command[j])
+                j += 1
+            if j >= n:
+                return None
+            i = j + 1
+        elif ch == "`" and substitutions is not None:
+            end = _substitution_end(command, i)
+            if end is None:
+                return None
+            substitutions.append(command[i + 1:end - 1])
+            add(command[i:end])
+            i = end
+        else:
+            add(ch, True)
+            i += 1
+    end_operator()
+    end_word()
+    return tokens
+
+
+def _wrapper_option_ends(words: list, start: int, name: str, scripts: list) -> set:
+    """Indices just past wrapper *name*'s options and positionals.
+
+    More than one index means an option was not in the wrapper's table and
+    could take a value or not; both readings are returned. ``env -S``'s
+    value is a command line and is added to *scripts*.
+    """
+    short_flags, short_values, long_flags, long_values, positionals = _WRAPPER_OPTIONS[name]
+    ends: set = set()
+
+    def walk(j: int) -> None:
+        if len(ends) >= _MAX_COMMAND_READINGS:
+            return
+        while j < len(words):
+            word = words[j]
+            if word == "--":
+                j += 1
+                break
+            if name == "env" and word == "-":
+                j += 1
+                continue
+            if not word.startswith("-") or word == "-":
+                break
+            if word.startswith("--"):
+                key, has_value, value = word.partition("=")
+                if key in long_values and not has_value:
+                    if name == "env" and key == "--split-string" and j + 1 < len(words):
+                        scripts.append(words[j + 1])
+                    j += 2
+                    continue
+                if key == "--split-string" and name == "env" and has_value:
+                    scripts.append(value)
+                if has_value or key in long_flags or key in long_values:
+                    j += 1
+                    continue
+                walk(j + 2)  # unknown long option: maybe it takes a value
+                j += 1
+                continue
+            cluster = word[1:]
+            if name == "nice" and cluster.lstrip("-").isdigit():
+                j += 1  # nice -5 / nice --5: the adjustment is attached
+                continue
+            step = 1
+            for k, flag in enumerate(cluster):
+                if flag in short_values:
+                    attached = cluster[k + 1:]
+                    if not attached:
+                        step = 2
+                    if name == "env" and flag == "S":
+                        if attached:
+                            scripts.append(attached)
+                        elif j + 1 < len(words):
+                            scripts.append(words[j + 1])
+                    break
+                if flag not in short_flags:
+                    walk(j + 2)  # unknown short flag: maybe it takes a value
+                    break
+            j += step
+        ends.add(j + positionals)
+
+    walk(start)
+    return ends
+
+
+# Shell reserved words at a command position. After these the next word is
+# again a command position (``then tee .env``, ``! tee .env``, ``{ tee .env;
+# }``); after ``function`` / ``coproc`` a name may come first, so both
+# readings count; after ``case`` / ``for`` / ``select`` / ``[[`` the rest of
+# the simple command is not a command.
+_RESERVED_BEFORE_COMMAND = frozenset({
+    "!", "{", "}", "do", "done", "elif", "else", "esac", "fi", "if", "then", "until", "while",
+})
+_RESERVED_BEFORE_NAME = frozenset({"coproc", "function"})
+_RESERVED_NO_COMMAND = frozenset({"[[", "case", "for", "select"})
+
+
+def _command_word_indices(words: list, scripts: list) -> set:
+    """Where the real command word of a simple command may be, after
+    reserved words, assignments, wrappers and their options; several when a
+    wrapper option is unknown (detection then considers every reading)."""
+    found: set = set()
+    seen: set = set()
+
+    def visit(i: int) -> None:
+        if i in seen or len(found) >= _MAX_COMMAND_READINGS:
+            return
+        seen.add(i)
+        while i < len(words):
+            word = words[i]
+            base = word.rsplit("/", 1)[-1]
+            if word in _RESERVED_BEFORE_COMMAND:
+                i += 1
+                continue
+            if word in _RESERVED_BEFORE_NAME:
+                visit(i + 1)  # ``coproc tee .env``
+                i += 2  # ``coproc NAME { ...``, ``function NAME { ...``
+                continue
+            if word in _RESERVED_NO_COMMAND:
+                i = len(words)
+                break
+            if _ASSIGNMENT_RE.match(word) or (word.isdigit() and i > 0):
+                i += 1  # VAR=value, or a stray fd number (``sudo 2>/dev/null tee``)
+                continue
+            if base in _WRAPPER_OPTIONS:
+                for end in _wrapper_option_ends(words, i + 1, base, scripts):
+                    visit(end)
+                return
+            break
+        found.add(i)
+
+    visit(0)
+    return found
+
+
+_FIND_EXEC_ACTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+# xargs' own options (GNU and BSD), so the command it runs is found: short
+# flags without a value, short flags taking a value, short flags whose value
+# is optional and only attached (-i[R], -l[N], -e[E]), long options without a
+# separate value (--replace[=R] takes it only attached), long options taking
+# a value. An unknown option is read both with and without a value.
+_XARGS_SHORT_FLAGS = "0oprtx"
+_XARGS_SHORT_VALUES = "adEIJLnPRSs"
+_XARGS_SHORT_OPTIONAL = "eil"
+_XARGS_LONG_FLAGS = frozenset({
+    "--eof", "--exit", "--help", "--interactive", "--max-lines", "--no-run-if-empty",
+    "--null", "--open-tty", "--replace", "--show-limits", "--verbose", "--version",
+})
+_XARGS_LONG_VALUES = frozenset({
+    "--arg-file", "--delimiter", "--max-args", "--max-chars", "--max-procs", "--process-slot-var",
+})
+
+
+def _xargs_command_starts(args: list) -> set:
+    """Indices in xargs' *args* where the command it runs may start, past
+    xargs' own options (several when an option is unknown)."""
+    starts: set = set()
+
+    def walk(j: int) -> None:
+        if len(starts) >= _MAX_COMMAND_READINGS:
+            return
+        while j < len(args):
+            arg = args[j]
+            if arg == "--":
+                j += 1
+                break
+            if not arg.startswith("-") or arg == "-":
+                break
+            if arg.startswith("--"):
+                key, has_value, _ = arg.partition("=")
+                if key in _XARGS_LONG_VALUES and not has_value:
+                    j += 2
+                    continue
+                if not (has_value or key in _XARGS_LONG_FLAGS or key in _XARGS_LONG_VALUES):
+                    walk(j + 2)  # unknown long option: maybe it takes a value
+                j += 1
+                continue
+            step = 1
+            for k, flag in enumerate(arg[1:]):
+                if flag in _XARGS_SHORT_VALUES:
+                    if k == len(arg) - 2:
+                        step = 2  # the value is the next word
+                    break
+                if flag in _XARGS_SHORT_OPTIONAL:
+                    break  # the rest of the word is the value
+                if flag not in _XARGS_SHORT_FLAGS:
+                    walk(j + 2)  # unknown short flag: maybe it takes a value
+                    break
+            j += step
+        starts.add(j)
+
+    walk(0)
+    return starts
+
+
+def _env_split_words(words: list, k: int) -> Optional[list]:
+    """*words* with the ``env`` at *k*'s ``-S STRING`` / ``--split-string``
+    replaced by the words STRING splits into, so they join the rest of the
+    invocation (``env -S tee .env`` runs ``tee .env``); None without -S."""
+    j = k + 1
+    while j < len(words):
+        word = words[j]
+        value = rest = None
+        if word == "--" or not word.startswith("-") or word == "-":
+            if _ASSIGNMENT_RE.match(word):
+                j += 1
+                continue
+            return None
+        if word == "--split-string" or word.startswith("--split-string="):
+            attached = word.partition("=")[2] if "=" in word else None
+            value = attached if attached is not None else (words[j + 1] if j + 1 < len(words) else "")
+            rest = j + (1 if attached is not None else 2)
+            prefix = []
+        elif word.startswith("--"):
+            j += 2 if word in ("--unset", "--chdir") else 1
+            continue
+        else:
+            flags = word[1:]
+            at = flags.find("S")
+            if at < 0:
+                j += 2 if flags[-1:] in ("u", "C") else 1
+                continue
+            attached = flags[at + 1:]
+            value = attached or (words[j + 1] if j + 1 < len(words) else "")
+            rest = j + (1 if attached else 2)
+            prefix = ["-" + flags[:at]] if at else []
+        try:
+            split = shlex.split(value)
+        except ValueError:
+            split = value.split()
+        return words[:j] + prefix + split + words[rest:]
+    return None
+
+
+def _command_invocations(words: list, scripts: list, depth: int = 0, via: bool = False) -> list:
+    """Every command the simple command *words* may run, as ``(words, via)``
+    with the command word first: its own command word (in every wrapper
+    reading, with ``env -S``'s split words joined to the rest), and the
+    command xargs or find -exec/-execdir/-ok/-okdir runs, recursively. *via*
+    is True for those last ones, whose operands xargs/find add."""
+    found: list = []
+    if depth < _MAX_NESTED_SCRIPT_DEPTH:
+        # env -S's words join the rest of its invocation; any ``env`` word
+        # is tried (an argument named env only widens detection).
+        for k, word in enumerate(words):
+            if word.rsplit("/", 1)[-1] == "env":
+                split = _env_split_words(words, k)
+                if split is not None:
+                    found.extend(_command_invocations(split, scripts, depth + 1, via))
+    for start in sorted(_command_word_indices(words, scripts)):
+        if start >= len(words):
+            continue
+        found.append((words[start:], via))
+        if depth >= _MAX_NESTED_SCRIPT_DEPTH:
+            continue
+        base = words[start].rsplit("/", 1)[-1]
+        args = words[start + 1:]
+        if base == "xargs":
+            for j in sorted(_xargs_command_starts(args)):
+                found.extend(_command_invocations(args[j:], scripts, depth + 1, True))
+        elif base == "find":
+            for j, action in enumerate(args):
+                if action in _FIND_EXEC_ACTIONS:
+                    end = next((k for k in range(j + 1, len(args)) if args[k] in {";", "+"}), len(args))
+                    found.extend(_command_invocations(args[j + 1:end], scripts, depth + 1, True))
+    return found
+
+
+# A heredoc body is input, not commands, only when it is clearly safe: every
+# command of the pipeline it feeds reads stdin as data and never runs it.
+_HEREDOC_DATA_COMMANDS = frozenset({
+    "base64", "cat", "cksum", "cmp", "column", "comm", "cut", "diff", "egrep", "expand",
+    "fgrep", "fmt", "fold", "grep", "head", "iconv", "md5sum", "nl", "od", "paste", "rev",
+    "sha1sum", "sha256sum", "sha512sum", "sort", "tac", "tail", "tee", "tr", "unexpand",
+    "uniq", "wc", "xxd",
+})
+# Anything that can change what a later command name runs, or hide which
+# pipeline a heredoc feeds, makes every heredoc body count as commands:
+# a ( ) operator (subshell, function definition, substitution), these words
+# as a command, and these assignments.
+_HEREDOC_UNSAFE_WORDS = frozenset({
+    "!", "{", "}", "[[", "case", "coproc", "do", "done", "elif", "else", "esac", "fi",
+    "for", "function", "if", "select", "then", "until", "while",
+    "alias", "bind", "declare", "enable", "eval", "export", "hash", "local", "readonly",
+    "set", "shopt", "source", ".", "trap", "typeset", "unalias", "unset",
+})
+_HEREDOC_UNSAFE_ASSIGNMENT = re.compile(r"^(?:PATH|BASH_ENV|ENV|BASH_FUNC_[^=]*|IFS|SHELLOPTS|BASHOPTS)\+?=")
+
+
+def _heredoc_scripts(tokens: list, heredocs: list) -> list:
+    """The heredoc bodies (from ``_shell_tokens(..., heredocs=)``) and
+    here-strings (``<<< WORD``) of *tokens* to scan as commands. A body is
+    input only when every command of its pipeline is in
+    ``_HEREDOC_DATA_COMMANDS`` and nothing in the whole command is unsafe
+    (see ``_HEREDOC_UNSAFE_WORDS``); otherwise every body counts."""
+    bodies = iter(heredocs)
+    every_body: list = []  # heredoc bodies and here-strings, in order
+    here_string = False  # the next word is a here-string
+    pipelines: list = []  # [bodies fed into the pipeline, all commands read data]
+    current: list = [[], True]
+    words: list = []  # words of the current simple command
+    unsafe = skip_target = after_pipe = False
+
+    def end_command() -> None:
+        nonlocal unsafe
+        if not words:
+            return
+        if words[0] in _HEREDOC_UNSAFE_WORDS or any(_HEREDOC_UNSAFE_ASSIGNMENT.match(w) for w in words):
+            unsafe = True
+        for i in _command_word_indices(words, []):
+            name = words[i].rsplit("/", 1)[-1] if i < len(words) else ""
+            if name in _HEREDOC_UNSAFE_WORDS:
+                unsafe = True
+            if name not in _HEREDOC_DATA_COMMANDS:
+                current[1] = False
+        words.clear()
+
+    def end_pipeline() -> None:
+        nonlocal current
+        if current[0]:
+            pipelines.append(current)
+        current = [[], True]
+
+    for text, is_operator in tokens:
+        if not is_operator:
+            if here_string:  # ``bash <<< 'cmd'`` feeds cmd to bash's stdin
+                current[0].append(text)
+                every_body.append(text)
+            elif not skip_target:  # a redirect's target is not a command word
+                words.append(text)
+            skip_target = after_pipe = here_string = False
+            continue
+        skip_target = here_string = False
+        if "(" in text or ")" in text:
+            unsafe = True  # subshell, group, function or substitution
+        if _is_heredoc_operator(text):
+            body = next(bodies, None)
+            if body is None:
+                unsafe = True
+            else:
+                current[0].append(body)
+                every_body.append(body)
+            skip_target = True
+        elif text.endswith("<<<"):
+            here_string = True
+        elif ">" in text or "<" in text:
+            skip_target = True
+        else:
+            end_command()
+            separator = text.strip("\n")
+            if separator in ("|", "|&"):
+                after_pipe = True  # newlines after a pipe continue the pipeline
+            elif separator or not after_pipe:
+                end_pipeline()
+                after_pipe = False
+    end_command()
+    end_pipeline()
+    if unsafe or next(bodies, None) is not None:
+        return every_body + list(bodies)
+    return [body for fed, data_only in pipelines if not data_only for body in fed]
+
+
+def _env_write_targets_or_fallback(command: str, depth: int = 0) -> list:
+    """Return redirect/tee targets, using the regex fallback if untokenizable."""
+    targets = _env_write_targets(command, depth)
+    if targets is not None:
+        return targets
+    folded = _normalize_command_for_detection(command)
+    return [
+        match.group("target")
+        for regex in (_ENV_REDIRECT_FALLBACK_RE, _ENV_TEE_FALLBACK_RE)
+        for match in regex.finditer(folded)
+    ]
+
+
+def _operands(args: list) -> list:
+    """The operands of a GNU-style command line: words that are not
+    options, and every word after the ``--`` option terminator
+    (``tee -- -dir/.env`` writes ``-dir/.env``)."""
+    if "--" not in args:
+        return [w for w in args if not w.startswith("-") or w == "-"]
+    end = args.index("--")
+    return [w for w in args[:end] if not w.startswith("-") or w == "-"] + args[end + 1:]
+
+
+def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
+    """Return the redirect/tee targets of *command*, or None if untokenizable.
+
+    The script of ``sh -c`` / ``bash -c`` (any shell in ``_NESTED_SHELLS``)
+    and the arguments of ``eval`` are scanned as nested commands, up to
+    ``_MAX_NESTED_SCRIPT_DEPTH`` levels deep.
+    """
+    # A commented-out redirect writes nothing: ``cat .env # > .env`` is a read.
+    heredocs: list = []
+    nested: list = []  # scripts: sh -c, eval, "$(...)", `...`, heredocs that run
+    tokens = _shell_tokens(command, comments=True, heredocs=heredocs, substitutions=nested)
+    if tokens is None:
+        return None
+    nested.extend(_heredoc_scripts(tokens, heredocs))
+    targets: list = []
+    words: list = []  # words of the current simple command
+
+    def _flush_segment() -> None:
+        # The command itself, and any command xargs or find -exec runs.
+        for command_words, _via in _command_invocations(words, nested):
+            base = command_words[0].rsplit("/", 1)[-1]
+            args = command_words[1:]
+            if base == "tee":
+                targets.extend(_operands(args))
+            elif base == "eval":
+                nested.append(" ".join(args))
+            elif base in _NESTED_SHELLS:
+                nested.extend(_shell_c_scripts(base, args))
+        words.clear()
+
+    pending_redirect = None  # operator awaiting its target word
+    # Each open ( pushes the words of the command around it, and the
+    # matching ) restores them: ``tee >(cat) .env`` is still one tee, with
+    # the process substitution standing in as a /dev/fd operand.
+    outer: list = []
+    for token, is_operator in tokens:
+        if pending_redirect is not None:
+            if not is_operator:
+                fd_dup = pending_redirect.endswith("&") and (token.isdigit() or token == "-")
+                if ">" in pending_redirect and not fd_dup:
+                    targets.append(token)
+                pending_redirect = None
+                continue
+            pending_redirect = None
+        if not is_operator:
+            words.append(token)
+            continue
+        if token.endswith("("):
+            outer.append((list(words), token != "("))
+            words.clear()  # the subshell or substitution's own commands
+            continue
+        if token == ")" and outer:
+            _flush_segment()
+            saved, substitution = outer.pop()
+            words.extend(saved)
+            if substitution:
+                words.append("/dev/fd/63")
+            continue
+        if ">" not in token and "<" not in token:
+            _flush_segment()  # separator
+            continue
+        pending_redirect = token
+    _flush_segment()
+    if depth < _MAX_NESTED_SCRIPT_DEPTH:
+        for script in nested:
+            targets.extend(_env_write_targets_or_fallback(script, depth + 1))
+    return targets
+
+
+def detect_env_file_write(command: str) -> tuple:
+    """Detect a shell redirect or tee into a protected environment file.
+
+    Returns:
+        (True, description) when a target is a protected env file, else
+        (False, None).
+    """
+    normalized = _normalize_command_for_detection(command, preserve_shell_quotes=True)
+    # dotglob (or a GLOBIGNORE, which sets it) lets * and ? match a leading dot.
+    dotglob = re.search(r"dotglob|globignore", command, re.IGNORECASE) is not None
+    for target in _env_write_targets_or_fallback(normalized):
+        if _is_protected_env_basename(target):
+            return (True, f"shell write into protected environment file {target}")
+        if _glob_may_name_env(target, dotglob):
+            shown = target.replace(_BRACE_ANY, "*")  # the marker is not printable text
+            return (True, f"shell write into {shown}, a glob that may match a protected .env file")
+    return (False, None)
+
+
+def _env_write_block_result(description: str) -> dict:
+    """Build the block result for a shell write into a protected env file."""
+    return {
+        "approved": False,
+        "hardline": True,
+        "description": description,
+        "message": (
+            f"BLOCKED (protected environment file): {description}. "
+            "Writing an environment file through shell redirection or tee is "
+            "refused without a prompt — not even --yolo, /yolo, "
+            "approvals.mode=off, or cron approve mode lifts it. Reading the "
+            "file is still allowed. If the file genuinely needs to change, "
+            "edit it yourself outside the agent."
+        ),
+    }
+
+
 def _sudo_stdin_block_result(description: str) -> dict:
     """Build the standard block result for sudo stdin guard."""
     return {
@@ -378,6 +1677,17 @@ def _sudo_stdin_block_result(description: str) -> dict:
 # =========================================================================
 # Dangerous command patterns
 # =========================================================================
+
+# Executable positions, including common command wrappers and find actions.
+_DELETE_COMMAND_START = (
+    r'(?:^|[;&|\n]|\$\(|`)\s*'
+    # leading redirects (``>/dev/null rm x``, ``2>&1 rm x``)
+    r'(?:\d*(?:&>>?|[<>][>&|]?)\s*[^\s;|&<>()]+\s+)*'
+    r'(?:(?:xargs|sudo|env|command|exec|nohup)\s+(?:[^;|&\n]*?\s+)?'
+    r'|find\b[^;|&\n]*?-exec(?:dir)?\s+)?'
+    r'(?:[^\s\'";|&`()]*/)?'
+)
+
 
 DANGEROUS_PATTERNS = [
     (r'\brm\s+(-[^\s]*\s+)*/', "delete in root path"),
@@ -409,7 +1719,7 @@ DANGEROUS_PATTERNS = [
     (r':\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:', "fork bomb"),
     # Any shell invocation via -c or combined flags like -lc, -ic, etc.
     (r'\b(bash|sh|zsh|ksh)\s+-[^\s]*c(\s+|$)', "shell command via -c/-lc flag"),
-    (r'\b(python[23]?|perl|ruby|node)\s+-[ec]\s+', "script execution via -e/-c flag"),
+    (r'\b(python[23]?(?:\.\d+)*|perl|ruby|node)\s+-[ec]\s+', "script execution via -e/-c flag"),
     (r'\b(curl|wget)\b.*\|\s*(?:[/\w]*/)?(?:ba)?sh(?:\s|$|-c)', "pipe remote content to shell"),
     (r'\b(bash|sh|zsh|ksh)\s+<\s*<?\s*\(\s*(curl|wget)\b', "execute remote script via process substitution"),
     (rf'\btee\b.*["\']?{_SENSITIVE_WRITE_TARGET}', "overwrite system file via tee"),
@@ -473,6 +1783,13 @@ DANGEROUS_PATTERNS = [
     # The trailing `[^\s"\']*` consumes the rest of the destination filename
     # (e.g. `authorized_keys` after the `~/.ssh/` fragment).
     (rf'\b(cp|mv|install)\b.*\s["\']?{_SENSITIVE_WRITE_TARGET}[^\s"\']*["\']?{_COMMAND_TAIL}', "copy/move file into sensitive credential/SSH/shell-rc path"),
+    # AI-1183: shell writes into the skill library / pending-approval store.
+    # Written without a leading \b so their legacy approval keys stay distinct
+    # from the generic tee/redirect/cp keys (see _legacy_pattern_key).
+    (rf'>>?\s*["\']?{_SKILL_STORE_PATH}', "write into skill library or pending approvals via redirection"),
+    (rf'(?<![\w.-])tee\s.*["\']?{_SKILL_STORE_PATH}', "write into skill library or pending approvals via tee"),
+    (rf'(?<![\w.-])(?:cp|mv|install|rsync|ln)\s.*\s["\']?{_SKILL_STORE_PATH}[^\s"\']*["\']?{_COMMAND_TAIL}', "copy/move file into skill library or pending approvals"),
+    (rf'(?<![\w.-])(?:sed\s+(?:-[^\s]*i|--in-place)|(?:perl|ruby)\s+-[^\s]*i)\s.*{_SKILL_STORE_PATH}', "in-place edit in skill library or pending approvals"),
     # In-place edits mutate the target file directly, bypassing redirection,
     # tee, and copy/move/install coverage. Gate the same user-controlled
     # startup/credential files so `sed -i ... ~/.bashrc` and `perl -i ...
@@ -499,7 +1816,7 @@ DANGEROUS_PATTERNS = [
     (rf'\b(?:perl|ruby)\b.*(?:^|\s)-[^\s]*i\b.*(?:{_LLIAM_CONFIG_PATH}|{_LLIAM_ENV_PATH})', "in-place edit of Lliam-GOV config/env (perl/ruby)"),
     # Script execution via heredoc — bypasses the -e/-c flag patterns above.
     # `python3 << 'EOF'` feeds arbitrary code via stdin without -c/-e flags.
-    (r'\b(python[23]?|perl|ruby|node)\s+<<', "script execution via heredoc"),
+    (r'\b(python[23]?(?:\.\d+)*|perl|ruby|node)\s+(?:-\s+)?<<', "script execution via heredoc"),
     # Git destructive operations that can lose uncommitted work or rewrite
     # shared history. Not captured by rm/chmod/etc patterns.
     (r'\bgit\s+reset\s+--hard\b', "git reset --hard (destroys uncommitted changes)"),
@@ -530,7 +1847,83 @@ DANGEROUS_PATTERNS = [
     # into a single -X token. Catches the same threat class.
     (r'\bsudo\b[^;|&\n]*?\s+-[a-z]*[sa][a-z]*\b',
      "sudo with combined-flag privilege escalation"),
+    # Deletes require consent even for a single relative path in the working
+    # directory. Keep these after the existing rules to preserve their more
+    # specific descriptions and approval keys (recursive rm, find, scripts).
+    (rf'{_DELETE_COMMAND_START}(?:rm|unlink|rmdir)(?=\s|[;&|)]|$)', "file/directory delete"),
+    (rf'{_DELETE_COMMAND_START}git\s+rm(?=\s|$)', "file/directory delete"),
+    (rf'{_DELETE_COMMAND_START}(?:\$\(\s*|`\s*)(?:which|command\s+-v)\s+'
+     r'(?:[^\s;|&`()]*/)?(?:rm|unlink|rmdir)\s*(?:\)|`)', "file/directory delete"),
+    # Decoded programs are opaque to static detection; require one-shot consent
+    # before piping them to a shell, where they can perform arbitrary deletes.
+    (rf'{_DELETE_COMMAND_START}(?:base64\s+[^;|&\n]*?-d\b|xxd\s+[^;|&\n]*?-r\b)'
+     r'[^;|&\n]*\|\s*(?:[^\s;|&]*/)?(?:sh|bash|zsh|ksh)\b',
+     "file/directory delete via decoded shell"),
+    (rf'{_DELETE_COMMAND_START}find\b[^;|&\n]*?-delete\b', "file/directory delete"),
+    # Inline Python can arrive via -c, stdin (`python - <<...`), or a versioned
+    # interpreter. Apply these only to extracted Python source. Include aliases
+    # and dynamic dispatch conservatively: static matching cannot resolve the
+    # receiver or the function name constructed at runtime.
+    (r'\b(?:remove|removedirs|getattr|__import__)\s*\(|\bsubprocess\b.*\brm\b',
+     "file/directory delete via Python os"),
+    (r'\b(?:unlink|rmdir|rmtree)\s*\(',
+     "file/directory delete via Python pathlib/os/shutil"),
+    # Node source is extracted before matching. Recognize direct fs calls and
+    # delete calls following a filesystem import, including destructured names
+    # and dynamic-import callbacks. Require a call, not a bare word like npm rm.
+    (r'(?:\bfs\s*\.\s*(?:promises\s*\.\s*)?'
+     r'|\b(?:(?:require|import)\s*\(\s*|import\s+[^;]*?\bfrom\s+)'
+     r'''['"](?:node:)?fs(?:/promises)?['"][\s\S]*?\b)'''
+     r'(?:rmSync|unlinkSync|rmdirSync|rm|unlink|rmdir)\s*\(',
+     "file/directory delete via Node.js"),
+    (r'\b(?:File\s*\.\s*(?:delete|unlink)|FileUtils\s*\.\s*rm(?:_rf|_f)?)\b',
+     "file/directory delete via Ruby"),
+    (r'\b(?:unlink|remove_tree)\b', "file/directory delete via Perl"),
+    (r'\bDeno\s*\.\s*(?:remove|removeSync)\s*\(', "file/directory delete via Deno"),
+    (rf'{_DELETE_COMMAND_START}shred\b[^;|&\n]*?\s+(?:-[a-z]*u[a-z]*\b|--remove\b)',
+     "file/directory delete via shred"),
+    (rf'{_DELETE_COMMAND_START}rsync\b[^;|&\n]*?\s+--(?:delete|remove-source-files)\b',
+     "file/directory delete via rsync"),
+    (rf'{_DELETE_COMMAND_START}tar\b[^;|&\n]*?\s+--remove-files\b',
+     "file/directory delete via tar"),
+    # AI-1181: compressors replace (delete) the original file unless told to
+    # keep it. detect_all_dangerous_commands decides this from the tool's own
+    # arguments with _command_delete_kinds (case-sensitive, per tool,
+    # zstd/lz4 only with --rm); this case-folded pattern is only the fallback
+    # for a command that can't be tokenized.
+    (rf'{_DELETE_COMMAND_START}(?:gzip|gunzip|xz|unxz|bzip2|bunzip2|lzma|unlzma)(?=\s)'
+     r'(?![^;|&\n]*?\s(?:-[a-z0-9]*[kc][a-z0-9]*|-[tl]'
+     r'|--(?:keep|stdout|to-stdout|test|list))(?=[\s;|&]|$))'
+     r'(?:\s+-[^\s;|&<>]*)*\s+[^\s;|&<>-]',
+     "file/directory delete via compressor replacing original"),
+    # Trash is still a delete from the working tree; trash-rm/trash-empty and
+    # gio remove delete permanently.
+    (rf'{_DELETE_COMMAND_START}(?:trash(?:-put|-rm|-empty)?|gio\s+(?:trash|remove))(?=\s|[;&|)]|$)',
+     "file/directory delete via trash"),
+    # git stash -u/-a (--include-untracked/--all) removes untracked (and with
+    # --all, ignored) files from the working tree; a later drop loses them.
+    # Git's global options may come first (-C <path>, -c <k=v>, --git-dir=,
+    # -P, --bare, ...); any option is read as maybe taking a value word, so
+    # an unknown option before stash fails closed.
+    (rf'{_DELETE_COMMAND_START}git'
+     r'(?:\s+-[^\s;|&]*(?:\s+(?:"[^"]*"|' r"'[^']*'" r'|[^\s;|&"\'-][^\s;|&]*))?)*?'
+     r'\s+stash(?:\s+(?:push|save))?'
+     r'(?:\s+(?:-m|--message)(?:\s+|=)(?:"[^"]*"|' r"'[^']*'" r'|[^\s;|&]+)|\s+-[^\s;|&]*)*?'
+     r'\s+(?:-[a-z]*[ua][a-z]*|--include-untracked|--all)(?=[\s;|&]|$)',
+     "file/directory delete via git stash of untracked files"),
+    # macOS Finder scripting: delete / move to trash / empty trash.
+    (rf'{_DELETE_COMMAND_START}osascript\b[^\n]*?\bfinder\b[^\n]*?'
+     r'\b(?:delete|empty\s+(?:the\s+)?trash|move\b[^\n]*?\bto\s+(?:the\s+)?trash)\b',
+     "file/directory delete via osascript Finder"),
 ]
+
+
+# Delete consent is scoped to one execution, even if an older config contains
+# one of these keys. Other dangerous operations retain their existing scopes.
+_ONCE_ONLY_DELETE_KEYS = {
+    description for _, description in DANGEROUS_PATTERNS
+    if description.startswith("file/directory delete")
+}
 
 
 # Pre-compiled variant (same rationale as HARDLINE_PATTERNS_COMPILED above).
@@ -538,6 +1931,243 @@ DANGEROUS_PATTERNS_COMPILED = [
     (re.compile(pattern, _RE_FLAGS), description)
     for pattern, description in DANGEROUS_PATTERNS
 ]
+
+# AI-1181: whether a compressor replaces (deletes) its input files, read from
+# its real argument list: words before a redirect target, comment or command
+# separator. Flags are case-sensitive and per tool (xz -C takes a check name,
+# -c writes to stdout). gzip, bzip2 and xz delete the input unless a flag in
+# "keeps" is given; zstd and lz4 keep it unless --rm is given.
+_COMPRESSOR_DELETE = "file/directory delete via compressor replacing original"
+_GZIP = ("replace", "S", {"--suffix"}, "cklthLV",
+         {"--keep", "--stdout", "--to-stdout", "--list", "--test", "--help", "--license", "--version"})
+_BZIP2 = ("replace", "", set(), "ckthLV",
+          {"--keep", "--stdout", "--test", "--help", "--license", "--version"})
+_XZ = ("replace", "CFMST",
+       {"--block-list", "--block-size", "--check", "--filters", "--flush-timeout",
+        "--format", "--memlimit", "--memlimit-compress", "--memlimit-decompress", "--memlimit-mt",
+        "--suffix", "--threads"},
+       "ckltHhV",
+       {"--keep", "--stdout", "--to-stdout", "--list", "--test", "--help", "--long-help", "--version",
+        "--info-memory"})
+_ZSTD = ("rm", "Do", {"--filelist", "--output-dir-flat", "--output-dir-mirror", "--trace"}, "chltV",
+         {"--stdout", "--list", "--test", "--help", "--version"})
+_LZ4 = ("rm", "", set(), "chtV", {"--stdout", "--to-stdout", "--list", "--test", "--help", "--version"})
+# tool: (deletes unless kept / only with --rm, short flags taking a value,
+#        long options taking a value, short flags that keep the input,
+#        long options that keep the input). For the "rm" tools -k/--keep and
+#        --rm override each other and the last one wins.
+_COMPRESSORS = {
+    "gzip": _GZIP, "gunzip": _GZIP,
+    "bzip2": _BZIP2, "bunzip2": _BZIP2,
+    "xz": _XZ, "unxz": _XZ, "lzma": _XZ, "unlzma": _XZ,
+    "zstd": _ZSTD, "unzstd": _ZSTD, "zstdmt": _ZSTD,
+    "lz4": _LZ4, "unlz4": _LZ4,
+}
+# Options that name the input files in a list (xz --files[=FILE] and
+# --files0[=FILE], whose value is optional and only attached, read stdin
+# without one; zstd --filelist FILE).
+_COMPRESSOR_FILE_LISTS = frozenset({"--files", "--files0", "--filelist"})
+
+
+def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> bool:
+    """True when compressor *name* run with *args* replaces its input files."""
+    family, short_values, long_values, keep_short, keep_long = _COMPRESSORS[name]
+    has_operand = operands_supplied
+    keeps = removes = False
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        i += 1
+        if arg == "--":
+            has_operand = has_operand or any(a for a in args[i:])
+            break
+        if arg == "-" or not arg.startswith("-"):
+            has_operand = has_operand or arg != "-"
+            continue
+        if arg.startswith("--"):
+            key, has_value, _ = arg.partition("=")
+            if key in _COMPRESSOR_FILE_LISTS:
+                has_operand = True  # input names come from a list file or stdin
+            if key in long_values and not has_value:
+                i += 1
+            elif key in keep_long:
+                keeps = True
+            elif key == "--rm":
+                removes = True
+            elif key == "--keep" and family == "rm":
+                removes = False  # the later of --keep and --rm wins
+            continue
+        cluster = arg[1:]
+        for k, flag in enumerate(cluster):
+            if flag in short_values:
+                if k == len(cluster) - 1:
+                    i += 1  # the value is the next word
+                break
+            if flag in keep_short:
+                keeps = True
+            elif flag == "k" and family == "rm":
+                removes = False
+    if not has_operand or keeps:
+        return False
+    return removes if family == "rm" else True
+
+
+_FILE_DELETE = "file/directory delete"
+_FILE_DELETE_COMMANDS = frozenset({"rm", "unlink", "rmdir"})
+_TRASH_DELETE = "file/directory delete via trash"
+_STASH_DELETE = "file/directory delete via git stash of untracked files"
+_FINDER_DELETE = "file/directory delete via osascript Finder"
+_TRASH_COMMANDS = frozenset({"trash", "trash-put", "trash-rm", "trash-empty"})
+# git's global options that take a value word (unless written --opt=value).
+_GIT_GLOBAL_VALUES = frozenset({
+    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--super-prefix",
+    "--attr-source", "--list-cmds",
+})
+_FINDER_DELETE_RE = re.compile(
+    r"\bfinder\b.*?\b(?:delete|empty\s+(?:the\s+)?trash|move\b.*?\bto\s+(?:the\s+)?trash)\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _git_subcommand_starts(args: list) -> set:
+    """Indices in git's *args* where the subcommand may be, past git's
+    global options; an unknown option is read both with and without a value."""
+    starts: set = set()
+
+    def walk(j: int) -> None:
+        if len(starts) >= _MAX_COMMAND_READINGS:
+            return
+        while j < len(args) and args[j].startswith("-") and args[j] != "-":
+            key = args[j].partition("=")[0]
+            if key in _GIT_GLOBAL_VALUES and "=" not in args[j]:
+                j += 2
+                continue
+            walk(j + 2)  # fail closed: any other option may take a value word
+            j += 1
+        starts.add(j)
+
+    walk(0)
+    return starts
+
+
+def _stash_keeps_untracked_out(args: list) -> bool:
+    """True when ``git stash`` with *args* stashes untracked files (-u/-a,
+    --include-untracked/--all), which removes them from the working tree."""
+    if args and not args[0].startswith("-"):
+        if args[0] not in ("push", "save"):
+            return False  # list, show, pop, apply, drop, ...
+        args = args[1:]
+    j = 0
+    while j < len(args):
+        arg = args[j]
+        j += 1
+        if arg == "--":
+            break
+        if arg in ("--include-untracked", "--all"):
+            return True
+        if arg in ("-m", "--message"):
+            j += 1
+            continue
+        if arg.startswith("--") or not arg.startswith("-"):
+            continue
+        for flag in arg[1:]:
+            if flag == "m":
+                break  # the rest of the word is the message
+            if flag in "ua":
+                return True
+    return False
+
+
+def _invocation_delete_kinds(base: str, args: list, operands_supplied: bool) -> set:
+    """The once-only delete kinds one command invocation performs."""
+    kinds: set = set()
+    if base in _FILE_DELETE_COMMANDS or (base == "find" and "-delete" in args):
+        kinds.add(_FILE_DELETE)
+    if base in _COMPRESSORS and _compressor_call_deletes(base, args, operands_supplied):
+        kinds.add(_COMPRESSOR_DELETE)
+    if base in _TRASH_COMMANDS or (base == "gio" and args[:1] in (["trash"], ["remove"])):
+        kinds.add(_TRASH_DELETE)
+    if base == "git":
+        for j in _git_subcommand_starts(args):
+            if j < len(args) and args[j] == "stash" and _stash_keeps_untracked_out(args[j + 1:]):
+                kinds.add(_STASH_DELETE)
+            if j < len(args) and args[j] == "rm":
+                kinds.add(_FILE_DELETE)
+    if base == "osascript" and _FINDER_DELETE_RE.search(" ".join(args)):
+        kinds.add(_FINDER_DELETE)
+    return kinds
+
+
+def _simple_command_delete_kinds(words: list, scripts: list) -> set:
+    """The delete kinds the simple command *words* performs, at every command
+    position ``_command_invocations`` finds (shared with ``_env_write_targets``):
+    after reserved words and wrappers, and as the command xargs or find -exec
+    runs (which supply its operands)."""
+    kinds: set = set()
+    for command_words, via in _command_invocations(words, scripts):
+        base = command_words[0].rsplit("/", 1)[-1]
+        args = command_words[1:]
+        kinds |= _invocation_delete_kinds(base, args, via)
+        # Literal eval arguments and a shell's -c script run as commands,
+        # as in _env_write_targets; the caller scans *scripts*.
+        if base == "eval":
+            scripts.append(" ".join(args))
+        elif base in _NESTED_SHELLS:
+            scripts.extend(_shell_c_scripts(base, args))
+    return kinds
+
+
+# The delete rules decided from the tokenized command; their patterns are a
+# fallback (the compressor's only for a command that can't be tokenized).
+_TOKENIZED_DELETE_KINDS = frozenset({
+    _FILE_DELETE, _COMPRESSOR_DELETE, _TRASH_DELETE, _STASH_DELETE, _FINDER_DELETE,
+})
+
+
+def _command_delete_kinds(command: str, depth: int = 0) -> Optional[set]:
+    """The tokenized delete kinds *command* performs, including nested
+    scripts; None when it (or, with nothing found, a nested script) can't
+    be tokenized."""
+    command = re.sub(r"\$\{IFS\}|\$IFS\b", " ", command, flags=re.IGNORECASE)
+    heredocs: list = []
+    nested: list = []  # "$(...)" / `...` scripts and heredoc bodies that run
+    tokens = _shell_tokens(command, comments=True, heredocs=heredocs, substitutions=nested)
+    if tokens is None:
+        return None
+    nested.extend(_heredoc_scripts(tokens, heredocs))
+    segments: list = [[]]
+    outer: list = []  # commands around an open ( (see _env_write_targets)
+    skip_target = False
+    for text, is_operator in tokens:
+        if skip_target and not is_operator:
+            skip_target = False  # a redirect's target is not an argument
+            continue
+        skip_target = False
+        if not is_operator:
+            segments[-1].append(text)
+        elif text.endswith("("):
+            outer.append((segments.pop(), text != "("))
+            segments.append([])  # the subshell or substitution's own commands
+        elif text == ")" and outer:
+            saved, substitution = outer.pop()
+            segments.append(saved + (["/dev/fd/63"] if substitution else []))
+        elif ">" not in text and "<" not in text:
+            segments.append([])  # separator, pipe
+        else:
+            skip_target = True
+    scripts: list = []  # eval, sh -c and env -S command lines
+    kinds: set = set()
+    for words in segments:
+        kinds |= _simple_command_delete_kinds(words, scripts)
+    unknown = False
+    if depth < _MAX_NESTED_SCRIPT_DEPTH:
+        for script in scripts + nested:
+            reading = _command_delete_kinds(script, depth + 1)
+            if reading is None:
+                unknown = True
+            else:
+                kinds |= reading
+    return None if unknown and not kinds else kinds
 
 
 def _legacy_pattern_key(pattern: str) -> str:
@@ -567,7 +2197,7 @@ def _approval_key_aliases(pattern_key: str) -> set[str]:
 # Detection
 # =========================================================================
 
-def _normalize_command_for_detection(command: str) -> str:
+def _normalize_command_for_detection(command: str, *, preserve_shell_quotes: bool = False) -> str:
     """Normalize a command string before dangerous-pattern matching.
 
     Strips ANSI escape sequences (full ECMA-48 via tools.ansi_strip),
@@ -599,10 +2229,13 @@ def _normalize_command_for_detection(command: str) -> str:
     # first would eat the prefix the Lliam-GOV-home fold needs.
     command = _rewrite_resolved_lliam_home(command)
     command = _rewrite_resolved_user_home(command)
-    # Strip shell backslash-escapes: r\m → rm. Prevents \-injection bypass.
-    command = re.sub(r'\\([^\n])', r'\1', command)
-    # Strip empty-string literals that split tokens: r''m → rm, r"\"m → rm.
-    command = re.sub(r"''|\"\"", '', command)
+    # Parsing script bodies needs the original quote escapes to find the real
+    # closing delimiter. Existing pattern matching still uses the folded form.
+    if not preserve_shell_quotes:
+        # Strip shell backslash-escapes: r\m → rm. Prevents \-injection bypass.
+        command = re.sub(r'\\([^\n])', r'\1', command)
+        # Strip empty-string literals that split tokens: r''m → rm, r"\"m → rm.
+        command = re.sub(r"''|\"\"", '', command)
     return command
 
 
@@ -714,18 +2347,97 @@ def _rewrite_resolved_lliam_home(command: str) -> str:
     return _fold_home_prefixes(command, candidates, "~/.hermes")
 
 
-def detect_dangerous_command(command: str) -> tuple:
-    """Check if a command matches any dangerous patterns.
+def _normalize_delete_words(command: str) -> str:
+    """Join shell quote fragments in delete words without unquoting prose."""
+    def normalize(match):
+        word = match.group()
+        unquoted = word.replace("'", "").replace('"', '')
+        if unquoted.rsplit("/", 1)[-1] in {"rm", "unlink", "rmdir"}:
+            return unquoted
+        return word
 
-    Returns:
-        (is_dangerous, pattern_key, description) or (False, None, None)
+    command = command.replace("${ifs}", " ")
+    return re.sub(r"(?:[^\s'\";&|`()]+|'[^']*'|\"[^\"]*\")+", normalize, command)
+
+
+def _script_bodies(command: str, interpreter: str, flag: str) -> list[str]:
+    """Extract inline/stdin source; do not scan adjacent search prose."""
+    bodies = []
+    invocation = re.compile(
+        rf'{_DELETE_COMMAND_START}{interpreter}\s+'
+        rf"(?:(?:{flag})\s*(?P<quote>['\"])(?P<code>(?:\\.|(?!(?P=quote)).)*)(?P=quote)"
+        r"|(?:-\s+)?<<-?\s*(?P<delimiter>[^\s]+)[^\n]*\n)",
+        re.DOTALL,
+    )
+    for match in invocation.finditer(command):
+        if match.group("code") is not None:
+            bodies.append(match.group("code"))
+        else:
+            delimiter = match.group("delimiter").strip("'\"")
+            tail = command[match.end():]
+            end = re.search(rf"(?m)^\t*{re.escape(delimiter)}[ \t]*$", tail)
+            bodies.append(tail[:end.start()] if end else tail)
+    return bodies
+
+
+def detect_all_dangerous_commands(command: str) -> list[tuple[str, str]]:
+    """Return every matched approval key/description, in pattern order.
+
+    Shell -c bodies are executable commands, not ordinary quoted arguments.
+    Inspect them as command contexts so an approved shell wrapper cannot hide
+    an unapproved delete. Never execute substitutions while inspecting input.
     """
-    command_lower = _normalize_command_for_detection(command).lower()
+    raw = _normalize_command_for_detection(command, preserve_shell_quotes=True).lower()
+    raw_contexts = [raw, *_script_bodies(raw, r"(?:bash|sh|zsh|ksh)", r"-[^\s]*c")]
+    contexts = [_normalize_command_for_detection(context).lower() for context in raw_contexts]
+    script_specs = {
+        "Python": (r"python[23]?(?:\.\d+)*", r"-c"),
+        "Node.js": (r"node", r"-e|-p|--eval(?:=|\s+)"),
+        "Ruby": (r"ruby", r"-e"),
+        "Perl": (r"perl", r"-e"),
+        "Deno": (r"deno", r"eval\s+"),
+    }
+    script_bodies = {
+        language: [
+            _normalize_command_for_detection(body).lower()
+            for context in raw_contexts for body in _script_bodies(context, interpreter, flag)
+        ]
+        for language, (interpreter, flag) in script_specs.items()
+    }
+    delete_contexts = [_normalize_delete_words(context) for context in contexts]
+    # Compressor flags are case-sensitive, so read them from the unfolded command.
+    unfolded = _normalize_command_for_detection(command, preserve_shell_quotes=True)
+    unfolded_contexts = [unfolded, *_script_bodies(unfolded, r"(?:bash|sh|zsh|ksh)", r"-[^\s]*c")]
+    delete_kinds = None  # tokenized delete kinds per context, computed once
+    matches = []
     for pattern_re, description in DANGEROUS_PATTERNS_COMPILED:
-        if pattern_re.search(command_lower):
-            pattern_key = description
-            return (True, pattern_key, description)
-    return (False, None, None)
+        if description in _TOKENIZED_DELETE_KINDS:
+            if delete_kinds is None:
+                delete_kinds = [_command_delete_kinds(context) for context in unfolded_contexts]
+            found = any(kinds and description in kinds for kinds in delete_kinds)
+            # The compressor pattern is only the fallback for a command that
+            # can't be tokenized; the others still match on their own.
+            if description != _COMPRESSOR_DELETE or None in delete_kinds:
+                found = found or any(pattern_re.search(c) for c in delete_contexts)
+            if found and (description, description) not in matches:
+                matches.append((description, description))  # several share one
+            continue
+        candidates = delete_contexts if description.startswith("file/directory delete") else contexts
+        for language, bodies in script_bodies.items():
+            if description.startswith(f"file/directory delete via {language}"):
+                candidates = bodies
+                break
+        if any(pattern_re.search(context) for context in candidates):
+            entry = (description, description)
+            if entry not in matches:
+                matches.append(entry)
+    return matches
+
+
+def detect_dangerous_command(command: str) -> tuple:
+    """Return the first dangerous match, preserving the historical contract."""
+    matches = detect_all_dangerous_commands(command)
+    return (True, *matches[0]) if matches else (False, None, None)
 
 
 # =========================================================================
@@ -749,12 +2461,17 @@ _permanent_approved: set = set()
 
 class _ApprovalEntry:
     """One pending dangerous-command approval inside a gateway session."""
-    __slots__ = ("event", "data", "result")
+    __slots__ = ("event", "data", "result", "approver", "approver_method")
 
     def __init__(self, data: dict):
         self.event = threading.Event()
         self.data = data          # command, description, pattern_keys, …
         self.result: Optional[str] = None  # "once"|"session"|"always"|"deny"
+        # Authenticated approver that resolved the entry (LG-GV-05) — a
+        # dashboard_auth user or the desktop app's local operator — and how
+        # it authenticated; None when resolved anonymously / not yet resolved.
+        self.approver: Optional[str] = None
+        self.approver_method: Optional[str] = None
 
 
 _gateway_queues: dict[str, list] = {}        # session_key → [_ApprovalEntry, …]
@@ -786,8 +2503,14 @@ def unregister_gateway_notify(session_key: str) -> None:
         entry.event.set()
 
 
+class ApprovalRefused(PermissionError):
+    """An approval was refused because the resolver is not an authenticated
+    approver (``security.require_authenticated_approver`` — LG-GV-05)."""
+
+
 def resolve_gateway_approval(session_key: str, choice: str,
-                             resolve_all: bool = False) -> int:
+                             resolve_all: bool = False,
+                             *, raise_on_refusal: bool = False) -> int:
     """Called by the gateway's /approve or /deny handler to unblock
     waiting agent thread(s).
 
@@ -795,8 +2518,41 @@ def resolve_gateway_approval(session_key: str, choice: str,
     resolved at once (``/approve all``).  Otherwise only the oldest one
     is resolved (FIFO).
 
+    LG-GV-05: when ``security.require_authenticated_approver`` is set, an
+    approving *choice* is refused unless the calling context carries an
+    authenticated approver (a dashboard_auth user, or the local operator on
+    the desktop app's gateway-secret connection). A refused approval leaves the
+    entries pending (an authenticated approver can still rule, or it times
+    out to a deny) and returns 0 — or raises :class:`ApprovalRefused` when
+    *raise_on_refusal* is True. Denials are never refused.
+
     Returns the number of approvals resolved (0 means nothing was pending).
     """
+    approver: Optional[str] = None
+    approver_method: Optional[str] = None
+    try:
+        from tools.hitl_oversight import authorize_approval
+    except Exception:  # pragma: no cover - module ships with this one
+        authorize_approval = None
+    if authorize_approval is not None:
+        with _lock:
+            queue = _gateway_queues.get(session_key) or []
+            head = dict(queue[0].data) if queue else None
+        if head is None:
+            return 0
+        auth = authorize_approval(
+            choice, gate="gateway.approval",
+            target=str(head.get("command", "")),
+            description=str(head.get("description", "")),
+            origin="gateway",
+        )
+        if not auth.allowed:
+            if raise_on_refusal:
+                raise ApprovalRefused(auth.reason)
+            return 0
+        approver = auth.principal
+        approver_method = auth.method
+
     with _lock:
         queue = _gateway_queues.get(session_key)
         if not queue:
@@ -810,6 +2566,8 @@ def resolve_gateway_approval(session_key: str, choice: str,
             _gateway_queues.pop(session_key, None)
 
     for entry in targets:
+        entry.approver = approver
+        entry.approver_method = approver_method
         entry.result = choice
         entry.event.set()
     return len(targets)
@@ -829,6 +2587,8 @@ def submit_pending(session_key: str, approval: dict):
 
 def approve_session(session_key: str, pattern_key: str):
     """Approve a pattern for this session only."""
+    if pattern_key in _ONCE_ONLY_DELETE_KEYS:
+        return
     with _lock:
         _session_approved.setdefault(session_key, set()).add(pattern_key)
 
@@ -884,6 +2644,8 @@ def is_approved(session_key: str, pattern_key: str) -> bool:
     Accept both the current canonical key and the legacy regex-derived key so
     existing command_allowlist entries continue to work after key migrations.
     """
+    if pattern_key in _ONCE_ONLY_DELETE_KEYS:
+        return False
     aliases = _approval_key_aliases(pattern_key)
     with _lock:
         if any(alias in _permanent_approved for alias in aliases):
@@ -894,6 +2656,8 @@ def is_approved(session_key: str, pattern_key: str) -> bool:
 
 def approve_permanent(pattern_key: str):
     """Add a pattern to the permanent allowlist."""
+    if pattern_key in _ONCE_ONLY_DELETE_KEYS:
+        return
     with _lock:
         _permanent_approved.add(pattern_key)
 
@@ -979,32 +2743,98 @@ def save_permanent_allowlist(patterns: set):
 # Approval prompting + orchestration
 # =========================================================================
 
+def _unauthenticated_approver_reason(command: str, description: str,
+                                     *, origin: str) -> Optional[str]:
+    """Return the LG-GV-05 refusal reason when no authenticated approver can
+    rule on a prompt in this context, else None (always None on low-side)."""
+    try:
+        from tools.hitl_oversight import authorize_approval
+        auth = authorize_approval(
+            "once", gate="shell.dangerous", target=command,
+            description=description, origin=origin,
+        )
+    except Exception:
+        return None
+    return None if auth.allowed else auth.reason
+
+
+def _unauthenticated_approver_block(command: str, description: str,
+                                    pattern_key: str, *, origin: str) -> Optional[dict]:
+    """Blocked result for a prompt no authenticated approver can answer."""
+    reason = _unauthenticated_approver_reason(command, description, origin=origin)
+    if reason is None:
+        return None
+    return {
+        "approved": False,
+        "pattern_key": pattern_key,
+        "description": description,
+        "outcome": "denied",
+        "user_consent": False,
+        "message": (
+            f"BLOCKED (fail-closed): this command is potentially dangerous "
+            f"({description}) and needs an authenticated approver; {reason} "
+            "Do NOT retry this command or attempt the same outcome another way."
+        ),
+    }
+
+
 def prompt_dangerous_approval(command: str, description: str,
                               timeout_seconds: int | None = None,
                               allow_permanent: bool = True,
-                              approval_callback=None) -> str:
+                              approval_callback=None,
+                              allow_session: bool = True) -> str:
     """Prompt the user to approve a dangerous command (CLI only).
 
     Args:
-        allow_permanent: When False, hide the [a]lways option (used when
-            tirith warnings are present, since broad permanent allowlisting
-            is inappropriate for content-level security findings).
+        allow_permanent: When False, hide the [a]lways option (tirith or deletes).
+        allow_session: When False, offer only once/deny (deletes).
         approval_callback: Optional callback registered by the CLI for
             prompt_toolkit integration. Signature:
-            (command, description, *, allow_permanent=True) -> str.
+            (command, description, *, allow_permanent=True, allow_session=True) -> str.
+            Older callbacks may omit allow_session; scope is still enforced here.
 
     Returns: 'once', 'session', 'always', or 'deny'
+
+    LG-GV-05: when ``security.require_authenticated_approver`` is set and no
+    authenticated approver is bound to this context, the prompt is not shown
+    and the result is 'deny' — an anonymous terminal / ACP answer cannot
+    approve a high-risk action.
     """
+    if _unauthenticated_approver_reason(command, description, origin="prompt"):
+        return "deny"
+
+    def resolved(choice: str, *, timed_out: bool = False) -> str:
+        from tools.hitl_oversight import authenticated_principal, log_approval_resolution
+
+        decision = "timeout" if timed_out else ("deny" if choice == "deny" else "approve")
+        log_approval_resolution(
+            session_id=get_current_session_key(), command=command, decision=decision,
+            approver=None if timed_out else authenticated_principal(),
+        )
+        return choice
+
     if timeout_seconds is None:
         timeout_seconds = _get_approval_timeout()
 
     if approval_callback is not None:
         try:
-            return approval_callback(command, description,
-                                     allow_permanent=allow_permanent)
+            scope = {"allow_permanent": allow_permanent}
+            if not allow_session:
+                # Older adapters only accept allow_permanent. Keep their
+                # callback contract; the guard still enforces once-only scope.
+                parameters = inspect.signature(approval_callback).parameters
+                if "allow_session" in parameters or any(
+                    param.kind == inspect.Parameter.VAR_KEYWORD for param in parameters.values()
+                ):
+                    scope["allow_session"] = False
+            _approval_timed_out.value = False
+            choice = approval_callback(command, description, **scope)
+            if choice == "deny" and getattr(_approval_timed_out, "value", False):
+                return resolved("deny", timed_out=True)
+            return resolved("once" if not allow_session and choice in {"session", "always"} else choice)
         except Exception as e:
             logger.error("Approval callback failed: %s", e, exc_info=True)
-            return "deny"
+            return resolved("deny")
 
     # Fail-closed guard: if prompt_toolkit owns the terminal (interactive
     # CLI session) and no approval callback is registered on this thread,
@@ -1026,7 +2856,7 @@ def prompt_dangerous_approval(command: str, description: str,
                 "to avoid stdin deadlock. command=%r description=%r",
                 command, description,
             )
-            return "deny"
+            return resolved("deny")
     except Exception:
         # prompt_toolkit not installed, or detection failed -- fall through
         # to the legacy input() path (safe in non-TUI contexts: scripts,
@@ -1043,7 +2873,9 @@ def prompt_dangerous_approval(command: str, description: str,
             print(f"  {t('approval.dangerous_header', description=description)}")
             print(f"      {command}")
             print()
-            if allow_permanent:
+            if not allow_session:
+                print("  [o]nce / [d]eny")
+            elif allow_permanent:
                 print(t("approval.choose_long"))
             else:
                 print(t("approval.choose_short"))
@@ -1055,6 +2887,8 @@ def prompt_dangerous_approval(command: str, description: str,
             def get_input():
                 try:
                     prompt = t("approval.prompt_long") if allow_permanent else t("approval.prompt_short")
+                    if not allow_session:
+                        prompt = "[o/d]: "
                     result["choice"] = input(prompt).strip().lower()
                 except (EOFError, OSError):
                     result["choice"] = ""
@@ -1065,28 +2899,30 @@ def prompt_dangerous_approval(command: str, description: str,
 
             if thread.is_alive():
                 print("\n" + t("approval.timeout"))
-                return "deny"
+                return resolved("deny", timed_out=True)
 
             choice = result["choice"]
+            if not allow_session and choice in {"s", "session", "a", "always"}:
+                choice = "once"
             if choice in {'o', 'once'}:
                 print(t("approval.allowed_once"))
-                return "once"
+                return resolved("once")
             elif choice in {'s', 'session'}:
                 print(t("approval.allowed_session"))
-                return "session"
+                return resolved("session")
             elif choice in {'a', 'always'}:
                 if not allow_permanent:
                     print(t("approval.allowed_session"))
-                    return "session"
+                    return resolved("session")
                 print(t("approval.allowed_always"))
-                return "always"
+                return resolved("always")
             else:
                 print(t("approval.denied"))
-                return "deny"
+                return resolved("deny")
 
     except (EOFError, KeyboardInterrupt):
         print("\n" + t("approval.cancelled"))
-        return "deny"
+        return resolved("deny")
     finally:
         # rename R.8a: clear the LLIAM_ name we set above.
         if "LLIAM_SPINNER_PAUSE" in os.environ:
@@ -1261,6 +3097,14 @@ def _smart_approve(command: str, description: str) -> str:
         answer = (response.choices[0].message.content or "").strip().upper()
 
         if answer == "APPROVE":
+            # LG-GV-05: the auxiliary LLM is not an authenticated approver;
+            # when one is required, an APPROVE verdict escalates to a human.
+            try:
+                from tools.hitl_oversight import require_authenticated_approver
+                if require_authenticated_approver():
+                    return "escalate"
+            except Exception:
+                return "escalate"
             return "approve"
         elif answer == "DENY":
             return "deny"
@@ -1300,26 +3144,39 @@ def check_dangerous_command(command: str, env_type: str,
         logger.warning("Hardline block: %s (command: %s)", hardline_desc, command[:200])
         return _hardline_block_result(hardline_desc)
 
+    # Env-file write floor (AI-1178): redirect/tee into .env is refused with
+    # no prompt, before any yolo / mode=off / cron / stored-approval bypass.
+    is_env_write, env_write_desc = detect_env_file_write(command)
+    if is_env_write:
+        logger.warning("Env-file write block: %s (command: %s)", env_write_desc, command[:200])
+        return _env_write_block_result(env_write_desc)
+
     # --yolo: bypass all approval prompts. Gateway /yolo is session-scoped;
     # CLI --yolo remains process-scoped via the env var for local use.
     if _YOLO_MODE_FROZEN or is_current_session_yolo_enabled():
         return {"approved": True, "message": None}
 
-    if _command_matches_permanent_allowlist(command):
-        return {"approved": True, "message": None}
-
-    is_dangerous, pattern_key, description = detect_dangerous_command(command)
-    if not is_dangerous:
+    matches = detect_all_dangerous_commands(command)
+    has_delete = any(key in _ONCE_ONLY_DELETE_KEYS for key, _ in matches)
+    if not has_delete and _command_matches_permanent_allowlist(command):
         return {"approved": True, "message": None}
 
     session_key = get_current_session_key()
-    if is_approved(session_key, pattern_key):
+    warnings = [(key, desc) for key, desc in matches if not is_approved(session_key, key)]
+    if not warnings:
         return {"approved": True, "message": None}
+    pattern_key = warnings[0][0]
+    all_keys = [key for key, _ in warnings]
+    description = "; ".join(desc for _, desc in warnings)
 
-    is_cli = env_var_enabled("HERMES_INTERACTIVE")
-    is_gateway = _is_gateway_approval_context()
+    # Cron policy beats interactive/exec-ask flags a cron job inherits from
+    # its host process (the gateway sets exec-ask process-wide). Otherwise an
+    # exec-ask surface queues the command for approval below, as in
+    # check_all_command_guards; only a session with no surface at all is a
+    # no-approver session.
+    is_cron, is_cli, is_gateway, is_ask = _approval_surfaces()
 
-    if not is_cli and not is_gateway:
+    if not is_cli and not is_gateway and not is_ask:
         # LG-HO-02 (additive @ P2.2): under strict posture the legacy
         # auto-approve below is fail-closed DENY — a dangerous command with no
         # approver present must not run for CUI (closes the R6 gap). Applies
@@ -1352,7 +3209,7 @@ def check_dangerous_command(command: str, env_type: str,
                 ),
             }
         # Cron sessions: respect cron_mode config
-        if env_var_enabled("HERMES_CRON_SESSION"):
+        if is_cron:
             if _get_cron_approval_mode() == "deny":
                 return {
                     "approved": False,
@@ -1364,18 +3221,20 @@ def check_dangerous_command(command: str, env_type: str,
                         "approvals.cron_mode: approve in config.yaml."
                     ),
                 }
-        logger.warning(
-            "AUTO-APPROVED dangerous command in non-interactive non-gateway context "
-            "(pattern: %s): %s — set HERMES_INTERACTIVE or HERMES_GATEWAY_SESSION to require approval.",
-            description, command[:200],
-        )
-        return {"approved": True, "message": None}
+            # approvals.cron_mode: approve is cron's own explicit opt-in.
+            return {"approved": True, "message": None}
+        # AI-1172 / DEF-015: no approver and no explicit opt-in. Refuse
+        # instead of auto-approving.
+        return _no_approver_block_result(command, description, pattern_key)
 
-    if is_gateway or env_var_enabled("HERMES_EXEC_ASK"):
+    if is_gateway or is_ask:
         submit_pending(session_key, {
             "command": command,
             "pattern_key": pattern_key,
+            "pattern_keys": all_keys,
             "description": description,
+            "allow_permanent": not has_delete,
+            "allow_session": not has_delete,
         })
         return {
             "approved": False,
@@ -1389,6 +3248,13 @@ def check_dangerous_command(command: str, env_type: str,
             ),
         }
 
+    # LG-GV-05: no authenticated approver in this context → don't prompt.
+    _gv05_block = _unauthenticated_approver_block(
+        command, description, pattern_key, origin="interactive_prompt",
+    )
+    if _gv05_block is not None:
+        return _gv05_block
+
     # LG-HO-07/10 (additive @ P2.2): count the prompt for fatigue tracking and
     # record the operator's verdict to the governance ledger. Never blocking.
     try:
@@ -1399,7 +3265,11 @@ def check_dangerous_command(command: str, env_type: str,
         _ho_record = None
 
     choice = prompt_dangerous_approval(command, description,
+                                       allow_permanent=not has_delete,
+                                       allow_session=not has_delete,
                                        approval_callback=approval_callback)
+    if has_delete and choice in {"session", "always"}:
+        choice = "once"
 
     if choice == "deny":
         if _ho_record is not None:
@@ -1416,12 +3286,13 @@ def check_dangerous_command(command: str, env_type: str,
             "description": description,
         }
 
-    if choice == "session":
-        approve_session(session_key, pattern_key)
-    elif choice == "always":
-        approve_session(session_key, pattern_key)
-        approve_permanent(pattern_key)
-        save_permanent_allowlist(_permanent_approved)
+    for key in all_keys:
+        if choice == "session":
+            approve_session(session_key, key)
+        elif choice == "always":
+            approve_session(session_key, key)
+            approve_permanent(key)
+            save_permanent_allowlist(_permanent_approved)
 
     if _ho_record is not None:
         try:
@@ -1565,6 +3436,30 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict,
     _drop_entry()
 
     choice = entry.result
+    if approval_data.get("allow_session") is False and choice in {"session", "always"}:
+        choice = "once"
+    # LG-HO-10 / LG-GV-05: record the gateway verdict with the authenticated
+    # approver (if any) that resolved it. Never blocking.
+    try:
+        from tools.hitl_oversight import is_approval_choice, record_decision
+        if not resolved or not choice:
+            _verdict = "timeout"
+        elif is_approval_choice(choice):
+            _verdict = "approve"
+        else:
+            _verdict = "deny"
+        record_decision(
+            decision=_verdict, gate="gateway.approval", target=command,
+            description=description, approver=entry.approver,
+            # entry.approver is only ever set from an authenticated principal
+            # bound in the resolver's context (resolve_gateway_approval).
+            approver_authenticated=True if entry.approver else None,
+            approver_method=entry.approver_method,
+            origin=surface,
+            session_id=session_key,
+        )
+    except Exception:
+        pass
     # Normalize outcome for the post hook. Unresolved (timeout) and None both
     # mean the user never responded; report that explicitly so plugins can
     # distinguish timeout from explicit deny.
@@ -1604,6 +3499,13 @@ def check_all_command_guards(command: str, env_type: str,
         logger.warning("Hardline block: %s (command: %s)", hardline_desc, command[:200])
         return _hardline_block_result(hardline_desc)
 
+    # Env-file write floor (AI-1178): redirect/tee into .env is refused with
+    # no prompt, before any yolo / mode=off / cron / stored-approval bypass.
+    is_env_write, env_write_desc = detect_env_file_write(command)
+    if is_env_write:
+        logger.warning("Env-file write block: %s (command: %s)", env_write_desc, command[:200])
+        return _env_write_block_result(env_write_desc)
+
     # == Sudo stdin guard ==
     # Like the hardline floor above, this is unconditional: there is never a
     # legitimate reason for the agent to pipe passwords to sudo -S when no
@@ -1621,15 +3523,18 @@ def check_all_command_guards(command: str, env_type: str,
     if _YOLO_MODE_FROZEN or is_current_session_yolo_enabled() or approval_mode == "off":
         return {"approved": True, "message": None}
 
-    if _command_matches_permanent_allowlist(command):
+    matches = detect_all_dangerous_commands(command)
+    has_delete = any(key in _ONCE_ONLY_DELETE_KEYS for key, _ in matches)
+    if not has_delete and _command_matches_permanent_allowlist(command):
         return {"approved": True, "message": None}
 
-    is_cli = env_var_enabled("HERMES_INTERACTIVE")
-    is_gateway = _is_gateway_approval_context()
-    is_ask = env_var_enabled("HERMES_EXEC_ASK")
+    # Cron policy beats interactive/exec-ask flags inherited from the host
+    # process (see check_dangerous_command).
+    is_cron, is_cli, is_gateway, is_ask = _approval_surfaces()
 
-    # Preserve the existing non-interactive behavior: outside CLI/gateway/ask
-    # flows, we do not block on approvals and we skip external guard work.
+    # Outside CLI/gateway/ask flows there is no approver: we skip external
+    # guard work and refuse dangerous commands (AI-1172) unless an explicit
+    # opt-in applies.
     if not is_cli and not is_gateway and not is_ask:
         # LG-HO-02: this is the terminal dispatcher's real guard. Strict
         # sessions must not inherit the shipped headless auto-approve behavior
@@ -1660,7 +3565,7 @@ def check_all_command_guards(command: str, env_type: str,
                 ),
             }
         # Cron sessions: respect cron_mode config
-        if env_var_enabled("HERMES_CRON_SESSION"):
+        if is_cron:
             if _get_cron_approval_mode() == "deny":
                 # Run detection to get a description for the block message
                 is_dangerous, _pk, description = detect_dangerous_command(command)
@@ -1675,6 +3580,20 @@ def check_all_command_guards(command: str, env_type: str,
                             "approvals.cron_mode: approve in config.yaml."
                         ),
                     }
+            # approvals.cron_mode: approve is cron's own explicit opt-in.
+            return {"approved": True, "message": None}
+        # AI-1172 / DEF-015: no approver and no explicit opt-in. An earlier
+        # operator approval (session or "always") still counts; anything else
+        # is refused instead of auto-approved.
+        session_key = get_current_session_key()
+        unapproved = [(key, desc) for key, desc in matches
+                      if not is_approved(session_key, key)]
+        if unapproved:
+            return _no_approver_block_result(
+                command,
+                "; ".join(desc for _, desc in unapproved),
+                unapproved[0][0],
+            )
         return {"approved": True, "message": None}
 
     # --- Phase 1: Gather findings from both checks ---
@@ -1721,9 +3640,6 @@ def check_all_command_guards(command: str, env_type: str,
             }
         # else: tirith_fail_open is True — allow as before (tirith_result stays "allow")
 
-    # Dangerous command check (detection only, no approval)
-    is_dangerous, pattern_key, description = detect_dangerous_command(command)
-
     # --- Phase 2: Decide ---
 
     # Collect warnings that need approval
@@ -1743,7 +3659,7 @@ def check_all_command_guards(command: str, env_type: str,
         if not is_approved(session_key, tirith_key):
             warnings.append((tirith_key, tirith_desc, True))
 
-    if is_dangerous:
+    for pattern_key, description in matches:
         if not is_approved(session_key, pattern_key):
             warnings.append((pattern_key, description, False))
 
@@ -1784,6 +3700,7 @@ def check_all_command_guards(command: str, env_type: str,
     primary_key = warnings[0][0]
     all_keys = [key for key, _, _ in warnings]
     has_tirith = any(is_t for _, _, is_t in warnings)
+    has_delete = any(key in _ONCE_ONLY_DELETE_KEYS for key in all_keys)
 
     # Gateway/async approval — block the agent thread until the user
     # responds with /approve or /deny, mirroring the CLI's synchronous
@@ -1806,7 +3723,8 @@ def check_all_command_guards(command: str, env_type: str,
                 "description": combined_desc,
                 # Mirror the CLI's allow_permanent gate: a tirith warning downgrades
                 # "always" to session scope below, so the UI must not offer it.
-                "allow_permanent": not has_tirith,
+                "allow_permanent": not (has_tirith or has_delete),
+                "allow_session": not has_delete,
             }
             decision = _await_gateway_decision(
                 session_key, notify_cb, approval_data, surface="gateway"
@@ -1820,6 +3738,8 @@ def check_all_command_guards(command: str, env_type: str,
                 }
             resolved = decision["resolved"]
             choice = decision["choice"]
+            if has_delete and choice in {"session", "always"}:
+                choice = "once"
 
             if not resolved or choice is None or choice == "deny":
                 # Consent contract: silence is NOT consent, and an explicit
@@ -1873,6 +3793,8 @@ def check_all_command_guards(command: str, env_type: str,
             "pattern_key": primary_key,
             "pattern_keys": all_keys,
             "description": combined_desc,
+            "allow_permanent": not (has_tirith or has_delete),
+            "allow_session": not has_delete,
         })
         return {
             "approved": False,
@@ -1886,6 +3808,13 @@ def check_all_command_guards(command: str, env_type: str,
             ),
         }
 
+    # LG-GV-05: no authenticated approver in this context → don't prompt.
+    _gv05_block = _unauthenticated_approver_block(
+        command, combined_desc, primary_key, origin="interactive_prompt",
+    )
+    if _gv05_block is not None:
+        return _gv05_block
+
     # CLI interactive: single combined prompt
     # Hide [a]lways when any tirith warning is present
     _fire_approval_hook(
@@ -1898,7 +3827,8 @@ def check_all_command_guards(command: str, env_type: str,
         surface="cli",
     )
     choice = prompt_dangerous_approval(command, combined_desc,
-                                       allow_permanent=not has_tirith,
+                                       allow_permanent=not (has_tirith or has_delete),
+                                       allow_session=not has_delete,
                                        approval_callback=approval_callback)
     _fire_approval_hook(
         "post_approval_response",
@@ -1910,6 +3840,17 @@ def check_all_command_guards(command: str, env_type: str,
         surface="cli",
         choice=choice,
     )
+
+    # LG-HO-10: record the operator's verdict (approver = bound principal).
+    try:
+        from tools.hitl_oversight import record_decision
+        record_decision(
+            decision="deny" if choice == "deny" else "approve",
+            gate="shell.dangerous", target=command, description=combined_desc,
+            origin="interactive_prompt",
+        )
+    except Exception:
+        pass
 
     if choice == "deny":
         return {
@@ -1927,6 +3868,9 @@ def check_all_command_guards(command: str, env_type: str,
             "outcome": "denied",
             "user_consent": False,
         }
+
+    if has_delete and choice in {"session", "always"}:
+        choice = "once"
 
     # Persist approval for each warning individually
     for key, _, is_tirith in warnings:
@@ -1955,11 +3899,11 @@ def check_execute_code_guard(code: str, env_type: str) -> dict:
 
     Scope (documented limitation, #30882): in a purely local non-interactive
     non-gateway session (no TTY, not gateway, not cron-deny) this returns
-    approved — matching the existing terminal auto-approve contract. The
-    hardline floor still blocks catastrophic ``terminal()`` commands the script
-    issues; running arbitrary code headlessly without any approval surface is
-    trusted-by-config (set a gateway/ask surface or ``approvals.cron_mode`` to
-    require approval).
+    approved. The script's own ``terminal()`` calls still pass through
+    ``check_all_command_guards``, which refuses dangerous commands in that
+    context (AI-1172), and the hardline floor still applies. Running arbitrary
+    code headlessly without any approval surface is trusted-by-config (set a
+    gateway/ask surface or ``approvals.cron_mode`` to require approval).
     """
     pattern_key = "execute_code"
     description = (
@@ -1978,11 +3922,10 @@ def check_execute_code_guard(code: str, env_type: str) -> dict:
     if _YOLO_MODE_FROZEN or is_current_session_yolo_enabled() or approval_mode == "off":
         return {"approved": True, "message": None}
 
-    is_gateway = _is_gateway_approval_context()
-    is_ask = env_var_enabled("HERMES_EXEC_ASK")
+    _is_cron, _is_cli, is_gateway, is_ask = _approval_surfaces()
 
     # Cron: no user is present to approve arbitrary code.
-    if env_var_enabled("HERMES_CRON_SESSION"):
+    if _is_cron_session():
         if _get_cron_approval_mode() == "deny":
             return {
                 "approved": False,

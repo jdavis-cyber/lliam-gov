@@ -325,6 +325,13 @@ class TestCliApprovalUi:
         fell back to raw input() in a background thread and timed out under
         prompt_toolkit.
         """
+        # The /btw thread's callback setters import tools.terminal_tool and
+        # tools.skills_tool lazily. Import them here so the 2s window below
+        # times the background task itself, not a cold import that can take
+        # longer than that on a loaded CI runner (AI-1172).
+        import tools.skills_tool  # noqa: F401
+        import tools.terminal_tool  # noqa: F401
+
         cli = _make_background_cli_stub()
         seen = {}
 
@@ -642,3 +649,34 @@ class TestPersistPromptSummary:
         assert "Clarify" in summary
         assert "Pick a path?" in summary
         assert "B" in summary
+
+
+def test_approval_prompt_honors_session_scope():
+    """The terminal approval flow exposes only scopes the request permits."""
+    from tools.approval import prompt_dangerous_approval
+
+    for allow_session in (False, True):
+        cli = _make_cli_stub()
+        result = {}
+
+        def run():
+            result["value"] = prompt_dangerous_approval(
+                "rm f", "file/directory delete", allow_permanent=False,
+                allow_session=allow_session, approval_callback=cli._approval_callback,
+            )
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 2
+        while cli._approval_state is None and thread.is_alive() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        try:
+            assert cli._approval_state is not None
+            choices = cli._approval_state["choices"]
+            assert ("session" in choices) is allow_session
+            assert "always" not in choices
+        finally:
+            if cli._approval_state is not None:
+                cli._approval_state["response_queue"].put("once")
+            thread.join(timeout=2)
+        assert result["value"] == "once"

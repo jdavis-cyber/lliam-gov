@@ -8,7 +8,7 @@ import os
 import threading
 from pathlib import Path
 
-from agent.file_safety import get_read_block_error
+from agent.file_safety import get_write_block_error, get_read_block_error
 from tools.binary_extensions import has_binary_extension
 from tools.file_operations import (
     ShellFileOperations,
@@ -449,7 +449,13 @@ def _get_lliam_config_resolved() -> str | None:
 
 def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None:
     """Return an error message if the path targets a sensitive system location."""
+    block_error = None
     try:
+        # Preserve the supplied basename as well as the resolved target: a
+        # .env symlink to an ordinary filename is still an environment file.
+        block_error = get_write_block_error(
+            _expand_tilde(filepath), cwd=str(_resolve_base_dir(task_id)),
+        )
         resolved = str(_resolve_path_for_task(filepath, task_id))
     except (OSError, ValueError):
         resolved = filepath
@@ -474,7 +480,7 @@ def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None
             "Agent cannot modify security-sensitive configuration. "
             "Edit ~/.hermes/config.yaml directly or use 'lliam-gov config' instead."
         )
-    return None
+    return block_error
 
 
 def _get_container_mirror_prefix_for_task(task_id: str = "default") -> str | None:
@@ -936,6 +942,7 @@ def _get_file_ops(task_id: str = "default") -> ShellFileOperations:
                     "docker_mount_cwd_to_workspace": config.get("docker_mount_cwd_to_workspace", False),
                     "docker_forward_env": config.get("docker_forward_env", []),
                     "docker_run_as_host_user": config.get("docker_run_as_host_user", False),
+                    "docker_network": config.get("docker_network", True),
                 }
 
             ssh_config = None
@@ -1003,6 +1010,44 @@ def clear_file_ops_cache(task_id: str = None):
             _file_ops_cache.clear()
 
 
+def _page_extracted_document(extracted, file_ops, offset: int, limit: int, file_size: int) -> dict:
+    """Page extracted document text like ``read_file`` pages a plain file.
+
+    Lines longer than the per-line cap are split into numbered chunks rather
+    than truncated, so offset/limit paging reaches all of the text. Such
+    lines are redacted before splitting, so a secret cannot escape
+    redaction by straddling a chunk boundary.
+    """
+    from tools.read_extract import split_long_line
+    from tools.tool_output_limits import get_max_line_length
+
+    width = get_max_line_length()
+    lines: list[str] = []
+    for line in extracted.text.splitlines():
+        if len(line) > width:
+            lines.extend(split_long_line(redact_sensitive_text(line, file_read=True), width))
+        else:
+            lines.append(line)
+    total_lines = len(lines)
+    end_line = offset + limit - 1
+    page_text = "\n".join(lines[offset - 1:end_line])
+    result_dict = {
+        "content": file_ops._add_line_numbers(page_text, offset) if page_text else "",
+        "total_lines": total_lines,
+        "file_size": file_size,
+        "truncated": total_lines > end_line,
+        "extracted_document": True,
+    }
+    if extracted.notice:
+        result_dict["document_notice"] = extracted.notice
+    if result_dict["truncated"]:
+        result_dict["hint"] = (
+            f"Use offset={end_line + 1} to continue reading "
+            f"(showing {offset}-{min(end_line, total_lines)} of {total_lines} lines)"
+        )
+    return result_dict
+
+
 def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = "default") -> str:
     """Read a file with pagination and line numbers."""
     try:
@@ -1022,62 +1067,14 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
 
         _resolved = _resolve_path_for_task(path, task_id)
 
-        # ── Structured-document extraction ────────────────────────────
-        # Try before the binary-extension guard so .docx/.xlsx can render as text.
-        # Malformed documents fall through to the normal path/binary guard.
-        from tools.read_extract import ExtractionError, extract_document_text, is_extractable_document
-
-        if is_extractable_document(str(_resolved)):
-            try:
-                extracted_text = extract_document_text(str(_resolved))
-            except ExtractionError:
-                logger.debug("document extraction failed for %s", path, exc_info=True)
-            else:
-                file_ops = _get_file_ops(task_id)
-                lines = extracted_text.splitlines()
-                total_lines = len(lines)
-                end_line = offset + limit - 1
-                page_text = "\n".join(lines[offset - 1:end_line])
-                result_dict = {
-                    "content": file_ops._add_line_numbers(page_text, offset) if page_text else "",
-                    "total_lines": total_lines,
-                    "file_size": os.path.getsize(_resolved),
-                    "truncated": total_lines > end_line,
-                    "extracted_document": True,
-                }
-                if result_dict["truncated"]:
-                    result_dict["hint"] = (
-                        f"Use offset={end_line + 1} to continue reading "
-                        f"(showing {offset}-{min(end_line, total_lines)} of {total_lines} lines)"
-                    )
-                content_len = len(result_dict["content"])
-                max_chars = _get_max_read_chars()
-                if content_len > max_chars:
-                    return json.dumps({
-                        "error": (
-                            f"Read produced {content_len:,} characters which exceeds "
-                            f"the safety limit ({max_chars:,} chars). "
-                            "Use offset and limit to read a smaller range. "
-                            f"The document has {total_lines} lines of extracted text."
-                        ),
-                        "path": path,
-                        "total_lines": total_lines,
-                        "file_size": result_dict["file_size"],
-                    }, ensure_ascii=False)
-                if result_dict["content"]:
-                    result_dict["content"] = redact_sensitive_text(result_dict["content"], file_read=True)
-                return json.dumps(result_dict, ensure_ascii=False)
-
-        # ── Binary file guard ─────────────────────────────────────────
-        # Block binary files by extension (no I/O).
-        if has_binary_extension(str(_resolved)):
-            _ext = _resolved.suffix.lower()
-            return json.dumps({
-                "error": (
-                    f"Cannot read binary file '{path}' ({_ext}). "
-                    "Use vision_analyze for images, or terminal to inspect binary files."
-                ),
-            })
+        # Check the supplied name and its target before any content reads,
+        # including document extraction. Anchor at the task cwd without
+        # resolving away an env-named symlink to an ordinary file.
+        block_error = get_read_block_error(
+            str(_resolve_base_dir(task_id) / _expand_tilde(path))
+        )
+        if block_error:
+            return json.dumps({"error": block_error})
 
         # ── Lliam-GOV internal path guard ────────────────────────────────
         # Prevent prompt injection via catalog or hub metadata files,
@@ -1089,6 +1086,48 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
         block_error = get_read_block_error(str(_resolved))
         if block_error:
             return json.dumps({"error": block_error})
+
+        # ── Structured-document extraction ────────────────────────────
+        # Try before the binary-extension guard so .docx/.xlsx/.pdf render as text.
+        # PDF errors explain why text is unavailable; other malformed documents
+        # fall through to the normal path/binary guard. A successful extraction
+        # is paged below through the same dedup, loop-guard and read tracking
+        # as a plain-text read.
+        from tools.read_extract import (
+            ExtractionError,
+            document_signature,
+            extract_document,
+            is_extractable_document,
+        )
+        from tools.terminal_tool import _get_env_config
+
+        missing_pdf = False
+        extracted = None
+        # Extraction opens host files; remote paths must stay in their backend.
+        # Use the same backend configuration as _get_file_ops.
+        if is_extractable_document(str(_resolved)) and _get_env_config()["env_type"] == "local":
+            try:
+                extracted = extract_document(str(_resolved))
+            except ExtractionError as exc:
+                logger.debug("document extraction failed for %s", path, exc_info=True)
+                if _resolved.suffix.lower() == ".pdf":
+                    if isinstance(exc.__cause__, FileNotFoundError):
+                        missing_pdf = True
+                    else:
+                        return json.dumps({"error": str(exc)}, ensure_ascii=False)
+
+        # ── Binary file guard ─────────────────────────────────────────
+        # Block binary files by extension (no I/O).
+        if extracted is None and not missing_pdf and (
+            has_binary_extension(str(_resolved)) or _resolved.suffix.lower() == ".pdf"
+        ):
+            _ext = _resolved.suffix.lower()
+            return json.dumps({
+                "error": (
+                    f"Cannot read binary file '{path}' ({_ext}). "
+                    "Use vision_analyze for images, or terminal to inspect binary files."
+                ),
+            })
 
         # ── Dedup check ───────────────────────────────────────────────
         # If we already read this exact (path, offset, limit) and the
@@ -1113,7 +1152,13 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
 
         if cached_mtime is not None:
             try:
-                current_mtime = os.path.getmtime(resolved_str)
+                # Extracted documents dedup on the extraction cache's file
+                # signature, so a replacement that keeps the mtime is re-read.
+                current_mtime = (
+                    document_signature(resolved_str)
+                    if extracted is not None
+                    else os.path.getmtime(resolved_str)
+                )
                 if current_mtime == cached_mtime:
                     # Count repeated stub returns so weak tool-followers that
                     # ignore the "refer to earlier result" hint don't burn
@@ -1152,8 +1197,12 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
 
         # ── Perform the read ──────────────────────────────────────────
         file_ops = _get_file_ops(task_id)
-        result = file_ops.read_file(path, offset, limit)
-        result_dict = result.to_dict()
+        if extracted is not None:
+            result_dict = _page_extracted_document(
+                extracted, file_ops, offset, limit, os.path.getsize(_resolved),
+            )
+        else:
+            result_dict = file_ops.read_file(path, offset, limit).to_dict()
 
         # ── Character-count guard ─────────────────────────────────────
         # We're model-agnostic so we can't count tokens; characters are
@@ -1162,17 +1211,23 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
         # Note: we check the formatted content (with line-number prefixes),
         # not the raw file size, because that's what actually enters context.
         # Check BEFORE redaction to avoid expensive regex on huge content.
-        content_len = len(result.content or "")
+        content = result_dict.get("content") or ""
+        content_len = len(content)
         file_size = result_dict.get("file_size", 0)
         max_chars = _get_max_read_chars()
         if content_len > max_chars:
             total_lines = result_dict.get("total_lines", "unknown")
+            extent = (
+                f"The document has {total_lines} lines of extracted text."
+                if extracted is not None
+                else f"The file has {total_lines} lines total."
+            )
             return json.dumps({
                 "error": (
                     f"Read produced {content_len:,} characters which exceeds "
                     f"the safety limit ({max_chars:,} chars). "
                     "Use offset and limit to read a smaller range. "
-                    f"The file has {total_lines} lines total."
+                    f"{extent}"
                 ),
                 "path": path,
                 "total_lines": total_lines,
@@ -1180,9 +1235,8 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
             }, ensure_ascii=False)
 
         # ── Redact secrets (after guard check to skip oversized content) ──
-        if result.content:
-            result.content = redact_sensitive_text(result.content, file_read=True)
-            result_dict["content"] = result.content
+        if content:
+            result_dict["content"] = redact_sensitive_text(content, file_read=True)
 
         # Large-file hint: if the file is big and the caller didn't ask
         # for a narrow window, nudge toward targeted reads.
@@ -1222,7 +1276,9 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
             #    the agent last read it (external edit, concurrent agent, etc.).
             try:
                 _mtime_now = os.path.getmtime(resolved_str)
-                task_data["dedup"][dedup_key] = _mtime_now
+                task_data["dedup"][dedup_key] = (
+                    document_signature(resolved_str) if extracted is not None else _mtime_now
+                )
                 task_data.setdefault("read_timestamps", {})[resolved_str] = _mtime_now
             except OSError:
                 pass  # Can't stat — skip tracking for this entry

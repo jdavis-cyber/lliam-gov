@@ -36,7 +36,6 @@ import {
 } from '@/components/ui/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { LliamGitWorktree } from '@/global'
-import { searchSessions, type SessionInfo, type SessionSearchResult } from '@/lliam'
 import { useI18n } from '@/i18n'
 import { comboTokens } from '@/lib/keybinds/combo'
 import { profileColor } from '@/lib/profile-color'
@@ -44,6 +43,7 @@ import { flattenSessionsWithBranches } from '@/lib/session-branch-tree'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { normalizeSessionSource, sessionSourceLabel } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
+import { searchSessions, type SessionInfo, type SessionSearchResult } from '@/lliam'
 import { $cronJobs } from '@/store/cron'
 import {
   $dismissedAutoProjectIds,

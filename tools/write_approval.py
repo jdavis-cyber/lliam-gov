@@ -15,13 +15,9 @@ Both stores are written from two origins:
     turn and autonomously decides what to save (the source of the
     "wrong assumptions" users complained about)
 
-This module lets the user gate those writes per-subsystem with a boolean
-``write_approval``:
-
-  * ``false`` (default) — write freely (the pre-gate behaviour)
-  * ``true``            — require approval: do not commit the write; either
-    prompt inline (memory, interactive CLI only) or **stage** it to a pending
-    store and surface it for the user to approve or reject out-of-band
+Agent skill writes always stage for operator approval; ``skills.write_approval``
+is deprecated and ignored. Memory retains its boolean ``memory.write_approval``:
+false allows writes, while true prompts inline or stages them for review.
 
 The size asymmetry between memory and skills is real and unavoidable: a memory
 entry can be reviewed inline in a chat bubble; a 100 KB SKILL.md cannot. So
@@ -29,11 +25,9 @@ the gate stages BOTH to disk, but review affordances differ by subsystem
 (see ``lliam_cli`` slash handlers): memory shows full content, skills show
 metadata + a one-line gist + a ``diff`` escape hatch (CLI/dashboard/file).
 
-Staging is mandatory for background-origin writes (a daemon thread cannot
-block on an interactive prompt) and for gateway sessions (no inline prompt
-channel — review happens via ``/memory pending``). Foreground CLI memory
-writes prompt inline via the dangerous-command approval callback; skill
-writes always stage (too big to eyeball mid-loop).
+When memory approval is enabled, background and gateway memory writes stage
+for ``/memory pending`` review; foreground CLI writes can prompt inline.
+Skill writes always stage, regardless of origin or configuration.
 
 Pending records live under ``<HERMES_HOME>/pending/{memory,skills}/<id>.json``
 so they survive process restarts and can be reviewed from CLI, gateway, or the
@@ -42,13 +36,18 @@ web dashboard.
 
 from __future__ import annotations
 
+import getpass
+import hashlib
+import hmac
 import json
 import logging
 import os
 import time
 import uuid
+import weakref
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from lliam_constants import get_lliam_home
 
@@ -59,11 +58,7 @@ MEMORY = "memory"
 SKILLS = "skills"
 _SUBSYSTEMS = (MEMORY, SKILLS)
 
-# Config key (per subsystem). A single boolean: the approval gate is OFF by
-# default (writes flow freely, the pre-gate behaviour), and ON means stage /
-# prompt every write for the user's approval. There is intentionally no third
-# "block all writes" state — to disable a subsystem entirely use its own
-# enable flag (e.g. ``memory.memory_enabled: false``).
+# Memory's opt-in approval setting. The legacy skill key is ignored.
 CONFIG_KEY = "write_approval"
 
 
@@ -74,10 +69,12 @@ CONFIG_KEY = "write_approval"
 def write_approval_enabled(subsystem: str) -> bool:
     """Return whether the approval gate is enabled for ``subsystem``.
 
-    Reads ``<subsystem>.write_approval`` from config.yaml. Defaults to
-    ``False`` (gate off — writes flow freely) for any unset / invalid value so
-    existing installs keep their current behaviour until the user opts in.
+    Skills always require approval; ``skills.write_approval`` is deprecated
+    and ignored. Memory reads ``memory.write_approval`` from config.yaml,
+    defaulting to False for unset or invalid values.
     """
+    if subsystem == SKILLS:
+        return True
     if subsystem not in _SUBSYSTEMS:
         return False
     try:
@@ -125,9 +122,8 @@ def stage_write(subsystem: str, payload: Dict[str, Any],
             entry text itself.
         origin: ``foreground`` or ``background_review`` — recorded for audit.
 
-    Returns a dict with ``id`` and metadata. Best-effort: on disk failure it
-    logs and still returns a record (the write is simply lost, which is the
-    safe failure for an approval gate — nothing is silently committed).
+    Returns a dict with ``id`` and metadata only after persistence succeeds.
+    Disk errors propagate to the caller; no proposal is reported as staged.
     """
     pid = uuid.uuid4().hex[:8]
     record = {
@@ -139,15 +135,15 @@ def stage_write(subsystem: str, payload: Dict[str, Any],
         "created_at": time.time(),
         "payload": payload,
     }
+    d = _pending_dir(subsystem)
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / f"{pid}.json"
+    tmp = path.with_suffix(".json.tmp")
     try:
-        d = _pending_dir(subsystem)
-        d.mkdir(parents=True, exist_ok=True)
-        path = d / f"{pid}.json"
-        tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, path)
-    except Exception as e:  # pragma: no cover - disk failure path
-        logger.error("Failed to stage pending %s write: %s", subsystem, e, exc_info=True)
+    finally:
+        tmp.unlink(missing_ok=True)
     return record
 
 
@@ -198,6 +194,163 @@ def pending_count(subsystem: str) -> int:
         return sum(1 for _ in d.glob("*.json"))
     except Exception:
         return 0
+
+
+# ---------------------------------------------------------------------------
+# Durable operator decisions
+# ---------------------------------------------------------------------------
+
+def _append_decision(record: Dict[str, Any]) -> None:
+    """Append and sync one JSON line; errors must stop a pending decision."""
+    from agent.governance_audit import _lock_file, _unlock_file
+
+    directory = get_lliam_home() / "logs"
+    directory.mkdir(parents=True, exist_ok=True)
+    data = (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8")
+    fd = os.open(directory / "write-approvals.jsonl", os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd, "a+b", buffering=0) as stream:
+        # Reuse the ledger's cross-process POSIX/Windows locking. A torn tail
+        # requires operator repair; never concatenate a new decision onto it.
+        _lock_file(stream)
+        try:
+            if stream.seek(0, os.SEEK_END):
+                stream.seek(-1, os.SEEK_END)
+                if stream.read(1) != b"\n":
+                    raise OSError("Decision log has an incomplete record; repair it before retrying")
+            if os.write(fd, data) != len(data):
+                raise OSError("Incomplete write-approval decision record")
+            os.fsync(fd)
+            if os.name != "nt":
+                # Persist both the log entry and a newly created logs/ entry.
+                # Windows has no POSIX directory-fsync interface.
+                for path in (directory, directory.parent):
+                    directory_fd = os.open(path, os.O_RDONLY)
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+        finally:
+            _unlock_file(stream)
+
+
+def payload_sha256(payload: Dict[str, Any]) -> str:
+    """SHA-256 of a staged payload: UTF-8 JSON, sorted keys, compact separators.
+
+    This is the hash recorded in write-approvals.jsonl and shown to the
+    operator by the pending list and diff handlers.
+    """
+    return hashlib.sha256(json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode("utf-8")).hexdigest()
+
+
+class OperatorCapability:
+    """Opaque, in-memory proof that the caller is an operator review surface.
+
+    The CLI and gateway /skills handlers each issue one when they first run
+    and keep it on their own instance. It is never written to env, files or
+    logs, cannot be pickled, and is not inherited by child processes.
+    """
+
+    __slots__ = ("__weakref__",)
+
+    def __repr__(self) -> str:
+        return "<OperatorCapability>"
+
+    def __reduce__(self):
+        raise TypeError("OperatorCapability cannot be serialized")
+
+
+_operator_capabilities: "weakref.WeakSet[OperatorCapability]" = weakref.WeakSet()
+
+
+def issue_operator_capability() -> OperatorCapability:
+    """Issue an operator capability. Only operator review surfaces call this."""
+    capability = OperatorCapability()
+    _operator_capabilities.add(capability)
+    return capability
+
+
+def _is_operator(capability: Any) -> bool:
+    return isinstance(capability, OperatorCapability) and capability in _operator_capabilities
+
+
+# Approvals logged by record_write_decision in THIS process, keyed by
+# (subsystem, pending_id) -> approved payload sha256. AI-1183: replaying a
+# staged skill write consumes one of these, and one is registered only when
+# the decision is recorded with an OperatorCapability issued in this process.
+# A fresh interpreter (python -c, execute_code) that calls
+# record_write_decision itself logs a decision line but gets no replay token,
+# so apply_skill_pending refuses.
+_approved_payloads: Dict[Tuple[str, str], str] = {}
+
+
+def consume_approval(subsystem: str, pending_id: str,
+                     payload: Dict[str, Any]) -> Optional[str]:
+    """Consume the logged approval for ``pending_id``; single use.
+
+    Returns None when an operator approval for exactly this payload was
+    recorded in this process, else the reason to refuse the replay.
+    """
+    expected = _approved_payloads.pop((subsystem, pending_id), None)
+    if expected is None:
+        return ("No operator approval is recorded for this proposal in this "
+                f"process. Approve it with /{subsystem} approve {pending_id}.")
+    actual = payload_sha256(payload)
+    if not hmac.compare_digest(expected, actual):
+        return (f"Proposal {pending_id} changed after it was approved "
+                f"(approved sha256 {expected[:12]}, now {actual[:12]}); "
+                "it was not applied. Review it again.")
+    return None
+
+
+def record_write_decision(subsystem: str, pending: Dict[str, Any],
+                          decision: str, *,
+                          operator: Optional[OperatorCapability] = None) -> Dict[str, Any]:
+    """Persist authorization BEFORE applying/discarding a staged payload.
+
+    ``result=pending`` means execution has not occurred. A second line records
+    the outcome; a crash between the two leaves an honest pending result.
+    The hash covers UTF-8 JSON with sorted keys and compact separators.
+    """
+    from tools import hitl_oversight
+
+    payload = pending["payload"]
+    record = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "decision": decision,
+        "subsystem": subsystem,
+        "pending_id": pending["id"],
+        "action": payload.get("action", ""),
+        "name": payload.get("name", payload.get("target", "")),
+        "origin": pending.get("origin", "foreground"),
+        "summary": pending.get("summary", ""),
+        "sha256": payload_sha256(payload),
+        "approver": hitl_oversight.authenticated_principal() or getpass.getuser(),
+        "result": "pending",
+    }
+    _append_decision(record)
+    hitl_oversight.record_decision(
+        decision="approve" if decision == "approve" else "deny",
+        gate=f"{subsystem}.write_approval", target=pending["id"],
+        description=record["summary"], approver=record["approver"],
+        origin=record["origin"], justification=f"sha256:{record['sha256']}",
+    )
+    if subsystem == SKILLS:
+        key = (subsystem, pending["id"])
+        if decision == "approve" and _is_operator(operator):
+            _approved_payloads[key] = record["sha256"]
+        else:
+            _approved_payloads.pop(key, None)
+    return record
+
+
+def record_write_outcome(record: Dict[str, Any], result: str, error: str = "") -> None:
+    """Append execution outcome without replacing the prior authorization."""
+    outcome = {**record, "ts": datetime.now(timezone.utc).isoformat(), "result": result}
+    if error:
+        outcome["error"] = error
+    _append_decision(outcome)
 
 
 # ---------------------------------------------------------------------------
@@ -262,10 +415,10 @@ def evaluate_gate(subsystem: str, *, inline_summary: str = "",
             are small; skills never take the inline path).
 
     Decision matrix:
-        gate off (default)                    → allow (writes flow freely)
+        memory gate off (default)             → allow (writes flow freely)
         gate on, memory + interactive CLI     → inline approve/deny prompt
         gate on, memory + gateway/script/bg   → stage
-        gate on, skills (any origin)          → stage (too big to review inline)
+        skills (any config or origin)        → stage (operator approval required)
 
     Note: there is no config-driven "blocked" outcome — the gate only ever
     delays a write for approval, never silently refuses it. ``blocked`` is
@@ -283,7 +436,7 @@ def evaluate_gate(subsystem: str, *, inline_summary: str = "",
         return GateDecision(
             stage=True,
             message=(
-                f"Staged for approval ({subsystem}.write_approval is on). "
+                "Staged for approval. "
                 f"Not yet saved — review with {where}."
             ),
         )

@@ -204,7 +204,10 @@ class TestFindAgentBrowser:
              patch(
                  "tools.browser_tool._discover_homebrew_node_dirs",
                  return_value=[],
-             ):
+             ), \
+             patch("lliam_cli.dep_ensure.ensure_dependency", return_value=False):
+            # Stub the lazy install: unpatched, the lookup runs
+            # scripts/install.sh --ensure browser, a real npm install.
             with pytest.raises(FileNotFoundError, match="agent-browser CLI not found"):
                 _find_agent_browser()
 

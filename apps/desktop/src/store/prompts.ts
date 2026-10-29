@@ -69,8 +69,9 @@ function keyedPromptStore<T extends KeyedPrompt>(): PromptStore<T> {
 // resolved via approval.respond {choice, session_id}). It carries no request_id,
 // unlike sudo/secret which are _block()-style request/response.
 export interface ApprovalRequest extends KeyedPrompt {
-  // false when the backend won't honor a permanent allow (tirith warning) → hide "Always allow".
+  // false when the backend requires limited consent (tirith warnings or deletes).
   allowPermanent?: boolean
+  allowSession?: boolean
   command: string
   description: string
 }

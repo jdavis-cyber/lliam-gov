@@ -392,8 +392,9 @@ def get_disabled_skill_names(platform: str | None = None) -> Set[str]:
     # so a denied skill is refused regardless. No-op unless posture==strict; never
     # breaks listing (faults swallowed, falling back to shipped behavior).
     try:
-        from tools.tool_policy import policy_denied_skill_names
+        from tools.tool_policy import policy_denied_skill_names, policy_held_skill_names
         global_disabled = global_disabled | policy_denied_skill_names(resolved_platform)
+        global_disabled = global_disabled | policy_held_skill_names()
     except Exception:
         pass
     return global_disabled

@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import contextvars
 import logging
+from types import SimpleNamespace
 from typing import Any, Optional
 
 _log = logging.getLogger(__name__)
@@ -115,6 +116,22 @@ _RISK_BY_TOOL: dict[str, frozenset[str]] = {
     # part of the fail-closed guarantee during an audit-write outage.
     "vision_analyze": frozenset({"egress"}),
     "video_analyze": frozenset({"egress"}),
+    # Web search/extract (and X search) send the query or URL to an external
+    # provider, so session content can leave in a search query. Classed as
+    # egress (not the default "mutating") the PDP resolves them to
+    # network.egress, and the injection-taint (LG-PI-06) and CUI-taint
+    # (LG-DP-10) escalations apply to them exactly as to other egress.
+    "web_search": frozenset({"egress"}),
+    "web_extract": frozenset({"egress"}),
+    "x_search": frozenset({"egress"}),
+    # Media generation ships the prompt to an external provider.
+    "image_generate": frozenset({"egress"}),
+    "video_generate": frozenset({"egress"}),
+    # Outbound messaging: content leaves the boundary and posts state.
+    "discord": frozenset({"egress", "mutating"}),
+    "discord_admin": frozenset({"egress", "mutating"}),
+    "yb_send_dm": frozenset({"egress", "mutating"}),
+    "yb_send_sticker": frozenset({"egress", "mutating"}),
     "feishu_drive_add_comment": frozenset({"egress", "mutating"}),
     "feishu_drive_reply_comment": frozenset({"egress", "mutating"}),
 }
@@ -177,6 +194,120 @@ def _actor_for_agent(agent) -> dict:
         return actor
 
 
+# Session -> NPE actor cache (LG-QT-03). Outcome and PDP-denial records are
+# emitted without the agent in hand; they carry the instance identity last
+# derived for their session (or correlation id) so every record of one
+# operation names the same instance. Bounded LRU; refreshed on every
+# dispatch, so a mid-session identity change shows up on the next record.
+import threading as _threading  # noqa: E402  (kept beside its only user)
+from collections import OrderedDict as _OrderedDict  # noqa: E402
+
+_ACTOR_CACHE_MAX = 256
+_session_actors: "_OrderedDict[str, dict]" = _OrderedDict()
+_session_actors_lock = _threading.Lock()
+
+
+def _remember_actor(keys, actor: dict, *, overwrite: bool = True) -> None:
+    if not isinstance(actor, dict) or not actor.get("instance_id"):
+        return
+    with _session_actors_lock:
+        for key in keys:
+            if not key:
+                continue
+            if not overwrite and key in _session_actors:
+                continue
+            _session_actors[key] = actor
+            _session_actors.move_to_end(key)
+        while len(_session_actors) > _ACTOR_CACHE_MAX:
+            _session_actors.popitem(last=False)
+
+
+def _cached_actor(*, task_id: str = "", session_id: str = "") -> Optional[dict]:
+    with _session_actors_lock:
+        for key in (
+            f"agent:{session_id}" if session_id else "",
+            _correlation_id(task_id=task_id, session_id=session_id) or "",
+        ):
+            if key and key in _session_actors:
+                _session_actors.move_to_end(key)
+                return _session_actors[key]
+    return None
+
+
+def bind_session_actor(agent) -> None:
+    """Cache ``agent``'s instance identity for its session. Never raises.
+
+    Called at the executor's PDP seam so a call denied before it reaches
+    :func:`predispatch_gate` still yields records that carry the instance id.
+    Cheap after the first call per session (cache hit).
+    """
+    try:
+        sid = getattr(agent, "session_id", "") or ""
+        if not sid or _enabled_ledger() is None:
+            return
+        with _session_actors_lock:
+            if f"agent:{sid}" in _session_actors:
+                return
+        _remember_actor([f"agent:{sid}"], _actor_for_agent(agent))
+    except Exception:
+        pass
+
+
+def _record_actor(*, task_id: str = "", session_id: str = "") -> dict:
+    """Actor for a record emitted without the agent (outcome / PDP denial)."""
+    actor = _cached_actor(task_id=task_id, session_id=session_id)
+    if actor is not None:
+        return actor
+    # No agent ever dispatched in this session (a direct caller of the
+    # public dispatcher): derive the agent-less identity the dispatch record
+    # of that path uses, and cache it under the correlation id.
+    actor = _actor_for_agent(None)
+    _remember_actor(
+        [_correlation_id(task_id=task_id, session_id=session_id)], actor,
+        overwrite=False,
+    )
+    return actor
+
+
+def _dispatch_actor(agent, *, task_id: str = "") -> dict:
+    """Instance identity for a dispatch record, cached for later records."""
+    actor = _actor_for_agent(agent)
+    sid = (getattr(agent, "session_id", "") or "") if agent is not None else ""
+    keys = [_correlation_id(agent, task_id=task_id)]
+    if sid:
+        keys.append(f"agent:{sid}")
+    # An agent-less identity (direct dispatcher callers) never replaces one
+    # derived from a real agent under a shared correlation id.
+    _remember_actor(keys, actor, overwrite=agent is not None)
+    return actor
+
+
+def _dispatch_resource(function_name: str, function_args: Optional[dict]) -> dict:
+    """Resource block for ``tool.dispatch`` with a non-secret args digest.
+
+    ``args_digest`` is a SHA-256 over the REDACTED, canonical arguments
+    (prefix-truncated), so identical calls share a digest and distinct
+    targets do not, without any secret entering the hash. LG-MO-01 keys its
+    runaway-loop signature on it.
+    """
+    resource: dict[str, Any] = {"type": "tool", "name": function_name}
+    try:
+        import hashlib
+        import json
+        from agent import governance_audit as ga
+
+        redacted = ga._redact_value(ga._jsonify(dict(function_args or {})))
+        canon = json.dumps(
+            redacted, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        ).encode("utf-8")
+        resource["args_digest"] = (
+            "sha256:" + hashlib.sha256(canon).hexdigest()[:32]
+        )
+    except Exception:
+        pass
+    return resource
+
+
 def _trace_for(
     agent=None,
     *,
@@ -234,6 +365,21 @@ def _correlation_id(agent=None, *, task_id: str = "", session_id: str = "") -> O
     return None  # ledger falls back to its process-level session id
 
 
+def _killswitch_guard_failure(function_name: str, err: BaseException):
+    """Blocking decision for a kill-switch guard that could not run."""
+    message = ("Blocked (fail-closed): the kill-switch guard could not run "
+               f"({type(err).__name__}); tool execution is denied (LG-IR-01).")
+    try:
+        from agent.tool_guardrails import ToolGuardrailDecision
+        return ToolGuardrailDecision(action="halt", code="killswitch_guard_error",
+                                     message=message, tool_name=function_name)
+    except Exception:
+        return SimpleNamespace(action="halt", code="killswitch_guard_error",
+                               message=message, tool_name=function_name, count=0,
+                               signature=None, allows_execution=False,
+                               should_halt=True)
+
+
 # ---------------------------------------------------------------------------
 # 1. Pre-dispatch gate (LG-AU-02 + LG-AU-09) — called from tool_executor
 # ---------------------------------------------------------------------------
@@ -257,14 +403,17 @@ def predispatch_gate(
     """
     # LG-IR-01 (additive @ P5.3): the kill-switch halts ALL tool execution
     # when engaged — checked before the audit/PDP path so a contained agent
-    # cannot act even if the ledger is disabled. Fail-safe (no-op unengaged).
+    # cannot act even if the ledger is disabled. No-op unengaged; fail-CLOSED
+    # when the check itself errors (JER-190): the call is denied.
     try:
         from agent import killswitch as _ks
         _halt = _ks.guard_tool_dispatch(function_name)
-        if _halt is not None:
-            return _halt
-    except Exception:
-        pass
+    except Exception as e:
+        _log.error("kill-switch guard unavailable — denying %s (fail-closed): %s",
+                   function_name, e)
+        return _killswitch_guard_failure(function_name, e)
+    if _halt is not None:
+        return _halt
 
     ledger = _enabled_ledger()
     if ledger is None:
@@ -278,9 +427,9 @@ def predispatch_gate(
                 action=f"tool.{function_name}",
                 parameters=dict(function_args or {}),
                 risk_scope=set(risk),
-                actor=_actor_for_agent(agent),
+                actor=_dispatch_actor(agent, task_id=effective_task_id),
                 subject=_current_subject(),
-                resource={"type": "tool", "name": function_name},
+                resource=_dispatch_resource(function_name, function_args),
                 correlation_id=_correlation_id(agent, task_id=effective_task_id),
                 trace=_trace_for(
                     agent,
@@ -344,11 +493,21 @@ def record_outcome(
     everything else is ``tool.result``. Tool result CONTENT is not
     persisted — only status/class/redacted error (spec §3.1 outcome shape).
     """
+    blocked = (status == "blocked") or (error_type in _BLOCK_ERROR_TYPES)
+    # LG-IR-03 (JER-190): governance circuit-breaker — a run of consecutive
+    # blocked calls in a session within a window trips the kill-switch. Fed
+    # whether or not the ledger is on; off unless the gov overlay enables it.
+    try:
+        from agent import governance_breaker as _gb
+        _gb.observe_outcome(blocked=blocked, session_id=session_id or "",
+                            tool=function_name, detail=error_message or "")
+    except Exception as e:
+        _log.error("governance circuit-breaker feed failed: %s", e)
+
     ledger = _enabled_ledger()
     if ledger is None:
         return
     try:
-        blocked = (status == "blocked") or (error_type in _BLOCK_ERROR_TYPES)
         if blocked:
             event, decision, severity = "policy.violation", "deny", "warning"
             out_status = "blocked"
@@ -371,6 +530,7 @@ def record_outcome(
             severity=severity,
             parameters=dict(function_args or {}),
             outcome=outcome,
+            actor=_record_actor(task_id=task_id, session_id=session_id),
             subject=_current_subject(),
             resource={"type": "tool", "name": function_name},
             correlation_id=_correlation_id(task_id=task_id, session_id=session_id),
@@ -388,6 +548,31 @@ def record_outcome(
         )
     except Exception as e:
         _log.warning("governance outcome record failed (non-blocking): %s", e)
+
+
+def denial_record_context(
+    *, task_id: str = "", session_id: str = "", tool_call_id: str = "",
+) -> dict:
+    """Correlation fields for a denial recorded off the outcome funnel.
+
+    The tool-risk PDP records its own ``policy.violation``; this gives it the
+    same correlation id, instance identity and trace as the terminal outcome
+    record of the same call, so both land in ONE session (LG-AU-10) and the
+    monitors can pair them into one alert. Never raises.
+    """
+    try:
+        return {
+            "actor": _record_actor(task_id=task_id, session_id=session_id),
+            "subject": _current_subject(),
+            "correlation_id": _correlation_id(
+                task_id=task_id, session_id=session_id),
+            "trace": _trace_for(
+                tool_call_id=tool_call_id, task_id=task_id,
+                session_id=session_id,
+            ),
+        }
+    except Exception:
+        return {}
 
 
 # ---------------------------------------------------------------------------

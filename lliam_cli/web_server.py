@@ -9870,7 +9870,7 @@ def _ws_auth_reason(ws: "WebSocket") -> tuple[Optional[str], str]:
         internal = ws.query_params.get("internal", "")
         if internal:
             try:
-                consume_internal_credential(internal)
+                _stash_ws_identity(ws, consume_internal_credential(internal))
                 return None, "internal"
             except TicketInvalid as exc:
                 audit_log(
@@ -9886,7 +9886,7 @@ def _ws_auth_reason(ws: "WebSocket") -> tuple[Optional[str], str]:
             return "no_credential", "none"
 
         try:
-            consume_ticket(ticket)
+            _stash_ws_identity(ws, consume_ticket(ticket))
             return None, "ticket"
         except TicketInvalid as exc:
             audit_log(
@@ -9909,6 +9909,40 @@ def _ws_auth_ok(ws: "WebSocket") -> bool:
     """True when the WS-upgrade credential is accepted. See _ws_auth_reason."""
     return _ws_auth_reason(ws)[0] is None
 
+
+def _stash_ws_identity(ws: "WebSocket", info: Optional[dict]) -> None:
+    """Remember the dashboard_auth identity a WS credential resolved to.
+
+    Single-use tickets are consumed inside ``_ws_auth_reason``, so the
+    identity has to be captured there for the handler to bind it (JER-73).
+    """
+    try:
+        ws.state.dashboard_auth_identity = dict(info) if isinstance(info, dict) else None
+    except Exception:
+        pass
+
+
+def _ws_identity(ws: "WebSocket") -> Optional[dict]:
+    """The identity stashed by :func:`_stash_ws_identity`, if any."""
+    try:
+        info = getattr(ws.state, "dashboard_auth_identity", None)
+    except Exception:
+        return None
+    return info if isinstance(info, dict) else None
+
+
+def _ws_human_identity(ws: "WebSocket") -> Optional[dict]:
+    """The stashed identity when it names a human dashboard_auth user."""
+    info = _ws_identity(ws)
+    if not info:
+        return None
+    from lliam_cli.dashboard_auth.ws_tickets import INTERNAL_USER_ID
+
+    user_id = str(info.get("user_id") or "").strip()
+    if not user_id or user_id == INTERNAL_USER_ID:
+        return None
+    return info
+
 # Per-channel subscriber registry used by /api/pub (PTY-side gateway → dashboard)
 # and /api/events (dashboard → browser sidebar).  Keyed by an opaque channel id
 # the chat tab generates on mount; entries auto-evict when the last subscriber
@@ -9922,6 +9956,7 @@ def _resolve_chat_argv(
     sidecar_url: Optional[str] = None,
     profile: Optional[str] = None,
     active_session_file: Optional[str] = None,
+    gateway_credential: Optional[str] = None,
 ) -> tuple[list[str], Optional[str], Optional[dict]]:
     """Resolve the argv + cwd + env for the chat PTY.
 
@@ -9957,8 +9992,14 @@ def _resolve_chat_argv(
     ``HERMES_TUI_GATEWAY_URL`` attach is SKIPPED for scoped chats: the
     dashboard's in-memory gateway runs under the dashboard's own profile,
     so a profile-scoped chat must spawn its own gateway subprocess.
+
+    `gateway_credential` (gated mode, JER-73) is a principal-bound child
+    credential minted for the authenticated user who opened the PTY; the
+    attach URL carries it instead of the anonymous internal credential so
+    approvals made in the embedded TUI are attributed to that user.
     """
     from lliam_cli.main import PROJECT_ROOT, _make_tui_argv
+    from tui_gateway.transport import GATEWAY_SECRET_ENV_NAMES
 
     profile_dir: Optional[Path] = None
     requested = (profile or "").strip()
@@ -9967,6 +10008,10 @@ def _resolve_chat_argv(
 
     argv, cwd = _make_tui_argv(PROJECT_ROOT / "ui-tui", tui_dev=False)
     env = os.environ.copy()
+    # The parent-pinned gateway secret is handed to the child only inside its
+    # attach URL (below), never as a raw inheritable env var.
+    for _name in GATEWAY_SECRET_ENV_NAMES:
+        env.pop(_name, None)
     try:
         from lliam_cli.config import apply_terminal_config_to_env
         apply_terminal_config_to_env(env=env)
@@ -9988,6 +10033,7 @@ def _resolve_chat_argv(
 
     if profile_dir is not None:
         env["HERMES_HOME"] = str(profile_dir)
+        env["LLIAM_HOME"] = str(profile_dir)
 
     if resume:
         latest_resume, _latest_path = _session_latest_descendant(resume)
@@ -10006,16 +10052,26 @@ def _resolve_chat_argv(
     # attach URL, gatewayClient spawns its own `tui_gateway.entry`, which
     # inherits the profile HERMES_HOME set above.
     if profile_dir is None:
-        if gateway_ws_url := _build_gateway_ws_url():
+        if gateway_ws_url := _build_gateway_ws_url(child_credential=gateway_credential):
             env["LLIAM_TUI_GATEWAY_URL"] = gateway_ws_url
 
     return list(argv), str(cwd) if cwd else None, env
 
 
-def _build_gateway_ws_url() -> Optional[str]:
+def _build_gateway_ws_url(child_credential: Optional[str] = None) -> Optional[str]:
     """ws:// URL the PTY child should attach to for JSON-RPC gateway traffic.
 
-    Loopback / ``--insecure``: ``?token=<_SESSION_TOKEN>``.
+    Loopback / ``--insecure``: ``?token=<_SESSION_TOKEN>``. Under strict
+    posture the URL also carries the PTY child secret (``gw_child``),
+    because the loopback token alone is readable by any local process from
+    index.html (JER-73; see ``tui_gateway.transport``). The child secret
+    passes the gateway handshake but, unlike the desktop's ``gw_secret``, does
+    not bind the local operator: ``/api/pty`` accepts the loopback token, so
+    the PTY's opener is not known to be the operator and its embedded TUI can
+    deny but not approve when an authenticated approver is required.
+
+    Gated mode with ``child_credential``: the principal-bound child credential
+    minted for the authenticated user who opened the PTY (``?internal=``).
 
     Gated mode: the legacy token path is rejected by ``_ws_auth_ok``, so the
     server-spawned PTY child authenticates with the process-lifetime internal
@@ -10038,9 +10094,18 @@ def _build_gateway_ws_url() -> Optional[str]:
     if getattr(app.state, "auth_required", False):
         from lliam_cli.dashboard_auth.ws_tickets import internal_ws_credential
 
-        qs = urllib.parse.urlencode({"internal": internal_ws_credential()})
+        qs = urllib.parse.urlencode(
+            {"internal": child_credential or internal_ws_credential()}
+        )
     else:
-        qs = urllib.parse.urlencode({"token": _SESSION_TOKEN})
+        params = {"token": _SESSION_TOKEN}
+        from tui_gateway import transport as _gw_transport
+
+        if _gw_transport.handshake_required():
+            params[_gw_transport.GATEWAY_CHILD_SECRET_PARAM] = (
+                _gw_transport.gateway_child_secret()
+            )
+        qs = urllib.parse.urlencode(params)
 
     return f"ws://{netloc}/api/ws?{qs}"
 
@@ -10050,6 +10115,7 @@ async def _resolve_chat_argv_async(
     sidecar_url: Optional[str] = None,
     profile: Optional[str] = None,
     active_session_file: Optional[str] = None,
+    gateway_credential: Optional[str] = None,
 ) -> tuple[list[str], Optional[str], Optional[dict]]:
     """Resolve chat argv without blocking the dashboard event loop.
 
@@ -10068,6 +10134,8 @@ async def _resolve_chat_argv_async(
     }
     if active_session_file is not None:
         kwargs["active_session_file"] = active_session_file
+    if gateway_credential is not None:
+        kwargs["gateway_credential"] = gateway_credential
 
     async with _get_chat_argv_lock(app):
         return await asyncio.to_thread(
@@ -10259,15 +10327,37 @@ async def pty_ws(ws: WebSocket) -> None:
     if active_session_file is not None:
         resolve_kwargs["active_session_file"] = str(active_session_file)
 
+    # JER-73: a PTY opened by an authenticated dashboard_auth user attaches
+    # its TUI to /api/ws with a credential bound to that user, so approvals
+    # made in the embedded TUI carry the user's principal.
+    child_credential: Optional[str] = None
+    pty_identity = _ws_human_identity(ws) if cred == "ticket" else None
+    if pty_identity is not None:
+        from lliam_cli.dashboard_auth.ws_tickets import mint_child_credential
+
+        child_credential = mint_child_credential(
+            user_id=str(pty_identity.get("user_id")),
+            provider=str(pty_identity.get("provider") or ""),
+        )
+        resolve_kwargs["gateway_credential"] = child_credential
+
+    def _revoke_child_credential() -> None:
+        if child_credential is not None:
+            from lliam_cli.dashboard_auth.ws_tickets import revoke_child_credential
+
+            revoke_child_credential(child_credential)
+
     try:
         argv, cwd, env = await _resolve_chat_argv_async(**resolve_kwargs)
     except HTTPException as exc:
         # Unknown/invalid profile from _resolve_profile_dir.
+        _revoke_child_credential()
         await ws.send_text(f"\r\n\x1b[31mChat unavailable: {exc.detail}\x1b[0m\r\n")
         await ws.close(code=1011)
         return
     except SystemExit as exc:
         # _make_tui_argv calls sys.exit(1) when node/npm is missing.
+        _revoke_child_credential()
         await ws.send_text(f"\r\n\x1b[31mChat unavailable: {exc}\x1b[0m\r\n")
         await ws.close(code=1011)
         return
@@ -10276,10 +10366,12 @@ async def pty_ws(ws: WebSocket) -> None:
     try:
         bridge = await asyncio.to_thread(PtyBridge.spawn, argv, cwd=cwd, env=env)
     except PtyUnavailableError as exc:
+        _revoke_child_credential()
         await ws.send_text(f"\r\n\x1b[31mChat unavailable: {exc}\x1b[0m\r\n")
         await ws.close(code=1011)
         return
     except (FileNotFoundError, OSError) as exc:
+        _revoke_child_credential()
         await ws.send_text(f"\r\n\x1b[31mChat failed to start: {exc}\x1b[0m\r\n")
         await ws.close(code=1011)
         return
@@ -10364,6 +10456,7 @@ async def pty_ws(ws: WebSocket) -> None:
         except (asyncio.CancelledError, Exception):
             pass
         await asyncio.to_thread(bridge.close)
+        _revoke_child_credential()
 
 
 # ---------------------------------------------------------------------------
@@ -10383,7 +10476,8 @@ async def gateway_ws(ws: WebSocket) -> None:
         await ws.close(code=4403)
         return
 
-    if not _ws_auth_ok(ws):
+    auth_reason, cred = _ws_auth_reason(ws)
+    if auth_reason is not None:
         await ws.close(code=4401)
         return
 
@@ -10393,7 +10487,16 @@ async def gateway_ws(ws: WebSocket) -> None:
 
     from tui_gateway.ws import handle_ws
 
-    await handle_ws(ws)
+    # A single-use dashboard_auth ticket or an env-delivered internal
+    # credential cannot be read by other local processes, so the gateway's
+    # strict-posture secret check is already satisfied; the loopback
+    # ``?token=`` (served in index.html) is not (JER-73). A ticket's user is
+    # bound as the operator subject so approvals carry the principal.
+    await handle_ws(
+        ws,
+        authenticated=cred in ("ticket", "internal"),
+        principal=_ws_human_identity(ws),
+    )
 
 
 # ---------------------------------------------------------------------------

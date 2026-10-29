@@ -6,7 +6,7 @@
 # Uses uv for desktop/server installs and Python's stdlib venv + pip on Termux.
 #
 # Usage:
-#   curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/jdavis-cyber/lliam-gov/main/scripts/install.sh | bash
 #
 # Or with options:
 #   curl -fsSL ... | bash -s -- --no-venv --skip-setup
@@ -45,7 +45,12 @@ BOLD='\033[1m'
 # Configuration
 REPO_URL_SSH="git@github.com:jdavis-cyber/lliam-gov.git"
 REPO_URL_HTTPS="https://github.com/jdavis-cyber/lliam-gov.git"
-HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+if [ -d "$HOME/.hermes" ]; then
+    _default_lliam_home="$HOME/.hermes"
+else
+    _default_lliam_home="$HOME/.lliam"
+fi
+HERMES_HOME="${LLIAM_HOME:-${HERMES_HOME:-$_default_lliam_home}}"
 # INSTALL_DIR is resolved AFTER arg parsing and OS detection so we can pick an
 # FHS-style layout for root installs.  Track whether the user gave us an
 # explicit directory — if so we never override it.
@@ -142,7 +147,7 @@ while [[ $# -gt 0 ]]; do
             INSTALL_DIR_EXPLICIT=true
             shift 2
             ;;
-        --hermes-home)
+        --lliam-home|--hermes-home)
             HERMES_HOME="$2"
             shift 2
             ;;
@@ -176,6 +181,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --dir PATH     Installation directory"
             echo "                   default (non-root):  ~/.hermes/hermes-agent"
             echo "                   default (root, Linux): /usr/local/lib/hermes-agent"
+            echo "  --lliam-home PATH   Data directory (alias: --hermes-home)"
             echo "  --hermes-home PATH  Data directory (default: ~/.hermes, or \$HERMES_HOME)"
             echo "  -h, --help     Show this help"
             echo ""
@@ -201,6 +207,10 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Keep both names aligned after explicit --lliam-home / --hermes-home overrides.
+export HERMES_HOME
+export LLIAM_HOME="$HERMES_HOME"
 
 # ============================================================================
 # Helper functions
@@ -527,7 +537,7 @@ detect_os() {
             OS="windows"
             DISTRO="windows"
             log_error "Windows detected. Please use the PowerShell installer:"
-            log_info "  iex (irm https://hermes-agent.nousresearch.com/install.ps1)"
+            log_info "  iex (irm https://raw.githubusercontent.com/jdavis-cyber/lliam-gov/main/scripts/install.ps1)"
             exit 1
             ;;
         *)
@@ -778,19 +788,15 @@ check_git() {
     exit 1
 }
 
-# The desktop build runs Vite ^8, which refuses to start on Node outside
-# `^20.19 || >=22.12` — older Node lacks `node:util.styleText`, so `vite build`
-# crashes with a SyntaxError that surfaces only as the opaque "Build desktop
-# app … exit code 1" install failure. Returns 0 when the given `node --version`
-# string clears that floor; anything below it is replaced with the Lliam-GOV-
-# managed Node $NODE_VERSION LTS.
+# Desktop dependencies, including sanitize-html, require Node >=22.12.
+# Return 0 when a node --version string meets that floor; otherwise check_node
+# provisions the managed Node LTS before installing the workspaces.
 node_satisfies_build() {
     local ver="${1#v}"
     local major="${ver%%.*}"
     local minor="${ver#*.}"; minor="${minor%%.*}"
     case "$major" in ''|*[!0-9]*) return 1 ;; esac
     case "$minor" in ''|*[!0-9]*) minor=0 ;; esac
-    if [ "$major" -eq 20 ] && [ "$minor" -ge 19 ]; then return 0; fi
     if [ "$major" -ge 22 ] && { [ "$major" -gt 22 ] || [ "$minor" -ge 12 ]; }; then return 0; fi
     return 1
 }
@@ -818,7 +824,7 @@ check_node() {
     fi
 
     if command -v node &> /dev/null; then
-        log_warn "Node.js $(node --version) is too old for the desktop build (need ^20.19 or >=22.12) — installing Lliam-managed Node $NODE_VERSION LTS..."
+        log_warn "Node.js $(node --version) is too old for the desktop build (need >=22.12) — installing Lliam-managed Node $NODE_VERSION LTS..."
     elif [ "$DISTRO" = "termux" ]; then
         log_info "Node.js not found — installing Node.js via pkg..."
     else
@@ -1623,15 +1629,19 @@ setup_path() {
     # Create a user-facing shim for the lliam-gov command.
     # We intentionally clear PYTHONPATH/PYTHONHOME here so inherited env vars
     # can't make this launcher import modules from another checkout.
+    local quoted_home
     mkdir -p "$command_link_dir"
     # Older installs created this path as a symlink to $HERMES_BIN. Without
     # the rm, `cat >` follows the symlink and overwrites the venv pip entry
     # point with this shim — making `exec "$HERMES_BIN"` self-recurse. (#21454)
     rm -f "$command_link_dir/lliam-gov"
+    printf -v quoted_home "%q" "$HERMES_HOME"
     cat > "$command_link_dir/lliam-gov" <<EOF
 #!/usr/bin/env bash
 unset PYTHONPATH
 unset PYTHONHOME
+export HERMES_HOME=\${LLIAM_HOME:-\${HERMES_HOME:-$quoted_home}}
+export LLIAM_HOME="\$HERMES_HOME"
 exec "$HERMES_BIN" "\$@"
 EOF
     chmod +x "$command_link_dir/lliam-gov"
@@ -2644,7 +2654,7 @@ install_desktop() {
     # with no app and a confusing "couldn't find a built desktop" at launch.
     # Always re-resolve Node here. Stages run in separate processes, so we can't
     # trust an earlier check; more importantly check_node now enforces the build
-    # floor (^20.19 || >=22.12) and prepends the Lliam-managed Node to PATH, so
+    # floor (>=22.12) and prepends the Lliam-managed Node to PATH, so
     # the build never runs on a too-old system Node — the cause of the opaque
     # "Build desktop app … exit code 1" failure (Vite crashes on old Node).
     check_node

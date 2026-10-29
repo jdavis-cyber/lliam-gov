@@ -1,0 +1,737 @@
+"""File deletes require consent even inside an ordinary working directory."""
+
+import json
+import shlex
+import sys
+
+import pytest
+
+from lliam_constants import get_lliam_home
+from tools import approval
+
+
+@pytest.mark.parametrize("command,expected_description", [
+    ('rm -- scratch/throwaway-file-n.txt', 'file/directory delete'),
+    ('rm scratch/file.txt', 'file/directory delete'),
+    ("rm -f 'scratch/file with spaces.txt'", 'file/directory delete'),
+    ('/bin/rm -- scratch/file.txt', 'file/directory delete'),
+    ('sudo rm scratch/file.txt', 'file/directory delete'),
+    ('env rm scratch/file.txt', 'file/directory delete'),
+    ('cd scratch && rm file.txt', 'file/directory delete'),
+    ('true; rm scratch/file.txt', 'file/directory delete'),
+    ('true\nrm scratch/file.txt', 'file/directory delete'),
+    ('unlink scratch/file.txt', 'file/directory delete'),
+    ('/usr/bin/unlink scratch/file.txt', 'file/directory delete'),
+    ('rmdir scratch/empty', 'file/directory delete'),
+    ("find scratch -name '*.txt' -delete", 'find -delete'),
+    ('find scratch -exec unlink {} \\;', 'file/directory delete'),
+    ('find scratch -type d -execdir rmdir {} \\;', 'file/directory delete'),
+    ("printf '%s\\n' scratch/file.txt | xargs unlink", 'file/directory delete'),
+    ('python3.11 -c "os.remove(\'scratch/file.txt\')"', 'script execution via -e/-c flag'),
+    ('python3.11 -c "os . remove (\'scratch/file.txt\')"', 'script execution via -e/-c flag'),
+    ('python3.11 -c "os.unlink(\'scratch/file.txt\')"', 'script execution via -e/-c flag'),
+    ('python3.11 -c "os.rmdir(\'scratch/empty\')"', 'script execution via -e/-c flag'),
+    ('python3.11 -c "os.removedirs(\'scratch/empty\')"', 'script execution via -e/-c flag'),
+    ('python3.11 -c "from os import remove; remove(\'scratch/file.txt\')"', 'script execution via -e/-c flag'),
+    ('python3.11 -c "from os import unlink; unlink(\'scratch/file.txt\')"', 'script execution via -e/-c flag'),
+    ('python3.11 -c "Path(\'scratch/file.txt\').unlink()"', 'script execution via -e/-c flag'),
+    ('python3.11 -c "pathlib.Path(\'scratch/empty\').rmdir()"', 'script execution via -e/-c flag'),
+    ('python3.11 -c "shutil.rmtree(\'scratch/tree\')"', 'script execution via -e/-c flag'),
+    ('python3.11 -c "from shutil import rmtree; rmtree(\'scratch/tree\')"', 'script execution via -e/-c flag'),
+    ("python3 - <<'PY'\nimport os\nos.remove('scratch/file.txt')\nPY", 'script execution via heredoc'),
+    ('python3.11 -c "import os; os.remove(\'scratch/file.txt\')"', 'script execution via -e/-c flag'),
+])
+def test_delete_detection_is_independent_of_target_path(command, expected_description):
+    assert approval.detect_dangerous_command(command) == (True, expected_description, expected_description)
+
+
+@pytest.mark.parametrize("command", [
+    "ls scratch",
+    "cat scratch/file.txt",
+    "mkdir scratch/empty",
+    "echo removal complete",
+    "git status",
+    "os.stat('scratch/file.txt')",
+    "items.remove('scratch/file.txt')",
+    "Path('scratch/file.txt').read_text()",
+])
+def test_non_delete_operations_remain_safe(command):
+    assert approval.detect_dangerous_command(command) == (False, None, None)
+
+
+@pytest.fixture
+def desktop_terminal(tmp_path, monkeypatch):
+    """Use the real local terminal and gateway guard with an isolated home."""
+    from tools import terminal_tool
+
+    assert get_lliam_home().is_relative_to(tmp_path.parent)
+    assert approval._get_approval_mode() == "manual"
+    monkeypatch.setenv("TERMINAL_ENV", "local")
+    monkeypatch.setenv("TERMINAL_CWD", str(tmp_path))
+    monkeypatch.setenv("HERMES_GATEWAY_SESSION", "1")
+    session = f"file-delete-{tmp_path.name}"
+    token = approval.set_current_session_key(session)
+    try:
+        yield terminal_tool, session
+    finally:
+        terminal_tool.cleanup_vm(session)
+        approval.unregister_gateway_notify(session)
+        approval.clear_session(session)
+        approval.reset_current_session_key(token)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Executes POSIX shell commands")
+@pytest.mark.parametrize("operation,is_directory", [
+    ("rm -- {path}", False),
+    ("unlink {path}", False),
+    ("rmdir {path}", True),
+    ("find {path} -delete", False),
+    ("{python} -c \"import os; os.remove('{path}')\"", False),
+    ("{python} - <<'PY'\nimport os\nos.remove('{path}')\nPY", False),
+    ("{python} - <<'PY'\nfrom os import remove\nremove('{path}')\nPY", False),
+    ("{python} - <<'PY'\nimport os\nos.unlink('{path}')\nPY", False),
+    ("{python} - <<'PY'\nfrom pathlib import Path\nPath('{path}').unlink()\nPY", False),
+    ("{python} - <<'PY'\nfrom pathlib import Path\nPath('{path}').rmdir()\nPY", True),
+    ("{python} - <<'PY'\nimport shutil\nshutil.rmtree('{path}')\nPY", True),
+])
+def test_terminal_delete_prompts_before_execution(
+    desktop_terminal, tmp_path, operation, is_directory,
+):
+    terminal, session = desktop_terminal
+    relative_path = "scratch/throwaway-file-n.txt"
+    target = tmp_path / relative_path
+    target.parent.mkdir()
+    if is_directory:
+        target.mkdir()
+    else:
+        target.write_bytes(b"keep until approved\n")
+    sibling = target.parent / "keep.txt"
+    sibling.write_bytes(b"untouched\n")
+    # Use a stable interpreter command name even when the test runner's Python
+    # executable has a vendor-specific basename.
+    python = tmp_path / "python3"
+    python.symlink_to(sys.executable)
+    command = operation.format(path=relative_path, python=shlex.quote(str(python)))
+
+    # Deny first, then approve the same command. No guard or executor is mocked.
+    for choice in ("deny", "once"):
+        requests = []
+
+        def respond(data):
+            requests.append(data)
+            assert data["command"] == command
+            assert relative_path in data["command"]
+            assert target.exists(), "Delete ran before consent"
+            assert "delete" in data["description"]
+            assert data["allow_permanent"] is False
+            assert data["allow_session"] is False
+            assert approval.resolve_gateway_approval(session, choice) == 1
+
+        approval.register_gateway_notify(session, respond)
+        result = json.loads(terminal.terminal_tool(
+            command, task_id=session, workdir=str(tmp_path), timeout=10,
+        ))
+        assert len(requests) == 1, result
+        if choice == "deny":
+            assert "BLOCKED" in result["error"]
+            assert target.exists()
+            if not is_directory:
+                assert target.read_bytes() == b"keep until approved\n"
+        else:
+            assert result["exit_code"] == 0, result
+            assert not target.exists()
+            assert not approval.is_approved(session, requests[0]["pattern_key"])
+        assert sibling.read_bytes() == b"untouched\n"
+
+
+@pytest.mark.parametrize("choice", ["session", "always"])
+@pytest.mark.parametrize("command", [
+    "rm {path}",
+    "python3.11 -c \"import os; os.remove('{path}')\"",
+    "python3.11 -c \"from pathlib import Path; Path('{path}').unlink()\"",
+])
+def test_delete_approval_is_once_only(desktop_terminal, command, choice):
+    _, session = desktop_terminal
+    requests = []
+
+    def respond(data):
+        requests.append(data)
+        approval.resolve_gateway_approval(session, choice)
+
+    approval.register_gateway_notify(session, respond)
+    for name in ("first.txt", "second.txt"):
+        # Denied execution is tested above; here use the real guard to cover
+        # persistence without depending on installed interpreter versions.
+        result = approval.check_all_command_guards(command.format(path=name), "local")
+        assert result["approved"], result
+    assert len(requests) == 2
+    for request in requests:
+        assert request.get("allow_permanent") is False
+        assert request.get("allow_session") is False
+        assert not approval.is_approved(session, request["pattern_key"])
+    assert not (get_lliam_home() / "config.yaml").exists()
+
+
+def test_smart_delete_approval_does_not_cover_the_next_delete(desktop_terminal, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    _, session = desktop_terminal
+    (get_lliam_home() / "config.yaml").write_text("approvals:\n  mode: smart\n", encoding="utf-8")
+    llm = Mock(side_effect=[
+        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="APPROVE"))]),
+        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="ESCALATE"))]),
+    ])
+    monkeypatch.setattr("agent.auxiliary_client.call_llm", llm)
+    requests = []
+
+    def deny(data):
+        requests.append(data)
+        approval.resolve_gateway_approval(session, "deny")
+
+    approval.register_gateway_notify(session, deny)
+    assert approval.check_all_command_guards("rm first.txt", "local")["approved"]
+    assert not approval.check_all_command_guards("rm second.txt", "local")["approved"]
+    assert len(requests) == 1
+
+
+@pytest.mark.parametrize("command,expected_description", [
+    ("docker run --rm img", None),
+    ("docker rm c1", None),
+    ("npm rm pkg", None),
+    ("echo 'rm notes'", None),
+    ('git commit -m "rm stale file"', None),
+    ("git rm file", "file/directory delete"),
+    ("command rm f", "file/directory delete"),
+    ("exec unlink f", "file/directory delete"),
+    ("nohup rmdir d", "file/directory delete"),
+    ("true & rm f", "file/directory delete"),
+    ("true || rm f", "file/directory delete"),
+    ("true | rm f", "file/directory delete"),
+    ("echo $(rm f)", "file/directory delete"),
+    ("echo `rm f`", "file/directory delete"),
+])
+def test_shell_delete_command_positions(command, expected_description):
+    assert approval.detect_dangerous_command(command) == (
+        expected_description is not None, expected_description, expected_description,
+    )
+
+
+@pytest.mark.parametrize("guard", [approval.check_all_command_guards, approval.check_dangerous_command])
+@pytest.mark.parametrize("command,preapproved", [
+    ("bash -c 'rm f'", "shell command via -c/-lc flag"),
+    ('python3 -c "import os; os.remove(\'f\')"', "script execution via -e/-c flag"),
+])
+def test_preapproved_wrapper_still_prompts_for_delete(desktop_terminal, monkeypatch, guard, command, preapproved):
+    _, session = desktop_terminal
+    monkeypatch.delenv("HERMES_GATEWAY_SESSION")
+    monkeypatch.setenv("HERMES_INTERACTIVE", "1")
+    approval.approve_session(session, preapproved)
+    requests = []
+
+    def deny(cmd, description, **scope):
+        requests.append((description, scope))
+        return "deny"
+
+    assert not guard(command, "local", approval_callback=deny)["approved"]
+    assert len(requests) == 1
+    assert "delete" in requests[0][0]
+    assert requests[0][1] == {"allow_permanent": False, "allow_session": False}
+
+
+@pytest.mark.parametrize("command", [
+    'grep -n "remove(" f',
+    r"rg 'unlink\('",
+    'git commit -m "guard os.remove() calls"',
+])
+def test_python_delete_mentions_are_not_executed_code(command):
+    assert approval.detect_dangerous_command(command) == (False, None, None)
+
+
+@pytest.mark.parametrize("command,expected_description", [
+    ('"rm" f', "file/directory delete"),
+    ("'rm' f", "file/directory delete"),
+    ('r"m" f', "file/directory delete"),
+    ("`which rm` f", "file/directory delete"),
+    ("$(which rm) f", "file/directory delete"),
+    ("rm${IFS}f", "file/directory delete"),
+    ("echo cm0gZg== | base64 -d | sh", "file/directory delete via decoded shell"),
+    ("echo 726d2066 | xxd -r -p | bash", "file/directory delete via decoded shell"),
+])
+def test_obfuscated_delete_commands(command, expected_description):
+    assert approval.detect_dangerous_command(command) == (True, expected_description, expected_description)
+
+
+@pytest.mark.parametrize("command,delete_description", [
+    ('python3.12 -c "import os; os.remove(\'f\')"', "file/directory delete via Python os"),
+    ('python3.11 -c "import os as o; o.remove(\'f\')"', "file/directory delete via Python os"),
+    ("python3 - <<EOF\nimport os as o\no.remove('f')\nEOF", "file/directory delete via Python os"),
+    ('python3 -c "import os as o; o.removedirs(\'d\')"', "file/directory delete via Python os"),
+    ('python3 -c "import os as o; o.unlink(\'f\')"', "file/directory delete via Python pathlib/os/shutil"),
+    ('python3 -c "import os as o; o.rmdir(\'d\')"', "file/directory delete via Python pathlib/os/shutil"),
+    ('python3 -c "import shutil as s; s.rmtree(\'d\')"', "file/directory delete via Python pathlib/os/shutil"),
+    ('python3 -c "import os; getattr(os, \'remove\')(\'f\')"', "file/directory delete via Python os"),
+    ('python3 -c "__import__(\'os\').remove(\'f\')"', "file/directory delete via Python os"),
+    ('python3 -c "import subprocess; subprocess.run([\'rm\', \'f\'])"', "file/directory delete via Python os"),
+])
+def test_python_delete_variants_need_once_only_consent(desktop_terminal, command, delete_description):
+    _, session = desktop_terminal
+    approval.approve_session(session, "script execution via -e/-c flag")
+    approval.approve_session(session, "script execution via heredoc")
+    requests = []
+
+    def deny(data):
+        requests.append(data)
+        approval.resolve_gateway_approval(session, "deny")
+
+    approval.register_gateway_notify(session, deny)
+    assert not approval.check_all_command_guards(command, "local")["approved"]
+    assert len(requests) == 1
+    assert delete_description in requests[0]["description"]
+    assert requests[0]["allow_session"] is False
+    assert requests[0]["allow_permanent"] is False
+
+
+@pytest.mark.parametrize("command,expected_description", [
+    ("node -e \"require('fs').rmSync('f')\"", "file/directory delete via Node.js"),
+    ("node -e \"require('node:fs').unlinkSync('f')\"", "file/directory delete via Node.js"),
+    ("node -p \"require('fs').rmdirSync('d')\"", "file/directory delete via Node.js"),
+    ("node -e \"const {rmSync}=require('fs'); rmSync('f')\"", "file/directory delete via Node.js"),
+    ("node --eval \"const {unlinkSync}=require('node:fs'); unlinkSync('f')\"", "file/directory delete via Node.js"),
+    ("node --eval=\"const {rmdirSync}=require('fs'); rmdirSync('d')\"", "file/directory delete via Node.js"),
+    ("node -e \"require('fs/promises').rm('f')\"", "file/directory delete via Node.js"),
+    ("node -e \"import('fs/promises').then(m=>m.unlink('f'))\"", "file/directory delete via Node.js"),
+    ("node -p \"require('node:fs/promises').rmdir('d')\"", "file/directory delete via Node.js"),
+    ("node -e \"const {rm}=require('fs/promises'); rm('f')\"", "file/directory delete via Node.js"),
+    ("node -e \"const {unlink}=require('node:fs'); unlink('f', ()=>{})\"", "file/directory delete via Node.js"),
+    ("node -e \"const {rmdir}=require('fs'); rmdir('d', ()=>{})\"", "file/directory delete via Node.js"),
+    ("node -e \"fs.rm('f', ()=>{})\"", "file/directory delete via Node.js"),
+    ("node -e \"fs.unlink('f', ()=>{})\"", "file/directory delete via Node.js"),
+    ("node -e \"fs.rmdir('d', ()=>{})\"", "file/directory delete via Node.js"),
+    ("node <<'JS'\nconst {rmSync}=require('fs');\nrmSync('f')\nJS", "file/directory delete via Node.js"),
+    ("node - <<'JS'\nimport {unlink} from 'node:fs/promises';\nunlink('f')\nJS", "file/directory delete via Node.js"),
+    ("node -e \"const filesystem = require('fs'); filesystem.unlinkSync('f')\"", "file/directory delete via Node.js"),
+    ("npm rm package", None),
+    ("node -e \"console.log('npm rm')\"", None),
+    ("node -e \"element.remove()\"", None),
+    ("node -e \"require('fs'); element.remove()\"", None),
+    ("node -e \"require('fs'); console.log('npm rm')\"", None),
+    ("node -e \"require('other').rm('f')\"", None),
+    ("node -e \"require('fs-extra').rm('f')\"", None),
+    ("rg \"require('fs').rmSync('f')\"", None),
+    ("node -e \"console.log('ok')\"; rg \"require('fs').rmSync('f')\"", None),
+])
+def test_node_delete_forms_have_a_distinct_approval_key(command, expected_description):
+    matches = approval.detect_all_dangerous_commands(command)
+    if expected_description is None:
+        assert ("file/directory delete via Node.js", "file/directory delete via Node.js") not in matches
+    else:
+        assert (expected_description, expected_description) in matches
+
+
+@pytest.mark.parametrize("command,delete_description", [
+    ('node -e "fs.rmSync(\'f\')"', "file/directory delete via Node.js"),
+    ('node -p "fs.unlinkSync(\'f\')"', "file/directory delete via Node.js"),
+    ('node --eval "fs.rmdirSync(\'d\')"', "file/directory delete via Node.js"),
+    ('node -e "fs.promises.rm(\'f\')"', "file/directory delete via Node.js"),
+    ('node -e "fs.promises.unlink(\'f\')"', "file/directory delete via Node.js"),
+    ('ruby -e "File.delete(\'f\')"', "file/directory delete via Ruby"),
+    ('ruby -e"File.unlink(\'f\')"', "file/directory delete via Ruby"),
+    ('ruby -e "FileUtils.rm(\'f\')"', "file/directory delete via Ruby"),
+    ('ruby -e "FileUtils.rm_f(\'f\')"', "file/directory delete via Ruby"),
+    ('ruby -e "FileUtils.rm_rf(\'d\')"', "file/directory delete via Ruby"),
+    ('perl -e "unlink \'f\'"', "file/directory delete via Perl"),
+    ('perl -e"unlink(\'f\')"', "file/directory delete via Perl"),
+    ('perl -e "remove_tree(\'d\')"', "file/directory delete via Perl"),
+    ('perl -e"remove_tree(\'d\')"', "file/directory delete via Perl"),
+    ('deno eval "Deno.remove(\'f\')"', "file/directory delete via Deno"),
+    ('deno eval "Deno.removeSync(\'d\')"', "file/directory delete via Deno"),
+    ('shred -u f', "file/directory delete via shred"),
+    ('rsync --delete src/ dst/', "file/directory delete via rsync"),
+    ('rsync --remove-source-files src/ dst/', "file/directory delete via rsync"),
+    ('tar --remove-files -cf archive.tar f', "file/directory delete via tar"),
+])
+def test_other_delete_tools_require_once_only_consent(desktop_terminal, command, delete_description):
+    _, session = desktop_terminal
+    approval.approve_session(session, "script execution via -e/-c flag")
+    requests = []
+
+    def respond(data):
+        requests.append(data)
+        approval.resolve_gateway_approval(session, "always")
+
+    approval.register_gateway_notify(session, respond)
+    for cmd in (command, command.replace("'f'", "'second'").replace("'d'", "'other'") + " "):
+        assert approval.check_all_command_guards(cmd, "local")["approved"]
+    assert len(requests) == 2
+    for request in requests:
+        assert delete_description in request["description"]
+        assert request["allow_permanent"] is False
+        assert request["allow_session"] is False
+
+
+def test_find_delete_never_inherits_previous_consent(desktop_terminal):
+    _, session = desktop_terminal
+    requests = []
+
+    def respond(data):
+        requests.append(data)
+        approval.resolve_gateway_approval(session, "session")
+
+    approval.register_gateway_notify(session, respond)
+    for path in ("first", "second"):
+        assert approval.check_all_command_guards(f"find {path} -delete", "local")["approved"]
+    assert len(requests) == 2
+    assert all(r["allow_session"] is False for r in requests)
+
+
+@pytest.mark.parametrize("command,expected_description", [
+    ("echo 'sudo rm notes'", None),
+    ('git commit -m "env rm oldfile"', None),
+    ("sudo -u root rm f", "file/directory delete"),
+    ("env KEEP=1 rm f", "file/directory delete"),
+    ('sudo "rm" f', "file/directory delete"),
+])
+def test_delete_wrappers_are_commands_not_quoted_prose(command, expected_description):
+    assert approval.detect_dangerous_command(command) == (
+        expected_description is not None, expected_description, expected_description,
+    )
+
+
+@pytest.mark.parametrize("command,has_delete", [
+    (r'''python3 -c "print(\"hi\"); import os; os.remove('f')"''', True),
+    ('''python3 -c "print('hi')"; rg 'os.remove()' f''', False),
+])
+def test_python_code_boundaries_preserve_escaped_quotes(desktop_terminal, command, has_delete):
+    _, session = desktop_terminal
+    requests = []
+
+    def deny(data):
+        requests.append(data)
+        approval.resolve_gateway_approval(session, "deny")
+
+    approval.register_gateway_notify(session, deny)
+    assert not approval.check_all_command_guards(command, "local")["approved"]
+    assert len(requests) == 1
+    assert ("delete" in requests[0]["description"]) is has_delete
+    assert requests[0]["allow_session"] is not has_delete
+
+
+@pytest.mark.parametrize("guard", [approval.check_all_command_guards, approval.check_dangerous_command])
+@pytest.mark.parametrize("choice", ["session", "always"])
+def test_cli_delete_answers_do_not_persist(desktop_terminal, monkeypatch, guard, choice):
+    _, session = desktop_terminal
+    monkeypatch.delenv("HERMES_GATEWAY_SESSION")
+    monkeypatch.setenv("HERMES_INTERACTIVE", "1")
+    requests = []
+
+    def respond(command, description, **scope):
+        requests.append(scope)
+        return choice
+
+    for command in ("rm first.txt", "rm second.txt"):
+        assert guard(command, "local", approval_callback=respond)["approved"]
+    assert requests == [{"allow_permanent": False, "allow_session": False}] * 2
+    assert not approval.is_approved(session, "file/directory delete")
+    assert not (get_lliam_home() / "config.yaml").exists()
+
+
+# --- AI-1181: residual deleters -------------------------------------------
+
+_COMPRESS = "file/directory delete via compressor replacing original"
+_TRASH = "file/directory delete via trash"
+_STASH = "file/directory delete via git stash of untracked files"
+_FINDER = "file/directory delete via osascript Finder"
+_FILE = "file/directory delete"
+
+
+@pytest.mark.parametrize("command,delete_description", [
+    ("gzip notes.txt", _COMPRESS),
+    ("gzip -9 notes.txt", _COMPRESS),
+    ("gzip -r logs/", _COMPRESS),
+    ("gunzip notes.txt.gz", _COMPRESS),
+    ("gzip -d notes.txt.gz", _COMPRESS),
+    ("xz notes.txt", _COMPRESS),
+    ("xz -T0 -9 notes.txt", _COMPRESS),
+    ("unxz notes.txt.xz", _COMPRESS),
+    ("bzip2 notes.txt", _COMPRESS),
+    ("bunzip2 notes.txt.bz2", _COMPRESS),
+    ("cd logs && gzip *.log", _COMPRESS),
+    ("sudo xz --force notes.txt", _COMPRESS),
+    # Codex P2 on #147: only the compressor's own arguments count.
+    ("gzip notes.txt > -k", _COMPRESS),
+    ("gzip notes.txt >> --keep", _COMPRESS),
+    ("gzip notes.txt # -k", _COMPRESS),
+    ("gzip notes.txt; echo -k", _COMPRESS),
+    ("gzip notes.txt && ls -c", _COMPRESS),
+    ("gzip notes.txt | tee -c", _COMPRESS),
+    # Codex P2 on #147: flags are case-sensitive and per tool; values are consumed.
+    ("xz -C crc32 notes.txt", _COMPRESS),
+    ("xz --check=crc32 notes.txt", _COMPRESS),
+    ("xz -T 4 notes.txt", _COMPRESS),
+    ("xz -S .z notes.txt", _COMPRESS),
+    ("gzip -S .z notes.txt", _COMPRESS),
+    ("gzip -K notes.txt", _COMPRESS),
+    ("bzip2 -C notes.txt", _COMPRESS),
+    ("gzip -- -k", _COMPRESS),
+    ("zstd --rm notes.txt", _COMPRESS),
+    ("zstd -q --rm -19 notes.txt", _COMPRESS),
+    ("unzstd --rm notes.txt.zst", _COMPRESS),
+    ("lz4 --rm notes.txt", _COMPRESS),
+    ("sudo -n gzip notes.txt", _COMPRESS),
+    ("find . -name '*.log' -exec gzip {} +", _COMPRESS),
+    ("ls *.log | xargs gzip", _COMPRESS),
+    ("GZIP=-9 gzip notes.txt", _COMPRESS),
+    # A digit word set apart from the redirect is a file operand, not an fd.
+    ("gzip 2 > out.gz", _COMPRESS),
+    ("gzip '2'>out.gz", _COMPRESS),
+    # Codex P2 on #147 (round 2): inputs from a list file are still replaced.
+    ("xz --files=list.txt", _COMPRESS),
+    ("xz --files list.txt", _COMPRESS),
+    ("xz --files0=list0.txt", _COMPRESS),
+    ("xz --files0 list0.txt", _COMPRESS),
+    ("xz --files < list.txt", _COMPRESS),
+    ("find . -name '*.log' -print0 | xz --files0", _COMPRESS),
+    ("zstd --rm --filelist list.txt", _COMPRESS),
+    ("zstd --rm --filelist=list.txt", _COMPRESS),
+    # Codex P2 on #147 (round 4): the later of -k/--keep and --rm wins.
+    ("zstd --keep --rm notes.txt", _COMPRESS),
+    ("zstd -k --rm notes.txt", _COMPRESS),
+    ("zstd --rm -k --rm notes.txt", _COMPRESS),
+    ("lz4 -k --rm notes.txt", _COMPRESS),
+    # Codex P2 on #147 (round 4): xargs runs the command after its own options.
+    ("printf '%s\\n' notes.txt | xargs gzip", _COMPRESS),
+    ("find . -name '*.log' -print0 | xargs -0 -n1 gzip", _COMPRESS),
+    ("xargs -n 1 gzip", _COMPRESS),
+    ("xargs -I {} gzip {}", _COMPRESS),
+    ("xargs -I{} gzip {}", _COMPRESS),
+    ("xargs -i gzip {}", _COMPRESS),
+    ("xargs --max-args 1 gzip", _COMPRESS),
+    ("xargs -a list.txt -d , gzip", _COMPRESS),
+    ("xargs sudo gzip", _COMPRESS),
+    ("xargs --unknown-option 1 gzip", _COMPRESS),
+    ("find . -exec sudo gzip {} ;", _COMPRESS),
+    # A heredoc body a shell runs and a command substitution still count.
+    ("cat <<'EOF' | sh\ngzip notes.txt\nEOF", _COMPRESS),
+    ('echo "$(gzip notes.txt)"', _COMPRESS),
+    ("echo `gzip notes.txt`", _COMPRESS),
+    # Codex P2 on #147 (round 5): subshells and groups keep the heredoc's
+    # pipeline; an unquoted body expands $(...) after # and inside '.
+    ("cat <<'EOF' | (sh)\ngzip notes.txt\nEOF", _COMPRESS),
+    ("cat <<'EOF' | { sh; }\ngzip notes.txt\nEOF", _COMPRESS),
+    ("cat <<'EOF' | (bash -s)\ngzip notes.txt\nEOF", _COMPRESS),
+    ("cat <<EOF\n# $(gzip notes.txt)\nEOF", _COMPRESS),
+    ("cat <<EOF > README.md\n'$(gzip notes.txt)'\nEOF", _COMPRESS),
+    ("cat <<EOF > README.md\n# `gzip notes.txt`\nEOF", _COMPRESS),
+    ("cat <<EOF > README.md\n$(true # )\ngzip notes.txt\n)\nEOF", _COMPRESS),
+    # GitHub Codex P1 on #147: the word after a reserved word is a command.
+    ("if true; then gzip notes.txt; fi", _COMPRESS),
+    ("! gzip notes.txt", _COMPRESS),
+    ("{ gzip notes.txt; }", _COMPRESS),
+    ('while read f; do gzip "$f"; done < list.txt', _COMPRESS),
+    ("if true; then zstd --rm notes.txt; fi", _COMPRESS),
+    # GitHub Codex P2 on #147: literal eval arguments run as commands.
+    ("eval 'gzip notes.txt'", _COMPRESS),
+    ("eval gzip notes.txt", _COMPRESS),
+    ("if true; then eval 'gzip notes.txt'; fi", _COMPRESS),
+    ("sudo bash -c 'gzip notes.txt'", _COMPRESS),
+    # GitHub Codex P1 on #145 (round 7): a here-string a shell runs is a script.
+    ("bash <<< 'gzip notes.txt'", _COMPRESS),
+    ('sh <<< "gzip notes.txt"', _COMPRESS),
+    ("cat <<< 'gzip notes.txt' | sh", _COMPRESS),
+    # GitHub Codex P1 on #147 (round 8): the -c script after -- and options.
+    ("bash -c -- 'gzip notes.txt'", _COMPRESS),
+    ("bash -ec 'gzip notes.txt'", _COMPRESS),
+    ("bash -c -e 'gzip notes.txt'", _COMPRESS),
+    ("bash -o pipefail -c 'gzip notes.txt'", _COMPRESS),
+    ("sudo sh -c - 'zstd --rm notes.txt'", _COMPRESS),
+    # GitHub Codex P1 on #147 (round 9): brace alternatives and env -S.
+    ("gzip notes{,2}.txt", _COMPRESS),
+    ("env -S gzip notes.txt", _COMPRESS),
+    ("env -S 'bash -c' 'gzip notes.txt'", _COMPRESS),
+    ("trash notes.txt", _TRASH),
+    ("trash-put notes.txt", _TRASH),
+    ("trash-rm notes.txt", _TRASH),
+    ("trash-empty", _TRASH),
+    ("gio trash notes.txt", _TRASH),
+    ("gio remove notes.txt", _TRASH),
+    ("git stash -u", _STASH),
+    ("git stash push -u -m wip", _STASH),
+    ("git stash --include-untracked", _STASH),
+    ("git stash save --include-untracked wip", _STASH),
+    ("git stash -a", _STASH),
+    ("git stash push --all", _STASH),
+    ("git stash -ku", _STASH),
+    # GitHub Codex P2 on #147 (round 7): git's global options come first.
+    ("git -C /path/to/repo stash -u", _STASH),
+    ("git -c core.x=y stash -u", _STASH),
+    ("git --git-dir=/x/.git --work-tree=/x stash push --all", _STASH),
+    ("git --git-dir /x/.git stash -u", _STASH),
+    ("git -P stash -u", _STASH),
+    ("git --no-pager stash --include-untracked", _STASH),
+    ('git -C "/my path" stash -u', _STASH),
+    ("git --bare --no-replace-objects stash -a", _STASH),
+    ("git --unknown-option value stash -u", _STASH),
+    # GitHub Codex P2 on #147 (round 9): stash, trash and Finder deletes at
+    # reserved-word, eval and xargs/find command positions.
+    ("if true; then git stash -u; fi", _STASH),
+    ("! git -C /repo stash -a", _STASH),
+    ("while true; do git stash push --include-untracked; done", _STASH),
+    ("eval 'git stash -u'", _STASH),
+    ("if true; then trash notes.txt; fi", _TRASH),
+    ("{ trash-put notes.txt; }", _TRASH),
+    ("if true; then gio trash notes.txt; fi", _TRASH),
+    ("""if true; then osascript -e 'tell app "Finder" to delete POSIX file "/tmp/x"'; fi""", _FINDER),
+    ("""osascript -e 'tell application "Finder" to delete POSIX file "/tmp/x"'""", _FINDER),
+    ("""osascript -e 'tell app "Finder" to move POSIX file "/tmp/x" to trash'""", _FINDER),
+    ("""osascript -e 'tell application "Finder" to empty trash'""", _FINDER),
+    # GitHub Codex P1 on #147 (round 10): ;> is ; then a redirect, so the
+    # next word is still the command; leading redirects don't hide it.
+    ("true;>/dev/null gzip notes.txt", _COMPRESS),
+    ("true;2>/dev/null gzip notes.txt", _COMPRESS),
+    ("true|>/dev/null gzip notes.txt", _COMPRESS),
+    ("gzip >(cat) notes.txt", _COMPRESS),
+    ("true;>/dev/null git stash -u", _STASH),
+    ("true;>/dev/null trash notes.txt", _TRASH),
+    ("true;>/dev/null rm -f notes.txt", _FILE),
+    (">/dev/null rm notes.txt", _FILE),
+    ("true; 2>&1 unlink notes.txt", _FILE),
+    ("&>/dev/null rmdir build", _FILE),
+    # rm, unlink, rmdir, git rm and find -delete at reserved-word and
+    # subshell command positions.
+    ("if true; then rm notes.txt; fi", _FILE),
+    ("(rm notes.txt)", _FILE),
+    ("{ rm notes.txt; }", _FILE),
+    ("while true; do unlink notes.txt; done", _FILE),
+    ("! git rm notes.txt", _FILE),
+    ("if true; then find . -name x -delete; fi", _FILE),
+])
+def test_residual_deleters_are_once_only_deletes(command, delete_description):
+    keys = [key for key, _ in approval.detect_all_dangerous_commands(command)]
+    assert delete_description in keys, keys
+    assert delete_description in approval._ONCE_ONLY_DELETE_KEYS
+
+
+@pytest.mark.parametrize("command", [
+    "gzip -k notes.txt",
+    "gzip --keep notes.txt",
+    "gzip -c notes.txt > notes.txt.gz",
+    "gzip -9c notes.txt > notes.txt.gz",
+    "gzip --stdout notes.txt > notes.txt.gz",
+    "gunzip -c notes.txt.gz",
+    "gzip -l notes.txt.gz",
+    "gzip -t notes.txt.gz",
+    "tar cf - src | gzip > src.tar.gz",
+    "gzip < notes.txt > notes.txt.gz",
+    "xz -k notes.txt",
+    "xz -dc notes.txt.xz",
+    "xz --list notes.txt.xz",
+    "bzip2 -k notes.txt",
+    "bzip2 -c notes.txt > notes.txt.bz2",
+    "xz -C crc32 -k notes.txt",
+    "xz -k -C crc32 notes.txt",
+    "xz --check=crc32 -c notes.txt > notes.txt.xz",
+    "zstd notes.txt",
+    "zstd -19 -o notes.txt.zst notes.txt",
+    "zstd --rm -c notes.txt > notes.txt.zst",
+    "zstd --rm --stdout notes.txt > notes.txt.zst",
+    "zstd -l notes.txt.zst",
+    "lz4 notes.txt",
+    "lz4 -d notes.txt.lz4",
+    "unzstd notes.txt.zst",
+    "gzip -9 -c notes.txt > 'out -k.gz'",
+    "gzip -kv notes.txt",
+    "gzip -h",
+    "gzip --version",
+    "echo gzip notes.txt",
+    "grep -c gzip notes.txt",
+    # Codex P2 on #147 (round 2): fd numbers on a redirect are not operands.
+    "gzip < notes.txt 2>/dev/null",
+    "gzip < notes.txt 2>> gzip.log > notes.txt.gz",
+    "gzip < notes.txt > notes.txt.gz 2>&1",
+    "gzip 2>/dev/null < notes.txt > notes.txt.gz",
+    "gzip <&0 1>&2",
+    "gzip 0< notes.txt 1> notes.txt.gz",
+    "gzip < notes.txt 3<> lock.file > notes.txt.gz",
+    "cat notes.txt | xz 2>/dev/null > notes.txt.xz",
+    "xz -k --files=list.txt",
+    "xz --files=list.txt -c > all.xz",
+    "xz --files -k < list.txt",
+    "zstd --filelist list.txt",
+    # Codex P2 on #147 (round 4): a later -k/--keep overrides --rm.
+    "zstd --rm --keep notes.txt",
+    "zstd --rm -k notes.txt",
+    "zstd --rm -qk notes.txt",
+    "lz4 --rm -k notes.txt",
+    "lz4 --rm --keep notes.txt",
+    # Codex P2 on #147 (round 4): only the command xargs runs counts.
+    "printf '%s\\n' notes.txt | xargs echo gzip",
+    "xargs -n 1 echo gzip",
+    "xargs grep gzip",
+    "xargs -I {} echo gzip {}",
+    "xargs -P 4 -n 1 gzip -k",
+    "find . -exec echo gzip {} +",
+    # Codex P2 on #147 (round 4): a heredoc body is input, not commands.
+    "cat <<'EOF' > README.md\ngzip notes.txt\nEOF",
+    "cat <<'EOF' | grep gzip\ngzip notes.txt\nEOF",
+    "cat <<'EOF' > README.md\n# $(gzip notes.txt)\nEOF",
+    "cat <<EOF > README.md\ngzip notes.txt\nEOF",
+    "if true; then gzip -k notes.txt; fi",
+    "eval 'gzip -k notes.txt'",
+    "eval 'echo gzip notes.txt'",
+    "cat <<< 'gzip notes.txt'",
+    "bash -c -- 'gzip -k notes.txt'",
+    "env -S gzip",
+    "if true; then git stash list; fi",
+    "true;>/dev/null gzip -k notes.txt",
+    "echo >notes.txt rm",
+    "echo a 2>/dev/null rmx",
+    "if true; then echo rm notes.txt; fi",
+    "man rm",
+    "git stash show -u",
+    "if true; then trash-list; fi",
+    "echo git stash -u",
+    "for f in gzip notes.txt; do echo $f; done",
+    "zcat notes.txt.gz",
+    "trash-list",
+    "echo trash notes.txt",
+    "gio info notes.txt",
+    "git stash",
+    "git stash push -m wip",
+    "git -C /path stash",
+    "git -C /path stash list",
+    "git -C /path stash push -m wip",
+    "git -C /path status -u",
+    "git -C /path log --all",
+    "git stash pop",
+    "git stash show -u",
+    "git stash list",
+    "osascript -e 'tell application \"Finder\" to activate'",
+    "osascript -e 'display notification \"delete done\"'",
+])
+def test_residual_deleters_leave_safe_forms_alone(command):
+    keys = [key for key, _ in approval.detect_all_dangerous_commands(command)]
+    assert not [key for key in keys if key in approval._ONCE_ONLY_DELETE_KEYS], keys
+
+
+@pytest.mark.parametrize("command", [
+    "gzip notes.txt",
+    "trash-put notes.txt",
+    "git stash -u",
+    """osascript -e 'tell application "Finder" to delete POSIX file "/tmp/x"'""",
+])
+def test_residual_deleters_offer_only_once(desktop_terminal, command):
+    _, session = desktop_terminal
+    requests = []
+
+    def respond(data):
+        requests.append(data)
+        approval.resolve_gateway_approval(session, "always")
+
+    approval.register_gateway_notify(session, respond)
+    for _ in range(2):
+        assert approval.check_all_command_guards(command, "local")["approved"]
+    assert len(requests) == 2
+    for request in requests:
+        assert request["allow_permanent"] is False
+        assert request["allow_session"] is False

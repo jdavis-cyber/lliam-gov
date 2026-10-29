@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -52,8 +53,17 @@ def test_tui_gateway_fuzzy_file_listing_hides_git_windows(monkeypatch):
     from tui_gateway import server
 
     captured = []
+    test_thread = threading.get_ident()
+    real_run = subprocess.run
 
     def fake_run(cmd, **kwargs):
+        # server.subprocess is the global subprocess module, so the update-check
+        # daemon thread started by importing tui_gateway.server
+        # (lliam_cli.banner.prefetch_update_check) would also hit this fake.
+        # Fake and collect only the calls this test makes; hand any other
+        # thread's calls to the real subprocess.run.
+        if threading.get_ident() != test_thread:
+            return real_run(cmd, **kwargs)
         captured.append((cmd, kwargs))
         if cmd[-1] == "--show-toplevel":
             return _Completed(stdout=b"C:/repo\n")

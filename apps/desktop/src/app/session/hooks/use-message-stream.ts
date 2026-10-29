@@ -1015,7 +1015,7 @@ export function useMessageStream({
         }
 
         // A file-mutating tool just finished — nudge the git-mirroring surfaces
-        // (coding rail, review pane, file tree) to refresh. Event-driven, not
+        // (coding rail, file tree) to refresh. Event-driven, not
         // polled: fires exactly when the agent touches the tree.
         if (payload && toolMayMutateFiles(payload)) {
           notifyWorkspaceChanged()
@@ -1083,8 +1083,9 @@ export function useMessageStream({
         const description = typeof payload?.description === 'string' ? payload.description : 'dangerous command'
 
         setApprovalRequest({
-          // false only when a tirith warning forbids it; backend omits the field otherwise.
+          // Missing scope flags retain the defaults used by older backends.
           allowPermanent: payload?.allow_permanent !== false,
+          allowSession: payload?.allow_session !== false,
           command,
           description,
           sessionId: sessionId ?? null

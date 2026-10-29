@@ -20,8 +20,17 @@ describe('virtual height estimates', () => {
   it('uses compound user prompt width when estimating user message wrapping', () => {
     const msg: Msg = { role: 'user', text: 'x'.repeat(21) }
 
-    expect(estimatedMsgHeight(msg, 26, { compact: false, details: false, userPrompt: '❯' })).toBe(3)
-    expect(estimatedMsgHeight(msg, 26, { compact: false, details: false, userPrompt: 'Ψ >' })).toBe(4)
+    // At 28 columns the simple prompt leaves room for the text on one row,
+    // while the compound prompt reduces the body to the 20-column floor.
+    const simple = estimatedMsgHeight(msg, 28, { compact: false, details: false, userPrompt: '❯' })
+    const compound = estimatedMsgHeight(msg, 28, { compact: false, details: false, userPrompt: 'Ψ >' })
+
+    expect(compound).toBe(simple + 1)
+    // Once both body widths reach the floor, a wider prompt cannot cause
+    // an extra estimated row that the rendered transcript does not have.
+    expect(estimatedMsgHeight(msg, 26, { compact: false, details: false, userPrompt: '❯' })).toBe(
+      estimatedMsgHeight(msg, 26, { compact: false, details: false, userPrompt: 'Ψ >' })
+    )
   })
 
   it('adds one row for a group-boundary lead gap', () => {

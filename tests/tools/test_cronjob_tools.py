@@ -240,6 +240,7 @@ class TestCronjobRequirements:
         assert check_cronjob_requirements() is False
 
 
+@pytest.mark.usefixtures("unavailable_optional_dependencies")
 class TestUnifiedCronjobTool:
     @pytest.fixture(autouse=True)
     def _setup_cron_dir(self, tmp_path, monkeypatch):

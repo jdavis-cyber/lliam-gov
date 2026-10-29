@@ -1314,9 +1314,14 @@ class CLICommandsMixin:
                                         "deny", "drop", "diff", "approval", "mode"}:
             from lliam_cli.write_approval_commands import handle_pending_subcommand
             from tools import write_approval as wa
+            # AI-1183: this interactive operator surface holds the in-memory
+            # capability that lets an approval replay the staged skill write.
+            operator = getattr(self, "_skill_operator_capability", None)
+            if operator is None:
+                operator = wa.issue_operator_capability()
+                self._skill_operator_capability = operator
             out = handle_pending_subcommand(
-                wa.SKILLS, args,
-                set_mode_fn=lambda enabled: self._save_write_approval("skills", enabled),
+                wa.SKILLS, args, operator=operator,
             )
             if out is not None:
                 print(out)
@@ -1379,7 +1384,7 @@ class CLICommandsMixin:
         print(out)
 
     def _save_write_approval(self, subsystem: str, enabled: bool):
-        """Persist <subsystem>.write_approval to config (for /memory|/skills approval)."""
+        """Persist the memory write-approval setting (skills always require approval)."""
         from cli import save_config_value
         save_config_value(f"{subsystem}.write_approval", bool(enabled))
 

@@ -16,6 +16,8 @@ and simply yields no finding):
    HERMES_HOME data dir (state is ephemeral — lost on container restart).
 4. A network-accessible gateway listener (dashboard / API server) with no
    authentication configured.
+5. Strict posture reading credentials from a plaintext ``.env`` while the
+   managed secret source (``secrets.bitwarden``) is disabled (LG-IA-04).
 
 Cross-platform: the root and SSH checks are POSIX-only and no-op on Windows.
 Everything is best-effort and read-only.
@@ -231,6 +233,49 @@ def _default_credentials_in_use(config: Optional[dict]) -> list[str]:
     except Exception:
         pass
     return findings
+
+
+def _plaintext_env_secrets_of_record(
+    config: Optional[dict], lliam_home: Optional[Path]
+) -> list[str]:
+    """Warn when strict posture reads credentials from a plaintext .env (LG-IA-04).
+
+    The managed secret source of record is ``secrets.bitwarden``. When it is
+    disabled under strict posture and the data dir's ``.env`` still carries
+    credential-bearing variables, say so at startup. Only variable NAMES are
+    reported, never values. Advisory: Bitwarden provisioning is an operator
+    action, so this never blocks or enables anything.
+    """
+    cfg = config or {}
+    try:
+        from lliam_cli import posture_resolver as _pr
+        if not _pr.is_strict(cfg):
+            return []
+    except Exception:
+        return []
+    secrets_cfg = cfg.get("secrets") or {}
+    bitwarden = secrets_cfg.get("bitwarden") if isinstance(secrets_cfg, dict) else None
+    if isinstance(bitwarden, dict) and bitwarden.get("enabled"):
+        return []
+    if lliam_home is None:
+        from lliam_constants import get_lliam_home
+        lliam_home = get_lliam_home()
+    env_path = Path(lliam_home) / ".env"
+    if not env_path.is_file():
+        return []
+    from dotenv import dotenv_values
+    names = sorted(
+        name for name, value in dotenv_values(env_path).items()
+        if name and value and any(h in name.upper() for h in _CREDENTIAL_NAME_HINTS)
+    )
+    if not names:
+        return []
+    return [
+        f"Strict posture is reading {len(names)} credential(s) ({', '.join(names)}) "
+        f"from plaintext {env_path} while secrets.bitwarden.enabled is false — the "
+        "managed secret source of record is not provisioned (LG-IA-04). Provision "
+        "secrets.bitwarden and move these credentials off .env."
+    ]
 
 
 def _network_listener_without_auth(config: Optional[dict]) -> list[str]:
@@ -696,6 +741,10 @@ def run_security_audit(
         pass
     try:
         findings.extend(_default_credentials_in_use(config))
+    except Exception:
+        pass
+    try:
+        findings.extend(_plaintext_env_secrets_of_record(config, lliam_home))
     except Exception:
         pass
     try:

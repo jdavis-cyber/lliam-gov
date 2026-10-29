@@ -154,3 +154,48 @@ def test_audit_never_raises_on_broken_check(monkeypatch, tmp_path):
     # Must not propagate — the broken check is swallowed, others still run.
     findings = audit.run_security_audit(lliam_home=tmp_path, config={})
     assert isinstance(findings, list)
+
+
+# ── LG-IA-04 secrets of record (JER-78) ─────────────────────────────────────
+
+_STRICT_NO_BW = {"security": {"posture": "strict"}, "secrets": {"bitwarden": {"enabled": False}}}
+
+
+def _env(tmp_path, text):
+    (tmp_path / ".env").write_text(text, encoding="utf-8")
+
+
+def test_strict_plaintext_env_credentials_without_bitwarden_flags(tmp_path):
+    _env(tmp_path, "OPENROUTER_API_KEY=sk-real-value-123\nAWS_SECRET_ACCESS_KEY=abc\nLOG_LEVEL=info\n")
+    findings = audit._plaintext_env_secrets_of_record(_STRICT_NO_BW, tmp_path)
+    assert len(findings) == 1
+    msg = findings[0]
+    assert "secrets.bitwarden.enabled is false" in msg
+    assert "AWS_SECRET_ACCESS_KEY" in msg and "OPENROUTER_API_KEY" in msg
+    assert "LOG_LEVEL" not in msg
+    assert "sk-real-value-123" not in msg and "=abc" not in msg   # names only, never values
+
+
+def test_strict_plaintext_env_finding_reaches_startup_audit(monkeypatch, tmp_path):
+    monkeypatch.setattr(audit, "_is_root", lambda: False)
+    monkeypatch.setattr(audit, "_iter_sshd_config_lines", lambda: ["PasswordAuthentication no"])
+    monkeypatch.setattr(audit, "_in_container", lambda: False)
+    _env(tmp_path, "OPENROUTER_API_KEY=sk-real-value-123\n")
+    findings = audit.run_security_audit(lliam_home=tmp_path, config=_STRICT_NO_BW)
+    assert any("LG-IA-04" in f for f in findings)
+
+
+@pytest.mark.parametrize("config", [
+    {"security": {"posture": "strict"}, "secrets": {"bitwarden": {"enabled": True}}},
+    {"security": {}, "secrets": {"bitwarden": {"enabled": False}}},   # non-strict: silent
+    {},
+])
+def test_plaintext_env_check_silent_when_managed_or_not_strict(tmp_path, config):
+    _env(tmp_path, "OPENROUTER_API_KEY=sk-real-value-123\n")
+    assert audit._plaintext_env_secrets_of_record(config, tmp_path) == []
+
+
+def test_plaintext_env_check_silent_without_env_credentials(tmp_path):
+    assert audit._plaintext_env_secrets_of_record(_STRICT_NO_BW, tmp_path) == []   # no .env
+    _env(tmp_path, "LOG_LEVEL=info\nOPENROUTER_API_KEY=\n")
+    assert audit._plaintext_env_secrets_of_record(_STRICT_NO_BW, tmp_path) == []

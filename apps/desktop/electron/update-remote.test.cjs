@@ -28,13 +28,13 @@ const {
 
 test('canonicalGitHubRemote normalizes SSH and HTTPS forms to the same value', () => {
   assert.equal(canonicalGitHubRemote('git@github.com:jdavis-cyber/lliam-gov.git'), OFFICIAL_REPO_CANONICAL)
-  assert.equal(canonicalGitHubRemote('git@github.com:NousResearch/hermes-agent'), OFFICIAL_REPO_CANONICAL)
+  assert.equal(canonicalGitHubRemote('git@github.com:jdavis-cyber/lliam-gov'), OFFICIAL_REPO_CANONICAL)
   assert.equal(canonicalGitHubRemote('ssh://git@github.com/jdavis-cyber/lliam-gov.git'), OFFICIAL_REPO_CANONICAL)
   assert.equal(canonicalGitHubRemote('https://github.com/jdavis-cyber/lliam-gov.git'), OFFICIAL_REPO_CANONICAL)
   // Case-insensitive: an uppercased owner still canonicalizes to the same repo.
-  assert.equal(canonicalGitHubRemote('git@github.com:nousresearch/hermes-agent.git'), OFFICIAL_REPO_CANONICAL)
+  assert.equal(canonicalGitHubRemote('git@github.com:jdavis-cyber/lliam-gov.git'), OFFICIAL_REPO_CANONICAL)
   // Trailing slashes are stripped.
-  assert.equal(canonicalGitHubRemote('https://github.com/NousResearch/hermes-agent/'), OFFICIAL_REPO_CANONICAL)
+  assert.equal(canonicalGitHubRemote('https://github.com/jdavis-cyber/lliam-gov/'), OFFICIAL_REPO_CANONICAL)
 })
 
 test('canonicalGitHubRemote is empty for falsy input', () => {
@@ -53,10 +53,10 @@ test('isSshRemote detects scp-like and ssh:// forms only', () => {
 
 test('isOfficialSshRemote is true only for the official repo over SSH', () => {
   assert.equal(isOfficialSshRemote('git@github.com:jdavis-cyber/lliam-gov.git'), true)
-  assert.equal(isOfficialSshRemote('git@github.com:NousResearch/hermes-agent'), true)
+  assert.equal(isOfficialSshRemote('git@github.com:jdavis-cyber/lliam-gov'), true)
   assert.equal(isOfficialSshRemote('ssh://git@github.com/jdavis-cyber/lliam-gov.git'), true)
   // Case-insensitive owner/repo match.
-  assert.equal(isOfficialSshRemote('git@github.com:nousresearch/hermes-agent.git'), true)
+  assert.equal(isOfficialSshRemote('git@github.com:jdavis-cyber/lliam-gov.git'), true)
 })
 
 test('isOfficialSshRemote does NOT match forks, other hosts, or HTTPS', () => {

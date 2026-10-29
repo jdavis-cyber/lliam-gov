@@ -620,7 +620,21 @@ def run_conversation(
             if not agent.quiet_mode:
                 agent._safe_print("\n⚡ Breaking out of tool loop due to interrupt...")
             break
-        
+
+        # Inference spend ceiling (security.spend_ceiling): a breach routes to
+        # HITL approval; no approval stops the turn before the call is made.
+        from lliam_cli.model_cost_guard import check_spend_before_call
+
+        _spend_refusal = check_spend_before_call(agent)
+        if _spend_refusal:
+            _turn_exit_reason = "spend_ceiling"
+            failed = True
+            final_response = _spend_refusal
+            messages.append({"role": "assistant", "content": final_response})
+            if not agent.quiet_mode:
+                agent._safe_print(f"\n⛔ {_spend_refusal}")
+            break
+
         api_call_count += 1
         agent._api_call_count = api_call_count
         agent._touch_activity(f"starting API call #{api_call_count}")
@@ -1972,6 +1986,16 @@ def run_conversation(
                         agent.session_estimated_cost_usd += float(cost_result.amount_usd)
                     agent.session_cost_status = cost_result.status
                     agent.session_cost_source = cost_result.source
+
+                    # security.spend_ceiling accounting (checked before the next call).
+                    from lliam_cli.model_cost_guard import record_spend
+
+                    record_spend(
+                        agent,
+                        total_tokens,
+                        float(cost_result.amount_usd)
+                        if cost_result.amount_usd is not None else None,
+                    )
 
                     # Persist token counts to session DB for /insights.
                     # Do this for every platform with a session_id so non-CLI

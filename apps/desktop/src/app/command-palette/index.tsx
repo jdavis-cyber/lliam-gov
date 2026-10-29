@@ -8,7 +8,6 @@ import { HUD_HEADING, HUD_ITEM, HUD_POSITION, HUD_SURFACE, HUD_TEXT } from '@/ap
 import { setTerminalTakeover } from '@/app/right-sidebar/store'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { KbdCombo } from '@/components/ui/kbd'
-import { getLliamConfigRecord, listAllProfileSessions } from '@/lliam'
 import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
 import {
@@ -42,6 +41,7 @@ import {
   Zap
 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { getLliamConfigRecord, listAllProfileSessions } from '@/lliam'
 import { $repoWorktrees } from '@/store/coding-status'
 import {
   $commandPaletteOpen,

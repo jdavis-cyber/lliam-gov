@@ -127,6 +127,38 @@ def active_count() -> int:
         return sum(1 for r in _records.values() if r.get("status") == "running")
 
 
+def _capture_cron_marker() -> bool:
+    """Read the caller's context-local cron marker at dispatch time.
+
+    The worker runs on a pool thread that does not inherit the caller's
+    ContextVars. Only the cron marker is carried across (AI-1172): copying
+    the whole context would also carry gateway session and approval
+    routing state, which could send a background child's approval prompt to
+    a gateway turn that has already ended.
+    """
+    try:
+        from tools.approval import cron_session_marked
+        return cron_session_marked()
+    except Exception:  # pragma: no cover — approval import failure
+        return False
+
+
+def _bind_cron_marker(marked: bool):
+    """Re-bind the captured cron marker on the worker; returns a reset token."""
+    if not marked:
+        return None
+    from tools.approval import set_cron_session
+    return set_cron_session()
+
+
+def _unbind_cron_marker(token) -> None:
+    """Undo :func:`_bind_cron_marker`; pool threads are reused across jobs."""
+    if token is None:
+        return
+    from tools.approval import reset_cron_session
+    reset_cron_session(token)
+
+
 def _new_delegation_id() -> str:
     return f"deleg_{uuid.uuid4().hex[:8]}"
 
@@ -226,11 +258,14 @@ def dispatch_async_delegation(
         _records[delegation_id] = record
 
     executor = _get_executor(max_async_children)
+    cron_marked = _capture_cron_marker()
 
     def _worker() -> None:
         result: Dict[str, Any] = {}
         status = "error"
+        cron_token = None
         try:
+            cron_token = _bind_cron_marker(cron_marked)
             result = runner() or {}
             status = result.get("status") or "completed"
         except Exception as exc:  # noqa: BLE001 — must never crash the worker
@@ -245,6 +280,7 @@ def dispatch_async_delegation(
             status = "error"
         finally:
             _finalize(delegation_id, result, status)
+            _unbind_cron_marker(cron_token)
 
     try:
         executor.submit(_worker)
@@ -405,11 +441,14 @@ def dispatch_async_delegation_batch(
         _records[delegation_id] = record
 
     executor = _get_executor(max_async_children)
+    cron_marked = _capture_cron_marker()
 
     def _worker() -> None:
         combined: Dict[str, Any] = {}
         status = "error"
+        cron_token = None
         try:
+            cron_token = _bind_cron_marker(cron_marked)
             combined = runner() or {}
             # Batch status: completed unless every child errored/was interrupted.
             child_results = combined.get("results") or []
@@ -430,6 +469,7 @@ def dispatch_async_delegation_batch(
             status = "error"
         finally:
             _finalize_batch(delegation_id, combined, status)
+            _unbind_cron_marker(cron_token)
 
     try:
         executor.submit(_worker)

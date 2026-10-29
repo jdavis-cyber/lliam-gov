@@ -79,7 +79,7 @@ from typing import Dict, Any, List, Optional, Set, Tuple
 
 from tools.registry import registry, tool_error
 from lliam_cli.config import cfg_get
-from utils import env_var_enabled
+from utils import is_truthy_value
 from agent.skill_utils import (
     EXCLUDED_SKILL_DIRS as _EXCLUDED_SKILL_DIRS,
     is_skill_support_path as _is_skill_support_path,
@@ -350,11 +350,11 @@ def _capture_required_environment_variables(
     missing_names = [entry["name"] for entry in missing_entries]
     # Most gateway surfaces (messaging platforms) can't prompt for a secret, so
     # they short-circuit to the "unsupported" hint. Interactive gateway surfaces
-    # — the desktop app / TUI — set HERMES_INTERACTIVE and register a
+    # — the desktop app / TUI — set LLIAM_INTERACTIVE and register a
     # secret-capture callback that routes to a secure secret.request overlay, so
-    # they fall through and actually prompt. (HERMES_INTERACTIVE is the same flag
+    # they fall through and actually prompt. (LLIAM_INTERACTIVE is the same flag
     # tools/approval.py uses to tell an interactive surface from a messaging one.)
-    if _is_gateway_surface() and not env_var_enabled("HERMES_INTERACTIVE"):
+    if _is_gateway_surface() and not _surface_flag_enabled("INTERACTIVE"):
         return {
             "missing_names": missing_names,
             "setup_skipped": False,
@@ -414,8 +414,13 @@ def _capture_required_environment_variables(
     }
 
 
+def _surface_flag_enabled(suffix: str) -> bool:
+    """True when ``LLIAM_<suffix>`` (or its legacy fallback) is truthy (AI-1187)."""
+    return is_truthy_value(getenv_compat(suffix, ""), default=False)
+
+
 def _is_gateway_surface() -> bool:
-    if env_var_enabled("HERMES_GATEWAY_SESSION"):
+    if _surface_flag_enabled("GATEWAY_SESSION"):
         return True
     from agent.session_context import get_session_env
     return bool(get_session_env("HERMES_SESSION_PLATFORM"))
@@ -803,6 +808,11 @@ def _serve_plugin_skill(
         )
 
     # Injection scan — log but still serve (matches local-skill behaviour)
+    from tools.tool_policy import skill_load_decision
+    decision, reason = skill_load_decision(f"{namespace}:{bare}", skill_md.parent, parsed_frontmatter)
+    if decision != "allow":
+        return json.dumps({"success": False, "error": f"Skill '{namespace}:{bare}' held or denied: {reason}"})
+
     if any(p in content.lower() for p in _INJECTION_PATTERNS):
         logger.warning(
             "Plugin skill '%s:%s' contains patterns that may indicate prompt injection",
@@ -1177,6 +1187,10 @@ def skill_view(
 
         # Check if the skill is disabled by the user
         resolved_name = parsed_frontmatter.get("name", skill_md.parent.name)
+        from tools.tool_policy import skill_load_decision
+        decision, reason = skill_load_decision(str(resolved_name), skill_dir, parsed_frontmatter)
+        if decision != "allow":
+            return json.dumps({"success": False, "error": f"Skill '{resolved_name}' held or denied: {reason}"})
         if _is_skill_disabled(resolved_name):
             return json.dumps(
                 {

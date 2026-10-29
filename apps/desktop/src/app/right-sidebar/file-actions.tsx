@@ -52,7 +52,7 @@ interface FileEntryContextMenuProps {
   relativeTo?: null | string
 }
 
-/** Right-click menu shared by both file trees (browser + review/git). */
+/** Right-click menu for file-browser tree entries. */
 export function FileEntryContextMenu({ children, isDirectory, name, path, relativeTo }: FileEntryContextMenuProps) {
   const { t } = useI18n()
   const m = t.fileMenu

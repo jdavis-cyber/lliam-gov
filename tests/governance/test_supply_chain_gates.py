@@ -13,6 +13,7 @@ credits-independent enforcement surface):
 from __future__ import annotations
 
 import importlib.util
+import re
 import textwrap
 from pathlib import Path
 
@@ -209,3 +210,94 @@ def test_bom_artifacts_written(tmp_path):
     sbom_path, ai_bom_path = gen.write_boms(repo, tmp_path)
     assert Path(sbom_path).is_file()
     assert Path(ai_bom_path).is_file()
+
+
+# ---------------------------------------------------------------------------
+# 4. JER-78 — the AI-BOM never carries a hash-shaped placeholder
+# ---------------------------------------------------------------------------
+
+
+_REPO = Path(__file__).resolve().parents[2]
+_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+def _assert_attestable_or_marked(gen, value):
+    assert gen.is_unprovisioned_marker(value) or _SHA256.match(str(value)), value
+    assert "PLACEHOLDER" not in str(value).upper() or gen.is_unprovisioned_marker(value)
+
+
+def test_ai_bom_marks_absent_skills_and_template_values_unprovisioned():
+    gen = _load("generate_bom")
+    ai_bom = gen.build_ai_bom(_REPO)
+    skills = {s["name"]: s for s in ai_bom["skills"]}
+    for name in ("pdf", "xlsx", "docx"):   # allowlisted but not shipped in this repo
+        assert gen.is_unprovisioned_marker(skills[name]["content_hash"])
+        assert "no skill directory named" in skills[name]["content_hash"]
+        # model_manifest.yaml still carries the shipped template hashes.
+        assert gen.is_unprovisioned_marker(skills[name]["signed_hash"])
+    assert gen.is_unprovisioned_marker(ai_bom["attestations"]["manifest_signature"])
+    for skill in ai_bom["skills"]:
+        _assert_attestable_or_marked(gen, skill["content_hash"])
+        _assert_attestable_or_marked(gen, skill["signed_hash"])
+
+
+def test_committed_ai_bom_carries_no_placeholder_hashes():
+    import yaml
+
+    gen = _load("generate_bom")
+    committed = yaml.safe_load((_REPO / "evidence" / "bom" / "ai-bom.yaml").read_text(encoding="utf-8"))
+    for skill in committed["skills"]:
+        _assert_attestable_or_marked(gen, skill["content_hash"])
+        _assert_attestable_or_marked(gen, skill["signed_hash"])
+    signature = committed["attestations"]["manifest_signature"]
+    assert gen.is_unprovisioned_marker(signature) or "REPLACE" not in signature.upper()
+
+
+def _mini_repo(tmp_path, *, skill_hash, signature):
+    import yaml
+
+    (tmp_path / "policy").mkdir()
+    (tmp_path / "docs" / "governance" / "model-cards").mkdir(parents=True)
+    (tmp_path / "policy" / "provider-allowlist.yaml").write_text(yaml.safe_dump({
+        "providers": [{"id": "lmstudio", "provider_class": "local",
+                       "data_residency": "local", "cui_eligible": True}]}), encoding="utf-8")
+    (tmp_path / "docs" / "governance" / "model-cards" / "model-cards.yaml").write_text(
+        yaml.safe_dump({"models": [{"id": "lmstudio/m", "provider": "lmstudio"}]}), encoding="utf-8")
+    (tmp_path / "policy" / "mcp-allowlist.yaml").write_text("approved_servers: []\n", encoding="utf-8")
+    (tmp_path / "policy" / "skills-allowlist.yaml").write_text(yaml.safe_dump({
+        "security": {"skill_allowlist": [{"name": "notes"}, {"name": "ghost"}]}}), encoding="utf-8")
+    (tmp_path / "model_manifest.yaml").write_text(yaml.safe_dump({
+        "signer": "s", "signature": signature, "models": {"primary": "lmstudio/m"},
+        "skill_hashes": {"notes": skill_hash, "ghost": skill_hash}}), encoding="utf-8")
+    skill = tmp_path / "skills" / "productivity" / "notes"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("---\nname: notes\n---\nTake notes.\n", encoding="utf-8")
+    (skill / "scripts").mkdir()
+    (skill / "scripts" / "run.py").write_text("print('ok')\n", encoding="utf-8")
+    return skill
+
+
+def test_ai_bom_computes_real_sha256_for_present_skills(tmp_path):
+    gen = _load("generate_bom")
+    provisioned = "sha256:" + "cd" * 32
+    skill = _mini_repo(tmp_path, skill_hash=provisioned, signature="a" * 64)
+    skills = {s["name"]: s for s in gen.build_ai_bom(tmp_path)["skills"]}
+
+    computed = skills["notes"]["content_hash"]
+    assert _SHA256.match(computed)
+    assert computed == gen.skill_content_sha256(skill)
+    (skill / "SKILL.md").write_text("---\nname: notes\n---\nTampered.\n", encoding="utf-8")
+    assert gen.skill_content_sha256(skill) != computed   # content-bound
+    assert skills["notes"]["signed_hash"] == provisioned  # provisioned value carried as-is
+    assert gen.is_unprovisioned_marker(skills["ghost"]["content_hash"])
+
+
+def test_ai_bom_marks_template_manifest_values_unprovisioned(tmp_path):
+    gen = _load("generate_bom")
+    _mini_repo(tmp_path, skill_hash="sha256:PLACEHOLDER-recompute-at-build",
+               signature="REPLACE-WITH-PROVISIONED-SIGNATURE")
+    ai_bom = gen.build_ai_bom(tmp_path)
+    skills = {s["name"]: s for s in ai_bom["skills"]}
+    assert gen.is_unprovisioned_marker(skills["notes"]["signed_hash"])
+    assert _SHA256.match(skills["notes"]["content_hash"])   # still computed from disk
+    assert gen.is_unprovisioned_marker(ai_bom["attestations"]["manifest_signature"])

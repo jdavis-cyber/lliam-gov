@@ -29,6 +29,13 @@ def fake_lliam(tmp_path, monkeypatch):
         "---\nname: shared-skill\ndescription: default copy.\n---\n"
     )
 
+    # AI-1183: file tools now refuse every skills/ and pending/ path outright,
+    # so the soft cross-profile guard is exercised on another scoped area.
+    (root / "plugins" / "shared-plugin").mkdir(parents=True)
+    (root / "plugins" / "shared-plugin" / "NOTES.md").write_text(
+        "---\nname: shared-plugin\ndescription: default copy.\n---\n"
+    )
+
     sec_home = root / "profiles" / "hermes-security"
     (sec_home / "skills").mkdir(parents=True)
 
@@ -59,7 +66,7 @@ def fake_lliam(tmp_path, monkeypatch):
 class TestWriteFileCrossProfileGuard:
     def test_in_profile_write_allowed(self, fake_lliam):
         from tools.file_tools import write_file_tool
-        target = fake_lliam["sec_home"] / "skills" / "new-skill" / "SKILL.md"
+        target = fake_lliam["sec_home"] / "plugins" / "new-plugin" / "NOTES.md"
         target.parent.mkdir(parents=True)
         result_json = write_file_tool(str(target), "in-profile content")
         result = json.loads(result_json)
@@ -68,10 +75,10 @@ class TestWriteFileCrossProfileGuard:
         assert target.read_text() == "in-profile content"
 
     def test_cross_profile_write_blocked_by_default(self, fake_lliam):
-        """The May 2026 incident — security-profile session edits default
-        profile's skill. Must be blocked."""
+        """The May 2026 incident shape — a security-profile session edits a
+        default-profile scoped file. Must be blocked."""
         from tools.file_tools import write_file_tool
-        target = fake_lliam["root"] / "skills" / "shared-skill" / "SKILL.md"
+        target = fake_lliam["root"] / "plugins" / "shared-plugin" / "NOTES.md"
         original = target.read_text()
         result_json = write_file_tool(str(target), "OVERWRITTEN")
         result = json.loads(result_json)
@@ -85,7 +92,7 @@ class TestWriteFileCrossProfileGuard:
     def test_cross_profile_True_bypass(self, fake_lliam):
         """Explicit override after user direction must succeed."""
         from tools.file_tools import write_file_tool
-        target = fake_lliam["root"] / "skills" / "shared-skill" / "SKILL.md"
+        target = fake_lliam["root"] / "plugins" / "shared-plugin" / "NOTES.md"
         result_json = write_file_tool(
             str(target), "user-directed override", cross_profile=True
         )
@@ -111,7 +118,7 @@ class TestWriteFileCrossProfileGuard:
 class TestPatchCrossProfileGuard:
     def test_cross_profile_patch_blocked(self, fake_lliam):
         from tools.file_tools import patch_tool
-        target = fake_lliam["root"] / "skills" / "shared-skill" / "SKILL.md"
+        target = fake_lliam["root"] / "plugins" / "shared-plugin" / "NOTES.md"
         original = target.read_text()
         result_json = patch_tool(
             mode="replace",
@@ -126,7 +133,7 @@ class TestPatchCrossProfileGuard:
 
     def test_cross_profile_patch_bypass(self, fake_lliam):
         from tools.file_tools import patch_tool
-        target = fake_lliam["root"] / "skills" / "shared-skill" / "SKILL.md"
+        target = fake_lliam["root"] / "plugins" / "shared-plugin" / "NOTES.md"
         result_json = patch_tool(
             mode="replace",
             path=str(target),
@@ -142,7 +149,7 @@ class TestPatchCrossProfileGuard:
         """V4A patches embed the target paths in the patch body, not in
         a ``path`` kwarg. The guard must still apply."""
         from tools.file_tools import patch_tool
-        target = fake_lliam["root"] / "skills" / "shared-skill" / "SKILL.md"
+        target = fake_lliam["root"] / "plugins" / "shared-plugin" / "NOTES.md"
         original = target.read_text()
         v4a = (
             "*** Begin Patch\n"

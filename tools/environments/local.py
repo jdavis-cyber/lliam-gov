@@ -362,6 +362,8 @@ def _build_provider_env_blocklist() -> frozenset:
         "EMAIL_HOME_ADDRESS_NAME",
         "LLIAM_DASHBOARD_SESSION_TOKEN",  # rename R.8a (new name)
         "HERMES_DASHBOARD_SESSION_TOKEN",  # legacy fallback
+        "LLIAM_TUI_GATEWAY_SECRET",  # JER-73 per-launch gateway WS secret
+        "HERMES_TUI_GATEWAY_SECRET",  # legacy fallback
         "GATEWAY_ALLOWED_USERS",
         "GH_TOKEN",
         "GITHUB_APP_ID",
@@ -401,6 +403,21 @@ def _inject_context_lliam_home(env: dict) -> None:
         pass
 
 
+def _inject_delegation_depth(env: dict) -> None:
+    """Stamp the spawning agent's delegation depth + 1 into subprocess env.
+
+    No-op outside an agent turn (see agent/delegation_depth.py), so a
+    ``lliam-gov`` process started by an agent counts toward
+    ``delegation.max_spawn_depth``.
+    """
+    try:
+        from agent.delegation_depth import apply_subprocess_depth_env
+
+        apply_subprocess_depth_env(env)
+    except Exception:
+        pass
+
+
 def _sanitize_subprocess_env(base_env: dict | None, extra_env: dict | None = None) -> dict:
     """Filter Lliam-managed secrets from a subprocess environment."""
     try:
@@ -424,6 +441,7 @@ def _sanitize_subprocess_env(base_env: dict | None, extra_env: dict | None = Non
             sanitized[key] = value
 
     _inject_context_lliam_home(sanitized)
+    _inject_delegation_depth(sanitized)
 
     from lliam_constants import apply_subprocess_home_env
     apply_subprocess_home_env(sanitized)
@@ -461,6 +479,8 @@ _ALWAYS_STRIP_KEYS: frozenset[str] = frozenset({
     "EMAIL_PASSWORD",
     "LLIAM_DASHBOARD_SESSION_TOKEN",  # rename R.8a (new name)
     "HERMES_DASHBOARD_SESSION_TOKEN",  # legacy fallback
+    "LLIAM_TUI_GATEWAY_SECRET",  # JER-73 per-launch gateway WS secret
+    "HERMES_TUI_GATEWAY_SECRET",  # legacy fallback
     # Remote-compute / infrastructure secrets
     "MODAL_TOKEN_ID",
     "MODAL_TOKEN_SECRET",
@@ -519,6 +539,7 @@ def lliam_subprocess_env(*, inherit_credentials: bool = False) -> dict[str, str]
     env.setdefault("PYTHONUTF8", "1")
 
     _inject_context_lliam_home(env)
+    _inject_delegation_depth(env)
     from lliam_constants import apply_subprocess_home_env
     apply_subprocess_home_env(env)
 
@@ -807,6 +828,7 @@ def _make_run_env(env: dict) -> dict:
         run_env[path_key] = _prepend_lliam_bin_dir(new_path)
 
     _inject_context_lliam_home(run_env)
+    _inject_delegation_depth(run_env)
 
     from lliam_constants import apply_subprocess_home_env
     apply_subprocess_home_env(run_env)

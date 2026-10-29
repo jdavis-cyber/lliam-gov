@@ -138,11 +138,21 @@ class TestTirithAllowDangerous:
     def test_dangerous_only_cli_deny(self, mock_tirith):
         os.environ["HERMES_INTERACTIVE"] = "1"
         cb = MagicMock(return_value="deny")
-        result = check_all_command_guards("rm -rf /tmp", "local", approval_callback=cb)
+        result = check_all_command_guards("chmod 777 /tmp/test", "local", approval_callback=cb)
         assert result["approved"] is False
         cb.assert_called_once()
-        # allow_permanent should be True (no tirith warning)
+        # allow_permanent should be True (no tirith warning, not a delete)
         assert cb.call_args[1]["allow_permanent"] is True
+
+    @patch(_TIRITH_PATCH, return_value=_tirith_result("allow"))
+    def test_delete_is_once_only(self, mock_tirith):
+        os.environ["HERMES_INTERACTIVE"] = "1"
+        cb = MagicMock(return_value="deny")
+        check_all_command_guards("rm -rf /tmp", "local", approval_callback=cb)
+        cb.assert_called_once()
+        # Deletes are approved one at a time: no "always", no "session"
+        assert cb.call_args[1]["allow_permanent"] is False
+        assert cb.call_args[1]["allow_session"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -228,11 +238,20 @@ class TestAlwaysVisibility:
     def test_dangerous_only_allows_permanent(self, mock_tirith):
         os.environ["HERMES_INTERACTIVE"] = "1"
         cb = MagicMock(return_value="always")
-        result = check_all_command_guards("rm -rf /tmp/test", "local",
+        result = check_all_command_guards("chmod 777 /tmp/test", "local",
                                           approval_callback=cb)
         assert result["approved"] is True
         cb.assert_called_once()
         assert cb.call_args[1]["allow_permanent"] is True
+
+    @patch(_TIRITH_PATCH, return_value=_tirith_result("allow"))
+    def test_delete_hides_always(self, mock_tirith):
+        os.environ["HERMES_INTERACTIVE"] = "1"
+        cb = MagicMock(return_value="once")
+        result = check_all_command_guards("rm -rf /tmp/test", "local",
+                                          approval_callback=cb)
+        assert result["approved"] is True
+        assert cb.call_args[1]["allow_permanent"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -404,9 +423,14 @@ class TestGatewayApprovalAllowPermanent:
 
     def test_dangerous_only_allows_permanent(self):
         """No tirith warning → permanent allow is offered."""
-        payload = self._capture_gateway_payload("rm -rf /important", "gw-allow-perm")
-        assert payload["command"] == "rm -rf /important"
+        payload = self._capture_gateway_payload("chmod 777 /important", "gw-allow-perm")
+        assert payload["command"] == "chmod 777 /important"
         assert payload["allow_permanent"] is True
+
+    def test_delete_disallows_permanent(self):
+        """Delete → once-only, even with no tirith warning."""
+        payload = self._capture_gateway_payload("rm -rf /important", "gw-delete-once")
+        assert payload["allow_permanent"] is False
 
     @patch(_TIRITH_PATCH,
            return_value=_tirith_result("warn",

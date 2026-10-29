@@ -100,8 +100,8 @@ requirements:
       re-evaluation.
     controls: [LG-PF-07]
     verification: >-
-      ci/governance-ci-gates/fairness_gate.py +
-      tests/governance/test_p44_qms_fairness.py.
+      Retired 2026-10-20 by owner decision: the fairness gate and its
+      evaluation record were removed from the repository.
 
   - id: REQ-11
     statement: >-

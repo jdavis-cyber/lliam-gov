@@ -118,14 +118,15 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
     #
     # mistralai pin tracks the `mistral` extra in pyproject.toml. PyPI
     # quarantined the project 2026-05-12 (malicious 2.4.6, Mini Shai-Hulud);
-    # 2.4.6 was removed and clean releases resumed (2.4.7, 2.4.8). Voxtral
-    # STT + TTS share the same SDK.
-    "tts.mistral": ("mistralai==2.4.8",),
+    # 2.4.6 was removed and clean releases resumed (2.4.7, 2.4.8). The current
+    # pin, 2.9.4, was published 2026-08-21. A clean OSV result for this pin
+    # has not been verified here. Voxtral STT + TTS share the SDK.
+    "tts.mistral": ("mistralai==2.9.4",),
     "tts.edge": ("edge-tts==7.2.7",),
     "tts.elevenlabs": ("elevenlabs==1.59.0",),
 
     # ─── Speech-to-text providers ──────────────────────────────────────────
-    "stt.mistral": ("mistralai==2.4.8",),
+    "stt.mistral": ("mistralai==2.9.4",),
     "stt.faster_whisper": (
         "faster-whisper==1.2.1",
         "sounddevice==0.5.5",
@@ -166,14 +167,14 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
     # for stripped/source-build installs that somehow dropped it. The vision
     # call site uses prompt=False so it can never raise a blocking input()
     # prompt mid-session (#40490).
-    "tool.vision": ("Pillow==12.2.0",),
+    "tool.vision": ("Pillow==13.0.0",),
     # Computer Use (cua-driver) — the MCP client SDK used to spawn and talk
     # to the cua-driver process over stdio. Matches the `mcp` / `computer-use`
     # extras in pyproject.toml. The one-liner installer pulls this in via
     # `[all]`; lazy-installing here covers lean / partial / broken-extra
     # installs so computer_use never dead-ends on `No module named 'mcp'`.
     "tool.computer_use": (
-        "mcp==1.26.0",
+        "mcp==1.30.0",
         "starlette==1.3.1",  # CVE-2026-48710 - keep in sync with pyproject [computer-use]
     ),
 }

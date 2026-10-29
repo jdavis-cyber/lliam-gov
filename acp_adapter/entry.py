@@ -235,6 +235,15 @@ def main(argv: list[str] | None = None) -> None:
     _setup_logging()
     _load_env()
 
+    # Fail-closed strict-posture startup gates (JER-80). After env load (the
+    # control-plane gate reads API_SERVER_* / TLS env) and before any agent or
+    # MCP code runs. --version/--check/--setup above stay reachable so an
+    # operator can repair a config the gates reject. Refusal goes to stderr;
+    # stdout is the ACP JSON-RPC channel.
+    from lliam_cli.startup_posture import enforce_startup_posture_or_exit
+
+    enforce_startup_posture_or_exit("lliam-gov-acp")
+
     logger = logging.getLogger(__name__)
     logger.info("Starting hermes-agent ACP adapter")
 

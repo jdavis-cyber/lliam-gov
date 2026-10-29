@@ -50,10 +50,11 @@ metadata:
     cmmc_l2: ["SC.L2-3.13.1", "SC.L2-3.13.5", "SC.L2-3.13.6"]
     iso_27001: ["A.8.20", "A.8.22", "A.8.23", "A.8.26"]
   review:
-    cadence_days: 90
-    last_validated: "2026-07-15"
-    next_due: "2026-10-13"
-    register: "docs/governance/egress-allowlist-register.md"
+    cadence_days: 180
+    last_validated: "2026-10-20"   # owner renewal of all approved_destinations
+    next_due: "2027-04-10"
+    # No separate egress register file exists: approved_destinations below
+    # (rationale / added / expires per entry) is the record.
 
 
 # -----------------------------------------------------------------------------
@@ -98,20 +99,17 @@ always_blocked:
 approved_destinations:
 
   # --- Inference providers (US / FedRAMP / authorized) ----------------------
+  # Provider-surface entries MUST be exact hosts that appear in an allowlisted
+  # provider's base_url_hosts in policy/provider-allowlist.yaml (and its id in
+  # security.allowed_providers). tests/governance/test_provider_egress_parity.py
+  # fails on any drift between the two registers.
   - host: "bedrock-runtime.us-gov-west-1.amazonaws.com"
     surfaces: [provider]
     classification_ceiling: "CUI//SP-PRIV"
     squid_dstdomain: "bedrock-runtime.us-gov-west-1.amazonaws.com"
     rationale: "AWS Bedrock GovCloud inference endpoint (in-boundary)."
     added: "2026-07-15"
-    expires: "2026-10-13"
-  - host: "api.anthropic.com"
-    surfaces: [provider]
-    classification_ceiling: "PUBLIC"          # raise only under authorized no-train terms
-    squid_dstdomain: "api.anthropic.com"
-    rationale: "Commercial Anthropic API — low-side / PUBLIC tasks only."
-    added: "2026-07-15"
-    expires: "2026-10-13"
+    expires: "2027-04-10"
 
   # --- Code / package / docs hosts (read-oriented research) -----------------
   - host: "api.github.com"
@@ -120,14 +118,14 @@ approved_destinations:
     squid_dstdomain: "api.github.com"
     rationale: "GitHub API for code/issue research (read)."
     added: "2026-07-15"
-    expires: "2026-10-13"
+    expires: "2027-04-10"
   - host: "github.com"
     surfaces: [web, browser]
     classification_ceiling: "PUBLIC"
     squid_dstdomain: "github.com"
     rationale: "Public source/documentation browsing."
     added: "2026-07-15"
-    expires: "2026-10-13"
+    expires: "2027-04-10"
 
   # --- Authoritative gov / standards references -----------------------------
   - host: "*.nist.gov"
@@ -136,14 +134,14 @@ approved_destinations:
     squid_dstdomain: ".nist.gov"
     rationale: "NIST publications (800-53/171/172, AI RMF, CSF) reference."
     added: "2026-07-15"
-    expires: "2026-10-13"
+    expires: "2027-04-10"
   - host: "*.cisa.gov"
     surfaces: [web, browser]
     classification_ceiling: "PUBLIC"
     squid_dstdomain: ".cisa.gov"
     rationale: "CISA advisories / KEV reference."
     added: "2026-07-15"
-    expires: "2026-10-13"
+    expires: "2027-04-10"
 
 
 # -----------------------------------------------------------------------------

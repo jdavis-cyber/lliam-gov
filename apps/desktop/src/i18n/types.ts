@@ -1181,36 +1181,6 @@ export interface Translations {
       changed: (count: number) => string
       ahead: (count: number) => string
       behind: (count: number) => string
-      review: string
-      close: string
-      openChanges: string
-      openFile: string
-      stage: string
-      unstage: string
-      stageAll: string
-      viewAsTree: string
-      viewAsList: string
-      revert: string
-      revertAll: string
-      revertConfirm: string
-      revertAllConfirm: string
-      staged: string
-      noChanges: string
-      notRepo: string
-      noDiff: string
-      scopeUncommitted: string
-      scopeBranch: string
-      scopeLastTurn: string
-      commit: string
-      commitAndPush: string
-      commitPlaceholder: string
-      generateCommitMessage: string
-      stopGenerating: string
-      createPr: string
-      openPr: string
-      ghMissing: string
-      agentShip: string
-      agentShipPrompt: string
       newBranch: string
       branchOffFrom: (base: string) => string
       switchTo: (branch: string) => string
@@ -1477,7 +1447,6 @@ export interface Translations {
     noProjectTitle: string
     noProjectBody: string
     noProjectOpen: string
-    noDiffs: string
     unreadableTitle: string
     unreadableBody: (error: string) => string
     emptyTitle: string

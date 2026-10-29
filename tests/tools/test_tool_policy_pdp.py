@@ -417,7 +417,7 @@ def test_pdp_gate_low_side_returns_none(tmp_path, monkeypatch):
     tp.reset_pdp_state()
 
 
-def test_pdp_gate_emits_policy_violation_to_ledger(strict_pdp, tmp_path, monkeypatch):
+def test_pdp_gate_emits_policy_violation_to_ledger(strict_pdp, tmp_path, monkeypatch, unavailable_optional_dependencies):
     import agent.governance_audit_hooks as gah
     from agent.governance_audit import GovernanceLedger, iter_records
 

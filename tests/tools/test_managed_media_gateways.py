@@ -50,6 +50,9 @@ def _restore_tool_and_agent_modules():
 def _enable_managed_nous_tools(monkeypatch):
     """Patch the source modules so managed_nous_tools_enabled() returns True
     even after tool modules are dynamically reloaded."""
+    # These tests provide fake SDK modules below; their version metadata is
+    # intentionally absent and must not trigger an install of the real SDK.
+    monkeypatch.setattr("tools.lazy_deps.ensure", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         "lliam_cli.nous_account.get_nous_portal_account_info",
         lambda: NousPortalAccountInfo(

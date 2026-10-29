@@ -48,7 +48,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
-from utils import env_var_enabled
+from utils import is_truthy_value
 
 logger = logging.getLogger(__name__)
 
@@ -295,13 +295,23 @@ def _validate_workdir(workdir: str) -> str | None:
     return None
 
 
+def _surface_flag_enabled(suffix: str) -> bool:
+    """True when ``LLIAM_<suffix>`` (or its legacy fallback) is truthy (AI-1187).
+
+    The CLI, gateway, TUI gateway and cron scheduler set the ``LLIAM_`` names
+    since the rename; ``getenv_compat`` reads that name first and falls back
+    to the legacy one.
+    """
+    return is_truthy_value(getenv_compat(suffix, ""), default=False)
+
+
 def _handle_sudo_failure(output: str, env_type: str) -> str:
     """
     Check for sudo failure and add helpful message for messaging contexts.
     
     Returns enhanced output if sudo failed in messaging context, else original.
     """
-    is_gateway = env_var_enabled("HERMES_GATEWAY_SESSION")
+    is_gateway = _surface_flag_enabled("GATEWAY_SESSION")
     
     if not is_gateway:
         return output
@@ -908,7 +918,7 @@ def _transform_sudo_command(command: str | None) -> tuple[str | None, str | None
 
     has_sudo_prompt_callback = _get_sudo_password_callback() is not None
     should_prompt_for_sudo = (
-        env_var_enabled("HERMES_INTERACTIVE") or has_sudo_prompt_callback
+        _surface_flag_enabled("INTERACTIVE") or has_sudo_prompt_callback
     )
     if not has_configured_password and not sudo_password and should_prompt_for_sudo:
         sudo_password = _prompt_for_sudo_password(timeout_seconds=45)
@@ -1394,11 +1404,13 @@ def _get_env_config() -> Dict[str, Any]:
         docker_volumes = _parse_env_var("TERMINAL_DOCKER_VOLUMES", "[]", json.loads, "valid JSON")
         docker_env = _parse_env_var("TERMINAL_DOCKER_ENV", "{}", json.loads, "valid JSON")
         docker_extra_args = _parse_env_var("TERMINAL_DOCKER_EXTRA_ARGS", "[]", json.loads, "valid JSON")
+        docker_network = os.getenv("TERMINAL_DOCKER_NETWORK", "true").lower() in {"true", "1", "yes"}
     else:
         docker_forward_env = []
         docker_volumes = []
         docker_env = {}
         docker_extra_args = []
+        docker_network = True
 
     # Default cwd: local uses the host's current directory, ssh uses the
     # remote home, and everything else starts in the backend's default
@@ -1471,6 +1483,8 @@ def _get_env_config() -> Dict[str, Any]:
         "docker_env": docker_env,
         "docker_run_as_host_user": os.getenv("TERMINAL_DOCKER_RUN_AS_HOST_USER", "false").lower() in {"true", "1", "yes"},
         "docker_extra_args": docker_extra_args,
+        # false -> the sandbox container runs with --network=none (no egress).
+        "docker_network": docker_network,
         # Cross-process container reuse (issue #20561).  The docs claim
         # "ONE long-lived container shared across sessions" — this toggle
         # makes that real by probing for a labeled container at startup and
@@ -1553,6 +1567,7 @@ def _create_environment(env_type: str, image: str, cwd: str, timeout: int,
             env=docker_env,
             run_as_host_user=cc.get("docker_run_as_host_user", False),
             extra_args=docker_extra_args,
+            network=cc.get("docker_network", True),
             persist_across_processes=cc.get("docker_persist_across_processes", True),
         )
     
@@ -2488,6 +2503,7 @@ def terminal_tool(
                                 "docker_env": config.get("docker_env", {}),
                                 "docker_run_as_host_user": config.get("docker_run_as_host_user", False),
                                 "docker_extra_args": config.get("docker_extra_args", []),
+                                "docker_network": config.get("docker_network", True),
                                 "docker_persist_across_processes": config.get("docker_persist_across_processes", True),
                                 "docker_orphan_reaper": config.get("docker_orphan_reaper", True),
                             }
@@ -2926,7 +2942,7 @@ def terminal_tool(
             )
             if sudo_cache_cleared:
                 has_sudo_prompt_callback = _get_sudo_password_callback() is not None
-                if has_sudo_prompt_callback or env_var_enabled("HERMES_INTERACTIVE"):
+                if has_sudo_prompt_callback or _surface_flag_enabled("INTERACTIVE"):
                     output += (
                         "\n\n⚠️ Sudo authentication failed — cached password "
                         "cleared. You will be prompted again on the next sudo "
