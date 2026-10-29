@@ -9,6 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("disable_lazy_stt_install")
+
 
 def _non_wsl_proc_version(real_open):
     """Return an open() shim that makes host WSL detection deterministic."""

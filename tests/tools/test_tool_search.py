@@ -351,6 +351,7 @@ class TestBridgeDispatch:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("unavailable_optional_dependencies")
 class TestHandleFunctionCallIntegration:
     def test_tool_search_dispatch_through_handle_function_call(self):
         """The dispatcher recognizes the bridge tool by name."""

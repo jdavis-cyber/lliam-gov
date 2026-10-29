@@ -473,7 +473,7 @@ class TestTextToSpeechToolWithCommandProvider:
         assert data["voice_compatible"] is True
         assert data["media_tag"].startswith("[[audio_as_voice]]")
 
-    def test_missing_command_falls_through_to_builtin(self, tmp_path):
+    def test_missing_command_falls_through_to_builtin(self, tmp_path, unavailable_optional_dependencies):
         """A provider entry with an empty command is not a command
         provider; the tool should not raise a "command not configured"
         error but fall through to the built-in resolution path."""

@@ -245,9 +245,8 @@ class TestRealInstallCoreWins:
     importable via the appended sys.path entry. Skipped by default so the
     unit-test shard never depends on PyPI reachability/egress."""
 
-    def test_install_lands_in_target_and_imports(self, tmp_path, monkeypatch):
-        target = tmp_path / "lazy-packages"
-        monkeypatch.setenv(ld._LAZY_TARGET_ENV, str(target))
+    def test_install_lands_in_target_and_imports(self, allow_lazy_installs):
+        target = allow_lazy_installs
         # 'isodate' is tiny, pure-python, and not shipped in the core venv,
         # so a successful import must resolve to the durable target.
         result = ld._venv_pip_install(("isodate==0.7.2",))
