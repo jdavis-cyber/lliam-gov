@@ -9,9 +9,30 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from lliam_constants import reset_lliam_home_override, set_lliam_home_override
 from lliam_cli.active_sessions import active_session_registry_snapshot
 from tui_gateway import server
+
+
+@pytest.fixture(autouse=True)
+def _cli_config_writes_stay_in_tmp(monkeypatch, tmp_path):
+    """Keep ``cli.save_config_value`` out of the repository.
+
+    ``config.set model`` persists through ``cli.save_config_value``, which
+    writes ``<cli._lliam_home>/config.yaml`` only when that file exists and
+    otherwise falls back to the gitignored ``cli-config.yaml`` at the
+    repository root. ``cli._lliam_home`` is bound at import, so it never has
+    the per-test config.yaml, and tests here wrote the repository file. A
+    leftover file then changed ``load_cli_config()`` for later tests.
+    """
+    import cli
+
+    home = tmp_path / "cli_home"
+    home.mkdir()
+    (home / "config.yaml").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "_lliam_home", home)
 
 
 def test_session_create_rejects_at_active_session_limit(monkeypatch, tmp_path):

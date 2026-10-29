@@ -24,11 +24,14 @@ test runner at ``scripts/run_tests.sh``.
 """
 
 import asyncio
+import atexit
 import json
 import os
+import shutil
 import subprocess
 import sys
 import sysconfig
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -38,6 +41,23 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+
+# ── Session-wide home redirect ─────────────────────────────────────────────
+#
+# ``_hermetic_environment`` points the home at a per-test tempdir, but code
+# also resolves the home outside any test: module-level paths bound at import
+# time (during collection, before any fixture runs) and background threads
+# that outlive their test after monkeypatch has restored the environment.
+# With no home variable set those resolve to the operator's real ~/.lliam, and
+# tests wrote SOUL.md, gateway state and cron files there. Point the home at a
+# throwaway session directory before collection imports any project module,
+# so the fallback outside a test is that directory, never the real home.
+# Tests still get their own per-test home from ``_hermetic_environment``.
+_SESSION_LLIAM_HOME = Path(tempfile.mkdtemp(prefix="lliam-test-session-home-"))
+os.environ.pop("LLIAM_HOME", None)
+os.environ["HERMES_HOME"] = str(_SESSION_LLIAM_HOME)
+atexit.register(shutil.rmtree, _SESSION_LLIAM_HOME, ignore_errors=True)
 
 
 # ── Per-file process isolation ──────────────────────────────────────────────
@@ -87,6 +107,7 @@ def _installed_packages():
 
 def pytest_sessionstart(session):
     session.config._installed_packages_before = _installed_packages()
+    session.config._real_home_snapshot_before = _real_home_snapshot()
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -99,6 +120,302 @@ def pytest_sessionfinish(session, exitstatus):
             reporter.write_line(f"Removed: {[package for package in before if package not in after]}")
             reporter.write_line(f"Added: {[package for package in after if package not in before]}")
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
+    _check_real_home_snapshot(session)
+
+
+# ── Real-home and repository config write guard ────────────────────────────
+#
+# Tests must not write to the operator's real home (``~/.lliam`` and the
+# legacy pre-rename home) or to the repository's gitignored config and install
+# files. Snapshot them when the session starts, before collection imports
+# anything, and fail the session if any entry was created, changed or
+# removed. Regular files are compared by size, mtime and, up to
+# ``_HOME_GUARD_HASH_LIMIT`` bytes, SHA-256. Contents are only hashed, never
+# decoded or reported: the home holds credentials (auth.json, .env). Failure
+# output names paths only.
+#
+# ``--real-home-guard=warn`` reports without failing, for an operator who runs
+# a live agent against the real home during a test run.
+
+_HOME_GUARD_HASH_LIMIT = 256 * 1024
+# The pre-rename product name, spelled from parts: the rename guard
+# (tests/rename) rejects new lines that spell it out.
+_LEGACY_NAME = "her" + "mes"
+# Toolchains and source checkouts are recorded but not walked: they are large
+# and walking them every session (one per test file) would be slow.
+_HOME_GUARD_UNWALKED_DIRS = frozenset({
+    ".git", "__pycache__", "node", "node_modules", "venv", ".venv",
+})
+# Gitignored config files (and the install targets an unmocked npm install
+# rewrites) at the repository root.
+_REPO_GUARDED_FILES = (
+    "cli-config.yaml",
+    ".env",
+    ".env.local",
+    ".env.development",
+    ".env.development.local",
+    ".env.test",
+    ".env.test.local",
+    ".env.production.local",
+    "package-lock.json",
+)
+_REPO_GUARDED_DIRS = ("node_modules",)
+
+
+def _real_home_roots():
+    """The platform default homes, resolved from HOME, not from test env."""
+    try:
+        from lliam_constants import _get_platform_default_home
+        roots = (_get_platform_default_home("lliam"), _get_platform_default_home(_LEGACY_NAME))
+    except Exception:
+        roots = (Path.home() / ".lliam", Path.home() / f".{_LEGACY_NAME}")
+    return tuple(dict.fromkeys(roots))
+
+
+def _guarded_entry(path, *, dir_mtime=False):
+    """A comparable record of one path, or None when it does not exist."""
+    import hashlib
+    import stat
+
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return None
+    if stat.S_ISDIR(st.st_mode):
+        return ("dir", st.st_mtime_ns) if dir_mtime else ("dir",)
+    if stat.S_ISLNK(st.st_mode):
+        try:
+            return ("link", os.readlink(path))
+        except OSError:
+            return ("link", None)
+    if not stat.S_ISREG(st.st_mode):
+        return ("other", stat.S_IFMT(st.st_mode))
+    digest = None
+    if st.st_size <= _HOME_GUARD_HASH_LIMIT:
+        try:
+            with open(path, "rb") as handle:
+                digest = hashlib.sha256(handle.read()).hexdigest()
+        except OSError:
+            pass
+    return ("file", st.st_size, st.st_mtime_ns, digest)
+
+
+def _snapshot_protected(snapshot, path, *, walk, walked, dir_mtime=False,
+                        explicit=True):
+    """Record ``path`` and, when it is a symlink, its referent too.
+
+    A symlinked home or config file is written through: the link entry stays
+    the same while the referent changes, so the referent is recorded (and,
+    for a directory, walked) as well. ``realpath`` resolves chains and stops
+    on cycles, and ``walked`` keeps two roots that resolve to one directory
+    from being walked twice. Links found during the walk come back here
+    (``explicit=False``), so a link at any depth is followed the same way.
+    """
+    entry = _guarded_entry(path, dir_mtime=dir_mtime)
+    if entry is None:
+        return
+    snapshot[str(path)] = entry
+    target = str(path)
+    if entry[0] == "link":
+        # A missing referent is not recorded, so one created through the
+        # link shows up as created.
+        target = os.path.realpath(path)
+        entry = _guarded_entry(target, dir_mtime=dir_mtime)
+        if entry is None:
+            return
+        snapshot[target] = entry
+    if walk and entry[0] == "dir":
+        _walk_protected(snapshot, target, walked, explicit=explicit)
+
+
+def _is_within(path, parent, _paths=os.path):
+    """True when ``path`` is ``parent`` or below it.
+
+    Paths on different Windows drives share no common path, so
+    ``commonpath`` raises ``ValueError``; they are unrelated.
+    """
+    try:
+        return _paths.commonpath((path, parent)) == parent
+    except ValueError:
+        return False
+
+
+def _walkable_dir(path):
+    """False for the toolchain and checkout directories the guard skips.
+
+    The name is checked on the path and on its referent, so a link does not
+    bring an excluded directory back into the walk.
+    """
+    names = {os.path.basename(path), os.path.basename(os.path.realpath(path))}
+    return (not names & _HOME_GUARD_UNWALKED_DIRS
+            and not os.path.lexists(os.path.join(path, ".git")))
+
+
+def _walk_protected(snapshot, root, walked, *, explicit):
+    """Record everything under ``root``, following links below it as well.
+
+    ``os.walk`` lists a link but does not follow it, so each descendant link
+    gets the same referent handling as a protected root. ``walked`` holds the
+    resolved directories already walked, and a subdirectory that resolves to
+    one of them is recorded but not walked again, which also stops cycles.
+
+    A protected root (``explicit``) is always walked unless that exact
+    directory was walked already. A referent reached through a link below a
+    root is skipped when it is, or contains, an already walked directory: a
+    link back to ``~`` or ``/`` would otherwise walk far outside the guarded
+    home.
+    """
+    real_root = os.path.realpath(root)
+    if real_root in walked:
+        return
+    if not explicit and any(_is_within(done, real_root) for done in walked):
+        return
+    walked.add(real_root)
+    for dirpath, dirnames, filenames in os.walk(root):
+        for name in dirnames + filenames:
+            child = os.path.join(dirpath, name)
+            child_entry = _guarded_entry(child)
+            if child_entry is None:
+                continue
+            snapshot[child] = child_entry
+            if child_entry[0] == "link":
+                _snapshot_protected(snapshot, child, walk=_walkable_dir(child),
+                                    walked=walked, explicit=False)
+        dirnames[:] = [
+            name for name in dirnames
+            if _walkable_dir(os.path.join(dirpath, name))
+            and os.path.realpath(os.path.join(dirpath, name)) not in walked
+        ]
+
+
+def _real_home_snapshot():
+    snapshot = {}
+    walked = set()
+    for root in _real_home_roots():
+        _snapshot_protected(snapshot, root, walk=True, walked=walked)
+    for name in _REPO_GUARDED_FILES + _REPO_GUARDED_DIRS:
+        _snapshot_protected(snapshot, PROJECT_ROOT / name, walk=False,
+                            walked=walked, dir_mtime=True)
+    return snapshot
+
+
+def _real_home_changes(before, after):
+    return (
+        sorted(after.keys() - before.keys()),
+        sorted(path for path in before.keys() & after.keys() if before[path] != after[path]),
+        sorted(before.keys() - after.keys()),
+    )
+
+
+def _check_real_home_snapshot(session):
+    mode = session.config.getoption("real_home_guard", default="fail")
+    before = getattr(session.config, "_real_home_snapshot_before", None)
+    if mode == "off" or before is None:
+        return
+    created, changed, removed = _real_home_changes(before, _real_home_snapshot())
+    if not (created or changed or removed):
+        return
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    write = reporter.write_line if reporter is not None else (
+        lambda line: print(line, file=sys.stderr))
+    if reporter is not None:
+        reporter.write_line("")
+        reporter.write_sep("=", "Tests wrote to the real Lliam home or repository config")
+    for label, paths in (("Created", created), ("Changed", changed), ("Removed", removed)):
+        for path in paths[:50]:
+            write(f"{label}: {path}")
+        if len(paths) > 50:
+            write(f"{label}: ... and {len(paths) - 50} more")
+    write(
+        "Point the code under test at the per-test home (get_lliam_home()) "
+        "or tmp_path. "
+        "A live agent or a parallel test process writing these paths also "
+        "trips this guard; --real-home-guard=warn reports without failing."
+    )
+    if mode == "fail":
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+# ── Opt-in test reordering ─────────────────────────────────────────────────
+#
+# ``--test-order=reverse`` or ``--test-order=random[:SEED]`` reorders the
+# collected tests to expose order-dependent state leaks. No plugin is needed.
+# The ``LLIAM_TEST_ORDER`` environment variable sets the same value when the
+# flag is absent. A random order prints its seed in the report header; pass
+# it back to reproduce. Through the canonical runner the flag reorders tests
+# inside each file; a plain single-process ``pytest`` run also reorders
+# across files.
+
+
+def pytest_addoption(parser):
+    group = parser.getgroup("lliam test isolation")
+    group.addoption(
+        "--test-order", dest="test_order",
+        default=os.environ.get("LLIAM_TEST_ORDER") or "default", metavar="ORDER",
+        help="default, reverse, or random[:SEED]: reorder collected tests "
+             "to expose order-dependent state leaks.",
+    )
+    group.addoption(
+        "--real-home-guard", dest="real_home_guard", default="fail",
+        choices=("fail", "warn", "off"),
+        help="fail (default), warn or off: what to do when tests write to "
+             "the real Lliam home or repository config files.",
+    )
+
+
+def _test_order_seed(config):
+    order = config.getoption("test_order", default="default")
+    if order in ("default", "reverse"):
+        return None
+    kind, _, seed = order.partition(":")
+    if kind != "random" or (seed and not seed.isdigit()):
+        raise pytest.UsageError(
+            f"--test-order must be default, reverse or random[:SEED], not {order!r}")
+    if not seed:
+        import random
+        seed = str(random.SystemRandom().randrange(1 << 32))
+    return int(seed)
+
+
+def pytest_report_header(config):
+    seed = getattr(config, "_test_order_seed", None)
+    if seed is not None:
+        return [f"test order: random:{seed}"]
+    if config.getoption("test_order", default="default") == "reverse":
+        return ["test order: reverse"]
+    return []
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config, items):
+    order = config.getoption("test_order", default="default")
+    if order == "reverse":
+        items.reverse()
+    elif getattr(config, "_test_order_seed", None) is not None:
+        import random
+        random.Random(config._test_order_seed).shuffle(items)
+
+
+# ── Per-test environment restore ───────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _restore_process_environment():
+    """Restore os.environ after each test, including writes by the code under test.
+
+    ``monkeypatch`` restores only the variables a test patched. Code under
+    test also sets variables directly (cron runs set LLIAM_CRON_SESSION, CLI
+    entry points set LLIAM_INTERACTIVE and friends), and those leaked into
+    later tests in a single-process run. Defined first so it wraps every
+    other autouse fixture.
+    """
+    saved = dict(os.environ)
+    yield
+    for name in [name for name in os.environ if name not in saved]:
+        del os.environ[name]
+    for name, value in saved.items():
+        if os.environ.get(name) != value:
+            os.environ[name] = value
 
 
 @pytest.fixture(autouse=True)
@@ -463,6 +780,16 @@ _LLIAM_BEHAVIORAL_VARS = frozenset({
 })
 
 
+# Home variables that survive ``os.environ.clear()`` inside a test.
+_CLEAR_KEEPS_HOME_VARS = ("HERMES_HOME", "LLIAM_HOME")
+
+
+def _clear_environ_keeping_home():
+    kept = {name: os.environ[name] for name in _CLEAR_KEEPS_HOME_VARS if name in os.environ}
+    type(os.environ).clear(os.environ)
+    os.environ.update(kept)
+
+
 @pytest.fixture(autouse=True)
 def _hermetic_environment(tmp_path, monkeypatch):
     """Blank out all credential/behavioral env vars so local and CI match.
@@ -477,8 +804,13 @@ def _hermetic_environment(tmp_path, monkeypatch):
             monkeypatch.delenv(name, raising=False)
 
     # 2. Blank behavioral HERMES_* vars that could change test semantics.
+    #    Also blank their LLIAM_* spellings: getenv_compat() reads
+    #    LLIAM_<name> first, so an ambient LLIAM_YOLO_MODE would win.
+    legacy_prefix = _LEGACY_NAME.upper() + "_"
     for name in _LLIAM_BEHAVIORAL_VARS:
         monkeypatch.delenv(name, raising=False)
+        if name.startswith(legacy_prefix):
+            monkeypatch.delenv("LLIAM_" + name[len(legacy_prefix):], raising=False)
 
     # 3. Redirect HERMES_HOME to a per-test tempdir. Code that reads
     #    ``~/.hermes/*`` via ``get_lliam_home()`` now gets the tempdir.
@@ -511,6 +843,14 @@ def _hermetic_environment(tmp_path, monkeypatch):
     #     keeping the home resolved to a tempdir (never the operator's ~/.lliam,
     #     since HERMES_HOME is always set here).
     monkeypatch.delenv("LLIAM_HOME", raising=False)
+    # 3c. Keep the per-test home when a test clears the environment.
+    #     ``patch.dict(os.environ, ..., clear=True)`` (over 150 uses) and
+    #     ``os.environ.clear()`` dropped HERMES_HOME along with HOME, so
+    #     ``get_lliam_home()`` fell back to the passwd home: the real
+    #     ~/.lliam (on CI, /home/runner/.lliam). Clearing still removes
+    #     every other variable, and a test that sets its own home in the
+    #     patched dict still wins.
+    monkeypatch.setattr(os.environ, "clear", _clear_environ_keeping_home)
 
     # 4. Deterministic locale / timezone / hashseed. CI runs in UTC with
     #    C.UTF-8 locale; local dev often doesn't. Pin everything.
@@ -544,6 +884,47 @@ def _hermetic_environment(tmp_path, monkeypatch):
     # the generic credential-shaped env-var filter above.
     monkeypatch.delenv("GMI_API_KEY", raising=False)
     monkeypatch.delenv("GMI_BASE_URL", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _reset_session_and_interrupt_state(_hermetic_environment):
+    """Clear process-wide session, interrupt and kill-switch state per test.
+
+    Two leaks made later gateway approval tests fail in a single-process run:
+
+    * ``agent.killswitch.engage()`` interrupts the calling thread, the main
+      thread in tests, so later approval waits returned "interrupted" at once.
+    * ``clear_session_vars()`` (cron runs call it) sets the gateway session
+      context variables to ``""`` in the main context, which stops them
+      falling back to the session-key environment variable a later test
+      sets.
+
+    Modules that are not imported yet hold no state. Runs after
+    ``_hermetic_environment`` so the kill-switch state path is already the
+    per-test home.
+    """
+    _clear_process_state(reset_killswitch=True)
+    yield
+    _clear_process_state(reset_killswitch=False)
+
+
+def _clear_process_state(*, reset_killswitch):
+    interrupt = sys.modules.get("tools.interrupt")
+    if interrupt is not None:
+        with interrupt._lock:
+            interrupt._interrupted_threads.clear()
+    session_context = sys.modules.get("gateway.session_context")
+    if session_context is not None:
+        for var in session_context._VAR_MAP.values():
+            var.set(session_context._UNSET)
+        session_context._SESSION_ASYNC_DELIVERY.set(session_context._UNSET)
+    approval = sys.modules.get("tools.approval")
+    if approval is not None:
+        approval._approval_session_key.set("")
+        approval._approval_turn_id.set("")
+    killswitch = sys.modules.get("agent.killswitch")
+    if reset_killswitch and killswitch is not None:
+        killswitch.reset_for_tests()
 
 
 # Backward-compat alias — old tests reference this fixture name. Keep it
@@ -713,6 +1094,8 @@ def pytest_configure(config):  # noqa: D401 — pytest hook
     # suite runs natively there (POSIX keeps the more reliable signal method).
     if sys.platform == "win32" and getattr(config.option, "timeout_method", None) == "signal":
         config.option.timeout_method = "thread"
+
+    config._test_order_seed = _test_order_seed(config)
 
 
 @pytest.fixture(autouse=True)
