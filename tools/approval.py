@@ -752,7 +752,8 @@ def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
     and the arguments of ``eval`` are scanned as nested commands, up to
     ``_MAX_NESTED_SCRIPT_DEPTH`` levels deep.
     """
-    tokens = _shell_tokens(command)
+    # A commented-out redirect writes nothing: ``cat .env # > .env`` is a read.
+    tokens = _shell_tokens(command, comments=True)
     if tokens is None:
         return None
     targets: list = []
