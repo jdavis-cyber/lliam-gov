@@ -442,6 +442,7 @@ _COMPRESS = "file/directory delete via compressor replacing original"
 _TRASH = "file/directory delete via trash"
 _STASH = "file/directory delete via git stash of untracked files"
 _FINDER = "file/directory delete via osascript Finder"
+_FILE = "file/directory delete"
 
 
 @pytest.mark.parametrize("command,delete_description", [
@@ -584,6 +585,26 @@ _FINDER = "file/directory delete via osascript Finder"
     ("""osascript -e 'tell application "Finder" to delete POSIX file "/tmp/x"'""", _FINDER),
     ("""osascript -e 'tell app "Finder" to move POSIX file "/tmp/x" to trash'""", _FINDER),
     ("""osascript -e 'tell application "Finder" to empty trash'""", _FINDER),
+    # GitHub Codex P1 on #147 (round 10): ;> is ; then a redirect, so the
+    # next word is still the command; leading redirects don't hide it.
+    ("true;>/dev/null gzip notes.txt", _COMPRESS),
+    ("true;2>/dev/null gzip notes.txt", _COMPRESS),
+    ("true|>/dev/null gzip notes.txt", _COMPRESS),
+    ("gzip >(cat) notes.txt", _COMPRESS),
+    ("true;>/dev/null git stash -u", _STASH),
+    ("true;>/dev/null trash notes.txt", _TRASH),
+    ("true;>/dev/null rm -f notes.txt", _FILE),
+    (">/dev/null rm notes.txt", _FILE),
+    ("true; 2>&1 unlink notes.txt", _FILE),
+    ("&>/dev/null rmdir build", _FILE),
+    # rm, unlink, rmdir, git rm and find -delete at reserved-word and
+    # subshell command positions.
+    ("if true; then rm notes.txt; fi", _FILE),
+    ("(rm notes.txt)", _FILE),
+    ("{ rm notes.txt; }", _FILE),
+    ("while true; do unlink notes.txt; done", _FILE),
+    ("! git rm notes.txt", _FILE),
+    ("if true; then find . -name x -delete; fi", _FILE),
 ])
 def test_residual_deleters_are_once_only_deletes(command, delete_description):
     keys = [key for key, _ in approval.detect_all_dangerous_commands(command)]
@@ -662,6 +683,11 @@ def test_residual_deleters_are_once_only_deletes(command, delete_description):
     "bash -c -- 'gzip -k notes.txt'",
     "env -S gzip",
     "if true; then git stash list; fi",
+    "true;>/dev/null gzip -k notes.txt",
+    "echo >notes.txt rm",
+    "echo a 2>/dev/null rmx",
+    "if true; then echo rm notes.txt; fi",
+    "man rm",
     "git stash show -u",
     "if true; then trash-list; fi",
     "echo git stash -u",

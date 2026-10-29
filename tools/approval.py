@@ -1108,8 +1108,8 @@ def _shell_tokens(command: str, comments: bool = False,
                 word_bare.clear()
                 in_word = False
             end_word()
-            if "".join(operator) + ch not in _SHELL_OPERATORS:
-                end_operator()  # ``;>`` is ``;`` then ``>``
+            if "".join(operator).lstrip("0123456789") + ch not in _SHELL_OPERATORS:
+                end_operator()  # ``;>`` is ``;`` then ``>``; ``2>`` keeps its fd
             operator.append(ch)
             i += 1
             if ch == "\n" and pending:
@@ -1681,6 +1681,8 @@ def _sudo_stdin_block_result(description: str) -> dict:
 # Executable positions, including common command wrappers and find actions.
 _DELETE_COMMAND_START = (
     r'(?:^|[;&|\n]|\$\(|`)\s*'
+    # leading redirects (``>/dev/null rm x``, ``2>&1 rm x``)
+    r'(?:\d*(?:&>>?|[<>][>&|]?)\s*[^\s;|&<>()]+\s+)*'
     r'(?:(?:xargs|sudo|env|command|exec|nohup)\s+(?:[^;|&\n]*?\s+)?'
     r'|find\b[^;|&\n]*?-exec(?:dir)?\s+)?'
     r'(?:[^\s\'";|&`()]*/)?'
@@ -2010,6 +2012,8 @@ def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> 
     return removes if family == "rm" else True
 
 
+_FILE_DELETE = "file/directory delete"
+_FILE_DELETE_COMMANDS = frozenset({"rm", "unlink", "rmdir"})
 _TRASH_DELETE = "file/directory delete via trash"
 _STASH_DELETE = "file/directory delete via git stash of untracked files"
 _FINDER_DELETE = "file/directory delete via osascript Finder"
@@ -2077,6 +2081,8 @@ def _stash_keeps_untracked_out(args: list) -> bool:
 def _invocation_delete_kinds(base: str, args: list, operands_supplied: bool) -> set:
     """The once-only delete kinds one command invocation performs."""
     kinds: set = set()
+    if base in _FILE_DELETE_COMMANDS or (base == "find" and "-delete" in args):
+        kinds.add(_FILE_DELETE)
     if base in _COMPRESSORS and _compressor_call_deletes(base, args, operands_supplied):
         kinds.add(_COMPRESSOR_DELETE)
     if base in _TRASH_COMMANDS or (base == "gio" and args[:1] in (["trash"], ["remove"])):
@@ -2085,6 +2091,8 @@ def _invocation_delete_kinds(base: str, args: list, operands_supplied: bool) -> 
         for j in _git_subcommand_starts(args):
             if j < len(args) and args[j] == "stash" and _stash_keeps_untracked_out(args[j + 1:]):
                 kinds.add(_STASH_DELETE)
+            if j < len(args) and args[j] == "rm":
+                kinds.add(_FILE_DELETE)
     if base == "osascript" and _FINDER_DELETE_RE.search(" ".join(args)):
         kinds.add(_FINDER_DELETE)
     return kinds
@@ -2111,7 +2119,9 @@ def _simple_command_delete_kinds(words: list, scripts: list) -> set:
 
 # The delete rules decided from the tokenized command; their patterns are a
 # fallback (the compressor's only for a command that can't be tokenized).
-_TOKENIZED_DELETE_KINDS = frozenset({_COMPRESSOR_DELETE, _TRASH_DELETE, _STASH_DELETE, _FINDER_DELETE})
+_TOKENIZED_DELETE_KINDS = frozenset({
+    _FILE_DELETE, _COMPRESSOR_DELETE, _TRASH_DELETE, _STASH_DELETE, _FINDER_DELETE,
+})
 
 
 def _command_delete_kinds(command: str, depth: int = 0) -> Optional[set]:
@@ -2126,6 +2136,7 @@ def _command_delete_kinds(command: str, depth: int = 0) -> Optional[set]:
         return None
     nested.extend(_heredoc_scripts(tokens, heredocs))
     segments: list = [[]]
+    outer: list = []  # commands around an open ( (see _env_write_targets)
     skip_target = False
     for text, is_operator in tokens:
         if skip_target and not is_operator:
@@ -2134,8 +2145,14 @@ def _command_delete_kinds(command: str, depth: int = 0) -> Optional[set]:
         skip_target = False
         if not is_operator:
             segments[-1].append(text)
-        elif text.endswith("(") or (">" not in text and "<" not in text):
-            segments.append([])  # separator, pipe, subshell
+        elif text.endswith("("):
+            outer.append((segments.pop(), text != "("))
+            segments.append([])  # the subshell or substitution's own commands
+        elif text == ")" and outer:
+            saved, substitution = outer.pop()
+            segments.append(saved + (["/dev/fd/63"] if substitution else []))
+        elif ">" not in text and "<" not in text:
+            segments.append([])  # separator, pipe
         else:
             skip_target = True
     scripts: list = []  # eval, sh -c and env -S command lines
@@ -2402,8 +2419,8 @@ def detect_all_dangerous_commands(command: str) -> list[tuple[str, str]]:
             # can't be tokenized; the others still match on their own.
             if description != _COMPRESSOR_DELETE or None in delete_kinds:
                 found = found or any(pattern_re.search(c) for c in delete_contexts)
-            if found:
-                matches.append((description, description))
+            if found and (description, description) not in matches:
+                matches.append((description, description))  # several share one
             continue
         candidates = delete_contexts if description.startswith("file/directory delete") else contexts
         for language, bodies in script_bodies.items():
