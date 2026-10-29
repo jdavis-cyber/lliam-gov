@@ -90,6 +90,14 @@ BLOCKED = [
     # A quoted operator next to a real redirect still counts the real one.
     "echo '>' > .env",
     "grep '|' notes | tee .env",
+    # A # inside a word or in quotes is not a comment; code before a comment counts.
+    "echo a#b > .env",
+    "echo '#' > .env",
+    'echo "x # y" > .env',
+    "echo x\\#y > .env",
+    "echo hi > .env # note",
+    "echo hi # note\necho k > .env",
+    "bash -c 'echo k > .env # note'",
 ]
 
 ALLOWED = [
@@ -127,6 +135,12 @@ ALLOWED = [
     'echo "a && tee .env"',
     "sudo -n cat .env",
     "sudo -u root grep KEY .env",
+    # A commented-out redirect is not a write (Codex P2 on #145, round 2).
+    "cat .env # > .env",
+    "cat .env #> .env",
+    "grep KEY .env # | tee .env",
+    "ls\n# echo x > .env",
+    "bash -c 'cat .env # > .env'",
 ]
 
 

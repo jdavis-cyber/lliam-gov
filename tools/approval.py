@@ -563,12 +563,13 @@ def _is_protected_env_basename(path: str) -> bool:
     return name in {".env", ".envrc"} or name.startswith(".env.")
 
 
-def _shell_tokens(command: str) -> Optional[list]:
+def _shell_tokens(command: str, comments: bool = False) -> Optional[list]:
     """Split *command* into ``(text, is_operator)`` pairs, or None on error.
 
     Quotes and backslash escapes are removed from words, as the shell does,
     and only unquoted, unescaped punctuation forms an operator: ``grep '>'``
-    passes ``>`` as an argument, it does not redirect.
+    passes ``>`` as an argument, it does not redirect. With *comments*, an
+    unquoted ``#`` that starts a word comments out the rest of the line.
     """
     tokens: list = []
     word: list = []
@@ -601,6 +602,10 @@ def _shell_tokens(command: str) -> Optional[list]:
             i += 1
             continue
         end_operator()
+        if comments and ch == "#" and not in_word:
+            newline = command.find("\n", i)
+            i = n if newline < 0 else newline
+            continue
         in_word = True
         if ch == "\\":
             if i + 1 >= n:
@@ -747,7 +752,8 @@ def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
     and the arguments of ``eval`` are scanned as nested commands, up to
     ``_MAX_NESTED_SCRIPT_DEPTH`` levels deep.
     """
-    tokens = _shell_tokens(command)
+    # A commented-out redirect writes nothing: ``cat .env # > .env`` is a read.
+    tokens = _shell_tokens(command, comments=True)
     if tokens is None:
         return None
     targets: list = []
