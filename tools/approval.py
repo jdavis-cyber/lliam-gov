@@ -647,12 +647,90 @@ def _heredoc_substitutions(body: str) -> Optional[list]:
     return scripts
 
 
+_ANSI_C_ESCAPES = {
+    "a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r",
+    "t": "\t", "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?",
+}
+
+
+def _ansi_c_quoted(command: str, start: int) -> tuple:
+    """Decode the ``$'...'`` string whose text begins at *start*, as Bash
+    does; return ``(text, index past the closing quote)`` or ``(None, None)``
+    when it is not closed. A NUL ends the value, as in Bash."""
+    out: list = []
+    ended = False  # a NUL was decoded: Bash drops the rest of the value
+    k, n = start, len(command)
+
+    def emit(text: str) -> None:
+        nonlocal ended
+        if not ended:
+            if "\0" in text:
+                text, ended = text.split("\0", 1)[0], True
+            out.append(text)
+
+    while k < n:
+        ch = command[k]
+        if ch == "'":
+            return "".join(out), k + 1
+        if ch != "\\":
+            emit(ch)
+            k += 1
+            continue
+        if k + 1 >= n:
+            return None, None
+        esc = command[k + 1]
+        k += 2
+        if esc in _ANSI_C_ESCAPES:
+            emit(_ANSI_C_ESCAPES[esc])
+        elif esc in "01234567":
+            digits = esc
+            while len(digits) < 3 and k < n and command[k] in "01234567":
+                digits += command[k]
+                k += 1
+            emit(chr(int(digits, 8) & 0xFF))
+        elif esc in "xuU":
+            width = {"x": 2, "u": 4, "U": 8}[esc]
+            digits = ""
+            while len(digits) < width and k < n and command[k] in "0123456789abcdefABCDEF":
+                digits += command[k]
+                k += 1
+            if not digits:
+                emit("\\" + esc)
+            elif int(digits, 16) > 0x10FFFF:
+                return None, None
+            else:
+                emit(chr(int(digits, 16)))
+        elif esc == "c":
+            if k >= n:
+                return None, None
+            emit(chr(ord(command[k]) & 0x1F))
+            k += 1
+        else:
+            emit("\\" + esc)  # an unknown escape stays as written
+    return None, None
+
+
+# Protected names a glob in a write target is tried against: Bash expands a
+# redirect target that matches one file, so ``> .en?`` can write ``.env``.
+_ENV_GLOB_PROBES = (".env", ".envrc", ".env.local", ".env.development", ".env.production", ".env.test")
+
+
+def _glob_may_name_env(path: str) -> bool:
+    """True when *path*'s file name is a glob that could match a protected
+    environment file (quoting is gone here, so a quoted ``*`` counts too)."""
+    name = unicodedata.normalize("NFKC", path).replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    if not any(ch in name for ch in "*?["):
+        return False
+    return any(fnmatch.fnmatchcase(probe, name) for probe in _ENV_GLOB_PROBES)
+
+
 def _shell_tokens(command: str, comments: bool = False,
                   heredocs: Optional[list] = None,
                   substitutions: Optional[list] = None) -> Optional[list]:
     """Split *command* into ``(text, is_operator)`` pairs, or None on error.
 
-    Quotes and backslash escapes are removed from words, as the shell does,
+    Quotes and backslash escapes are removed from words, as the shell does
+    (``$'...'`` is decoded and ``$"..."`` reads as ``"..."``),
     and only unquoted, unescaped punctuation forms an operator: ``grep '>'``
     passes ``>`` as an argument, it does not redirect. With *comments*, an
     unquoted ``#`` that starts a word comments out the rest of the line.
@@ -757,6 +835,17 @@ def _shell_tokens(command: str, comments: bool = False,
         in_word = True
         if ch in "\\'\"":
             word_quoted = True
+        if ch == "$" and i + 1 < n and command[i + 1] in "'\"":
+            word_quoted = True
+            if command[i + 1] == '"':
+                i += 1  # $"..." (locale translation) reads like "..."
+                continue
+            decoded, end = _ansi_c_quoted(command, i + 2)
+            if end is None:
+                return None
+            word.append(decoded)
+            i = end
+            continue
         if ch == "\\":
             if i + 1 >= n:
                 return None
@@ -870,10 +959,22 @@ def _wrapper_option_ends(words: list, start: int, name: str, scripts: list) -> s
     return ends
 
 
+# Shell reserved words at a command position. After these the next word is
+# again a command position (``then tee .env``, ``! tee .env``, ``{ tee .env;
+# }``); after ``function`` / ``coproc`` a name may come first, so both
+# readings count; after ``case`` / ``for`` / ``select`` / ``[[`` the rest of
+# the simple command is not a command.
+_RESERVED_BEFORE_COMMAND = frozenset({
+    "!", "{", "}", "do", "done", "elif", "else", "esac", "fi", "if", "then", "until", "while",
+})
+_RESERVED_BEFORE_NAME = frozenset({"coproc", "function"})
+_RESERVED_NO_COMMAND = frozenset({"[[", "case", "for", "select"})
+
+
 def _command_word_indices(words: list, scripts: list) -> set:
     """Where the real command word of a simple command may be, after
-    assignments, wrappers and their options; several when a wrapper option
-    is unknown (detection then considers every reading)."""
+    reserved words, assignments, wrappers and their options; several when a
+    wrapper option is unknown (detection then considers every reading)."""
     found: set = set()
     seen: set = set()
 
@@ -884,6 +985,16 @@ def _command_word_indices(words: list, scripts: list) -> set:
         while i < len(words):
             word = words[i]
             base = word.rsplit("/", 1)[-1]
+            if word in _RESERVED_BEFORE_COMMAND:
+                i += 1
+                continue
+            if word in _RESERVED_BEFORE_NAME:
+                visit(i + 1)  # ``coproc tee .env``
+                i += 2  # ``coproc NAME { ...``, ``function NAME { ...``
+                continue
+            if word in _RESERVED_NO_COMMAND:
+                i = len(words)
+                break
             if _ASSIGNMENT_RE.match(word) or (word.isdigit() and i > 0):
                 i += 1  # VAR=value, or a stray fd number (``sudo 2>/dev/null tee``)
                 continue
@@ -1065,6 +1176,8 @@ def detect_env_file_write(command: str) -> tuple:
     for target in _env_write_targets_or_fallback(normalized):
         if _is_protected_env_basename(target):
             return (True, f"shell write into protected environment file {target}")
+        if _glob_may_name_env(target):
+            return (True, f"shell write into {target}, a glob that may match a protected .env file")
     return (False, None)
 
 
