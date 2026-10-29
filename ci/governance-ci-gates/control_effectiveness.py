@@ -9,7 +9,8 @@ ledger on with verify-on-startup, continuous-monitoring enabled, and the
 approval channel authenticated (require_authenticated_approver set AND
 enforced by the runtime: an approval with no authenticated subject is
 refused, while the desktop app's local-operator subject can still approve;
-the MCP permissions_respond tool withheld under strict posture — JER-73),
+no inbound MCP server exposing permissions_respond under strict posture —
+JER-73, JER-198),
 and — on a deployed host only — a recent scheduled-assurance heartbeat. FAILS
 CLOSED (exit 1) on any broken invariant, and emits a `security.posture` event
 so the break is on the ISCM stream. Distinct from go_no_go_gate (a release
@@ -139,7 +140,9 @@ def _approval_channel_probe(cfg: dict, repo_root: Path) -> dict:
       the desktop app's connection (the one that presented the per-launch
       gateway secret) is accepted as an authenticated approver, so the
       operator's own desktop app can still approve.
-    * ``mcp_permissions_respond_withheld`` — the inbound MCP server's strict
+    * ``mcp_permissions_respond_withheld`` — no inbound MCP server can
+      resolve an approval: the server (``mcp_serve``) is absent (removed with
+      the messaging gateway, JER-198), or, if one is importable, its strict
       tool surface does not include ``permissions_respond``.
 
     Read-only: each probe runs in a fresh context (nothing bound unless the
@@ -188,9 +191,16 @@ def _approval_channel_probe(cfg: dict, repo_root: Path) -> dict:
     except Exception as e:  # pragma: no cover - surfaced as INEFFECTIVE
         _emit(f"desktop-approver probe error: {e}")
     try:
-        import mcp_serve
-        out["mcp_permissions_respond_withheld"] = (
-            "permissions_respond" not in mcp_serve.tool_surface(strict=True))
+        import importlib.util
+
+        if importlib.util.find_spec("mcp_serve") is None:
+            # JER-198: the inbound MCP server was removed with the messaging
+            # gateway, so no MCP client can reach permissions_respond at all.
+            out["mcp_permissions_respond_withheld"] = True
+        else:
+            import mcp_serve
+            out["mcp_permissions_respond_withheld"] = (
+                "permissions_respond" not in mcp_serve.tool_surface(strict=True))
     except Exception as e:  # pragma: no cover - surfaced as INEFFECTIVE
         _emit(f"MCP tool-surface probe error: {e}")
     return out

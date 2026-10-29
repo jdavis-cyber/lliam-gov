@@ -10495,8 +10495,8 @@ _AGENT_SUBCOMMANDS = {
 # strict-posture gate set (lliam_cli.startup_posture) BEFORE plugin/MCP/hook
 # discovery, EXCEPT the commands below. Default is gated: chat (bare / -z /
 # --resume / --continue / --tui), dashboard (also the desktop app's backend),
-# desktop/gui, proxy, send, kanban, curator, `cron run|tick`, `mcp serve`, and
-# any plugin-registered or unknown command.
+# desktop/gui, proxy, kanban, curator, `cron run|tick`, and any
+# plugin-registered or unknown command.
 #
 # Exempt — they never run an agent turn or open a serving endpoint, and an
 # operator must be able to reach them to REPAIR a config the gates reject
@@ -10504,29 +10504,28 @@ _AGENT_SUBCOMMANDS = {
 # high-risk skill, renew a governance artifact) or to inspect/diagnose it:
 #   * configure / repair: setup, postinstall, config, model, moa, fallback,
 #     secrets, migrate, login, logout, auth, portal, tools, skills, bundles,
-#     plugins, hooks, memory, profile, computer-use, lsp, pets, whatsapp,
-#     whatsapp-cloud, slack, webhook, pairing, claw, project
+#     plugins, hooks, memory, profile, computer-use, lsp, pets, claw, project
 #   * inspect / diagnose: doctor, security, status, dump, debug, logs,
 #     insights, sessions, checkpoints, prompt-size, version, help, completion
 #   * install lifecycle: update, uninstall, backup, import
-#   * self-gated: gateway (`gateway run` -> start_gateway runs the gate set at
-#     its original point, after PID/lock handling and logging setup) and acp
-#     (acp_adapter.entry.main gates its serve path; --setup/--check stay open)
+#   * self-gated: acp (acp_adapter.entry.main gates its serve path;
+#     --setup/--check stay open)
 #   * cron / mcp: exempt except the agent-running actions in
-#     _STARTUP_POSTURE_GATED_SUBCOMMANDS.
+#     _STARTUP_POSTURE_GATED_SUBCOMMANDS (`mcp serve` was removed with the
+#     messaging gateway, JER-198; its entry stays so a reintroduced serve
+#     action is gated, not exempt).
 # --help and --version exit before the gate runs.
 _STARTUP_POSTURE_EXEMPT_COMMANDS = frozenset(
     {
         "setup", "postinstall", "config", "model", "moa", "fallback", "secrets",
         "migrate", "login", "logout", "auth", "portal", "tools", "skills",
         "bundles", "plugins", "hooks", "memory", "profile", "computer-use",
-        "lsp", "pets", "whatsapp", "whatsapp-cloud", "slack", "webhook",
-        "pairing", "claw", "project",
+        "lsp", "pets", "claw", "project",
         "doctor", "security", "status", "dump", "debug", "logs", "insights",
         "sessions", "checkpoints", "prompt-size", "version", "help",
         "completion",
         "update", "uninstall", "backup", "import",
-        "gateway", "acp",
+        "acp",
         "cron", "mcp",
         # Operator controls (owner decision 2026-10-22): the kill-switch must
         # stay usable while a gate blocks, since it is how the operator halts

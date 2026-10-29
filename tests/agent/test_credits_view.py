@@ -9,7 +9,6 @@ the view-core tests plus manual verification).
 
 from __future__ import annotations
 
-import asyncio
 
 import pytest
 
@@ -129,24 +128,6 @@ def test_view_fetch_failure_is_logged_out(monkeypatch):
 
     view = build_credits_view()
     assert view.logged_in is False
-
-
-# ── gateway _handle_credits_command ─────────────────────────────────────────
-
-
-class _FakeEvent:
-    pass
-
-
-def _make_gateway_stub():
-    """Minimal object exposing the mixin's _handle_credits_command."""
-    from gateway.slash_commands import GatewaySlashCommandsMixin
-
-    class _Stub(GatewaySlashCommandsMixin):
-        def __init__(self):
-            pass
-
-    return _Stub()
 
 
 # ── command registry ────────────────────────────────────────────────────────

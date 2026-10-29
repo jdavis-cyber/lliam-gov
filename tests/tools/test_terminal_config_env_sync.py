@@ -252,7 +252,6 @@ def test_docker_network_is_bridged_everywhere():
     direct route out that bypasses the egress enclave.
     """
     assert "docker_network" in _cli_env_map_keys()
-    assert "docker_network" in _gateway_env_map_keys()
     assert "docker_network" in _save_config_env_sync_keys()
     assert "TERMINAL_DOCKER_NETWORK" in _terminal_tool_env_var_names()
 

@@ -15198,7 +15198,7 @@ def main(
     # A single-query run (-q / --image) is not interactive: nobody answers a
     # prompt, and piped stdin must never approve a command. Mark it one-shot
     # so dangerous commands are refused outright (AI-1172).
-    if (query or q or image) and not gateway:
+    if query or q or image:
         from tools.approval import mark_oneshot_process
         mark_oneshot_process()
     else:

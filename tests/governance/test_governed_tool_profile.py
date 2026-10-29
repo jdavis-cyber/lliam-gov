@@ -8,8 +8,8 @@ from the model:
      ``browser`` toolsets from the resolved toolset of EVERY platform, so none of
      their tools are offered to the model;
   2. dispatch: a direct call to any of those tools, e.g. from nested code
-     execution or the API server, is refused by the tool-risk PDP before the
-     handler runs. ``deny`` is terminal and a JIT grant does not re-enable it.
+     execution, is refused by the tool-risk PDP before the handler runs.
+     ``deny`` is terminal and a JIT grant does not re-enable it.
 
 Each layer has a control. With the overlay's disabled list cleared, the same
 platforms DO resolve both toolsets, so the registration test cannot pass
@@ -82,7 +82,7 @@ def test_families_not_resolved_for_platform(gov_config, platform):
     assert not {t for t in tool_names if _family_tool(t)}, platform
 
 
-@pytest.mark.parametrize("platform", ["cli", "telegram", "discord", "slack", "cron"])
+@pytest.mark.parametrize("platform", _platforms())
 def test_control_disabled_list_is_what_removes_them(gov_config, platform):
     from lliam_cli.tools_config import _get_platform_tools
 

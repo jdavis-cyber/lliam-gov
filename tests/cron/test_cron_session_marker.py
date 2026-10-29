@@ -1,7 +1,7 @@
 """AI-1172: run_job marks cron context-locally, not in the process env.
 
-The gateway runs the cron scheduler in-process. A process-wide cron env flag
-would make every later live gateway turn look like cron to tools.approval.
+A long-lived host can run the cron scheduler in-process. A process-wide cron
+env flag would make every later live turn look like cron to tools.approval.
 """
 
 import os
@@ -21,7 +21,6 @@ def test_run_job_marks_cron_only_for_the_job(tmp_path, monkeypatch):
         return {"final_response": "ok"}
 
     with patch("cron.scheduler._lliam_home", tmp_path), \
-         patch("cron.scheduler._resolve_origin", return_value=None), \
          patch("dotenv.load_dotenv"), \
          patch("lliam_state.SessionDB", return_value=MagicMock()), \
          patch(
