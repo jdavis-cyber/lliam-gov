@@ -8,6 +8,7 @@ Provides options for:
 
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -172,6 +173,239 @@ def remove_node_symlinks(lliam_home: Path) -> list:
             except Exception as e:
                 log_warn(f"Could not remove {link}: {e}")
 
+    return removed
+
+
+# ============================================================================
+# Legacy messaging-gateway cleanup
+# ============================================================================
+#
+# Earlier releases shipped a messaging gateway that could register itself as
+# a launchd agent (macOS) or a systemd user unit (Linux) and wrote its PID to
+# ``$HERMES_HOME/gateway.pid``.  The gateway is gone, but an install that once
+# ran ``gateway install`` still has that registration, and it points at code
+# that no longer exists.  These helpers find and remove it.  They are called
+# by the uninstaller and by ``lliam-gov doctor --fix``.
+#
+# The names below are the ones the deleted ``lliam_cli/gateway.py`` and
+# ``gateway/status.py`` used.  A candidate file is only touched when its
+# content also names the gateway entrypoint, so an unrelated service that
+# happens to share a prefix is left alone.
+
+_LEGACY_LAUNCHD_LABELS: tuple[str, ...] = (
+    "com.secondorderstrategy.lliam-gov.gateway",
+    "ai.hermes.gateway",  # pre-rename label
+)
+_LEGACY_LAUNCHD_MARKERS: tuple[str, ...] = (
+    "hermes_cli.main",
+    "lliam_cli.main",
+    "scripts/hermes-gateway",
+    "scripts/lliam-gov-gateway",
+    "gateway/run.py",
+)
+_LEGACY_SYSTEMD_UNIT_BASE = "hermes-gateway"
+_LEGACY_SYSTEMD_UNIT_NAMES: tuple[str, ...] = ("hermes.service",)  # pre-rename
+_LEGACY_SYSTEMD_MARKERS: tuple[str, ...] = (
+    "lliam_cli.main gateway",
+    "lliam_cli/main.py gateway",
+    "hermes_cli.main gateway",
+    "gateway/run.py",
+    " lliam-gov gateway ",
+    "/lliam-gov gateway ",
+    " hermes gateway ",
+    "/hermes gateway ",
+)
+
+
+def _real_user_home() -> Path:
+    """Return the account home; profile mode may point ``HOME`` elsewhere."""
+    try:
+        import pwd
+
+        return Path(pwd.getpwuid(os.getuid()).pw_dir)  # windows-footgun: ok — POSIX only; callers skip Windows
+    except Exception:
+        return Path.home()
+
+
+def _file_names_marker(path: Path, markers: tuple[str, ...]) -> bool:
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    return any(marker in text for marker in markers)
+
+
+def _legacy_launchd_plists() -> list[Path]:
+    agents = _real_user_home() / "Library" / "LaunchAgents"
+    found: list[Path] = []
+    for label in _LEGACY_LAUNCHD_LABELS:
+        for path in sorted(agents.glob(f"{label}.plist")) + sorted(agents.glob(f"{label}-*.plist")):
+            if path.is_file() and _file_names_marker(path, _LEGACY_LAUNCHD_MARKERS):
+                found.append(path)
+    return found
+
+
+def _legacy_systemd_user_units() -> list[Path]:
+    unit_dir = Path.home() / ".config" / "systemd" / "user"
+    candidates = (
+        sorted(unit_dir.glob(f"{_LEGACY_SYSTEMD_UNIT_BASE}.service"))
+        + sorted(unit_dir.glob(f"{_LEGACY_SYSTEMD_UNIT_BASE}-*.service"))
+        + [unit_dir / name for name in _LEGACY_SYSTEMD_UNIT_NAMES]
+    )
+    return [
+        path for path in candidates
+        if path.is_file() and _file_names_marker(path, _LEGACY_SYSTEMD_MARKERS)
+    ]
+
+
+def _legacy_gateway_pid_files() -> list[Path]:
+    homes = [get_lliam_home()]
+    try:
+        from lliam_constants import get_default_lliam_root
+
+        root = get_default_lliam_root()
+        homes.append(root)
+        homes.extend(sorted((root / "profiles").glob("*")))
+    except Exception:
+        pass
+    found: list[Path] = []
+    for home in homes:
+        path = home / "gateway.pid"
+        if path.is_file() and all(path.resolve() != f.resolve() for f in found):
+            found.append(path)
+    return found
+
+
+def find_legacy_gateway_services() -> list[Path]:
+    """Return leftover gateway service files and PID files, or ``[]``.
+
+    Read-only.  Windows is skipped: the product no longer ships there.
+    """
+    if _is_windows():
+        return []
+    found = _legacy_gateway_pid_files()
+    if sys.platform == "darwin":
+        found += _legacy_launchd_plists()
+    elif sys.platform.startswith("linux"):
+        found += _legacy_systemd_user_units()
+    return found
+
+
+def _read_pid(pid_path: Path) -> int | None:
+    import json
+
+    try:
+        raw = pid_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        return None
+    if isinstance(payload, dict):
+        payload = payload.get("pid")
+    if isinstance(payload, int) and not isinstance(payload, bool) and payload > 0:
+        return payload
+    return None
+
+
+def _process_command_line(pid: int) -> str:
+    proc = Path(f"/proc/{pid}/cmdline")
+    try:
+        return proc.read_bytes().replace(b"\0", b" ").decode("utf-8", "ignore")
+    except OSError:
+        pass
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return result.stdout if result.returncode == 0 else ""
+
+
+def _stop_gateway_by_pid_file(pid_path: Path) -> None:
+    import signal
+
+    pid = _read_pid(pid_path)
+    # Only signal a live process that still looks like the gateway, so a PID
+    # the OS has since reused for something else is never killed.
+    if pid is not None and pid != os.getpid():
+        cmdline = _process_command_line(pid)
+        if "gateway" in cmdline and ("lliam" in cmdline or "hermes" in cmdline):
+            try:
+                os.kill(pid, signal.SIGTERM)
+                log_success(f"Stopped leftover gateway process (PID {pid})")
+            except ProcessLookupError:
+                pass
+            except OSError as e:
+                log_warn(f"Could not stop gateway process {pid}: {e}")
+    for stale in (pid_path, pid_path.with_name("gateway.lock")):
+        try:
+            stale.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            log_warn(f"Could not remove {stale}: {e}")
+
+
+def _remove_launchd_plist(plist: Path) -> None:
+    unloaded = subprocess.run(
+        ["launchctl", "bootout", f"gui/{os.getuid()}", str(plist)],  # windows-footgun: ok — macOS only
+        capture_output=True, check=False, timeout=90,
+    )
+    if unloaded.returncode != 0:
+        subprocess.run(
+            ["launchctl", "unload", str(plist)],
+            capture_output=True, check=False, timeout=90,
+        )
+    plist.unlink()
+    log_success(f"Removed leftover gateway service ({plist})")
+
+
+def _remove_systemd_user_unit(unit: Path) -> None:
+    env = dict(os.environ)
+    if not env.get("XDG_RUNTIME_DIR"):
+        env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"  # windows-footgun: ok — Linux only
+    cmd = ["systemctl", "--user"]
+    for action in ("disable", "stop"):
+        subprocess.run(
+            cmd + [action, unit.name],
+            capture_output=True, check=False, timeout=90, env=env,
+        )
+    unit.unlink()
+    subprocess.run(
+        cmd + ["daemon-reload"], capture_output=True, check=False, timeout=30, env=env,
+    )
+    log_success(f"Removed leftover gateway service ({unit})")
+
+
+def remove_legacy_gateway_services() -> bool:
+    """Stop and remove leftover gateway registrations.  Returns True if any.
+
+    Unloads and deletes launchd plists (macOS) or disables, stops and
+    deletes systemd user units (Linux), then stops any process still named
+    by a ``gateway.pid`` file.  Failures are logged, never raised.
+    """
+    removed = False
+    # Remove service registrations before signalling PIDs, so launchd or
+    # systemd cannot restart a process we just stopped.
+    found = find_legacy_gateway_services()
+    ordered = [p for p in found if p.name != "gateway.pid"] + [
+        p for p in found if p.name == "gateway.pid"
+    ]
+    for path in ordered:
+        try:
+            if path.name == "gateway.pid":
+                _stop_gateway_by_pid_file(path)
+            elif path.suffix == ".plist":
+                _remove_launchd_plist(path)
+            else:
+                _remove_systemd_user_unit(path)
+            removed = True
+        except Exception as e:
+            log_warn(f"Could not remove leftover gateway service {path}: {e}")
     return removed
 
 
@@ -578,7 +812,8 @@ def _perform_uninstall(
     """Execute the uninstall steps. Shared by the interactive and ``--yes``
     paths so the destructive sequence lives in exactly one place.
 
-    Steps: strip PATH (rc files + Windows registry) → remove the
+    Steps: remove a leftover gateway service → strip PATH (rc files +
+    Windows registry) → remove the
     ``lliam-gov`` wrapper + node symlinks → remove the desktop Chat GUI artifacts →
     delete the code checkout → (Windows) remove PortableGit/Node → optionally
     wipe ``$HERMES_HOME`` data and named profiles on full uninstall.
@@ -587,6 +822,11 @@ def _perform_uninstall(
     print(color("Uninstalling...", Colors.CYAN, Colors.BOLD))
     print()
     
+    # 1. Stop and remove any gateway service a previous release registered.
+    log_info("Checking for a leftover gateway service...")
+    if not remove_legacy_gateway_services():
+        log_info("No leftover gateway service found")
+
     # 2. Remove PATH entries from shell configs (POSIX) AND from the Windows
     #    User-scope registry.  Both helpers no-op on the wrong platform so we
     #    can safely call them unconditionally.

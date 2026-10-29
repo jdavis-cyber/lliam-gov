@@ -1303,6 +1303,31 @@ def run_doctor(args):
                 else:
                     issues.append(f"Missing {_cmd_link_display}/lliam-gov symlink — run 'lliam-gov doctor --fix'")
 
+        # A messaging gateway service registered by an earlier release
+        # points at code that no longer exists.
+        try:
+            from lliam_cli.uninstall import (
+                find_legacy_gateway_services,
+                remove_legacy_gateway_services,
+            )
+
+            _leftover_gateway = find_legacy_gateway_services()
+        except Exception:
+            _leftover_gateway = []
+        for _leftover in _leftover_gateway:
+            check_warn(
+                f"Leftover gateway service: {_leftover}",
+                "(messaging was removed; this points at deleted code)",
+            )
+        if _leftover_gateway:
+            if should_fix:
+                if remove_legacy_gateway_services():
+                    fixed_count += 1
+            else:
+                issues.append(
+                    "Remove the leftover gateway service — run 'lliam-gov doctor --fix'"
+                )
+
     _section("External Tools")
     # Git
     if _safe_which("git"):
