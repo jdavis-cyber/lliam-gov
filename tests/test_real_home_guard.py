@@ -92,6 +92,29 @@ def test_session_passes_when_the_home_is_only_resolved_through_lliam_home(tmp_pa
     assert not (home / ".lliam").exists()
 
 
+def test_clearing_the_environment_keeps_the_per_test_home(tmp_path):
+    # With HOME gone too, a cleared environment used to resolve the home
+    # from the passwd database: the real ~/.lliam.
+    result, _ = _run_session(tmp_path, """
+        import os
+        from unittest.mock import patch
+        from lliam_constants import get_lliam_home
+
+        def test_patch_dict_clear():
+            home = get_lliam_home()
+            with patch.dict(os.environ, {"ONLY": "1"}, clear=True):
+                assert get_lliam_home() == home
+                assert "PATH" not in os.environ and os.environ["ONLY"] == "1"
+            assert "PATH" in os.environ
+
+        def test_environ_clear():
+            home = get_lliam_home()
+            os.environ.clear()
+            assert get_lliam_home() == home
+    """)
+    assert result.returncode == pytest.ExitCode.OK, result.stdout + result.stderr
+
+
 def test_warn_mode_reports_without_failing(tmp_path):
     result, home = _run_session(tmp_path, """
         from pathlib import Path

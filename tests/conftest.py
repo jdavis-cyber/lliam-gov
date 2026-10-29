@@ -165,12 +165,11 @@ _REPO_GUARDED_DIRS = ("node_modules",)
 def _real_home_roots():
     """The platform default homes, resolved from HOME, not from test env."""
     try:
-        from lliam_constants import _get_platform_default_lliam_home
-        lliam_home = _get_platform_default_lliam_home()
+        from lliam_constants import _get_platform_default_home
+        roots = (_get_platform_default_home("lliam"), _get_platform_default_home(_LEGACY_NAME))
     except Exception:
-        lliam_home = Path.home() / ".lliam"
-    legacy_home = Path.home() / f".{_LEGACY_NAME}"
-    return tuple(dict.fromkeys((lliam_home, legacy_home)))
+        roots = (Path.home() / ".lliam", Path.home() / f".{_LEGACY_NAME}")
+    return tuple(dict.fromkeys(roots))
 
 
 def _guarded_entry(path, *, dir_mtime=False):
@@ -710,6 +709,16 @@ _LLIAM_BEHAVIORAL_VARS = frozenset({
 })
 
 
+# Home variables that survive ``os.environ.clear()`` inside a test.
+_CLEAR_KEEPS_HOME_VARS = ("HERMES_HOME", "LLIAM_HOME")
+
+
+def _clear_environ_keeping_home():
+    kept = {name: os.environ[name] for name in _CLEAR_KEEPS_HOME_VARS if name in os.environ}
+    type(os.environ).clear(os.environ)
+    os.environ.update(kept)
+
+
 @pytest.fixture(autouse=True)
 def _hermetic_environment(tmp_path, monkeypatch):
     """Blank out all credential/behavioral env vars so local and CI match.
@@ -763,6 +772,14 @@ def _hermetic_environment(tmp_path, monkeypatch):
     #     keeping the home resolved to a tempdir (never the operator's ~/.lliam,
     #     since HERMES_HOME is always set here).
     monkeypatch.delenv("LLIAM_HOME", raising=False)
+    # 3c. Keep the per-test home when a test clears the environment.
+    #     ``patch.dict(os.environ, ..., clear=True)`` (over 150 uses) and
+    #     ``os.environ.clear()`` dropped HERMES_HOME along with HOME, so
+    #     ``get_lliam_home()`` fell back to the passwd home: the real
+    #     ~/.lliam (on CI, /home/runner/.lliam). Clearing still removes
+    #     every other variable, and a test that sets its own home in the
+    #     patched dict still wins.
+    monkeypatch.setattr(os.environ, "clear", _clear_environ_keeping_home)
 
     # 4. Deterministic locale / timezone / hashseed. CI runs in UTC with
     #    C.UTF-8 locale; local dev often doesn't. Pin everything.
