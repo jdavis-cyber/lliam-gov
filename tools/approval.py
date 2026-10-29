@@ -560,6 +560,61 @@ _ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # nested command, so ``bash -c "echo k > .env"`` is refused too.
 _NESTED_SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "busybox"})
 _MAX_NESTED_SCRIPT_DEPTH = 3
+# Shell invocation options: long options taking a value, and long options
+# known to take none. Short -o/+o and -O/+O take a value word.
+_SHELL_LONG_VALUES = frozenset({"--rcfile", "--init-file"})
+_SHELL_LONG_FLAGS = frozenset({
+    "--debug", "--debugger", "--dump-po-strings", "--dump-strings", "--help", "--login",
+    "--noediting", "--noprofile", "--norc", "--posix", "--pretty-print", "--protected",
+    "--restricted", "--verbose", "--version", "--wordexp",
+})
+
+
+def _shell_c_scripts(name: str, args: list) -> list:
+    """The ``-c`` script that shell *name* run with *args* executes, as
+    Bash reads its invocation: options may come before and after ``-c``
+    (``-ec``, ``-c -e``, ``-o opt``, ``+o opt``, ``-O shopt``), ``--`` or ``-``
+    ends them, and the first word after them is the script. With no ``-c``
+    there is none. When the position is unsure (an unknown long option, an
+    option missing its value), every word after ``-c`` is returned."""
+    if name == "busybox":  # ``busybox sh -c ...``: the applet comes first
+        if args and args[0].rsplit("/", 1)[-1] in _NESTED_SHELLS - {"busybox"}:
+            return _shell_c_scripts(args[0].rsplit("/", 1)[-1], args[1:])
+        return []
+    has_c = unsure = False
+    first_c = None  # index of the word holding -c
+    i = 0
+    while i < len(args):
+        word = args[i]
+        if word in ("--", "-"):
+            i += 1
+            break
+        if word.startswith("--"):
+            key = word.partition("=")[0]
+            if key in _SHELL_LONG_VALUES and "=" not in word:
+                i += 2
+                unsure = unsure or i > len(args)
+            else:
+                unsure = unsure or key not in _SHELL_LONG_FLAGS | _SHELL_LONG_VALUES
+                i += 1
+            continue
+        if len(word) < 2 or word[0] not in "-+":
+            break
+        i += 1
+        for flag in word[1:]:
+            if flag == "c" and word[0] == "-":
+                has_c = True
+                first_c = i if first_c is None else first_c
+            elif flag in "oO":
+                i += 1  # -o / +o / -O / +O name the option in the next word
+                unsure = unsure or i > len(args)
+    if not has_c:
+        return []
+    if unsure or i >= len(args):
+        return list(args[first_c:])
+    return [args[i]]
+
+
 # Fallback when the command cannot be tokenized (unbalanced quotes, e.g. a
 # heredoc body containing an apostrophe): look for a redirect operator or a
 # tee word followed by a token whose basename looks like an env file.
@@ -1324,11 +1379,7 @@ def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
             elif base == "eval":
                 nested.append(" ".join(args))
             elif base in _NESTED_SHELLS:
-                for j in range(len(args) - 1):
-                    flag = args[j]
-                    if flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:]:
-                        nested.append(args[j + 1])
-                        break
+                nested.extend(_shell_c_scripts(base, args))
         words.clear()
 
     pending_redirect = None  # operator awaiting its target word
