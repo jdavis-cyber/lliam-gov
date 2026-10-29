@@ -1084,6 +1084,7 @@ class Test403Enrichment:
 # model_tools integration — dynamic schema replaces static
 # ---------------------------------------------------------------------------
 
+@pytest.mark.usefixtures("unavailable_optional_dependencies")
 class TestModelToolsIntegration:
     def setup_method(self):
         _reset_capability_cache()

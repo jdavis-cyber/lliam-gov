@@ -423,6 +423,10 @@ class TestBackendSelection:
 class TestParallelClientConfig:
     """Test suite for Parallel client initialization."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_parallel_install(self, monkeypatch):
+        monkeypatch.setattr("tools.lazy_deps.ensure", lambda *args, **kwargs: None)
+
     def setup_method(self):
         import tools.web_tools
         tools.web_tools._parallel_client = None

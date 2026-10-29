@@ -2489,7 +2489,13 @@ class GatewaySlashCommandsMixin:
             return ("Unknown /skills subcommand on this platform. Use: pending, "
                     "approve <id>, reject <id>, diff <id>. "
                     "(Search/install are CLI-only.)")
-        out = handle_pending_subcommand(wa.SKILLS, args)
+        # AI-1183: the gateway's operator review surface holds the in-memory
+        # capability that lets an approval replay the staged skill write.
+        operator = getattr(self, "_skill_operator_capability", None)
+        if operator is None:
+            operator = wa.issue_operator_capability()
+            self._skill_operator_capability = operator
+        out = handle_pending_subcommand(wa.SKILLS, args, operator=operator)
 
         # Chat bubbles can't hold a full skill diff — truncate and point at
         # the real review surface. (Note: `lliam-gov skills diff <name>` is a

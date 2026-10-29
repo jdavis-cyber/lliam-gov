@@ -355,6 +355,20 @@ _USER_SENSITIVE_WRITE_TARGET = (
 )
 _PROJECT_SENSITIVE_WRITE_TARGET = rf'(?:{_PROJECT_ENV_PATH}|{_PROJECT_CONFIG_PATH})'
 _COMMAND_TAIL = r'(?:\s*(?:&&|\|\||;).*)?$'
+# AI-1183 (DEF-021): the skill library and the pending-approval store change
+# only through skill_manage staging plus operator approval. File tools refuse
+# these paths (agent.file_safety); this pairs that deny with best-effort
+# terminal coverage for the obvious shell writes below. The home-prefix
+# alternation is reused from _LLIAM_CONFIG_PATH (its file name stripped) and
+# extended with the ~/.lliam and $LLIAM_HOME spellings.
+assert _LLIAM_CONFIG_PATH.endswith(r'config\.yaml\b')
+_LLIAM_HOME_PREFIX = _LLIAM_CONFIG_PATH[: -len(r'config\.yaml\b')]
+_SKILL_STORE_PATH = (
+    rf'(?:{_LLIAM_HOME_PREFIX}|'
+    r'(?:~|\$home|\$\{home\})/\.lliam/|'
+    r'(?:\$lliam_home|\$\{lliam_home\})/)'
+    r'(?:skills|pending)(?=/|["\'\s;|&)]|$)'
+)
 
 # =========================================================================
 # Hardline (unconditional) blocklist
@@ -951,6 +965,13 @@ DANGEROUS_PATTERNS = [
     # The trailing `[^\s"\']*` consumes the rest of the destination filename
     # (e.g. `authorized_keys` after the `~/.ssh/` fragment).
     (rf'\b(cp|mv|install)\b.*\s["\']?{_SENSITIVE_WRITE_TARGET}[^\s"\']*["\']?{_COMMAND_TAIL}', "copy/move file into sensitive credential/SSH/shell-rc path"),
+    # AI-1183: shell writes into the skill library / pending-approval store.
+    # Written without a leading \b so their legacy approval keys stay distinct
+    # from the generic tee/redirect/cp keys (see _legacy_pattern_key).
+    (rf'>>?\s*["\']?{_SKILL_STORE_PATH}', "write into skill library or pending approvals via redirection"),
+    (rf'(?<![\w.-])tee\s.*["\']?{_SKILL_STORE_PATH}', "write into skill library or pending approvals via tee"),
+    (rf'(?<![\w.-])(?:cp|mv|install|rsync|ln)\s.*\s["\']?{_SKILL_STORE_PATH}[^\s"\']*["\']?{_COMMAND_TAIL}', "copy/move file into skill library or pending approvals"),
+    (rf'(?<![\w.-])(?:sed\s+(?:-[^\s]*i|--in-place)|(?:perl|ruby)\s+-[^\s]*i)\s.*{_SKILL_STORE_PATH}', "in-place edit in skill library or pending approvals"),
     # In-place edits mutate the target file directly, bypassing redirection,
     # tee, and copy/move/install coverage. Gate the same user-controlled
     # startup/credential files so `sed -i ... ~/.bashrc` and `perl -i ...

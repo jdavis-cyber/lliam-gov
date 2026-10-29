@@ -418,6 +418,7 @@ class TestConfig:
         assert env["HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT"] == "42"
 
     def test_get_client_passes_idle_timeout_to_hindsight_embedded(self, monkeypatch):
+        monkeypatch.setattr("tools.lazy_deps.ensure", lambda *args, **kwargs: None)
         captured = {}
 
         class FakeHindsightEmbedded:
