@@ -234,6 +234,45 @@ def test_snapshot_survives_a_symlink_cycle(isolated_guard, tmp_path):
     assert _changes_after(lambda: None) == ([], [], [])
 
 
+def test_snapshot_follows_a_symlinked_file_inside_the_home(isolated_guard, tmp_path):
+    shared = tmp_path / "shared.env"
+    shared.write_text(f"TOKEN={SECRET}\n")
+    isolated_guard.lliam_home.mkdir(parents=True)
+    _symlink(isolated_guard.lliam_home / ".env", shared)
+    created, changed, removed = _changes_after(lambda: shared.write_text("TOKEN=other\n"))
+    assert changed == [os.path.realpath(shared)]
+    assert created == [] and removed == []
+
+
+def test_snapshot_follows_a_symlinked_directory_inside_the_home(isolated_guard, tmp_path):
+    profiles = tmp_path / "profiles"
+    (profiles / "work").mkdir(parents=True)
+    isolated_guard.lliam_home.mkdir(parents=True)
+    _symlink(isolated_guard.lliam_home / "profiles", profiles, target_is_directory=True)
+    created, changed, removed = _changes_after(
+        lambda: (isolated_guard.lliam_home / "profiles" / "work" / "auth.json").write_text("{}"))
+    assert created == [str(Path(os.path.realpath(profiles)) / "work" / "auth.json")]
+    assert changed == [] and removed == []
+
+
+def test_snapshot_handles_cycles_and_exclusions_below_the_home(isolated_guard, tmp_path):
+    home = isolated_guard.lliam_home
+    (home / "state").mkdir(parents=True)
+    modules = tmp_path / "node_modules"
+    modules.mkdir()
+    _symlink(home / "state" / "back", home, target_is_directory=True)
+    _symlink(home / "state" / "up", isolated_guard.home, target_is_directory=True)
+    _symlink(home / "deps", modules, target_is_directory=True)
+    snapshot = guard._real_home_snapshot()
+    assert snapshot[str(home / "state" / "back")][0] == "link"
+    assert str(modules) in snapshot or os.path.realpath(modules) in snapshot
+
+    def write_unguarded():
+        (modules / "pkg.json").write_text("{}")
+
+    assert _changes_after(write_unguarded) == ([], [], [])
+
+
 _ORDER_BODY = """
     import os
 

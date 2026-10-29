@@ -207,13 +207,14 @@ def _snapshot_protected(snapshot, path, *, walk, walked, dir_mtime=False):
     the same while the referent changes, so the referent is recorded (and,
     for a directory, walked) as well. ``realpath`` resolves chains and stops
     on cycles, and ``walked`` keeps two roots that resolve to one directory
-    from being walked twice.
+    from being walked twice. Links found during the walk come back here, so
+    a link at any depth is followed the same way.
     """
     entry = _guarded_entry(path, dir_mtime=dir_mtime)
     if entry is None:
         return
     snapshot[str(path)] = entry
-    target = path
+    target = str(path)
     if entry[0] == "link":
         # A missing referent is not recorded, so one created through the
         # link shows up as created.
@@ -221,23 +222,49 @@ def _snapshot_protected(snapshot, path, *, walk, walked, dir_mtime=False):
         entry = _guarded_entry(target, dir_mtime=dir_mtime)
         if entry is None:
             return
-        snapshot[str(target)] = entry
-    if not walk or entry[0] != "dir":
-        return
-    real_root = os.path.realpath(target)
-    if real_root in walked:
+        snapshot[target] = entry
+    if walk and entry[0] == "dir":
+        _walk_protected(snapshot, target, walked)
+
+
+def _walkable_dir(path):
+    """False for the toolchain and checkout directories the guard skips.
+
+    The name is checked on the path and on its referent, so a link does not
+    bring an excluded directory back into the walk.
+    """
+    names = {os.path.basename(path), os.path.basename(os.path.realpath(path))}
+    return (not names & _HOME_GUARD_UNWALKED_DIRS
+            and not os.path.lexists(os.path.join(path, ".git")))
+
+
+def _walk_protected(snapshot, root, walked):
+    """Record everything under ``root``, following links below it as well.
+
+    ``os.walk`` lists a link but does not follow it, so each descendant link
+    gets the same referent handling as a protected root. ``walked`` holds the
+    resolved directories already walked: it stops cycles, and a referent
+    that contains one of them (a link back to ``~`` or ``/``) is recorded
+    but not walked, since that would walk far outside the guarded home.
+    """
+    real_root = os.path.realpath(root)
+    if any(real_root == done or os.path.commonpath((real_root, done)) == real_root
+           for done in walked):
         return
     walked.add(real_root)
-    for dirpath, dirnames, filenames in os.walk(target):
+    for dirpath, dirnames, filenames in os.walk(root):
         for name in dirnames + filenames:
             child = os.path.join(dirpath, name)
             child_entry = _guarded_entry(child)
-            if child_entry is not None:
-                snapshot[child] = child_entry
+            if child_entry is None:
+                continue
+            snapshot[child] = child_entry
+            if child_entry[0] == "link":
+                _snapshot_protected(snapshot, child, walk=_walkable_dir(child),
+                                    walked=walked)
         dirnames[:] = [
             name for name in dirnames
-            if name not in _HOME_GUARD_UNWALKED_DIRS
-            and not os.path.lexists(os.path.join(dirpath, name, ".git"))
+            if _walkable_dir(os.path.join(dirpath, name))
         ]
 
 
