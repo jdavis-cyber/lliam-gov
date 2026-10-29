@@ -119,6 +119,17 @@ def reset_cron_session(token: contextvars.Token[bool]) -> None:
     _approval_cron_session.reset(token)
 
 
+def cron_session_marked() -> bool:
+    """True when the context-local cron marker is set in the current context.
+
+    Unlike :func:`_is_cron_session` this ignores the ``LLIAM_CRON_SESSION``
+    env flag: it reports only the marker that a thread hop would drop, so a
+    caller can capture it at dispatch time and re-bind it on the worker
+    (tools/async_delegation.py).
+    """
+    return _approval_cron_session.get()
+
+
 # Set by cli.main for a single-query (`chat -q`) run: nobody is present to
 # answer a prompt, whatever surface flags the process inherited from its
 # parent (AI-1172). Process-local on purpose — an env var would leak into

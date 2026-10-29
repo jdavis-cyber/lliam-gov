@@ -126,3 +126,97 @@ def test_batch_children_keep_cron_policy(monkeypatch, cron_mode, exec_ask):
     assert len(guards) == 2
     for result in guards:
         _assert_cron_policy(result, cron_mode)
+
+
+@pytest.fixture
+def _async_pool():
+    import tools.async_delegation as async_delegation
+
+    async_delegation._reset_for_tests()
+    yield async_delegation
+    async_delegation._reset_for_tests()
+
+
+def _wait_for_delegation(async_delegation, delegation_id, timeout=10.0):
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for record in async_delegation.list_async_delegations():
+            if record.get("delegation_id") == delegation_id and record.get("status") != "running":
+                return record
+        time.sleep(0.01)
+    raise AssertionError(f"background delegation {delegation_id} did not finish")
+
+
+@pytest.mark.parametrize("exec_ask", [False, True])
+@pytest.mark.parametrize("cron_mode", ["approve", "deny"])
+def test_background_child_keeps_cron_policy(monkeypatch, _async_pool, cron_mode, exec_ask):
+    """Codex P2 (thread 4408461122): the real top-level path is background.
+
+    AIAgent._dispatch_delegate_task always selects background execution for a
+    top-level agent, so a cron job's child runs on the async-delegation pool.
+    The cron marker must survive that hop too, and be gone again afterwards.
+    """
+    from run_agent import AIAgent
+
+    if exec_ask:
+        monkeypatch.setenv("LLIAM_EXEC_ASK", "1")  # inherited from a gateway host
+    monkeypatch.setattr("tools.approval._get_cron_approval_mode", lambda: cron_mode)
+    seen = {}
+
+    child = MagicMock()
+    child._credential_pool = None
+    child.tool_progress_callback = None
+
+    def _run_conversation(**_kw):
+        seen["guard"] = _guard_in_worker()
+        seen["thread"] = threading.current_thread()
+        return {"final_response": "ok", "messages": [], "api_calls": 1, "completed": True}
+
+    child.run_conversation.side_effect = _run_conversation
+    parent = _make_mock_parent()
+
+    token = approval_module.set_cron_session()
+    try:
+        with patch("tools.delegate_tool._build_child_agent", return_value=child):
+            out = json.loads(AIAgent._dispatch_delegate_task(parent, {"goal": "g"}))
+    finally:
+        approval_module.reset_cron_session(token)
+
+    assert out["status"] == "dispatched", out
+    assert out["mode"] == "background"
+    record = _wait_for_delegation(_async_pool, out["delegation_id"])
+    assert record["status"] == "completed", record
+
+    assert seen["thread"] is not threading.current_thread()
+    _assert_cron_policy(seen["guard"], cron_mode)
+
+
+def test_background_worker_does_not_keep_cron_marker(monkeypatch, _async_pool):
+    """The pool thread is reused: the marker must be reset after the job."""
+    seen = []
+    done = threading.Event()
+
+    def _probe():
+        seen.append(approval_module._is_cron_session())
+        done.set()
+        return {"status": "completed"}
+
+    token = approval_module.set_cron_session()
+    try:
+        first = _async_pool.dispatch_async_delegation(
+            goal="cron", context=None, toolsets=None, role="leaf", model=None,
+            session_key="", runner=_probe, max_async_children=1,
+        )
+    finally:
+        approval_module.reset_cron_session(token)
+    _wait_for_delegation(_async_pool, first["delegation_id"])
+
+    second = _async_pool.dispatch_async_delegation(
+        goal="live", context=None, toolsets=None, role="leaf", model=None,
+        session_key="", runner=_probe, max_async_children=1,
+    )
+    _wait_for_delegation(_async_pool, second["delegation_id"])
+
+    assert seen == [True, False]
