@@ -325,6 +325,13 @@ class TestCliApprovalUi:
         fell back to raw input() in a background thread and timed out under
         prompt_toolkit.
         """
+        # The /btw thread's callback setters import tools.terminal_tool and
+        # tools.skills_tool lazily. Import them here so the 2s window below
+        # times the background task itself, not a cold import that can take
+        # longer than that on a loaded CI runner (AI-1172).
+        import tools.skills_tool  # noqa: F401
+        import tools.terminal_tool  # noqa: F401
+
         cli = _make_background_cli_stub()
         seen = {}
 

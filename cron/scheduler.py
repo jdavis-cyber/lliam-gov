@@ -2155,11 +2155,6 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
 
     agent = None
 
-    # Mark this as a cron session so the approval system can apply cron_mode.
-    # This env var is process-wide and persists for the lifetime of the
-    # scheduler process — every job this process runs is a cron job.
-    os.environ["LLIAM_CRON_SESSION"] = "1"
-
     # Use ContextVars for per-job session/delivery state so parallel jobs
     # don't clobber each other's targets (os.environ is process-global).
     from gateway.session_context import set_session_vars, clear_session_vars, _VAR_MAP
@@ -2221,6 +2216,14 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
     if _job_workdir:
         os.environ["TERMINAL_CWD"] = _job_workdir
         logger.info("Job '%s': using workdir %s", job_id, _job_workdir)
+
+    # Mark this as a cron session so the approval system can apply cron_mode.
+    # Context-local, set right before the try and reset in its finally: the
+    # gateway runs this scheduler in-process, and a process-wide env var would
+    # make every later (or concurrent) live gateway turn look like cron
+    # (AI-1172).
+    from tools.approval import reset_cron_session, set_cron_session
+    _cron_marker_token = set_cron_session()
 
     try:
         # Re-read .env and config.yaml fresh every run so provider/key
@@ -2710,6 +2713,7 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
             else:
                 os.environ["TERMINAL_CWD"] = _prior_terminal_cwd
         # Clean up ContextVar session/delivery state for this job.
+        reset_cron_session(_cron_marker_token)
         clear_session_vars(_ctx_tokens)
         for _var_name in _cron_delivery_vars:
             _VAR_MAP[_var_name].set("")
