@@ -17,7 +17,6 @@ from lliam_cli.subcommands.claw import build_claw_parser
 from lliam_cli.subcommands.insights import build_insights_parser
 from lliam_cli.subcommands.mcp import build_mcp_parser
 from lliam_cli.subcommands.memory import build_memory_parser
-from lliam_cli.subcommands.pairing import build_pairing_parser
 from lliam_cli.subcommands.plugins import build_plugins_parser
 from lliam_cli.subcommands.skills import build_skills_parser
 from lliam_cli.subcommands.tools import build_tools_parser
@@ -37,7 +36,6 @@ CASES = [
     ("tools", build_tools_parser, "cmd_tools", ["tools"]),
     ("insights", build_insights_parser, "cmd_insights", ["insights"]),
     ("skills", build_skills_parser, "cmd_skills", ["skills"]),
-    ("pairing", build_pairing_parser, "cmd_pairing", ["pairing"]),
     ("plugins", build_plugins_parser, "cmd_plugins", ["plugins"]),
     ("mcp", build_mcp_parser, "cmd_mcp", ["mcp"]),
     ("claw", build_claw_parser, "cmd_claw", ["claw"]),

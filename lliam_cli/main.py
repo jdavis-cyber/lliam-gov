@@ -5,12 +5,7 @@ Lliam-GOV CLI - Main entry point.
 Usage:
     lliam-gov                  # Interactive chat (default)
     lliam-gov chat                # Interactive chat
-    lliam-gov gateway             # Run gateway in foreground
-    lliam-gov gateway start       # Start gateway as service
-    lliam-gov gateway stop        # Stop gateway service
-    lliam-gov gateway status      # Show gateway status
-    lliam-gov gateway install     # Install gateway service
-    lliam-gov gateway uninstall   # Uninstall gateway service
+    lliam-gov dashboard           # Desktop backend (started by the desktop app)
     lliam-gov setup               # Interactive setup wizard
     lliam-gov logout              # Clear stored authentication
     lliam-gov status              # Show status of all components
@@ -266,18 +261,15 @@ from typing import Optional
 
 from lliam_cli.subcommands._shared import add_accept_hooks_flag as _add_accept_hooks_flag
 from lliam_cli.subcommands.cron import build_cron_parser
-from lliam_cli.subcommands.gateway import build_gateway_parser
+from lliam_cli.subcommands.proxy import build_proxy_parser
 from lliam_cli.subcommands.profile import build_profile_parser
 from lliam_cli.subcommands.model import build_model_parser
 from lliam_cli.subcommands.setup import build_setup_parser
 from lliam_cli.subcommands.postinstall import build_postinstall_parser
-from lliam_cli.subcommands.whatsapp import build_whatsapp_parser
-from lliam_cli.subcommands.slack import build_slack_parser
 from lliam_cli.subcommands.login import build_login_parser
 from lliam_cli.subcommands.logout import build_logout_parser
 from lliam_cli.subcommands.auth import build_auth_parser
 from lliam_cli.subcommands.status import build_status_parser
-from lliam_cli.subcommands.webhook import build_webhook_parser
 from lliam_cli.subcommands.hooks import build_hooks_parser
 from lliam_cli.subcommands.doctor import build_doctor_parser
 from lliam_cli.subcommands.security import build_security_parser
@@ -300,7 +292,6 @@ from lliam_cli.subcommands.acp import build_acp_parser
 from lliam_cli.subcommands.tools import build_tools_parser
 from lliam_cli.subcommands.insights import build_insights_parser
 from lliam_cli.subcommands.skills import build_skills_parser
-from lliam_cli.subcommands.pairing import build_pairing_parser
 from lliam_cli.subcommands.plugins import build_plugins_parser
 from lliam_cli.subcommands.mcp import build_mcp_parser
 from lliam_cli.subcommands.claw import build_claw_parser
@@ -2410,15 +2401,6 @@ def cmd_chat(args):
         sys.exit(1)
 
 
-def cmd_gateway(args):
-    """Gateway management commands."""
-    _sync_bundled_skills_quietly()
-
-    from lliam_cli.gateway import gateway_command
-
-    gateway_command(args)
-
-
 def cmd_proxy(args):
     """Local OpenAI-compatible proxy to OAuth providers."""
     # Lazy import — pulls in aiohttp, which is gated behind an extras install
@@ -2428,258 +2410,6 @@ def cmd_proxy(args):
     rc = _cmd_proxy(args)
     if isinstance(rc, int) and rc != 0:
         raise SystemExit(rc)
-
-
-def cmd_whatsapp(args):
-    """Set up WhatsApp: choose mode, configure, install bridge, pair via QR."""
-    _require_tty("whatsapp")
-    from lliam_cli.config import get_env_value, save_env_value
-    from lliam_constants import find_node_executable, with_lliam_node_path
-
-    print()
-    print("⚕ WhatsApp Setup")
-    print("=" * 50)
-
-    # ── Step 1: Choose mode ──────────────────────────────────────────────
-    current_mode = get_env_value("WHATSAPP_MODE") or ""
-    if not current_mode:
-        print()
-        print("How will you use WhatsApp with Lliam-GOV?")
-        print()
-        print("  1. Separate bot number (recommended)")
-        print("     People message the bot's number directly — cleanest experience.")
-        print(
-            "     Requires a second phone number with WhatsApp installed on a device."
-        )
-        print()
-        print("  2. Personal number (self-chat)")
-        print("     You message yourself to talk to the agent.")
-        print("     Quick to set up, but the UX is less intuitive.")
-        print()
-        try:
-            choice = input("  Choose [1/2]: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nSetup cancelled.")
-            return
-
-        if choice == "1":
-            save_env_value("WHATSAPP_MODE", "bot")
-            wa_mode = "bot"
-            print("  ✓ Mode: separate bot number")
-            print()
-            print("  ┌─────────────────────────────────────────────────┐")
-            print("  │  Getting a second number for the bot:           │")
-            print("  │                                                 │")
-            print("  │  Easiest: Install WhatsApp Business (free app)  │")
-            print("  │  on your phone with a second number:            │")
-            print("  │    • Dual-SIM: use your 2nd SIM slot            │")
-            print("  │    • Google Voice: free US number (voice.google) │")
-            print("  │    • Prepaid SIM: $3-10, verify once            │")
-            print("  │                                                 │")
-            print("  │  WhatsApp Business runs alongside your personal │")
-            print("  │  WhatsApp — no second phone needed.             │")
-            print("  └─────────────────────────────────────────────────┘")
-        else:
-            save_env_value("WHATSAPP_MODE", "self-chat")
-            wa_mode = "self-chat"
-            print("  ✓ Mode: personal number (self-chat)")
-    else:
-        wa_mode = current_mode
-        mode_label = (
-            "separate bot number" if wa_mode == "bot" else "personal number (self-chat)"
-        )
-        print(f"\n✓ Mode: {mode_label}")
-
-    # ── Step 2: Mode is selected, will enable WhatsApp only after pairing ──
-    # We intentionally don't write WHATSAPP_ENABLED=true here.  If the user
-    # aborts the wizard later (Ctrl+C, failed npm install, missed QR scan),
-    # we'd otherwise leave .env claiming WhatsApp is ready when the bridge
-    # has no creds.json.  Every subsequent `lliam-gov gateway` then paid a 30s
-    # bridge-bootstrap timeout and queued WhatsApp for indefinite retries.
-    # Now: aborted setup leaves WHATSAPP_ENABLED unset → gateway skips it.
-    # Re-runs that already have WHATSAPP_ENABLED=true (from a prior
-    # successful pairing) stay enabled — we just don't write it pre-emptively.
-    print()
-    if (get_env_value("WHATSAPP_ENABLED") or "").lower() == "true":
-        print("✓ WhatsApp is already enabled")
-
-    # ── Step 3: Allowed users ────────────────────────────────────────────
-    current_users = get_env_value("WHATSAPP_ALLOWED_USERS") or ""
-    if current_users:
-        print(f"✓ Allowed users: {current_users}")
-        try:
-            response = input("\n  Update allowed users? [y/N] ").strip()
-        except (EOFError, KeyboardInterrupt):
-            response = "n"
-        if response.lower() in {"y", "yes"}:
-            if wa_mode == "bot":
-                phone = input(
-                    "  Phone numbers that can message the bot (comma-separated): "
-                ).strip()
-            else:
-                phone = input("  Your phone number (e.g. 15551234567): ").strip()
-            if phone:
-                save_env_value("WHATSAPP_ALLOWED_USERS", phone.replace(" ", ""))
-                print(f"  ✓ Updated to: {phone}")
-    else:
-        print()
-        if wa_mode == "bot":
-            print("  Who should be allowed to message the bot?")
-            phone = input(
-                "  Phone numbers (comma-separated, or * for anyone): "
-            ).strip()
-        else:
-            phone = input("  Your phone number (e.g. 15551234567): ").strip()
-        if phone:
-            save_env_value("WHATSAPP_ALLOWED_USERS", phone.replace(" ", ""))
-            print(f"  ✓ Allowed users set: {phone}")
-        else:
-            print("  ⚠ No allowlist — the agent will respond to ALL incoming messages")
-
-    # ── Step 4: Install bridge dependencies ──────────────────────────────
-    from gateway.platforms.whatsapp_common import resolve_whatsapp_bridge_dir
-    bridge_dir = resolve_whatsapp_bridge_dir()
-    bridge_script = bridge_dir / "bridge.js"
-
-    if not bridge_script.exists():
-        print(f"\n✗ Bridge script not found at {bridge_script}")
-        return
-
-    if not (bridge_dir / "node_modules").exists():
-        print(
-            "\n→ Installing WhatsApp bridge dependencies (this can take a few minutes)..."
-        )
-        npm = find_node_executable("npm")
-        if not npm:
-            print("  ✗ npm not found on PATH — install Node.js first")
-            return
-        try:
-            result = subprocess.run(
-                [npm, "install", "--no-fund", "--no-audit", "--progress=false"],
-                cwd=str(bridge_dir),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                env=with_lliam_node_path(),
-            )
-        except KeyboardInterrupt:
-            print("\n  ✗ Install cancelled")
-            return
-        if result.returncode != 0:
-            err = (result.stderr or "").strip()
-            preview = "\n".join(err.splitlines()[-30:]) if err else "(no output)"
-            print("  ✗ npm install failed:")
-            print(preview)
-            return
-        print("  ✓ Dependencies installed")
-    else:
-        print("✓ Bridge dependencies already installed")
-
-    # ── Step 5: Check for existing session ───────────────────────────────
-    session_dir = get_lliam_home() / "whatsapp" / "session"
-    session_dir.mkdir(parents=True, exist_ok=True)
-
-    if (session_dir / "creds.json").exists():
-        print("✓ Existing WhatsApp session found")
-        try:
-            response = input(
-                "\n  Re-pair? This will clear the existing session. [y/N] "
-            ).strip()
-        except (EOFError, KeyboardInterrupt):
-            response = "n"
-        if response.lower() in {"y", "yes"}:
-            shutil.rmtree(session_dir, ignore_errors=True)
-            session_dir.mkdir(parents=True, exist_ok=True)
-            print("  ✓ Session cleared")
-        else:
-            # Existing pairing — ensure WHATSAPP_ENABLED reflects that.
-            # (Older installs may have lost the env var; covers re-runs
-            # where the user picked "no, keep my session" but the var
-            # was never set or got removed.)
-            if (get_env_value("WHATSAPP_ENABLED") or "").lower() != "true":
-                save_env_value("WHATSAPP_ENABLED", "true")
-            print("\n✓ WhatsApp is configured and paired!")
-            print("  Start the gateway with: lliam-gov gateway")
-            return
-
-    # ── Step 6: QR code pairing ──────────────────────────────────────────
-    print()
-    print("─" * 50)
-    if wa_mode == "bot":
-        print("📱 Open WhatsApp (or WhatsApp Business) on the")
-        print("   phone with the BOT's number, then scan:")
-    else:
-        print("📱 Open WhatsApp on your phone, then scan:")
-    print()
-    print("   Settings → Linked Devices → Link a Device")
-    print("─" * 50)
-    print()
-
-    try:
-        subprocess.run(
-            [
-                find_node_executable("node") or "node",
-                str(bridge_script),
-                "--pair-only",
-                "--session",
-                str(session_dir),
-            ],
-            cwd=str(bridge_dir),
-            env=with_lliam_node_path(),
-        )
-    except KeyboardInterrupt:
-        pass
-
-    # ── Step 7: Post-pairing ─────────────────────────────────────────────
-    print()
-    if (session_dir / "creds.json").exists():
-        # Only enable WhatsApp now that pairing actually succeeded.  If the
-        # user Ctrl+C'd at any earlier step, WHATSAPP_ENABLED stays unset
-        # and `lliam-gov gateway` skips it cleanly instead of paying a 30s
-        # bridge timeout + queueing the platform for indefinite retries.
-        save_env_value("WHATSAPP_ENABLED", "true")
-        print("✓ WhatsApp paired successfully!")
-        print()
-        if wa_mode == "bot":
-            print("  Next steps:")
-            print("    1. Start the gateway:  lliam-gov gateway")
-            print("    2. Send a message to the bot's WhatsApp number")
-            print("    3. The agent will reply automatically")
-            print()
-            print("  Tip: Agent responses are prefixed with '⚕ Lliam-GOV'")
-        else:
-            print("  Next steps:")
-            print("    1. Start the gateway:  lliam-gov gateway")
-            print("    2. Open WhatsApp → Message Yourself")
-            print("    3. Type a message — the agent will reply")
-            print()
-            print("  Tip: Agent responses are prefixed with '⚕ Lliam-GOV'")
-            print("  so you can tell them apart from your own messages.")
-        print()
-        print("  Or install as a service: lliam-gov gateway install")
-    else:
-        print("⚠ Pairing may not have completed. Run 'lliam-gov whatsapp' to try again.")
-
-
-def cmd_whatsapp_cloud(args):
-    """Set up WhatsApp Business Cloud API (official Meta integration).
-
-    Walks the user through the Meta-side credentials (Phone Number ID,
-    Access Token, App Secret, optional App/WABA IDs) plus webhook
-    configuration. Includes field-shape validators that catch the most
-    common setup mistakes (e.g. pasting a phone number into the Phone
-    Number ID field).
-
-    Distinct from ``lliam-gov whatsapp`` (the Baileys bridge wizard) — the
-    two adapters are complementary, not alternatives. See
-    ``lliam_cli/setup_whatsapp_cloud.py``.
-    """
-    _require_tty("whatsapp-cloud")
-    from lliam_cli.setup_whatsapp_cloud import run_whatsapp_cloud_setup
-
-    return run_whatsapp_cloud_setup()
 
 
 def cmd_setup(args):
@@ -3599,14 +3329,6 @@ def _prompt_provider_choice(choices, *, default=0, title="Select provider:"):
             return None
 
 
-
-
-
-
-
-
-
-
 _DEFAULT_QWEN_PORTAL_MODELS = [
     "qwen3-coder-plus",
     "qwen3-coder",
@@ -3789,8 +3511,6 @@ def _save_custom_provider(
     print(f'  💾 Saved to custom providers as "{name}" (edit in config.yaml)')
 
 
-
-
 def _remove_custom_provider(config):
     """Let the user remove a saved custom provider from config.yaml."""
     from lliam_cli.config import load_config, save_config
@@ -3847,8 +3567,6 @@ def _remove_custom_provider(config):
         removed.get("name", "unnamed") if isinstance(removed, dict) else str(removed)
     )
     print(f'✅ Removed "{removed_name}" from custom providers.')
-
-
 
 
 # Lazy-export the model catalog at module level. Tests and a handful of
@@ -3969,10 +3687,6 @@ def _prompt_reasoning_effort_selection(efforts, current_effort=""):
             return None
 
 
-
-
-
-
 def _prompt_api_key(pconfig, existing_key: str, provider_id: str = "") -> tuple:
     """Shared API-key entry point for ``lliam-gov setup`` / ``lliam-gov model``.
 
@@ -4056,8 +3770,6 @@ def _prompt_api_key(pconfig, existing_key: str, provider_id: str = "") -> tuple:
     return existing_key, False
 
 
-
-
 def _infer_stepfun_region(base_url: str) -> str:
     """Infer the current StepFun region from the configured endpoint."""
     normalized = (base_url or "").strip().lower()
@@ -4077,14 +3789,6 @@ def _stepfun_base_url_for_region(region: str) -> str:
         if region == "china"
         else STEPFUN_STEP_PLAN_INTL_BASE_URL
     )
-
-
-
-
-
-
-
-
 
 
 def _run_anthropic_oauth_flow(save_env_value):
@@ -4180,8 +3884,6 @@ def _run_anthropic_oauth_flow(save_env_value):
         return False
 
 
-
-
 def cmd_login(args):
     """Authenticate Lliam-GOV CLI with a provider."""
     from lliam_cli.auth import login_command
@@ -4215,44 +3917,6 @@ def cmd_cron(args):
     from lliam_cli.cron import cron_command
 
     cron_command(args)
-
-
-def cmd_webhook(args):
-    """Webhook subscription management."""
-    from lliam_cli.webhook import webhook_command
-
-    webhook_command(args)
-
-
-def cmd_slack(args):
-    """Slack integration helpers.
-
-    Dispatches ``lliam-gov slack <subcommand>``. Currently supports:
-      manifest — print or write a Slack app manifest with every gateway
-                 command registered as a first-class slash.
-    """
-    sub = getattr(args, "slack_command", None)
-    if sub in {None, ""}:
-        # No subcommand — print usage hint.
-        print(
-            "usage: lliam-gov slack <subcommand>\n"
-            "\n"
-            "subcommands:\n"
-            "  manifest   Generate a Slack app manifest with every gateway\n"
-            "             command registered as a native slash\n"
-            "\n"
-            "Run `lliam-gov slack manifest -h` for details.",
-            file=sys.stderr,
-        )
-        return 1
-
-    if sub == "manifest":
-        from lliam_cli.slack_cli import slack_manifest_command
-
-        return slack_manifest_command(args)
-
-    print(f"Unknown slack subcommand: {sub}", file=sys.stderr)
-    return 1
 
 
 def cmd_kanban(args):
@@ -4513,56 +4177,6 @@ def _validate_critical_files_syntax(root) -> tuple[bool, str | None, str | None]
             except OSError as exc:
                 return False, str(path), f"could not read: {exc}"
     return True, None, None
-
-
-def _gateway_prompt(prompt_text: str, default: str = "", timeout: float = 300.0) -> str:
-    """File-based IPC prompt for gateway mode.
-
-    Writes a prompt marker file so the gateway can forward the question to the
-    user, then polls for a response file.  Falls back to *default* on timeout.
-
-    Used by ``lliam-gov update --gateway`` so interactive prompts (stash restore,
-    config migration) are forwarded to the messenger instead of being silently
-    skipped.
-    """
-    import json as _json
-    import uuid as _uuid
-    from lliam_constants import get_lliam_home
-
-    home = get_lliam_home()
-    prompt_path = home / ".update_prompt.json"
-    response_path = home / ".update_response"
-
-    # Clean any stale response file
-    response_path.unlink(missing_ok=True)
-
-    payload = {
-        "prompt": prompt_text,
-        "default": default,
-        "id": str(_uuid.uuid4()),
-    }
-    tmp = prompt_path.with_suffix(".tmp")
-    tmp.write_text(_json.dumps(payload))
-    tmp.replace(prompt_path)
-
-    # Poll for response
-    deadline = _time.monotonic() + timeout
-    while _time.monotonic() < deadline:
-        if response_path.exists():
-            try:
-                answer = response_path.read_text().strip()
-                response_path.unlink(missing_ok=True)
-                prompt_path.unlink(missing_ok=True)
-                return answer if answer else default
-            except (OSError, ValueError):
-                pass
-        _time.sleep(0.5)
-
-    # Timeout — clean up and use default
-    prompt_path.unlink(missing_ok=True)
-    response_path.unlink(missing_ok=True)
-    print(f"  (no response after {int(timeout)}s, using default: {default!r})")
-    return default
 
 
 def _web_ui_build_needed(web_dir: Path) -> bool:
@@ -5491,7 +5105,6 @@ def _desktop_linux_sandbox_helper_is_regular_file(packaged_executable: Path) -> 
     return stat.S_ISREG(sandbox_lstat.st_mode)
 
 
-
 def _desktop_linux_sandbox_fixup(packaged_executable: Path) -> bool:
     """Configure Electron's Linux SUID sandbox helper when required."""
     if sys.platform != "linux":
@@ -6121,7 +5734,7 @@ def _kill_stale_dashboard_processes(
             still_pending = []
             # On Windows, os.kill(pid, 0) is NOT a no-op. Route through
             # the cross-platform existence check.
-            from gateway.status import _pid_exists
+            from lliam_cli.process_utils import _pid_exists
             for pid in pending:
                 if _pid_exists(pid):
                     still_pending.append(pid)
@@ -8106,7 +7719,7 @@ class _UpdateOutputStream:
         return getattr(self._original, name)
 
 
-def _install_hangup_protection(gateway_mode: bool = False):
+def _install_hangup_protection():
     """Protect ``cmd_update`` from SIGHUP and broken terminal pipes.
 
     Users commonly run ``lliam-gov update`` in an SSH session or a terminal
@@ -8128,9 +7741,6 @@ def _install_hangup_protection(gateway_mode: bool = False):
     **intentionally left alone** — those are legitimate cancellation
     signals the user or OS sent on purpose.
 
-    In gateway mode (``lliam-gov update --gateway``) the update is already
-    spawned detached from a terminal, so this function is a no-op.
-
     Returns a dict that ``cmd_update`` can pass to
     ``_finalize_update_output`` on exit.  Returning a dict rather than a
     tuple keeps the call site forward-compatible with future additions.
@@ -8141,9 +7751,6 @@ def _install_hangup_protection(gateway_mode: bool = False):
         "log_file": None,
         "installed": False,
     }
-
-    if gateway_mode:
-        return state
 
     import signal as _signal
 
@@ -8622,304 +8229,6 @@ def _run_pre_update_backup(args) -> None:
     print()
 
 
-def _write_update_planned_stop_marker(profile_path: Path, pid: int) -> bool:
-    """Write a planned-stop marker into a specific profile home."""
-    try:
-        from datetime import timezone
-
-        from gateway.status import _get_process_start_time
-        from utils import atomic_json_write
-
-        record = {
-            "target_pid": pid,
-            "target_start_time": _get_process_start_time(pid),
-            "stopper_pid": os.getpid(),
-            "written_at": datetime.now(timezone.utc).isoformat(),
-        }
-        atomic_json_write(
-            Path(profile_path) / ".gateway-planned-stop.json",
-            record,
-            indent=None,
-            separators=(",", ":"),
-        )
-        return True
-    except (OSError, PermissionError):
-        return False
-
-
-def _wait_for_windows_update_gateway_exit(
-    pids: list[int], *, timeout: float
-) -> set[int]:
-    """Wait for the given gateway PIDs to exit, returning survivors."""
-    if not pids:
-        return set()
-
-    from gateway.status import _pid_exists
-
-    remaining = set(pids)
-    deadline = _time.monotonic() + max(timeout, 0.0)
-    while remaining and _time.monotonic() < deadline:
-        for pid in list(remaining):
-            try:
-                if not _pid_exists(pid):
-                    remaining.discard(pid)
-            except Exception:
-                remaining.discard(pid)
-        if remaining:
-            _time.sleep(0.25)
-
-    survivors: set[int] = set()
-    for pid in remaining:
-        try:
-            if _pid_exists(pid):
-                survivors.add(pid)
-        except Exception:
-            pass
-    return survivors
-
-
-def _pause_windows_gateways_for_update() -> dict | None:
-    """Stop running Windows gateways before mutating the checkout or venv.
-
-    Windows scheduled/startup gateways run through pythonw.exe, so the generic
-    hermes.exe concurrent-instance guard does not see them. They still import
-    from the checkout and can keep files locked while ``git`` or ``uv`` updates
-    the install. Stop only PIDs that the gateway discovery code identifies.
-    """
-    if not _is_windows():
-        return None
-
-    try:
-        from gateway.status import terminate_pid
-        from lliam_cli.gateway import (
-            _capture_gateway_argv,
-            _get_restart_drain_timeout,
-            find_gateway_pids,
-            find_profile_gateway_processes,
-        )
-    except Exception as exc:
-        logger.debug("Could not prepare Windows gateway pause for update: %s", exc)
-        return None
-
-    try:
-        running_pids = list(dict.fromkeys(find_gateway_pids(all_profiles=True)))
-    except Exception as exc:
-        logger.debug("Could not discover Windows gateway PIDs before update: %s", exc)
-        return None
-    if not running_pids:
-        # No gateway is running right now, but the user may have installed an
-        # autostart entry (Scheduled Task or Startup-folder login item) — that
-        # is an explicit "I want a gateway" signal. A gateway that died between
-        # updates (e.g. the spawning terminal/TUI closed, taking its child with
-        # it) would otherwise never come back: the autostart entry only fires on
-        # the next login, and the update flow's resume path only relaunched
-        # gateways that were running when the update began. Cold-start one after
-        # the update so an installed gateway is actually up post-update. Users
-        # who run gateway-less (no autostart entry) get nothing forced on them.
-        try:
-            from lliam_cli import gateway_windows
-
-            if gateway_windows.is_installed():
-                return {
-                    "resume_needed": True,
-                    "profiles": {},
-                    "unmapped_pids": [],
-                    "unmapped": [],
-                    "cold_start_if_installed": True,
-                }
-        except Exception as exc:
-            logger.debug(
-                "Could not check Windows gateway autostart state before update: %s",
-                exc,
-            )
-        return None
-
-    profile_processes = {}
-    try:
-        profile_processes = {
-            proc.pid: proc for proc in find_profile_gateway_processes()
-        }
-    except Exception as exc:
-        logger.debug("Could not map Windows gateway PIDs to profiles: %s", exc)
-
-    profiles: dict[str, int] = {}
-    mapped_pids = []
-    for pid in running_pids:
-        proc = profile_processes.get(pid)
-        if proc is None:
-            continue
-        profiles[str(proc.profile)] = int(pid)
-        mapped_pids.append(int(pid))
-        _write_update_planned_stop_marker(Path(proc.path), int(pid))
-
-    print("→ Stopping Windows gateway process(es) before updating Lliam-GOV...")
-    try:
-        drain_timeout = max(float(_get_restart_drain_timeout()), 1.0)
-    except Exception:
-        drain_timeout = 10.0
-    survivors = _wait_for_windows_update_gateway_exit(
-        mapped_pids,
-        timeout=drain_timeout,
-    )
-    unmapped_pids = [pid for pid in running_pids if pid not in profile_processes]
-
-    # Snapshot each unmapped gateway's command line *before* we force-kill it,
-    # so ``_resume_windows_gateways_after_update`` can respawn it by replaying
-    # its own argv. Unmapped gateways are ones with no profile→PID-file mapping
-    # — e.g. a Windows Scheduled Task running ``pythonw.exe -m lliam_cli.main
-    # gateway run``. Without this snapshot they were force-killed and never
-    # restarted (the "Restart manually after update" dead-end from #50090).
-    unmapped: list[dict] = []
-    for pid in unmapped_pids:
-        argv = None
-        try:
-            argv = _capture_gateway_argv(int(pid))
-        except Exception as exc:
-            logger.debug("Could not capture argv for unmapped gateway %s: %s", pid, exc)
-        unmapped.append({"pid": int(pid), "argv": argv})
-
-    force_killed = []
-    for pid in sorted(set(survivors).union(unmapped_pids)):
-        try:
-            terminate_pid(int(pid), force=True)
-            force_killed.append(int(pid))
-        except (ProcessLookupError, PermissionError, OSError):
-            pass
-
-    if profiles:
-        print(f"  ✓ Paused gateway profile(s): {', '.join(sorted(profiles))}")
-    if force_killed:
-        print(f"  → Force-stopped {len(force_killed)} gateway process(es)")
-
-    if unmapped_pids:
-        respawnable = sum(1 for u in unmapped if u.get("argv"))
-        print(
-            f"  → Stopped {len(unmapped_pids)} gateway process(es) without profile mapping"
-        )
-        if respawnable < len(unmapped_pids):
-            # Some had no recoverable command line (psutil missing, access
-            # denied, already gone): those still need a manual restart.
-            print("    Restart manually after update: lliam-gov gateway run")
-
-    return {
-        "resume_needed": True,
-        "profiles": profiles,
-        "unmapped_pids": unmapped_pids,
-        "unmapped": unmapped,
-    }
-
-
-def _cold_start_windows_gateway_after_update() -> None:
-    """Start a fresh detached gateway after update when one is installed but down.
-
-    Invoked from ``_resume_windows_gateways_after_update`` for the
-    ``cold_start_if_installed`` case: no gateway was running when the update
-    began, but an autostart entry (Scheduled Task / Startup-folder login item)
-    is installed, signalling the user wants a gateway. Unlike the relaunch
-    paths — which watch an old PID and respawn once it exits — this is a direct
-    fresh spawn via the same windowless ``pythonw`` + breakaway path that
-    ``lliam-gov gateway start`` uses (``gateway_windows._spawn_detached``).
-
-    Best-effort and idempotent: re-checks that nothing is running first so a
-    concurrent start (e.g. the autostart entry firing) can't produce a
-    duplicate gateway.
-    """
-    if not _is_windows():
-        return
-    try:
-        from lliam_cli import gateway_windows
-        from lliam_cli.gateway import find_gateway_pids
-    except Exception as exc:
-        logger.debug("Could not load Windows gateway cold-start helpers: %s", exc)
-        return
-
-    # Re-check liveness right before spawning — between pause and resume the
-    # autostart entry may have already brought a gateway up, or a leftover
-    # process may have re-registered. Don't double-start.
-    try:
-        if list(find_gateway_pids(all_profiles=True)):
-            return
-    except Exception as exc:
-        logger.debug("Could not re-check gateway liveness before cold-start: %s", exc)
-        return
-
-    try:
-        pid = gateway_windows._spawn_detached()
-    except Exception as exc:
-        logger.debug("Could not cold-start Windows gateway after update: %s", exc)
-        return
-
-    if pid:
-        print()
-        print(f"  ✓ Starting Windows gateway after update (PID {pid})")
-
-
-def _resume_windows_gateways_after_update(token: dict | None) -> None:
-    """Restart Windows profile gateways previously paused for update."""
-    if not token or not token.get("resume_needed"):
-        return
-    token["resume_needed"] = False
-    if not _is_windows():
-        return
-
-    profiles = token.get("profiles") or {}
-    unmapped = token.get("unmapped") or []
-    cold_start = bool(token.get("cold_start_if_installed"))
-    if not profiles and not any(u.get("argv") for u in unmapped):
-        if cold_start:
-            _cold_start_windows_gateway_after_update()
-        return
-
-    try:
-        from lliam_cli.gateway import (
-            launch_detached_gateway_restart_by_cmdline,
-            launch_detached_profile_gateway_restart,
-        )
-    except Exception as exc:
-        logger.debug("Could not load Windows gateway restart helper: %s", exc)
-        return
-
-    relaunched = []
-    for profile, old_pid in sorted(profiles.items()):
-        try:
-            if launch_detached_profile_gateway_restart(str(profile), int(old_pid)):
-                relaunched.append(str(profile))
-        except Exception as exc:
-            logger.debug(
-                "Could not restart Windows gateway profile %s after update: %s",
-                profile,
-                exc,
-            )
-
-    # Respawn unmapped gateways (no profile→PID-file mapping, e.g. a Scheduled
-    # Task) by replaying the argv we snapshotted before force-killing them.
-    unmapped_relaunched = 0
-    for entry in unmapped:
-        argv = entry.get("argv")
-        old_pid = entry.get("pid")
-        if not argv or not old_pid:
-            continue
-        try:
-            if launch_detached_gateway_restart_by_cmdline(int(old_pid), list(argv)):
-                unmapped_relaunched += 1
-        except Exception as exc:
-            logger.debug(
-                "Could not restart unmapped Windows gateway (pid %s) after update: %s",
-                old_pid,
-                exc,
-            )
-
-    if relaunched:
-        print()
-        print(f"  ✓ Restarting Windows gateway profile(s): {', '.join(relaunched)}")
-    if unmapped_relaunched:
-        if not relaunched:
-            print()
-        print(
-            f"  ✓ Restarting {unmapped_relaunched} unmapped Windows gateway process(es)"
-        )
-
-
 def _discard_lockfile_churn(git_cmd, repo_root):
     """Restore tracked ``package-lock.json`` files that npm dirtied locally.
 
@@ -9001,14 +8310,11 @@ def cmd_update(args):
         )
         return
 
-    gateway_mode = getattr(args, "gateway", False)
-
     # Protect against mid-update terminal disconnects (SIGHUP) and tolerate
-    # writes to a closed stdout.  No-op in gateway mode.  See
-    # _install_hangup_protection for rationale.
-    _update_io_state = _install_hangup_protection(gateway_mode=gateway_mode)
+    # writes to a closed stdout.  See _install_hangup_protection for rationale.
+    _update_io_state = _install_hangup_protection()
     try:
-        _cmd_update_impl(args, gateway_mode=gateway_mode)
+        _cmd_update_impl(args)
     finally:
         _finalize_update_output(_update_io_state)
 
@@ -9074,15 +8380,9 @@ def _cmd_update_pip(args):
     print("✓ Update complete! Restart lliam-gov to use the new version.")
 
 
-def _cmd_update_impl(args, gateway_mode: bool):
+def _cmd_update_impl(args):
     """Body of ``cmd_update`` — kept separate so the wrapper can always
     restore stdio even on ``sys.exit``."""
-    # In gateway mode, use file-based IPC for prompts instead of stdin
-    gw_input_fn = (
-        (lambda prompt, default="": _gateway_prompt(prompt, default))
-        if gateway_mode
-        else None
-    )
     assume_yes = bool(getattr(args, "yes", False))
 
     # Whether this update is running without a human at the keyboard.
@@ -9091,8 +8391,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
     # the `updates.non_interactive_local_changes` config setting to decide
     # whether to auto-restore stashed local source changes or throw them away.
     _non_interactive_update = (
-        gateway_mode
-        or assume_yes
+        assume_yes
         or not (sys.stdin.isatty() and sys.stdout.isatty())
     )
     discard_local_changes = False
@@ -9127,15 +8426,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
     # Pre-update backup — runs before any git/file mutation so users can
     # always roll back to the exact state they had before this update.
     _run_pre_update_backup(args)
-
-    _windows_gateway_resume = _pause_windows_gateways_for_update()
-    if _windows_gateway_resume:
-        import atexit as _atexit
-
-        _atexit.register(
-            _resume_windows_gateways_after_update,
-            _windows_gateway_resume,
-        )
 
     # Try git-based update first, fall back to ZIP download on Windows
     # when git file I/O is broken (antivirus, NTFS filter drivers, etc.)
@@ -9199,10 +8489,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
 
     if use_zip_update:
         # ZIP-based update for Windows when git is broken
-        try:
-            _update_via_zip(args)
-        finally:
-            _resume_windows_gateways_after_update(_windows_gateway_resume)
+        _update_via_zip(args)
         return
 
     # Fetch and pull
@@ -9289,7 +8576,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
                             PROJECT_ROOT,
                             auto_stash_ref,
                             prompt_user=False,
-                            input_fn=gw_input_fn,
                         )
                     print(f"✗ Branch '{branch}' does not exist locally or on origin.")
                     if track_result.stderr.strip():
@@ -9301,7 +8587,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         prompt_for_restore = (
             auto_stash_ref is not None
             and not assume_yes
-            and (gateway_mode or (sys.stdin.isatty() and sys.stdout.isatty()))
+            and (sys.stdin.isatty() and sys.stdout.isatty())
         )
 
         # Check if there are updates
@@ -9328,7 +8614,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     PROJECT_ROOT,
                     auto_stash_ref,
                     prompt_user=prompt_for_restore,
-                    input_fn=gw_input_fn,
                 )
             if current_branch not in {branch, "HEAD"}:
                 subprocess.run(
@@ -9339,7 +8624,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     check=False,
                 )
             print("✓ Already up to date!")
-            _resume_windows_gateways_after_update(_windows_gateway_resume)
             return
 
         print(f"→ Found {commit_count} new commit(s)")
@@ -9464,7 +8748,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
                         PROJECT_ROOT,
                         auto_stash_ref,
                         prompt_user=prompt_for_restore,
-                        input_fn=gw_input_fn,
                     )
 
         _invalidate_update_cache()
@@ -9789,14 +9072,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     "  ℹ --yes: auto-applying config migration (skipping API-key prompts)."
                 )
                 response = "y"
-            elif gateway_mode:
-                response = (
-                    _gateway_prompt(
-                        "Would you like to configure new options now? [Y/n]", "n"
-                    )
-                    .strip()
-                    .lower()
-                )
             elif not (sys.stdin.isatty() and sys.stdout.isatty()):
                 print("  ℹ Non-interactive session — applying safe config migrations.")
                 response = "auto"
@@ -9818,14 +9093,14 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 # so new default config fields and version bumps are written
                 # before the freshly updated gateway validates config at startup.
                 interactive_migration = not (
-                    gateway_mode or assume_yes or response == "auto"
+                    assume_yes or response == "auto"
                 )
                 results = migrate_config(interactive=interactive_migration, quiet=False)
 
                 if results["env_added"] or results["config_added"]:
                     print()
                     print("✓ Configuration updated!")
-                if (gateway_mode or assume_yes or response == "auto") and missing_env:
+                if (assume_yes or response == "auto") and missing_env:
                     print("  ℹ API keys require manual entry: lliam-gov config migrate")
             else:
                 print()
@@ -9899,699 +9174,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
         except Exception as e:
             logger.debug("cua-driver refresh failed: %s", e)
 
-        # Write exit code *before* the gateway restart attempt.
-        # When running as ``lliam-gov update --gateway`` (spawned by the gateway's
-        # /update command), this process lives inside the gateway's systemd
-        # cgroup.  A graceful SIGUSR1 restart keeps the drain loop alive long
-        # enough for the exit-code marker to be written below, but the
-        # fallback ``systemctl restart`` path (see below) kills everything in
-        # the cgroup (KillMode=mixed → SIGKILL to remaining processes),
-        # including us and the wrapping bash shell.  The shell never reaches
-        # its ``printf $status > .update_exit_code`` epilogue, so the
-        # exit-code marker file would never be created.  The new gateway's
-        # update watcher would then poll for 30 minutes and send a spurious
-        # timeout message.
-        #
-        # Writing the marker here — after git pull + pip install succeed but
-        # before we attempt the restart — ensures the new gateway sees it
-        # regardless of how we die.
-        if gateway_mode:
-            _exit_code_path = get_lliam_home() / ".update_exit_code"
-            try:
-                _exit_code_path.write_text("0")
-            except OSError:
-                pass
-
-        # Auto-restart ALL gateways after update.
-        # The code update (git pull) is shared across all profiles, so every
-        # running gateway needs restarting to pick up the new code.
-        try:
-            from lliam_cli.gateway import (
-                is_macos,
-                supports_systemd_services,
-                _ensure_user_systemd_env,
-                find_gateway_pids,
-                find_profile_gateway_processes,
-                launch_detached_profile_gateway_restart,
-                _get_service_pids,
-                _graceful_restart_via_sigusr1,
-                _wait_for_gateway_exit,
-            )
-            import signal as _signal
-
-            def _wait_for_service_active(
-                scope_cmd_: list,
-                svc_name_: str,
-                timeout: float = 10.0,
-            ) -> bool:
-                """Poll ``systemctl is-active`` until the unit reports active.
-
-                systemd's Stopped -> Started transition after a graceful exit
-                (or a hard restart) is not instantaneous; a one-shot check
-                races that window and falsely reports the unit as down.
-                Poll every 0.5s up to ``timeout`` seconds before giving up.
-                """
-                deadline = _time.monotonic() + max(timeout, 0.5)
-                while True:
-                    try:
-                        _verify = subprocess.run(
-                            scope_cmd_ + ["is-active", svc_name_],
-                            capture_output=True,
-                            text=True,
-                            timeout=5,
-                        )
-                        if _verify.stdout.strip() == "active":
-                            return True
-                    except (FileNotFoundError, subprocess.TimeoutExpired):
-                        pass
-                    if _time.monotonic() >= deadline:
-                        return False
-                    _time.sleep(0.5)
-
-            def _service_restart_sec(
-                scope_cmd_: list,
-                svc_name_: str,
-                default: float = 0.0,
-            ) -> float:
-                """Read the unit's ``RestartUSec`` (RestartSec) in seconds.
-
-                After a graceful exit-75, systemd waits ``RestartSec`` before
-                respawning the unit.  Callers that poll for ``is-active``
-                must use a timeout >= ``RestartSec`` + transition slack, or
-                they'll give up *during* the cooldown window and wrongly
-                conclude the unit didn't relaunch.
-                """
-                try:
-                    _show = subprocess.run(
-                        scope_cmd_
-                        + [
-                            "show",
-                            svc_name_,
-                            "--property=RestartUSec",
-                            "--value",
-                        ],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                    )
-                except (FileNotFoundError, subprocess.TimeoutExpired):
-                    return default
-                raw = (_show.stdout or "").strip()
-                # systemd emits values like "30s", "100ms", "1min 30s", or
-                # "infinity".  Parse conservatively; on any miss return default.
-                if not raw or raw == "infinity":
-                    return default
-                total = 0.0
-                matched = False
-                for part in raw.split():
-                    for _suf, _mult in (
-                        ("ms", 0.001),
-                        ("us", 0.000001),
-                        ("min", 60.0),
-                        ("s", 1.0),
-                    ):
-                        if part.endswith(_suf):
-                            try:
-                                total += float(part[: -len(_suf)]) * _mult
-                                matched = True
-                            except ValueError:
-                                pass
-                            break
-                return total if matched else default
-
-            _manage_cmd_cache: dict = {}
-
-            def _resolve_manage_cmd(scope_: str, scope_cmd_: list, svc_name_: str):
-                """Resolve the command prefix for manage-units operations.
-
-                Read-only systemctl calls (``is-active``, ``show``,
-                ``list-units``) work unprivileged, but manage-units verbs
-                (``reset-failed``, ``start``, ``restart``) on a *system*
-                service trigger a polkit ``org.freedesktop.systemd1.manage-units``
-                authentication prompt when run as a non-root user.  That
-                interactive prompt runs inside our captured subprocess with a
-                10-15s timeout — the user sees the prompt flash and "exit
-                directly" before they can answer, and the resulting
-                TimeoutExpired used to be swallowed silently.
-
-                Strategy: if root, plain systemctl.  If not root, try
-                non-interactive sudo (``sudo -n``) — first a blanket probe,
-                then a targeted ``systemctl reset-failed`` probe so a
-                least-privilege sudoers entry scoped to
-                ``systemctl ... hermes-gateway*`` also qualifies
-                (``reset-failed`` is an idempotent no-op we run before every
-                privileged restart anyway).  If neither works, return None —
-                the caller must SKIP the restart (without draining the
-                gateway first!) and tell the user how to restart manually.
-                ``--no-ask-password`` guarantees polkit can never hang a
-                captured subprocess on this path.
-                """
-                if scope_ in _manage_cmd_cache:
-                    return _manage_cmd_cache[scope_]
-                cmd = scope_cmd_ + ["--no-ask-password"]
-                if (
-                    scope_ == "system"
-                    and hasattr(os, "geteuid")
-                    and os.geteuid() != 0  # windows-footgun: ok — systemd path, Linux-only
-                ):
-                    sudo_cmd = ["sudo", "-n"] + scope_cmd_ + ["--no-ask-password"]
-                    sudo_ok = False
-                    try:
-                        _probe = subprocess.run(
-                            ["sudo", "-n", "true"],
-                            capture_output=True,
-                            timeout=5,
-                        )
-                        sudo_ok = _probe.returncode == 0
-                        if not sudo_ok:
-                            # Blanket sudo refused — a targeted sudoers entry
-                            # (NOPASSWD for systemctl ... hermes-gateway*)
-                            # may still allow the exact commands we need.
-                            _probe = subprocess.run(
-                                sudo_cmd + ["reset-failed", svc_name_],
-                                capture_output=True,
-                                timeout=5,
-                            )
-                            sudo_ok = _probe.returncode == 0
-                    except (FileNotFoundError, subprocess.TimeoutExpired):
-                        sudo_ok = False
-                    cmd = sudo_cmd if sudo_ok else None
-                _manage_cmd_cache[scope_] = cmd
-                return cmd
-
-            # Drain budget for graceful SIGUSR1 restarts.  The gateway drains
-            # for up to ``agent.restart_drain_timeout`` (default 60s) before
-            # exiting with code 75; we wait slightly longer so the drain
-            # completes before we fall back to a hard restart.  On older
-            # systemd units without SIGUSR1 wiring this wait just times out
-            # and we fall back to ``systemctl restart`` (the old behaviour).
-            try:
-                from lliam_constants import (
-                    DEFAULT_GATEWAY_RESTART_DRAIN_TIMEOUT as _DEFAULT_DRAIN,
-                )
-            except Exception:
-                _DEFAULT_DRAIN = 60.0
-            _cfg_drain = None
-            try:
-                from lliam_cli.config import load_config
-
-                _cfg_agent = load_config().get("agent") or {}
-                _cfg_drain = _cfg_agent.get("restart_drain_timeout")
-            except Exception:
-                pass
-            try:
-                _drain_budget = (
-                    float(_cfg_drain)
-                    if _cfg_drain is not None
-                    else float(_DEFAULT_DRAIN)
-                )
-            except (TypeError, ValueError):
-                _drain_budget = float(_DEFAULT_DRAIN)
-            # Add a 15s margin so the drain loop + final exit finish before
-            # we escalate to ``systemctl restart`` / SIGTERM.
-            _drain_budget = max(_drain_budget, 30.0) + 15.0
-
-            restarted_services = []
-            killed_pids = set()
-            relaunched_profiles = []
-
-            # --- Systemd services (Linux) ---
-            # Discover all hermes-gateway* units (default + profiles)
-            if supports_systemd_services():
-                try:
-                    _ensure_user_systemd_env()
-                except Exception:
-                    pass
-
-                for scope, scope_cmd in [
-                    ("user", ["systemctl", "--user"]),
-                    ("system", ["systemctl"]),
-                ]:
-                    try:
-                        result = subprocess.run(
-                            scope_cmd
-                            + [
-                                "list-units",
-                                "hermes-gateway*",
-                                "--plain",
-                                "--no-legend",
-                                "--no-pager",
-                            ],
-                            capture_output=True,
-                            text=True,
-                            timeout=10,
-                        )
-                        for line in result.stdout.strip().splitlines():
-                            parts = line.split()
-                            if not parts:
-                                continue
-                            unit = parts[
-                                0
-                            ]  # e.g. hermes-gateway.service or hermes-gateway-coder.service
-                            if not unit.endswith(".service"):
-                                continue
-                            svc_name = unit.removesuffix(".service")
-                            # Check if active
-                            check = subprocess.run(
-                                scope_cmd + ["is-active", svc_name],
-                                capture_output=True,
-                                text=True,
-                                timeout=5,
-                            )
-                            if check.stdout.strip() != "active":
-                                continue
-
-                            # Resolve how we may run manage-units verbs
-                            # (reset-failed/start/restart) for this scope.
-                            # None ⇒ no non-interactive privilege path; we
-                            # must avoid those verbs entirely or polkit will
-                            # throw an interactive auth prompt inside our
-                            # captured 10-15s subprocess (the user sees it
-                            # flash and "exit directly" — reported June 2026).
-                            _manage_cmd = _resolve_manage_cmd(
-                                scope, scope_cmd, svc_name
-                            )
-
-                            # Prefer a graceful SIGUSR1 restart so in-flight
-                            # agent runs drain instead of being SIGKILLed.
-                            # The gateway's SIGUSR1 handler calls
-                            # request_restart(via_service=True) → drain →
-                            # exit; systemd's Restart=always respawns the unit.
-                            _main_pid = 0
-                            try:
-                                _show = subprocess.run(
-                                    scope_cmd
-                                    + [
-                                        "show",
-                                        svc_name,
-                                        "--property=MainPID",
-                                        "--value",
-                                    ],
-                                    capture_output=True,
-                                    text=True,
-                                    timeout=5,
-                                )
-                                _main_pid = int((_show.stdout or "").strip() or 0)
-                            except (
-                                ValueError,
-                                subprocess.TimeoutExpired,
-                                FileNotFoundError,
-                            ):
-                                _main_pid = 0
-
-                            _graceful_ok = False
-                            if _main_pid > 0:
-                                print(
-                                    f"  → {svc_name}: draining (up to {int(_drain_budget)}s)..."
-                                )
-                                _graceful_ok = _graceful_restart_via_sigusr1(
-                                    _main_pid,
-                                    drain_timeout=_drain_budget,
-                                )
-
-                            if _graceful_ok:
-                                # Gateway exited after a planned restart.
-                                # ``Restart=always`` means systemd WILL respawn
-                                # the unit — but only after
-                                # ``RestartSec`` (default 60s on our unit
-                                # file). That 60s wait is a crash-loop guard,
-                                # and is the right default when the gateway
-                                # dies unexpectedly. For a voluntary restart
-                                # on update, it's dead time the user watches.
-                                #
-                                # Shortcut it: ``reset-failed`` + ``start``
-                                # skips RestartSec entirely (we're manually
-                                # initiating the unit, not waiting for
-                                # systemd's auto-restart logic). Takes about
-                                # as long as the process takes to come up
-                                # (~1-3s on a warm box).
-                                #
-                                # If the unit is already active because
-                                # RestartSec elapsed while we were draining,
-                                # ``start`` is a no-op and we fall through to
-                                # the poll below. Either way we collapse the
-                                # 60s+ delay to a ~5s one.
-                                #
-                                # The shortcut needs manage-units privileges.
-                                # Without them (system service, non-root, no
-                                # passwordless sudo) skip it — systemd's own
-                                # auto-restart still relaunches the unit after
-                                # RestartSec, no privileges required.
-                                if _manage_cmd is not None:
-                                    subprocess.run(
-                                        _manage_cmd + ["reset-failed", svc_name],
-                                        capture_output=True,
-                                        text=True,
-                                        timeout=10,
-                                    )
-                                    subprocess.run(
-                                        _manage_cmd + ["start", svc_name],
-                                        capture_output=True,
-                                        text=True,
-                                        timeout=15,
-                                    )
-                                    # Short poll: the gateway should be up
-                                    # within a few seconds now that we
-                                    # bypassed RestartSec.
-                                    if _wait_for_service_active(
-                                        scope_cmd,
-                                        svc_name,
-                                        timeout=10.0,
-                                    ):
-                                        restarted_services.append(svc_name)
-                                        continue
-                                # Passive poll: systemd's auto-restart fires
-                                # after RestartSec regardless of privileges.
-                                # This is the primary path when _manage_cmd is
-                                # None, and the fallback when the explicit
-                                # start didn't take.
-                                _restart_sec = _service_restart_sec(
-                                    scope_cmd,
-                                    svc_name,
-                                    default=0.0,
-                                )
-                                _post_drain_timeout = max(
-                                    10.0,
-                                    _restart_sec + 10.0,
-                                )
-                                if _manage_cmd is None and _restart_sec > 5.0:
-                                    print(
-                                        f"  → {svc_name}: waiting for systemd "
-                                        f"auto-restart (~{int(_restart_sec)}s; "
-                                        "no root for an immediate restart)..."
-                                    )
-                                if _wait_for_service_active(
-                                    scope_cmd,
-                                    svc_name,
-                                    timeout=_post_drain_timeout,
-                                ):
-                                    restarted_services.append(svc_name)
-                                    continue
-                                # Process exited but wasn't respawned (older
-                                # unit without Restart=on-failure or
-                                # RestartForceExitStatus=75).  Fall through
-                                # to systemctl start/restart.
-                                print(
-                                    f"  ⚠ {svc_name} drained but didn't relaunch — forcing restart"
-                                )
-
-                            # Forcing a restart requires manage-units
-                            # privileges.  Without a non-interactive path,
-                            # running systemctl here would spawn a polkit
-                            # auth prompt inside a captured 10-15s subprocess
-                            # — it flashes and dies before the user can
-                            # answer.  Skip with clear instructions instead.
-                            if _manage_cmd is None:
-                                print(
-                                    f"  ⚠ {svc_name} is a system service and restarting it needs root.\n"
-                                    f"    Restart it manually to load the new version:\n"
-                                    f"      sudo systemctl restart {svc_name}\n"
-                                    f"    To let `lliam-gov update` restart it automatically, allow\n"
-                                    f"    passwordless sudo for systemctl, or run updates with sudo."
-                                )
-                                continue
-
-                            # Fallback: blunt systemctl restart.  This is
-                            # what the old code always did; we get here only
-                            # when the graceful path failed (unit missing
-                            # SIGUSR1 wiring, drain exceeded the budget,
-                            # restart-policy mismatch).
-                            #
-                            # Always `reset-failed` first.  If systemd's own
-                            # auto-restart attempts already parked the unit
-                            # in a failed state (transient CHDIR / OOM /
-                            # filesystem race after our drain + exit-75),
-                            # a plain `systemctl restart` can wedge against
-                            # the RestartSec backoff and leave the unit
-                            # dead.  Clearing the failed state first makes
-                            # the restart idempotent.  Mirrors the recovery
-                            # path in `lliam-gov gateway restart`
-                            # (`systemd_restart()`) as of PR #20949.
-                            subprocess.run(
-                                _manage_cmd + ["reset-failed", svc_name],
-                                capture_output=True,
-                                text=True,
-                                timeout=10,
-                            )
-                            restart = subprocess.run(
-                                _manage_cmd + ["restart", svc_name],
-                                capture_output=True,
-                                text=True,
-                                timeout=15,
-                            )
-                            if restart.returncode == 0:
-                                # Verify the service actually survived the
-                                # restart.  systemctl restart returns 0 even
-                                # if the new process crashes immediately.
-                                if _wait_for_service_active(
-                                    scope_cmd,
-                                    svc_name,
-                                    timeout=10.0,
-                                ):
-                                    restarted_services.append(svc_name)
-                                else:
-                                    # Retry once — transient startup failures
-                                    # (stale module cache, import race) often
-                                    # resolve on the second attempt.  Again
-                                    # clear any failed state first so the
-                                    # retry isn't blocked by the previous
-                                    # crash.
-                                    print(
-                                        f"  ⚠ {svc_name} died after restart, retrying..."
-                                    )
-                                    subprocess.run(
-                                        _manage_cmd + ["reset-failed", svc_name],
-                                        capture_output=True,
-                                        text=True,
-                                        timeout=10,
-                                    )
-                                    subprocess.run(
-                                        _manage_cmd + ["restart", svc_name],
-                                        capture_output=True,
-                                        text=True,
-                                        timeout=15,
-                                    )
-                                    if _wait_for_service_active(
-                                        scope_cmd,
-                                        svc_name,
-                                        timeout=10.0,
-                                    ):
-                                        restarted_services.append(svc_name)
-                                        print(f"  ✓ {svc_name} recovered on retry")
-                                    else:
-                                        _scope_flag = "--user " if scope == "user" else ""
-                                        _sudo_hint = "sudo " if scope == "system" else ""
-                                        print(
-                                            f"  ✗ {svc_name} failed to stay running after restart.\n"
-                                            f"    Check logs: {_sudo_hint}journalctl {_scope_flag}-u {svc_name} --since '2 min ago'\n"
-                                            f"    Recover manually:\n"
-                                            f"      {_sudo_hint}systemctl {_scope_flag}reset-failed {svc_name}\n"
-                                            f"      {_sudo_hint}systemctl {_scope_flag}restart {svc_name}"
-                                        )
-                            else:
-                                print(
-                                    f"  ⚠ Failed to restart {svc_name}: {restart.stderr.strip()}"
-                                )
-                    except FileNotFoundError:
-                        pass
-                    except subprocess.TimeoutExpired as exc:
-                        # Don't swallow this silently — a wedged systemctl
-                        # call here used to make the whole restart phase
-                        # vanish with no output (June 2026 report).
-                        print(
-                            f"  ⚠ systemctl timed out during the {scope}-scope "
-                            f"gateway restart ({exc.cmd if exc.cmd else 'unknown command'}). "
-                            f"Check the gateway with: lliam-gov gateway status"
-                        )
-
-            # --- Launchd services (macOS) ---
-            if is_macos():
-                try:
-                    from lliam_cli.gateway import (
-                        launchd_restart,
-                        get_launchd_label,
-                        get_launchd_plist_path,
-                    )
-
-                    plist_path = get_launchd_plist_path()
-                    if plist_path.exists():
-                        check = subprocess.run(
-                            ["launchctl", "list", get_launchd_label()],
-                            capture_output=True,
-                            text=True,
-                            timeout=5,
-                        )
-                        if check.returncode == 0:
-                            try:
-                                launchd_restart()
-                                restarted_services.append(get_launchd_label())
-                            except subprocess.CalledProcessError as e:
-                                stderr = (getattr(e, "stderr", "") or "").strip()
-                                print(f"  ⚠ Gateway restart failed: {stderr}")
-                except (FileNotFoundError, subprocess.TimeoutExpired, ImportError):
-                    pass
-
-            # --- Manual (non-service) gateways ---
-            # Kill any remaining gateway processes not managed by a service.
-            # Exclude PIDs that belong to just-restarted services so we don't
-            # immediately kill the process that systemd/launchd just spawned.
-            service_pids = _get_service_pids()
-            manual_pids = find_gateway_pids(
-                exclude_pids=service_pids, all_profiles=True
-            )
-            profile_processes = {
-                proc.pid: proc
-                for proc in find_profile_gateway_processes(exclude_pids=service_pids)
-                if proc.pid in manual_pids
-            }
-            for pid, proc in profile_processes.items():
-                if not launch_detached_profile_gateway_restart(proc.profile, pid):
-                    continue
-                # Prefer a graceful SIGUSR1 drain so in-flight agent runs
-                # finish before the watcher respawns the gateway.  If the
-                # gateway doesn't support SIGUSR1 or doesn't exit within
-                # the drain budget, fall back to SIGTERM — the watcher
-                # still sees the exit and relaunches either way.
-                # Announce the drain first: this wait can hold for the full
-                # budget per gateway with no other output, and on surfaces
-                # that stream update progress (the desktop updater most of
-                # all) the silence reads as a hung update (#44515).
-                print(
-                    f"  → {proc.profile}: draining gateway PID {pid} "
-                    f"(up to {int(_drain_budget)}s)..."
-                )
-                drained = _graceful_restart_via_sigusr1(
-                    pid,
-                    drain_timeout=_drain_budget,
-                )
-                if not drained:
-                    try:
-                        os.kill(pid, _signal.SIGTERM)
-                    except (ProcessLookupError, PermissionError):
-                        pass
-                # Wait for the old process to fully exit before the watcher
-                # spawns the new gateway.  Telegram holds the previous
-                # getUpdates long-poll session open on its servers for up to
-                # ~30s after the client disconnects.  If the new gateway
-                # connects before that window expires it receives a 409
-                # Conflict, which _handle_polling_conflict() recovers from
-                # via back-off retries — but a brief wait here reduces the
-                # chance of hitting that path at all, especially on fast
-                # machines where the watcher loop restarts in < 1s.
-                # We wait up to 5s for the process to exit (the OS-level
-                # close, not the Telegram server-side expiry), then let the
-                # watcher take over.  The Telegram adapter's retry logic
-                # handles any remaining 409s if the server session is still
-                # live when the new gateway polls.
-                _wait_for_gateway_exit(timeout=5.0, force_after=None)
-                killed_pids.add(pid)
-                relaunched_profiles.append(proc.profile)
-
-            for pid in manual_pids:
-                if pid in profile_processes:
-                    continue
-                try:
-                    os.kill(pid, _signal.SIGTERM)
-                    killed_pids.add(pid)
-                except (ProcessLookupError, PermissionError):
-                    pass
-
-            if restarted_services or killed_pids:
-                print()
-                for svc in restarted_services:
-                    print(f"  ✓ Restarted {svc}")
-                if relaunched_profiles:
-                    names = ", ".join(relaunched_profiles)
-                    print(f"  ✓ Restarting manual gateway profile(s): {names}")
-                unmapped_count = len(killed_pids) - len(relaunched_profiles)
-                if unmapped_count:
-                    print(f"  → Stopped {unmapped_count} manual gateway process(es)")
-                    print("    Restart manually: lliam-gov gateway run")
-                    if unmapped_count > 1:
-                        print(
-                            "    (or: lliam-gov -p <profile> gateway run  for each profile)"
-                        )
-
-            if not restarted_services and not killed_pids:
-                # No gateways were running — nothing to do
-                pass
-
-            # --- Post-restart survivor sweep -----------------------------
-            # Issue #17648: some gateways ignore SIGTERM (stuck drain,
-            # blocked I/O, PID dead but zombie).  The detached profile
-            # watchers wait 120s for the old PID to exit — if it never
-            # does, no respawn happens and the user keeps hitting
-            # ImportError against a stale sys.modules.  Give the
-            # graceful paths a brief window to complete, then SIGKILL
-            # any remaining pre-update PIDs so the watcher / service
-            # manager can relaunch with fresh code.
-            try:
-                _time.sleep(3.0)
-                _service_pids_after = _get_service_pids()
-                _surviving = find_gateway_pids(
-                    exclude_pids=_service_pids_after,
-                    all_profiles=True,
-                )
-                # Scope to PIDs we already tried to kill during this
-                # update (killed_pids).  Anything new is a gateway that
-                # started AFTER our restart attempt — respecting user
-                # intent, we don't kill those.
-                _stuck = [pid for pid in _surviving if pid in killed_pids]
-                if _stuck:
-                    print()
-                    print(
-                        f"  ⚠ {len(_stuck)} gateway process(es) ignored SIGTERM — force-killing"
-                    )
-                    from gateway.status import terminate_pid as _terminate_pid
-                    for pid in _stuck:
-                        try:
-                            # Routes through taskkill /T /F on Windows,
-                            # SIGKILL on POSIX — _signal.SIGKILL doesn't
-                            # exist on Windows so the old raw os.kill call
-                            # used to crash the entire update path.
-                            _terminate_pid(pid, force=True)
-                        except (ProcessLookupError, PermissionError, OSError):
-                            pass
-                    # Give the OS a beat to reap the processes so the
-                    # watchers see them exit and respawn.
-                    _time.sleep(1.5)
-            except Exception as _sweep_exc:
-                logger.debug("Post-restart survivor sweep failed: %s", _sweep_exc)
-
-        except Exception as e:
-            logger.debug("Gateway restart during update failed: %s", e)
-
-        _resume_windows_gateways_after_update(_windows_gateway_resume)
-
-        # Warn if legacy Lliam-GOV gateway unit files are still installed.
-        # When both hermes.service (from a pre-rename install) and the
-        # current hermes-gateway.service are enabled, they SIGTERM-fight
-        # for the same bot token (see PR #11909). Flagging here means
-        # every `lliam-gov update` surfaces the issue until the user migrates.
-        try:
-            from lliam_cli.gateway import (
-                has_legacy_lliam_units,
-                _find_legacy_lliam_units,
-                supports_systemd_services,
-            )
-
-            if supports_systemd_services() and has_legacy_lliam_units():
-                print()
-                print("⚠ Legacy Lliam-GOV gateway unit(s) detected:")
-                for name, path, is_sys in _find_legacy_lliam_units():
-                    scope = "system" if is_sys else "user"
-                    print(f"    {path}  ({scope} scope)")
-                print()
-                print("  These pre-rename units (hermes.service) fight the current")
-                print("  hermes-gateway.service for the bot token and cause SIGTERM")
-                print("  flap loops. Remove them with:")
-                print()
-                print("    lliam-gov gateway migrate-legacy")
-                print()
-                print("  (add `sudo` if any are in system scope)")
-        except Exception as e:
-            logger.debug("Legacy unit check during update failed: %s", e)
-
         # Kill stale dashboard processes — the dashboard has no service
         # manager, so leaving it alive after a code update produces a
         # silent frontend/backend mismatch.  We can't auto-restart it
@@ -10628,10 +9210,7 @@ def _coalesce_session_name_args(argv: list) -> list:
     _SUBCOMMANDS = {
         "chat",
         "model",
-        "gateway",
         "setup",
-        "whatsapp",
-        "whatsapp-cloud",
         "login",
         "logout",
         "auth",
@@ -10639,7 +9218,6 @@ def _coalesce_session_name_args(argv: list) -> list:
         "cron",
         "doctor",
         "config",
-        "pairing",
         "skills",
         "tools",
         "mcp",
@@ -10726,9 +9304,6 @@ def cmd_profile(args):
                         f"Model:          {p.model}"
                         + (f" ({p.provider})" if p.provider else "")
                     )
-                print(
-                    f"Gateway:        {'running' if p.gateway_running else 'stopped'}"
-                )
                 print(f"Skills:         {p.skill_count} installed")
                 if p.alias_path:
                     alias_display = p.alias_name or p.name
@@ -10747,11 +9322,11 @@ def cmd_profile(args):
 
         # Header
         print(
-            f"\n {'Profile':<16} {'Model':<28} {'Gateway':<12} "
+            f"\n {'Profile':<16} {'Model':<28} "
             f"{'Alias':<12} {'Distribution'}"
         )
         print(
-            f" {'─' * 15}    {'─' * 27}    {'─' * 11}    "
+            f" {'─' * 15}    {'─' * 27}    "
             f"{'─' * 11}    {'─' * 20}"
         )
 
@@ -10763,7 +9338,6 @@ def cmd_profile(args):
             )
             name = p.name
             model = (p.model or "—")[:26]
-            gw = "running" if p.gateway_running else "stopped"
             alias = (p.alias_name or p.name) if p.alias_path else "—"
             if p.is_default:
                 alias = "—"
@@ -10772,7 +9346,7 @@ def cmd_profile(args):
                 dist = dist[:30]
             else:
                 dist = "—"
-            print(f"{marker}{name:<15} {model:<28} {gw:<12} {alias:<12} {dist}")
+            print(f"{marker}{name:<15} {model:<28} {alias:<12} {dist}")
         print()
 
     elif action == "use":
@@ -10883,7 +9457,6 @@ def cmd_profile(args):
             print(f"\nNext steps:")
             print(f"  {name} setup              Configure API keys and model")
             print(f"  {name} chat               Start chatting")
-            print(f"  {name} gateway start      Start the messaging gateway")
             if clone or clone_all:
                 print(f"\n  Edit {profile_dir_display}/.env for different API keys")
                 print(f"  Edit {profile_dir_display}/SOUL.md for different personality")
@@ -11015,7 +9588,6 @@ def cmd_profile(args):
             get_profile_dir,
             profile_exists,
             _read_config_model,
-            _check_gateway_running,
             _count_skills,
             _read_distribution_meta,
             _get_wrapper_dir,
@@ -11027,7 +9599,6 @@ def cmd_profile(args):
             sys.exit(1)
         profile_dir = get_profile_dir(name)
         model, provider = _read_config_model(profile_dir)
-        gw = _check_gateway_running(profile_dir)
         skills = _count_skills(profile_dir)
         dist_name, dist_version, dist_source = _read_distribution_meta(profile_dir)
         alias_name = find_alias_for_profile(name)
@@ -11036,7 +9607,6 @@ def cmd_profile(args):
         print(f"Path:    {profile_dir}")
         if model:
             print(f"Model:   {model}" + (f" ({provider})" if provider else ""))
-        print(f"Gateway: {'running' if gw else 'stopped'}")
         print(f"Skills:  {skills}")
         print(
             f".env:    {'exists' if (profile_dir / '.env').exists() else 'not configured'}"
@@ -11746,13 +10316,6 @@ def cmd_dashboard_register(args):
     _impl(args)
 
 
-def cmd_gateway_enroll(args):
-    """Enroll a self-hosted gateway with a relay connector."""
-    from lliam_cli.gateway_enroll import cmd_gateway_enroll as _impl
-
-    _impl(args)
-
-
 def cmd_completion(args, parser=None):
     """Print shell completion script."""
     from lliam_cli.completion import generate_bash, generate_zsh, generate_fish
@@ -11825,14 +10388,14 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "computer-use",
         "config", "cron", "curator", "dashboard", "debug", "doctor",
         "killswitch", "kill-switch",
-        "dump", "fallback", "gateway", "hooks", "import", "insights",
+        "dump", "fallback", "hooks", "import", "insights",
         "gui", "desktop", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate", "moa",
-        "model", "pairing", "pets", "plugins", "portal", "postinstall", "profile",
+        "model", "pets", "plugins", "portal", "postinstall", "profile",
         "project", "proxy",
         "prompt-size",
-        "send", "sessions", "setup",
-        "skills", "slack", "status", "tools", "uninstall", "update",
-        "version", "webhook", "whatsapp", "whatsapp-cloud", "chat", "secrets", "security",
+        "sessions", "setup",
+        "skills", "status", "tools", "uninstall", "update",
+        "version", "chat", "secrets", "security",
         # Help-ish invocations — plugin commands not being listed in
         # top-level --help is an acceptable trade-off for skipping an
         # expensive eager import of every bundled plugin module.
@@ -11925,8 +10488,6 @@ def _plugin_cli_discovery_needed() -> bool:
 _AGENT_COMMANDS = {None, "chat", "acp", "rl"}
 _AGENT_SUBCOMMANDS = {
     "cron": ("cron_command", {"run", "tick"}),
-    "gateway": ("gateway_command", {"run"}),
-    "mcp": ("mcp_action", {"serve"}),
 }
 
 
@@ -11934,8 +10495,8 @@ _AGENT_SUBCOMMANDS = {
 # strict-posture gate set (lliam_cli.startup_posture) BEFORE plugin/MCP/hook
 # discovery, EXCEPT the commands below. Default is gated: chat (bare / -z /
 # --resume / --continue / --tui), dashboard (also the desktop app's backend),
-# desktop/gui, proxy, send, kanban, curator, `cron run|tick`, `mcp serve`, and
-# any plugin-registered or unknown command.
+# desktop/gui, proxy, kanban, curator, `cron run|tick`, and any
+# plugin-registered or unknown command.
 #
 # Exempt — they never run an agent turn or open a serving endpoint, and an
 # operator must be able to reach them to REPAIR a config the gates reject
@@ -11943,29 +10504,28 @@ _AGENT_SUBCOMMANDS = {
 # high-risk skill, renew a governance artifact) or to inspect/diagnose it:
 #   * configure / repair: setup, postinstall, config, model, moa, fallback,
 #     secrets, migrate, login, logout, auth, portal, tools, skills, bundles,
-#     plugins, hooks, memory, profile, computer-use, lsp, pets, whatsapp,
-#     whatsapp-cloud, slack, webhook, pairing, claw, project
+#     plugins, hooks, memory, profile, computer-use, lsp, pets, claw, project
 #   * inspect / diagnose: doctor, security, status, dump, debug, logs,
 #     insights, sessions, checkpoints, prompt-size, version, help, completion
 #   * install lifecycle: update, uninstall, backup, import
-#   * self-gated: gateway (`gateway run` -> start_gateway runs the gate set at
-#     its original point, after PID/lock handling and logging setup) and acp
-#     (acp_adapter.entry.main gates its serve path; --setup/--check stay open)
+#   * self-gated: acp (acp_adapter.entry.main gates its serve path;
+#     --setup/--check stay open)
 #   * cron / mcp: exempt except the agent-running actions in
-#     _STARTUP_POSTURE_GATED_SUBCOMMANDS.
+#     _STARTUP_POSTURE_GATED_SUBCOMMANDS (`mcp serve` was removed with the
+#     messaging gateway, JER-198; its entry stays so a reintroduced serve
+#     action is gated, not exempt).
 # --help and --version exit before the gate runs.
 _STARTUP_POSTURE_EXEMPT_COMMANDS = frozenset(
     {
         "setup", "postinstall", "config", "model", "moa", "fallback", "secrets",
         "migrate", "login", "logout", "auth", "portal", "tools", "skills",
         "bundles", "plugins", "hooks", "memory", "profile", "computer-use",
-        "lsp", "pets", "whatsapp", "whatsapp-cloud", "slack", "webhook",
-        "pairing", "claw", "project",
+        "lsp", "pets", "claw", "project",
         "doctor", "security", "status", "dump", "debug", "logs", "insights",
         "sessions", "checkpoints", "prompt-size", "version", "help",
         "completion",
         "update", "uninstall", "backup", "import",
-        "gateway", "acp",
+        "acp",
         "cron", "mcp",
         # Operator controls (owner decision 2026-10-22): the kill-switch must
         # stay usable while a gate blocks, since it is how the operator halts
@@ -12004,8 +10564,6 @@ def _is_tui_chat_launch(args) -> bool:
 
 def _command_has_dedicated_mcp_startup(args) -> bool:
     if args.command == "acp":
-        return True
-    if args.command == "gateway" and getattr(args, "gateway_command", None) == "run":
         return True
     if args.command == "cron" and getattr(args, "cron_command", None) in {"run", "tick"}:
         return True
@@ -12350,12 +10908,6 @@ def cmd_skills(args):
         skills_command(args)
 
 
-def cmd_pairing(args):
-    from lliam_cli.pairing import pairing_command
-
-    pairing_command(args)
-
-
 def cmd_plugins(args):
     from lliam_cli.plugins_cmd import plugins_command
 
@@ -12569,11 +11121,9 @@ def main():
     migrate_parser.set_defaults(func=cmd_migrate)
 
     # =========================================================================
-    # gateway + proxy commands  (parsers built in lliam_cli/subcommands/gateway.py)
+    # proxy command  (parser built in lliam_cli/subcommands/proxy.py)
     # =========================================================================
-    build_gateway_parser(
-        subparsers, cmd_gateway=cmd_gateway, cmd_proxy=cmd_proxy, cmd_gateway_enroll=cmd_gateway_enroll
-    )
+    build_proxy_parser(subparsers, cmd_proxy=cmd_proxy)
 
     # =========================================================================
     # lsp command
@@ -12595,37 +11145,6 @@ def main():
     # postinstall command  (parser built in lliam_cli/subcommands/postinstall.py)
     # =========================================================================
     build_postinstall_parser(subparsers, cmd_postinstall=cmd_postinstall)
-
-    # =========================================================================
-    # whatsapp command  (parser built in lliam_cli/subcommands/whatsapp.py)
-    # =========================================================================
-    build_whatsapp_parser(subparsers, cmd_whatsapp=cmd_whatsapp)
-
-    # =========================================================================
-    # whatsapp-cloud command (official Meta Cloud API; complement to Baileys)
-    # =========================================================================
-    whatsapp_cloud_parser = subparsers.add_parser(
-        "whatsapp-cloud",
-        help="Set up WhatsApp Business Cloud API integration",
-        description=(
-            "Configure the official Meta WhatsApp Business Cloud API "
-            "adapter (Business account required, public webhook URL "
-            "required). Distinct from `lliam-gov whatsapp` which sets up "
-            "the Baileys bridge for personal accounts."
-        ),
-    )
-    whatsapp_cloud_parser.set_defaults(func=cmd_whatsapp_cloud)
-
-    # =========================================================================
-    # slack command  (parser built in lliam_cli/subcommands/slack.py)
-    # =========================================================================
-    build_slack_parser(subparsers, cmd_slack=cmd_slack)
-
-    # =========================================================================
-    # send command — pipe shell-script output to any configured platform
-    # =========================================================================
-    from lliam_cli.send_cmd import register_send_subparser
-    register_send_subparser(subparsers)
 
     # =========================================================================
     # login command  (parser built in lliam_cli/subcommands/login.py)
@@ -12651,11 +11170,6 @@ def main():
     # cron command  (parser built in lliam_cli/subcommands/cron.py)
     # =========================================================================
     build_cron_parser(subparsers, cmd_cron=cmd_cron)
-
-    # =========================================================================
-    # webhook command  (parser built in lliam_cli/subcommands/webhook.py)
-    # =========================================================================
-    build_webhook_parser(subparsers, cmd_webhook=cmd_webhook)
 
     # =========================================================================
     # portal command — Nous Portal status + Tool Gateway routing
@@ -12743,11 +11257,6 @@ def main():
     # config command  (parser built in lliam_cli/subcommands/config.py)
     # =========================================================================
     build_config_parser(subparsers, cmd_config=cmd_config)
-
-    # =========================================================================
-    # pairing command  (parser built in lliam_cli/subcommands/pairing.py)
-    # =========================================================================
-    build_pairing_parser(subparsers, cmd_pairing=cmd_pairing)
 
     # =========================================================================
     # skills command  (parser built in lliam_cli/subcommands/skills.py)
@@ -13419,7 +11928,7 @@ def main():
             msgs = db.message_count()
             print(f"Total sessions: {total}")
             print(f"Total messages: {msgs}")
-            for src in ["cli", "telegram", "discord", "whatsapp", "slack"]:
+            for src in ["cli", "tui", "cron"]:
                 c = db.session_count(source=src)
                 if c > 0:
                     print(f"  {src}: {c} sessions")

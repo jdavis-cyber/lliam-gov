@@ -8,9 +8,10 @@ few lines later, aborting the entire image build. The fix replaces every
 existence-based check that guards a subsequent ``< /dev/tty`` redirect with
 an open-based probe so the skip kicks in correctly.
 
-This module covers all three affected functions: ``run_setup_wizard()``
-(the reproducer in #16746), ``install_system_packages()`` (the apt sudo
-prompt fallback), and ``maybe_start_gateway()`` (the gateway-install gate).
+This module covers the affected functions: ``run_setup_wizard()`` (the
+reproducer in #16746) and ``install_system_packages()`` (the apt sudo prompt
+fallback). The third, ``maybe_start_gateway()``, was removed with the
+messaging gateway (JER-198).
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 
 # Every function in scripts/install.sh that previously gated on a bare
 # ``[ -e /dev/tty ]`` check before redirecting stdin from ``/dev/tty``.
-GATED_FUNCTIONS = ("run_setup_wizard", "install_system_packages", "maybe_start_gateway")
+GATED_FUNCTIONS = ("run_setup_wizard", "install_system_packages")
 
 
 def _extract_function_body(name: str) -> str:

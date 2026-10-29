@@ -96,8 +96,6 @@ _READ_ONLY_TOOLS: frozenset[str] = frozenset({
     "read_file", "search_files", "session_search", "skills_list",
     "skill_view", "todo", "clarify", "read_terminal", "project_list",
     "browser_snapshot", "browser_console", "browser_get_images",
-    "feishu_doc_read",
-    "feishu_drive_list_comments", "feishu_drive_list_comment_replies",
 })
 
 _RISK_BY_TOOL: dict[str, frozenset[str]] = {

@@ -946,7 +946,6 @@ export const zhHant = defineLocale({
       newChat: { title: '新工作階段', detail: '開始新的工作階段' },
       settings: { title: '設定', detail: '設定 Lliam-GOV 桌面端' },
       skills: { title: '技能與工具', detail: '啟用技能、工具集和提供方' },
-      messaging: { title: '訊息平台', detail: '設定 Telegram、Slack、Discord 等' },
       artifacts: { title: '成品', detail: '瀏覽產生的輸出' }
     },
     sectionEntries: {
@@ -964,11 +963,7 @@ export const zhHant = defineLocale({
     exportSession: '匯出工作階段',
     deleteSession: '刪除工作階段',
     noSessions: '暫無工作階段。',
-    gatewayRunning: '訊息閘道執行中',
-    gatewayStopped: '訊息閘道已停止',
     lliamActiveSessions: (version, count) => `Lliam-GOV ${version} · 活躍工作階段 ${count}`,
-    restartGateway: '重新啟動閘道',
-    gatewayRestartFailed: '閘道重新啟動失敗。',
     updateLliam: '更新 Lliam-GOV',
     actionRunning: '執行中',
     actionDone: '完成',
@@ -997,129 +992,6 @@ export const zhHant = defineLocale({
     actions: count => `${count} 次動作`
   },
 
-  messaging: {
-    search: '搜尋訊息平台…',
-    loading: '正在載入訊息平台…',
-    loadFailed: '訊息平台載入失敗',
-    states: {
-      connected: '已連線',
-      connecting: '連線中',
-      disabled: '已停用',
-      fatal: '錯誤',
-      gateway_stopped: '訊息閘道已停止',
-      not_configured: '需要設定',
-      pending_restart: '需要重新啟動',
-      retrying: '重試中',
-      startup_failed: '啟動失敗'
-    },
-    unknown: '未知',
-    hintPendingRestart: '在狀態列重新啟動閘道以套用此變更。',
-    hintGatewayStopped: '在狀態列啟動閘道以建立連線。',
-    credentialsSet: '憑證已設定',
-    needsSetup: '需要設定',
-    gatewayStopped: '訊息閘道已停止',
-    getCredentials: '取得您的憑證',
-    openSetupGuide: '開啟設定指南',
-    required: '必填',
-    recommended: '建議',
-    advanced: count => `進階 (${count})`,
-    noTokenNeeded: '此平台不需要在此填寫 Token。請按照上方設定指南操作，然後在下方啟用。',
-    enabled: '已啟用',
-    disabled: '已停用',
-    unsavedChanges: '有未儲存的變更',
-    saving: '儲存中…',
-    saveChanges: '儲存變更',
-    saved: '已儲存',
-    replaceValue: '取代目前值',
-    openDocs: '開啟文件',
-    clearField: key => `清除 ${key}`,
-    enableAria: name => `啟用 ${name}`,
-    disableAria: name => `停用 ${name}`,
-    platformEnabled: name => `${name} 已啟用`,
-    platformDisabled: name => `${name} 已停用`,
-    restartToApply: '此變更將在閘道重新啟動後生效。',
-    setupSaved: name => `${name} 設定已儲存`,
-    restartToReconnect: '新憑證將在閘道重新啟動後生效。',
-    keyCleared: key => `${key} 已清除`,
-    setupUpdated: name => `${name} 設定已更新。`,
-    failedUpdate: name => `更新 ${name} 失敗`,
-    failedSave: name => `儲存 ${name} 失敗`,
-    failedClear: key => `清除 ${key} 失敗`,
-    fieldCopy: {
-      TELEGRAM_BOT_TOKEN: {
-        label: 'Bot Token',
-        help: '用 @BotFather 建立機器人，然後貼上它給您的 Token。',
-        placeholder: '貼上 Telegram bot Token'
-      },
-      TELEGRAM_ALLOWED_USERS: {
-        label: '允許的 Telegram 使用者 ID',
-        help: '建議設定。來自 @userinfobot 的逗號分隔數字 ID。不設定則任何人都能私訊您的機器人。'
-      },
-      TELEGRAM_PROXY: { label: '代理 URL', help: '僅在 Telegram 被封鎖的網路中需要。' },
-      DISCORD_BOT_TOKEN: {
-        label: 'Bot Token',
-        help: '在 Discord 開發者入口網站建立應用程式，新增機器人，然後貼上其 Token。'
-      },
-      DISCORD_ALLOWED_USERS: { label: '允許的 Discord 使用者 ID', help: '建議設定。逗號分隔的 Discord 使用者 ID。' },
-      DISCORD_REPLY_TO_MODE: { label: '回覆方式', help: 'first、all 或 off。' },
-      DISCORD_ALLOW_ALL_USERS: {
-        label: '允許所有 Discord 使用者',
-        help: '僅供開發使用。為 true 時，任何人都可以私訊機器人，不需要允許清單。'
-      },
-      DISCORD_HOME_CHANNEL: {
-        label: '主頻道 ID',
-        help: '機器人主動傳送訊息的頻道（cron 輸出、提醒等）。'
-      },
-      DISCORD_HOME_CHANNEL_NAME: {
-        label: '主頻道名稱',
-        help: '記錄和狀態輸出中顯示的主頻道名稱。'
-      },
-      BLUEBUBBLES_ALLOW_ALL_USERS: { label: '允許所有 iMessage 使用者', help: '為 true 時略過 BlueBubbles 允許清單。' },
-      MATTERMOST_ALLOW_ALL_USERS: { label: '允許所有 Mattermost 使用者' },
-      MATTERMOST_HOME_CHANNEL: { label: '主頻道' },
-      QQ_ALLOW_ALL_USERS: { label: '允許所有 QQ 使用者' },
-      QQBOT_HOME_CHANNEL: { label: 'QQ 主頻道', help: 'cron 傳遞的預設頻道或群組。' },
-      QQBOT_HOME_CHANNEL_NAME: { label: 'QQ 主頻道名稱' },
-      SLACK_BOT_TOKEN: {
-        label: 'Slack bot Token',
-        help: '安裝 Slack 應用程式後，在 OAuth & Permissions 中找到 bot Token。',
-        placeholder: '貼上 Slack bot Token'
-      },
-      SLACK_APP_TOKEN: {
-        label: 'Slack app Token',
-        help: 'Socket Mode 需要 app 層級 Token。',
-        placeholder: '貼上 Slack app Token'
-      },
-      SLACK_ALLOWED_USERS: { label: '允許的 Slack 使用者 ID', help: '建議設定。逗號分隔的 Slack 使用者 ID。' },
-      MATTERMOST_URL: { label: '伺服器 URL', placeholder: 'https://mattermost.example.com' },
-      MATTERMOST_TOKEN: { label: 'Bot Token' },
-      MATTERMOST_ALLOWED_USERS: { label: '允許的使用者 ID', help: '建議設定。逗號分隔的 Mattermost 使用者 ID。' },
-      MATRIX_HOMESERVER: { label: 'Homeserver URL', placeholder: 'https://matrix.org' },
-      MATRIX_ACCESS_TOKEN: { label: '存取 Token' },
-      MATRIX_USER_ID: { label: 'Bot 使用者 ID', placeholder: '@hermes:example.org' },
-      MATRIX_ALLOWED_USERS: {
-        label: '允許的 Matrix 使用者 ID',
-        help: '建議設定。@user:server 格式的逗號分隔使用者 ID。'
-      },
-      SIGNAL_HTTP_URL: {
-        label: 'Signal 橋接 URL',
-        placeholder: 'http://127.0.0.1:8080',
-        help: '執行中的 signal-cli REST 橋接的 URL。'
-      },
-      SIGNAL_ACCOUNT: { label: '電話號碼', help: '在 signal-cli 橋接中註冊的號碼。' },
-      SIGNAL_ALLOWED_USERS: { label: '允許的 Signal 使用者', help: '建議設定。逗號分隔的 Signal 識別碼。' },
-      WHATSAPP_ENABLED: {
-        label: '啟用 WhatsApp 橋接',
-        help: '由下方切換開關自動設定。除非確知需要，否則請勿變更。'
-      },
-      WHATSAPP_MODE: { label: '橋接模式' },
-      WHATSAPP_ALLOWED_USERS: {
-        label: '允許的 WhatsApp 使用者',
-        help: '建議設定。逗號分隔的電話號碼或 WhatsApp ID。'
-      }
-    },
-    platformIntro: {}
-  },
 
   profiles: {
     close: '關閉設定檔',
@@ -1209,13 +1081,6 @@ export const zhHant = defineLocale({
       error: '錯誤',
       completed: '已完成'
     },
-    deliveryLabels: {
-      local: '此桌面',
-      telegram: 'Telegram',
-      discord: 'Discord',
-      slack: 'Slack',
-      email: '電子郵件'
-    },
     scheduleLabels: {
       daily: '每天',
       weekdays: '工作日',
@@ -1295,7 +1160,6 @@ export const zhHant = defineLocale({
     promptLabel: '提示詞',
     promptPlaceholder: '代理每次執行時應做什麼？',
     frequencyLabel: '頻率',
-    deliverLabel: '傳遞至',
     customScheduleLabel: '自訂排程',
     customPlaceholder: '0 9 * * * 或 weekdays at 9am',
     customHint: 'Cron 表達式，或類似「每小時」「工作日上午 9 點」的短語。',
@@ -1344,7 +1208,6 @@ export const zhHant = defineLocale({
     nav: {
       'new-session': '新工作階段',
       skills: '技能與工具',
-      messaging: '訊息平台',
       artifacts: '成品'
     },
     searchAria: '搜尋工作階段',
@@ -1832,7 +1695,6 @@ export const zhHant = defineLocale({
       connection: label => `連線：${label}`,
       recentActivity: '最近活動',
       viewAllLogs: '查看全部記錄 →',
-      messagingPlatforms: '訊息平台'
     },
     statusbar: {
       unknown: '未知',
@@ -1856,7 +1718,6 @@ export const zhHant = defineLocale({
       gatewayChecking: '檢查中',
       gatewayConnecting: '連線中',
       gatewayOffline: '離線',
-      gatewayRestarting: '重新啟動中…',
       gatewayTitle: 'Lliam-GOV 推論閘道狀態',
       agents: '代理',
       closeAgents: '關閉代理',
@@ -2214,13 +2075,6 @@ export const zhHant = defineLocale({
     noClipboardImage: '剪貼簿中沒有圖片',
     clipboardPasteFailed: '剪貼簿貼上失敗',
     dropFiles: '拖曳檔案',
-    handoff: {
-      pickPlatform: '選擇目標平台',
-      success: platform => `已移交到 ${platform}。隨時可在此處恢復。`,
-      systemNote: platform => `↻ 已移交到 ${platform} — 隨時可在此處恢復。`,
-      failed: error => `移交失敗：${error}`,
-      timedOut: '等待閘道逾時。`lliam-gov gateway` 是否正在執行？'
-    }
   },
 
   errors: {

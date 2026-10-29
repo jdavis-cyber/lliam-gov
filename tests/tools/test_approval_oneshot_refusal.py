@@ -221,7 +221,7 @@ class TestSurfaceFlagsUnderCurrentNames:
 class TestCronMarkerIsContextLocal:
     def _gateway_turn(self, monkeypatch):
         """A live gateway turn: process-wide exec-ask plus a bound platform."""
-        from gateway.session_context import set_session_vars
+        from agent.session_context import set_session_vars
 
         monkeypatch.setenv("LLIAM_EXEC_ASK", "1")
         return set_session_vars(platform="telegram", chat_id="42")
@@ -249,7 +249,7 @@ class TestCronMarkerIsContextLocal:
         """A cron job in another context must not turn a live gateway turn into cron."""
         import contextvars
 
-        from gateway.session_context import clear_session_vars
+        from agent.session_context import clear_session_vars
 
         monkeypatch.setattr("tools.approval._get_cron_approval_mode", lambda: cron_mode)
         contextvars.copy_context().run(approval_module.set_cron_session)

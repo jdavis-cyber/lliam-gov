@@ -631,7 +631,7 @@ def _pid_alive(pid: int) -> bool:
     if not pid or pid <= 0:
         return False
     try:
-        from gateway.status import _pid_exists
+        from lliam_cli.process_utils import _pid_exists
 
         return bool(_pid_exists(int(pid)))
     except Exception:

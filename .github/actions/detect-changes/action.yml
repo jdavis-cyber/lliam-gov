@@ -12,9 +12,6 @@ outputs:
   frontend:
     description: Run the TypeScript typecheck matrix + desktop build.
     value: ${{ steps.classify.outputs.frontend }}
-  docker_meta:
-    description: Docker setup and meta files have changed.
-    value: ${{ steps.classify.outputs.docker_meta }}
   site:
     description: Build the Docusaurus docs site.
     value: ${{ steps.classify.outputs.site }}

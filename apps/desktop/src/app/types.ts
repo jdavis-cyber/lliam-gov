@@ -67,26 +67,6 @@ export interface SessionTitleResponse {
   session_key?: string
 }
 
-export interface HandoffRequestResponse {
-  queued?: boolean
-  session_key?: string
-  platform?: string
-  // Human-readable home channel name for the destination platform.
-  home_name?: string
-}
-
-export interface HandoffStateResponse {
-  // '' | 'pending' | 'running' | 'completed' | 'failed'
-  state?: string
-  platform?: string
-  error?: string
-}
-
-export interface HandoffFailResponse {
-  failed?: boolean
-  state?: string
-}
-
 export interface ExecCommandDispatchResponse {
   type: 'exec' | 'plugin'
   output?: string
@@ -122,7 +102,7 @@ export type CommandDispatchResponse =
   | SendCommandDispatchResponse
   | PrefillCommandDispatchResponse
 
-export type SidebarNavId = 'artifacts' | 'command-center' | 'messaging' | 'new-session' | 'settings' | 'skills'
+export type SidebarNavId = 'artifacts' | 'command-center' | 'new-session' | 'settings' | 'skills'
 
 export interface SidebarNavItem {
   id: SidebarNavId

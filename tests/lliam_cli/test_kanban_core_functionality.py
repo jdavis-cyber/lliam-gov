@@ -2935,7 +2935,6 @@ def test_build_worker_context_includes_runtime_timeout_budget(kanban_home, monke
     assert "Terminal timeout: 3570s" in ctx
 
 
-
 # ---------------------------------------------------------------------------
 # Per-task force-loaded skills
 # ---------------------------------------------------------------------------
@@ -3436,55 +3435,6 @@ def test_config_default_dispatch_in_gateway_is_true():
     )
 
 
-def test_check_dispatcher_presence_silent_when_gateway_running(monkeypatch):
-    from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: 12345)
-    monkeypatch.setattr(
-        "lliam_cli.config.load_config",
-        lambda: {"kanban": {"dispatch_in_gateway": True}},
-    )
-    running, msg = kb_cli._check_dispatcher_presence()
-    assert running is True
-    # Either empty (if import failed defensively) or includes the pid.
-    assert msg == "" or "12345" in msg
-
-
-def test_check_dispatcher_presence_warns_when_no_gateway(monkeypatch):
-    from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: None)
-    monkeypatch.setattr(
-        "lliam_cli.config.load_config",
-        lambda: {"kanban": {"dispatch_in_gateway": True}},
-    )
-    running, msg = kb_cli._check_dispatcher_presence()
-    assert running is False
-    assert "lliam-gov gateway start" in msg
-
-
-def test_check_dispatcher_presence_warns_when_flag_off(monkeypatch):
-    """Gateway is up but dispatch_in_gateway=false -> warning."""
-    from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: 999)
-    monkeypatch.setattr(
-        "lliam_cli.config.load_config",
-        lambda: {"kanban": {"dispatch_in_gateway": False}},
-    )
-    running, msg = kb_cli._check_dispatcher_presence()
-    assert running is False
-    assert "dispatch_in_gateway" in msg
-
-
-def test_check_dispatcher_presence_silent_on_probe_error(monkeypatch):
-    """If the probe itself errors, we stay silent."""
-    from lliam_cli import kanban as kb_cli
-    def _raise():
-        raise RuntimeError("boom")
-    monkeypatch.setattr("gateway.status.get_running_pid", _raise)
-    running, msg = kb_cli._check_dispatcher_presence()
-    assert running is True
-    assert msg == ""
-
-
 def _make_create_ns(**overrides):
     """Build a Namespace suitable for kb_cli._cmd_create()."""
     ns = argparse.Namespace(
@@ -3499,10 +3449,9 @@ def _make_create_ns(**overrides):
     return ns
 
 
-def test_cli_create_warns_when_no_gateway(kanban_home, monkeypatch, capsys):
-    """ready+assigned task + no gateway -> warning on stderr."""
+def test_cli_create_warns_when_no_dispatcher(kanban_home, monkeypatch, capsys):
+    """ready+assigned task + no dispatcher -> warning on stderr."""
     from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: None)
     monkeypatch.setattr(
         "lliam_cli.config.load_config",
         lambda: {"kanban": {"dispatch_in_gateway": True}},
@@ -3511,27 +3460,12 @@ def test_cli_create_warns_when_no_gateway(kanban_home, monkeypatch, capsys):
     assert kb_cli._cmd_create(ns) == 0
     captured = capsys.readouterr()
     # Stderr has the warning prefix + guidance.
-    assert "lliam-gov gateway start" in captured.err
-
-
-def test_cli_create_silent_when_gateway_up(kanban_home, monkeypatch, capsys):
-    """gateway running + dispatch enabled -> no warning."""
-    from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: 4242)
-    monkeypatch.setattr(
-        "lliam_cli.config.load_config",
-        lambda: {"kanban": {"dispatch_in_gateway": True}},
-    )
-    ns = _make_create_ns(title="silent", assignee="worker")
-    assert kb_cli._cmd_create(ns) == 0
-    captured = capsys.readouterr()
-    assert "lliam-gov gateway start" not in captured.err
+    assert "lliam-gov kanban daemon" in captured.err
 
 
 def test_cli_create_no_warn_on_triage(kanban_home, monkeypatch, capsys):
     """Triage tasks can't be dispatched -> no warning."""
     from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: None)
     monkeypatch.setattr(
         "lliam_cli.config.load_config",
         lambda: {"kanban": {"dispatch_in_gateway": True}},
@@ -3539,13 +3473,12 @@ def test_cli_create_no_warn_on_triage(kanban_home, monkeypatch, capsys):
     ns = _make_create_ns(title="triage-task", assignee=None, triage=True)
     assert kb_cli._cmd_create(ns) == 0
     err = capsys.readouterr().err
-    assert "lliam-gov gateway start" not in err
+    assert "lliam-gov kanban daemon" not in err
 
 
 def test_cli_create_no_warn_unassigned(kanban_home, monkeypatch, capsys):
     """Unassigned tasks can't be dispatched -> no warning."""
     from lliam_cli import kanban as kb_cli
-    monkeypatch.setattr("gateway.status.get_running_pid", lambda: None)
     monkeypatch.setattr(
         "lliam_cli.config.load_config",
         lambda: {"kanban": {"dispatch_in_gateway": True}},
@@ -3553,7 +3486,7 @@ def test_cli_create_no_warn_unassigned(kanban_home, monkeypatch, capsys):
     ns = _make_create_ns(title="nobody", assignee=None)
     assert kb_cli._cmd_create(ns) == 0
     err = capsys.readouterr().err
-    assert "lliam-gov gateway start" not in err
+    assert "lliam-gov kanban daemon" not in err
 
 
 def test_cli_daemon_without_force_prints_deprecation_exits_2(kanban_home, capsys):
@@ -3607,253 +3540,6 @@ def test_cli_daemon_help_marks_deprecated():
 # ---------------------------------------------------------------------------
 # Gateway embedded dispatcher watcher
 # ---------------------------------------------------------------------------
-
-def test_gateway_dispatcher_watcher_respects_config_flag_off(monkeypatch):
-    """dispatch_in_gateway=false -> watcher exits fast, no loop."""
-    import asyncio
-    from gateway.run import GatewayRunner
-    import lliam_cli.config as _cfg_mod
-
-    runner = object.__new__(GatewayRunner)
-    runner._running = True
-
-    monkeypatch.setattr(
-        _cfg_mod, "load_config",
-        lambda: {"kanban": {"dispatch_in_gateway": False}},
-    )
-    asyncio.run(
-        asyncio.wait_for(
-            runner._kanban_dispatcher_watcher(),
-            timeout=3.0,
-        )
-    )
-
-
-def test_gateway_dispatcher_watcher_respects_env_override(monkeypatch):
-    """HERMES_KANBAN_DISPATCH_IN_GATEWAY=0 disables without touching config."""
-    import asyncio
-    from gateway.run import GatewayRunner
-    monkeypatch.setenv("LLIAM_KANBAN_DISPATCH_IN_GATEWAY", "0")
-
-    runner = object.__new__(GatewayRunner)
-    runner._running = True
-    asyncio.run(
-        asyncio.wait_for(
-            runner._kanban_dispatcher_watcher(),
-            timeout=3.0,
-        )
-    )
-
-
-def test_gateway_dispatcher_watcher_env_truthy_uses_config(monkeypatch):
-    """Truthy env value doesn't force-enable — config still decides.
-    (We only treat explicit falses as an override; unset or truthy
-    defers to config.)"""
-    import asyncio
-    from gateway.run import GatewayRunner
-    import lliam_cli.config as _cfg_mod
-
-    monkeypatch.setenv("LLIAM_KANBAN_DISPATCH_IN_GATEWAY", "yes")
-    monkeypatch.setattr(
-        _cfg_mod, "load_config",
-        lambda: {"kanban": {"dispatch_in_gateway": False}},
-    )
-
-    runner = object.__new__(GatewayRunner)
-    runner._running = True
-    # config says false, env is truthy — watcher should still exit
-    # (because config is authoritative when env isn't a falsey override).
-    asyncio.run(
-        asyncio.wait_for(
-            runner._kanban_dispatcher_watcher(),
-            timeout=3.0,
-        )
-    )
-
-
-@pytest.mark.parametrize("corrupt_exc", ["sqlite", "guard"])
-def test_gateway_dispatcher_disables_corrupt_board_without_traceback(
-    monkeypatch, tmp_path, caplog, corrupt_exc
-):
-    """Corrupt board DBs log one actionable error and stop retrying per tick."""
-    import asyncio
-    import logging
-    import sqlite3
-
-    from gateway.run import GatewayRunner
-    import lliam_cli.config as _cfg_mod
-    import lliam_cli.kanban_db as _kb
-
-    runner = object.__new__(GatewayRunner)
-    runner._running = True
-    corrupt_db = tmp_path / "kanban.db"
-    corrupt_db.write_text("not sqlite", encoding="utf-8")
-
-    monkeypatch.setattr(
-        _cfg_mod,
-        "load_config",
-        lambda: {
-            "kanban": {
-                "dispatch_in_gateway": True,
-                "dispatch_interval_seconds": 1,
-            }
-        },
-    )
-    monkeypatch.setattr(
-        _kb,
-        "list_boards",
-        lambda include_archived=False: [{"slug": _kb.DEFAULT_BOARD}],
-    )
-    monkeypatch.setattr(
-        _kb,
-        "read_board_metadata",
-        lambda slug: {"slug": slug},
-    )
-    monkeypatch.setattr(_kb, "kanban_db_path", lambda board=None: corrupt_db)
-
-    calls = {"connect": 0, "to_thread": 0}
-
-    def _connect(*args, **kwargs):
-        calls["connect"] += 1
-        if corrupt_exc == "guard":
-            raise _kb.KanbanDbCorruptError(
-                corrupt_db,
-                corrupt_db.with_suffix(".db.corrupt.test.bak"),
-                "sqlite refused to open file: database disk image is malformed",
-            )
-        raise sqlite3.DatabaseError("file is not a database")
-
-    async def _to_thread(fn, *args, **kwargs):
-        # PR salvage (#32857 commit 7): the dispatcher now reaps zombies at
-        # the top of each tick via ``asyncio.to_thread(_kb.reap_worker_zombies)``
-        # BEFORE the per-board tick work. Each tick now issues 3 ``to_thread``
-        # calls (reaper + ``_tick_once`` + ``_ready_nonempty``) instead of 2,
-        # so this counter must reach 6 to allow the same 2 dispatch ticks the
-        # pre-reaper test expected at 4. Connect counts in the assertion below
-        # are unchanged.
-        calls["to_thread"] += 1
-        result = fn(*args, **kwargs)
-        if calls["to_thread"] >= 6:
-            runner._running = False
-        return result
-
-    async def _sleep(_delay):
-        return None
-
-    monkeypatch.setattr(_kb, "connect", _connect)
-    monkeypatch.setattr("gateway.run.asyncio.to_thread", _to_thread)
-    monkeypatch.setattr("gateway.run.asyncio.sleep", _sleep)
-
-    with caplog.at_level(logging.ERROR, logger="gateway.run"):
-        asyncio.run(
-            asyncio.wait_for(
-                runner._kanban_dispatcher_watcher(),
-                timeout=3.0,
-            )
-        )
-
-    messages = [record.getMessage() for record in caplog.records]
-    assert sum("not a valid SQLite database" in msg for msg in messages) == 1
-    assert not any("tick failed on board" in msg for msg in messages)
-    assert not any(record.exc_info for record in caplog.records)
-    # First tick connect (dispatch) + two probes per `_has_ready_work` call
-    # (ready then review, both via _kb.connect). The second dispatch tick
-    # skips the dispatch connect because the corrupt board fingerprint is
-    # disabled, but the ready/review probes still each connect. PR f55d94a1e
-    # added the review-column probe alongside the existing ready-column
-    # probe, bumping this from 3 → 5.
-    assert calls["connect"] == 5
-
-
-def test_gateway_dispatcher_retries_corrupt_board_after_quarantine(
-    monkeypatch, tmp_path, caplog
-):
-    """A corrupt-looking board is retried after the quarantine TTL expires."""
-    import asyncio
-    import inspect
-    import logging
-    import sqlite3
-
-    from gateway.run import GatewayRunner
-    import lliam_cli.config as _cfg_mod
-    import lliam_cli.kanban_db as _kb
-
-    runner = object.__new__(GatewayRunner)
-    runner._running = True
-    corrupt_db = tmp_path / "kanban.db"
-    corrupt_db.write_text("not sqlite", encoding="utf-8")
-
-    monkeypatch.setattr(
-        _cfg_mod,
-        "load_config",
-        lambda: {
-            "kanban": {
-                "dispatch_in_gateway": True,
-                "dispatch_interval_seconds": 1,
-            }
-        },
-    )
-    monkeypatch.setattr(
-        _kb,
-        "list_boards",
-        lambda include_archived=False: [{"slug": _kb.DEFAULT_BOARD}],
-    )
-    monkeypatch.setattr(
-        _kb,
-        "read_board_metadata",
-        lambda slug: {"slug": slug},
-    )
-    monkeypatch.setattr(_kb, "kanban_db_path", lambda board=None: corrupt_db)
-
-    real_monotonic = time.monotonic
-    time_values = iter([1000.0, 1001.0, 1301.0, 1301.0])
-
-    def _monotonic_for_gateway_dispatcher():
-        caller = inspect.currentframe().f_back  # type: ignore[union-attr]
-        code = caller.f_code if caller is not None else None
-        filename = code.co_filename if code is not None else ""
-        # The kanban dispatcher/notifier watcher loops were extracted from
-        # gateway/run.py into gateway/kanban_watchers.py (god-file Phase 3),
-        # so accept either filename for the time-travel mock.
-        if filename.endswith("gateway/run.py") or filename.endswith("gateway/kanban_watchers.py"):
-            return next(time_values, 1301.0)
-        return real_monotonic()
-
-    monkeypatch.setattr("gateway.run.time.monotonic", _monotonic_for_gateway_dispatcher)
-    monkeypatch.setattr("gateway.kanban_watchers.time.monotonic", _monotonic_for_gateway_dispatcher)
-
-    calls = {"tick": 0}
-
-    def _connect(*args, **kwargs):
-        raise sqlite3.DatabaseError("file is not a database")
-
-    async def _to_thread(fn, *args, **kwargs):
-        result = fn(*args, **kwargs)
-        if getattr(fn, "__name__", "") == "_tick_once":
-            calls["tick"] += 1
-            if calls["tick"] >= 3:
-                runner._running = False
-        return result
-
-    async def _sleep(_delay):
-        return None
-
-    monkeypatch.setattr(_kb, "connect", _connect)
-    monkeypatch.setattr("gateway.run.asyncio.to_thread", _to_thread)
-    monkeypatch.setattr("gateway.run.asyncio.sleep", _sleep)
-
-    with caplog.at_level(logging.INFO, logger="gateway.run"):
-        asyncio.run(
-            asyncio.wait_for(
-                runner._kanban_dispatcher_watcher(),
-                timeout=3.0,
-            )
-        )
-
-    messages = [record.getMessage() for record in caplog.records]
-    assert sum("not a valid SQLite database" in msg for msg in messages) == 2
-    assert any("database fingerprint unchanged" in msg for msg in messages)
-    assert calls["tick"] == 3
 
 
 # ---------------------------------------------------------------------------

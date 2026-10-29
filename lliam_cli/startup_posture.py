@@ -1,7 +1,8 @@
 """Shared fail-closed startup posture gate for every Lliam-GOV entrypoint.
 
 The five fail-closed startup gates in :mod:`lliam_cli.security_audit_startup`
-used to be invoked only from ``gateway/run.py:start_gateway``. Launching via the
+used to be invoked only from the messaging gateway's ``start_gateway`` (the
+gateway was removed in JER-198). Launching via the
 terminal chat (``lliam-gov``), ``lliam-gov-agent`` (``run_agent.py``), the ACP
 adapter (``lliam-gov-acp``), the TUI backend (``tui_gateway.entry``) or the
 desktop app's backend (``lliam-gov dashboard``) ran none of them, so the
@@ -23,7 +24,7 @@ fault inside a gate is logged at debug and treated as non-fatal, exactly as the
 gateway did. On the low-side posture every gate is advisory or a no-op, so this
 never blocks a non-strict deployment.
 
-Entrypoints other than the gateway use :func:`enforce_startup_posture_or_exit`,
+Entrypoints use :func:`enforce_startup_posture_or_exit`,
 which turns a blocking gate error into a one-line stderr refusal and a non-zero
 exit instead of a traceback. stdout is never written (ACP and the TUI backend
 speak JSON-RPC on stdout).
@@ -172,8 +173,7 @@ def enforce_startup_posture_or_exit(entrypoint: str) -> None:
     """Run :func:`enforce_startup_posture`; on a blocking gate, refuse to start.
 
     Prints a single refusal line to stderr (never stdout) and raises
-    ``SystemExit(STARTUP_POSTURE_EXIT_CODE)``. Used by every entrypoint except
-    the gateway, which lets the gate error propagate as it always has.
+    ``SystemExit(STARTUP_POSTURE_EXIT_CODE)``. Used by every entrypoint.
     """
     try:
         enforce_startup_posture()

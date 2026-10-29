@@ -5,7 +5,7 @@ import random
 
 # ---------------------------------------------------------------------------
 # Tip corpus — one-liners covering slash commands, CLI flags, config,
-# keybindings, tools, gateway, skills, profiles, and workflow tricks.
+# keybindings, tools, skills, profiles, and workflow tricks.
 # ---------------------------------------------------------------------------
 
 TIPS = [
@@ -33,7 +33,7 @@ TIPS = [
     "/tools disable browser temporarily removes browser tools for the current session.",
     "/browser connect attaches browser tools to your running Chromium-family browser via CDP.",
     "/plugins lists installed plugins and their status.",
-    "/cron manages scheduled tasks — set up recurring prompts with delivery to any platform.",
+    "/cron manages scheduled tasks — set up recurring prompts; results are saved locally.",
     "/reload-mcp hot-reloads MCP server configuration without restarting.",
     "/usage shows token usage, cost breakdown, and session duration.",
     "/insights shows usage analytics for the last 30 days.",
@@ -72,7 +72,6 @@ TIPS = [
     "lliam-gov chat --max-turns 200 overrides the default 90-iteration limit per turn.",
     "lliam-gov chat --checkpoints enables filesystem snapshots before every destructive file change.",
     "lliam-gov --yolo bypasses all dangerous command approval prompts for the entire session.",
-    "lliam-gov chat --source telegram tags the session for filtering in lliam-gov sessions list.",
     "lliam-gov -p work chat runs under a specific profile without changing your default.",
 
     # --- CLI Subcommands ---
@@ -97,9 +96,7 @@ TIPS = [
     "lliam-gov profile create coder creates an isolated profile that becomes its own command.",
     "lliam-gov profile create work --clone copies your current config and keys to a new profile.",
     "lliam-gov update syncs new bundled skills to ALL profiles automatically.",
-    "lliam-gov gateway install sets up Lliam-GOV as a system service (systemd/launchd).",
     "lliam-gov memory setup lets you configure an external memory provider (Honcho, Mem0, etc.).",
-    "lliam-gov webhook subscribe creates event-driven webhook routes with HMAC validation.",
     "Save money: lliam-gov tools disables unused tools, lliam-gov skills config trims skills down.",
     "/reasoning low or /reasoning minimal cuts thinking depth below the default (medium) — faster, cheaper responses.",
     "lliam-gov models routes vision, compression, and aux tasks to cheaper models — cuts background token cost 85%+ without downgrading your chat model.",
@@ -120,7 +117,6 @@ TIPS = [
     "Set browser.record_sessions: true to auto-record browser sessions as WebM videos.",
     "Set worktree: true in config.yaml to always create a git worktree (same as lliam-gov -w).",
     "Set security.website_blocklist.enabled: true to block specific domains from web tools.",
-    "Set cron.wrap_response: false to deliver raw agent output without the cron header/footer.",
     "HERMES_TIMEZONE overrides the server timezone with any IANA timezone string.",
     "Environment variable substitution works in config.yaml: use ${VAR_NAME} syntax.",
     "Quick commands in config.yaml run shell commands instantly with zero token usage.",
@@ -139,8 +135,6 @@ TIPS = [
     "browser_vision takes a screenshot and analyzes it with AI — works for CAPTCHAs and visual content.",
     "browser_console can evaluate JavaScript expressions in the page context.",
     "image_generate creates images with FLUX 2 Pro and automatic 2x upscaling.",
-    "text_to_speech converts text to audio — plays as voice bubbles on Telegram.",
-    "send_message can reach any connected messaging platform from within a session.",
     "The todo tool helps the agent track complex multi-step tasks during a session.",
     "session_search performs full-text search across ALL past conversations.",
     "The agent automatically saves preferences, corrections, and environment facts to memory.",
@@ -153,7 +147,6 @@ TIPS = [
     "Each profile gets its own config, API keys, memory, sessions, skills, and cron jobs.",
     "Profile names become shell commands — 'lliam-gov profile create coder' creates the 'coder' command.",
     "lliam-gov profile export coder -o backup.tar.gz creates a portable profile archive.",
-    "If two profiles accidentally share a bot token, the second gateway is blocked with a clear error.",
 
     # --- Sessions ---
     "Sessions auto-generate descriptive titles after the first exchange — no manual naming needed.",
@@ -179,7 +172,6 @@ TIPS = [
 
     # --- Cron & Scheduling ---
     "Cron jobs can attach skills: lliam-gov cron add --skill blogwatcher \"Check for new posts\".",
-    "Cron delivery targets include telegram, discord, slack, email, sms, and 12+ more platforms.",
     "If a cron response starts with [SILENT], delivery is suppressed — useful for monitoring-only jobs.",
     "Cron supports relative delays (30m), intervals (every 2h), cron expressions, and ISO timestamps.",
     "Cron jobs run in completely fresh agent sessions — prompts must be self-contained.",
@@ -189,19 +181,12 @@ TIPS = [
     "Five TTS providers available: Edge TTS (free), ElevenLabs, OpenAI, NeuTTS (free local), MiniMax.",
     "/voice on enables voice mode in the CLI. Ctrl+B toggles push-to-talk recording.",
     "Streaming TTS plays sentences as they generate — you don't wait for the full response.",
-    "Voice messages on Telegram, Discord, WhatsApp, and Slack are auto-transcribed.",
 
     # --- Gateway & Messaging ---
-    "Lliam-GOV runs on 21 messaging platforms: Telegram, Discord, Slack, WhatsApp, Signal, Matrix, IRC, Microsoft Teams, email, and more.",
-    "lliam-gov gateway install sets it up as a system service that starts on boot.",
-    "DingTalk uses Stream Mode — no webhooks or public URL needed.",
     "BlueBubbles brings iMessage to Lliam-GOV via a local macOS server.",
     "Webhook routes support HMAC validation, rate limiting, and event filtering.",
     "The API server exposes an OpenAI-compatible endpoint compatible with Open WebUI and LibreChat.",
-    "Discord voice channel mode: the bot joins VC, transcribes speech, and talks back.",
     "group_sessions_per_user: true gives each person their own session in group chats.",
-    "/sethome marks a chat as the home channel for cron job deliveries.",
-    "The gateway supports inactivity-based timeouts — active agents can run indefinitely.",
 
     # --- Security ---
     "Dangerous command approval has 4 tiers: once, session, always (permanent allowlist), deny.",
@@ -276,7 +261,6 @@ TIPS = [
     "SOUL.md is auto-seeded with a default personality on first run. Edit it to customize.",
     "/compress <focus topic> allocates 60-70% of the summary budget to your topic and aggressively trims the rest.",
     "On second+ compression, the compressor updates the previous summary instead of starting from scratch.",
-    "Before a gateway session reset, Lliam-GOV auto-flushes important facts to memory in the background.",
     "network.force_ipv4: true in config.yaml fixes hangs on servers with broken IPv6 — monkey-patches socket.",
     "The terminal tool annotates common exit codes: grep returning 1 = 'No matches found (not an error)'.",
     "Failed foreground terminal commands auto-retry up to 3 times with exponential backoff (2s, 4s, 8s).",
@@ -289,12 +273,9 @@ TIPS = [
     "MCP servers can request LLM completions back via sampling — the agent becomes a tool for the server.",
     "MCP servers send notifications/tools/list_changed to trigger automatic tool re-registration without restart.",
     "delegate_task with acp_command: 'claude' spawns Claude Code as a child agent from any platform.",
-    "Delegation has a heartbeat thread — child activity propagates to the parent, preventing gateway timeouts.",
     "When a provider returns HTTP 402 (payment required), the auxiliary client auto-falls back to the next one.",
     "agent.tool_use_enforcement steers models that describe actions instead of calling tools — auto for GPT/Codex.",
-    "agent.restart_drain_timeout (default 60s) lets running agents finish before a gateway restart takes effect.",
     "agent.api_max_retries (default 3) controls how many times the agent retries a failed API call before surfacing the error — lower it for fast fallback.",
-    "The gateway caches AIAgent instances per session — destroying this cache breaks Anthropic prompt caching.",
     "Any website can expose skills via /.well-known/skills/index.json — the skills hub discovers them automatically.",
     "The skills audit log at ~/.hermes/skills/.hub/audit.log tracks every install and removal operation.",
     "Stale git worktrees are auto-cleaned: 24-72h old with no unpushed commits get pruned on startup.",
@@ -309,7 +290,6 @@ TIPS = [
     "Quick commands support two types: exec (run shell command directly) and alias (redirect to another command).",
     "Per-task delegation model: delegation.model and delegation.provider in config route subagents to cheaper models.",
     "delegation.reasoning_effort independently controls thinking depth for subagents.",
-    "display.platforms in config.yaml allows per-platform display overrides: {telegram: {tool_progress: all}}.",
     "human_delay.mode in config simulates human typing speed — configurable min_ms/max_ms range.",
     "Config version migrations run automatically on load — new config keys appear without manual intervention.",
     "GPT and Codex models get special system prompt guidance for tool discipline and mandatory tool use.",
@@ -345,11 +325,8 @@ TIPS = [
     '/copy [N] copies the last assistant response to your clipboard, or the Nth-from-last with a number.',
     '/redraw forces a full UI repaint, fixing terminal drift after tmux resize or mouse selection artifacts.',
     '/agents (alias /tasks) shows active agents and running background tasks across the current session.',
-    '/footer toggles the gateway footer on final replies showing model, context %, and cwd.',
     '/busy queue|steer|interrupt controls what pressing Enter does while Lliam-GOV is working.',
-    '/topic in Telegram DMs enables user-managed multi-session topic mode — /topic <id> restores past sessions inline.',
     '/approve session|always runs a pending dangerous command with your chosen trust scope; /deny rejects it.',
-    '/restart gracefully restarts the gateway after draining active runs, then pings the requester when back up.',
     '/kanban boards switch <slug> changes the active multi-project Kanban board from inside chat.',
     '/reload reloads ~/.hermes/.env into the running session — pick up new API keys without restarting.',
 
@@ -360,8 +337,6 @@ TIPS = [
 
     # --- Gateway Hooks ---
     'Gateway hooks live under ~/.hermes/hooks/<name>/ with HOOK.yaml + handler.py — handler must be named `handle`.',
-    'Hook events include gateway:startup, session:start, agent:step, and command:* wildcard subscriptions.',
-    'Drop a ~/.hermes/BOOT.md checklist and a gateway:startup hook runs it as a one-shot agent every boot.',
 
     # --- Curator ---
     'lliam-gov curator run --dry-run previews what the curator would archive or consolidate without mutating anything.',
@@ -387,7 +362,6 @@ TIPS = [
     'layoutVariant: cockpit in a dashboard theme adds a 260px left rail that plugins can populate via the sidebar slot.',
 
     # --- Env Vars & Config Gates ---
-    "display.tool_progress_command: true exposes /verbose on messaging platforms; it's CLI-only by default.",
     'HERMES_BACKGROUND_NOTIFICATIONS=result only pings when background tasks finish (vs all/error/off).',
     'HERMES_WRITE_SAFE_ROOT restricts write_file/patch to directory prefixes; multiple paths via os.pathsep (: or ;).',
     'HERMES_IGNORE_RULES skips auto-injection of AGENTS.md, SOUL.md, .cursorrules, memory, and preloaded skills.',
@@ -400,8 +374,6 @@ TIPS = [
     'tts.providers.<name>.type: command wires any CLI TTS engine with {input_path} and {output_path} placeholders.',
 
     # --- API Server & Proxy ---
-    'API_SERVER_ENABLED=true runs an OpenAI-compatible endpoint alongside the gateway for Open WebUI and LibreChat.',
-    'GATEWAY_PROXY_URL runs a split setup: platform I/O locally, agent work delegated to a remote API server.',
 
     # --- Platform-specific ---
     'MATRIX_DEVICE_ID pins a stable device ID for E2EE — without it, keys rotate every start and historic decrypt breaks.',
@@ -417,7 +389,6 @@ TIPS = [
     '/save writes the current conversation to disk without ending the session.',
     '/status shows session info at a glance: ID, title, model, token usage, and elapsed time.',
     '/image <path> attaches a local image file for your next prompt without pasting or drag-and-drop.',
-    '/platforms shows gateway and messaging-platform connection status right from inside chat.',
     '/commands paginates the full slash-command + installed-skill list — useful on platforms without tab completion.',
     '/toolsets lists every available toolset so you know what -t/--toolsets accepts.',
     '/voice tts toggles TTS-only mode — agent replies out loud but you still type your prompts.',
@@ -435,12 +406,10 @@ TIPS = [
     'lliam-gov sessions rename <ID> "new title" renames any past session; lliam-gov sessions delete <ID> removes one.',
     'lliam-gov import restores a session export or profile archive produced by sessions export or profile export.',
     'lliam-gov fallback manages the fallback_model chain interactively — no hand-editing config.yaml.',
-    'lliam-gov pairing rotates the DM pairing token — the first messager after rotation claims access to the bot.',
-    'lliam-gov setup walks first-time users through provider, keys, and platform wiring in one interactive flow.',
+    'lliam-gov setup walks first-time users through provider and key setup in one interactive flow.',
     'lliam-gov status --deep runs the full health sweep across every component; plain lliam-gov status is the quick view.',
 
     # --- Agent Behavior Env Vars ---
-    'HERMES_AGENT_TIMEOUT=0 disables the gateway inactivity kill for a running agent — use for long research runs.',
     'HERMES_ENABLE_PROJECT_PLUGINS=1 auto-loads repo-local plugins from ./.hermes/plugins/ — trust-gated by design.',
     "HERMES_DISABLE_FILE_STATE_GUARD=1 turns off the 'file changed since you read it' guard on patch and write_file.",
     'HERMES_ALLOW_PRIVATE_URLS=true lets web tools hit localhost and private networks — off by default in gateway mode.',
@@ -452,7 +421,6 @@ TIPS = [
 
     # --- Gateway Behavior Env Vars ---
     'HERMES_GATEWAY_BUSY_ACK_ENABLED=false silences the ⚡/⏳/⏩ ack messages when a user messages a busy agent.',
-    'HERMES_AGENT_NOTIFY_INTERVAL (default 180s) sets how often the gateway pings with progress on long turns.',
     'HERMES_RESTART_DRAIN_TIMEOUT (default 900s) caps how long /restart waits for in-flight runs before forcing.',
     'HERMES_CHECKPOINT_TIMEOUT (default 30s) caps filesystem checkpoint creation — raise it on huge monorepos.',
 

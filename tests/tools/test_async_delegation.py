@@ -5,7 +5,6 @@ onto the shared process_registry.completion_queue, the rich re-injection block
 formatting, capacity rejection, and crash handling.
 """
 
-import queue
 import threading
 import time
 
@@ -229,7 +228,7 @@ def test_delegate_task_background_routes_async_and_does_not_block(monkeypatch):
     """delegate_task(background=True) returns a handle without running the
     child synchronously, and the child completes on the background thread.
     A single task is dispatched as a one-item background batch unit."""
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
     import tools.delegate_tool as dt
 
     parent = MagicMock()
@@ -295,7 +294,7 @@ def test_delegate_task_background_batch_runs_as_one_unit(monkeypatch):
     parallel and join; the consolidated results come back as a single
     completion event when ALL of them finish."""
     import json
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
     import tools.delegate_tool as dt
 
     parent = MagicMock()
@@ -522,70 +521,5 @@ def _make_async_evt(**over):
     }
     evt.update(over)
     return evt
-
-
-def test_gateway_enriches_routing_from_session_key():
-    from gateway.run import GatewayRunner
-
-    runner = object.__new__(GatewayRunner)
-    evt = _make_async_evt()
-    runner._enrich_async_delegation_routing(evt)
-    assert evt["platform"] == "telegram"
-    assert evt["chat_id"] == "12345"
-    assert evt["thread_id"] == "678"
-
-
-def test_gateway_formatter_renders_async_block():
-    from gateway.run import _format_gateway_process_notification
-
-    txt = _format_gateway_process_notification(_make_async_evt())
-    assert txt is not None
-    assert "ASYNC DELEGATION COMPLETE" in txt
-    assert "Found the bug in test_foo" in txt
-    assert "Investigate flaky test" in txt
-
-
-def test_gateway_watch_drain_requeues_async_without_looping():
-    from gateway.run import _drain_gateway_watch_events
-
-    q = queue.Queue()
-    async_evt = _make_async_evt()
-    watch_evt = {
-        "type": "watch_match",
-        "session_id": "proc_1",
-        "command": "pytest",
-        "pattern": "READY",
-        "output": "READY",
-    }
-    q.put(async_evt)
-    q.put(watch_evt)
-
-    watch_events = _drain_gateway_watch_events(q)
-
-    assert watch_events == [watch_evt]
-    assert q.qsize() == 1
-    assert q.get_nowait() == async_evt
-
-
-def test_gateway_builds_routable_source_from_enriched_event():
-    from gateway.run import GatewayRunner
-
-    runner = object.__new__(GatewayRunner)
-    evt = _make_async_evt()
-    runner._enrich_async_delegation_routing(evt)
-    src = runner._build_process_event_source(evt)
-    assert src is not None
-    assert src.platform.value == "telegram"
-    assert src.chat_id == "12345"
-
-
-def test_gateway_cli_origin_event_left_unrouted():
-    """An empty session_key (CLI origin) is left without routing fields."""
-    from gateway.run import GatewayRunner
-
-    runner = object.__new__(GatewayRunner)
-    evt = _make_async_evt(session_key="")
-    runner._enrich_async_delegation_routing(evt)
-    assert "platform" not in evt
 
 

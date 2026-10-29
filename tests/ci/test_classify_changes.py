@@ -23,7 +23,6 @@ classify = _mod.classify
 DEFAULT = {
     "python": True,
     "frontend": True,
-    "docker_meta": True,
     "site": True,
     "scan": True,
     "deps": True,
@@ -31,11 +30,10 @@ DEFAULT = {
 }
 
 
-def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, mcp_catalog=False, docker_meta=False) -> dict[str, bool]:
+def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, mcp_catalog=False) -> dict[str, bool]:
     return {
         "python": python,
         "frontend": frontend,
-        "docker_meta": docker_meta,
         "site": site,
         "scan": scan,
         "deps": deps,
@@ -56,7 +54,6 @@ CASES = {
     # SKILL.md reads like docs, but the skill-doc tests read skills/, so a
     # skill edit must still run Python.
     "skill md → python + site": (["skills/github/SKILL.md"], _lanes(python=True, site=True)),
-    "dockerfile → docker meta": (["Dockerfile"], _lanes(docker_meta=True)),
     # Unknown top-level file keeps Python on rather than risk a silent skip.
     "unknown toplevel → python": (["Makefile"], _lanes(python=True)),
     "mixed docs+python → python": (["README.md", "agent/x.py"], _lanes(python=True, scan=True)),

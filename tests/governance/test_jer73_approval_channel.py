@@ -4,15 +4,16 @@
 be enforced, not just declared:
 
   * an approval resolved with no authenticated approver bound is REFUSED
-    (gateway queue, CLI/ACP prompt, smart-approval LLM, MCP bridge, JIT
-    grants / operator override) and the refusal is recorded;
+    (approval queue, CLI/ACP prompt, smart-approval LLM, JIT grants /
+    operator override) and the refusal is recorded;
   * the same approval with an authenticated approver bound — a dashboard_auth
     user, or the desktop app's local operator — is ACCEPTED and the
     ``approval.decision`` record names that principal and how it
     authenticated;
   * a bound subject without a recognised auth method is not an approver;
   * denials are never refused;
-  * the MCP ``permissions_respond`` tool is withheld under strict posture;
+  * no inbound MCP server exposes ``permissions_respond`` (the server was
+    removed with the messaging gateway, JER-198);
   * low-side configs (key unset) behave exactly as before;
   * the control-effectiveness CI gate fails when either invariant regresses.
 """
@@ -379,51 +380,24 @@ def test_low_side_grant_unchanged(low_cfg, risk_policy):
 
 
 # ---------------------------------------------------------------------------
-# MCP surface (mcp_serve)
+# MCP surface — the inbound MCP server (mcp_serve) was removed with the
+# messaging gateway (JER-198), so no MCP client can resolve an approval.
 # ---------------------------------------------------------------------------
 
-def test_permissions_respond_withheld_under_strict(monkeypatch):
-    import mcp_serve
+def test_inbound_mcp_server_is_absent():
+    import argparse
+    import importlib.util
 
-    assert "permissions_respond" not in mcp_serve.tool_surface(strict=True)
-    assert "permissions_respond" in mcp_serve.tool_surface(strict=False)
+    from lliam_cli.subcommands.mcp import build_mcp_parser
 
-    registered = []
+    assert not (_REPO / "mcp_serve.py").exists()
+    assert importlib.util.find_spec("mcp_serve") is None
 
-    class _FakeMCP:
-        def __init__(self, *a, **kw):
-            pass
-
-        def tool(self):
-            def deco(fn):
-                registered.append(fn.__name__)
-                return fn
-            return deco
-
-    monkeypatch.setattr(mcp_serve, "_MCP_SERVER_AVAILABLE", True)
-    monkeypatch.setattr(mcp_serve, "FastMCP", _FakeMCP)
-    mcp_serve.create_mcp_server(event_bridge=mcp_serve.EventBridge(), strict=True)
-    assert registered == mcp_serve.tool_surface(strict=True)
-    registered.clear()
-    mcp_serve.create_mcp_server(event_bridge=mcp_serve.EventBridge(), strict=False)
-    assert "permissions_respond" in registered
-
-
-def test_mcp_strict_default_follows_live_posture(gov_cfg):
-    import mcp_serve
-
-    assert "permissions_respond" not in mcp_serve.tool_surface()
-
-
-def test_mcp_bridge_refuses_unauthenticated_approval(gov_cfg):
-    import mcp_serve
-
-    bridge = mcp_serve.EventBridge()
-    bridge._pending_approvals["a1"] = {"id": "a1", "description": "sudo rm"}
-    out = bridge.respond_to_approval("a1", "allow-once")
-    assert "LG-GV-05" in out["error"]
-    assert "a1" in bridge._pending_approvals               # still pending
-    assert bridge.respond_to_approval("a1", "deny")["resolved"] is True
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command")
+    build_mcp_parser(sub, cmd_mcp=lambda args: None)
+    with pytest.raises(SystemExit):
+        parser.parse_args(["mcp", "serve"])
 
 
 # ---------------------------------------------------------------------------
@@ -465,9 +439,23 @@ def test_control_effectiveness_fails_without_authenticated_approver(tmp_path):
     assert any("unauthenticated HITL approval" in f for f in failures)
 
 
-def test_control_effectiveness_fails_when_permissions_respond_exposed(monkeypatch):
-    import mcp_serve
+def _reintroduce_mcp_serve(tmp_path, monkeypatch, surface):
+    (tmp_path / "mcp_serve.py").write_text(textwrap.dedent(f"""
+        def tool_surface(strict=None):
+            return {surface!r}
+    """))
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.delitem(sys.modules, "mcp_serve", raising=False)
 
-    monkeypatch.setattr(mcp_serve, "STRICT_EXCLUDED_TOOLS", frozenset())
+
+def test_control_effectiveness_fails_when_permissions_respond_exposed(tmp_path, monkeypatch):
+    """A reintroduced inbound MCP server must still withhold permissions_respond."""
+    _reintroduce_mcp_serve(tmp_path, monkeypatch, ["conversations_list", "permissions_respond"])
     failures = ce.check_effectiveness(repo_root=_REPO)
     assert any("permissions_respond" in f for f in failures)
+
+
+def test_control_effectiveness_passes_when_reintroduced_server_withholds(tmp_path, monkeypatch):
+    _reintroduce_mcp_serve(tmp_path, monkeypatch, ["conversations_list"])
+    r = ce.effectiveness_report(repo_root=_REPO)
+    assert r["mcp_permissions_respond_withheld"] is True

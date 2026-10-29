@@ -140,44 +140,6 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
     "memory.honcho": ("honcho-ai==2.0.1",),
     "memory.hindsight": ("hindsight-client==0.6.1",),
 
-    # ─── Messaging platforms (lazy-installable on demand) ──────────────────
-    "platform.telegram": ("python-telegram-bot[webhooks]==22.6",),
-    # brotlicffi gives aiohttp a working 2-arg Decompressor.process() for
-    # Discord CDN's Brotli-encoded attachments. Without it, aiohttp falls
-    # back to google's `Brotli` package (1-arg API), and any .txt/.md/.doc
-    # uploaded to the Discord gateway fails to decode at att.read() with
-    # "Can not decode content-encoding: br" — see #12511 / #15744.
-    "platform.discord": ("discord.py==2.7.1", "brotlicffi==1.2.1.0"),
-    "platform.slack": (
-        "slack-bolt==1.27.0",
-        "slack-sdk==3.40.1",
-        "aiohttp==3.14.4",  # CVE-2026-34513/34518/34519/34520/34525; PYSEC-2026-3545/3546/3547, GHSA-2g87-pp6c-29x5/494j-54xm-rwp3/5wr8-gcqf-gqf3
-    ),
-    "platform.matrix": (
-        "mautrix[encryption]==0.21.0",
-        "aiosqlite==0.22.1",
-        "asyncpg==0.31.0",
-        "aiohttp-socks==0.11.0",
-    ),
-    "platform.dingtalk": (
-        "dingtalk-stream==0.24.3",
-        "alibabacloud-dingtalk==2.2.42",
-        "qrcode==7.4.2",
-    ),
-    "platform.feishu": (
-        "lark-oapi==1.5.3",
-        "qrcode==7.4.2",
-    ),
-    # WeCom callback-mode adapter — parses untrusted XML POST bodies. Pulls
-    # defusedxml only; aiohttp/httpx are core dependencies of every messaging
-    # adapter and ship via `platform.discord` / `platform.slack` / etc.
-    "platform.wecom_callback": ("defusedxml==0.7.1",),
-    # Microsoft Teams adapter — microsoft-teams-apps pulls a heavy tree
-    # (microsoft-teams-api/cards/common, dependency-injector, msal). Lazy-
-    # installed on demand like every other messaging platform; also exposed
-    # as the `teams` extra in pyproject for packagers / explicit installs.
-    "platform.teams": ("microsoft-teams-apps==2.0.13.4", "aiohttp==3.14.4"),
-
     # ─── Terminal backends ─────────────────────────────────────────────────
     "terminal.modal": ("modal==1.3.4",),
     "terminal.daytona": ("daytona==0.155.0",),

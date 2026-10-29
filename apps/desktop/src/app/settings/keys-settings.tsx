@@ -13,17 +13,12 @@ export const KEYS_VIEWS = ['tools', 'settings'] as const
 
 export type KeysView = (typeof KEYS_VIEWS)[number]
 
-// Providers live on their own page; messaging-platform credentials live on the
-// dedicated Messaging page (and are hidden here via `channel_managed`). This
-// view covers tool API keys plus server/setting env vars (API server, webhook,
-// gateway), which fold into the Settings subnav.
+// Providers live on their own page. This view covers tool API keys plus
+// server/setting env vars, which fold into the Settings subnav.
 
-// Backend categories that surface under each subnav. Platform credentials use the
-// `messaging` category but are flagged ``channel_managed`` and configured on
-// the Messaging page; only gateway-wide ``messaging`` rows (e.g. GATEWAY_PROXY)
-// appear here alongside ``setting``.
+// Backend categories that surface under each subnav.
 const VIEW_CATEGORIES: Record<KeysView, readonly string[]> = {
-  settings: ['setting', 'messaging'],
+  settings: ['setting'],
   tools: ['tool']
 }
 
@@ -45,7 +40,7 @@ export function KeysSettings({ view }: KeysSettingsProps) {
       const cats = VIEW_CATEGORIES[v]
 
       const entries = Object.entries(vars)
-        .filter(([, info]) => !info.channel_managed && cats.includes(asText(info.category)))
+        .filter(([, info]) => cats.includes(asText(info.category)))
         .sort(([a], [b]) => a.localeCompare(b))
 
       return entries.length === 0 ? [] : [{ category: v, entries }]

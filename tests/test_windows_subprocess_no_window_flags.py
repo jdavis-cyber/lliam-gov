@@ -159,31 +159,6 @@ def test_copilot_gh_cli_probe_hides_gh_windows(monkeypatch):
     assert captured[0][1]["creationflags"] == _CREATE_NO_WINDOW
 
 
-def test_gateway_pid_scan_hides_wmic_and_powershell_windows(monkeypatch):
-    from lliam_cli import gateway
-    from lliam_cli import _subprocess_compat
-
-    captured = []
-
-    def fake_run(cmd, **kwargs):
-        captured.append((cmd, kwargs))
-        if cmd[0] == "wmic":
-            return _Completed(stdout="", returncode=1)
-        return _Completed(stdout="CommandLine=lliam-gov gateway\nProcessId=123\n")
-
-    monkeypatch.setattr(gateway, "is_windows", lambda: True)
-    monkeypatch.setattr(gateway.shutil, "which", lambda name: name)
-    monkeypatch.setattr(_subprocess_compat, "IS_WINDOWS", True)
-    monkeypatch.setattr(_subprocess_compat, "windows_hide_flags", lambda: _CREATE_NO_WINDOW)
-    monkeypatch.setattr(gateway.subprocess, "run", fake_run)
-
-    assert gateway._scan_gateway_pids(set()) == [123]
-    assert [kwargs["creationflags"] for _, kwargs in captured] == [
-        _CREATE_NO_WINDOW,
-        _CREATE_NO_WINDOW,
-    ]
-
-
 def test_stale_dashboard_windows_scan_hides_wmic(monkeypatch):
     from lliam_cli import main
     from lliam_cli import _subprocess_compat
@@ -201,36 +176,6 @@ def test_stale_dashboard_windows_scan_hides_wmic(monkeypatch):
 
     assert main._find_stale_dashboard_pids() == [123]
     assert captured[0][1]["creationflags"] == _CREATE_NO_WINDOW
-
-
-def test_gateway_force_kill_hides_taskkill_window(monkeypatch):
-    from gateway import status
-    from lliam_cli import _subprocess_compat
-
-    captured = []
-
-    def fake_run(cmd, **kwargs):
-        captured.append((cmd, kwargs))
-        return _Completed(stdout="")
-
-    monkeypatch.setattr(status, "_IS_WINDOWS", True)
-    monkeypatch.setattr(_subprocess_compat, "IS_WINDOWS", True)
-    monkeypatch.setattr(_subprocess_compat, "windows_hide_flags", lambda: _CREATE_NO_WINDOW)
-    monkeypatch.setattr(status.subprocess, "run", fake_run)
-
-    status.terminate_pid(123, force=True)
-
-    assert captured == [
-        (
-            ["taskkill", "/PID", "123", "/T", "/F"],
-            {
-                "capture_output": True,
-                "text": True,
-                "timeout": 10,
-                "creationflags": _CREATE_NO_WINDOW,
-            },
-        )
-    ]
 
 
 def test_shell_hooks_hide_hook_command_windows(monkeypatch):

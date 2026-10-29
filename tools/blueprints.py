@@ -117,7 +117,8 @@ def parse_blueprint(skill_md_text: str) -> Optional[BlueprintSpec]:
     if not schedule:
         raise BlueprintError("blueprint.schedule is required and must be non-empty")
 
-    deliver = str(blueprint.get("deliver", "origin")).strip() or "origin"
+    # Cron output is delivered locally only (JER-198).
+    deliver = "local"
     prompt = blueprint.get("prompt")
     if prompt is not None:
         prompt = str(prompt)

@@ -322,12 +322,6 @@ def test_kanban_is_resolvable():
     assert cmd.name == "kanban"
 
 
-def test_kanban_bypasses_active_session_guard():
-    from lliam_cli.commands import should_bypass_active_session
-
-    assert should_bypass_active_session("kanban")
-
-
 def test_kanban_in_autocomplete_table():
     from lliam_cli.commands import COMMANDS, SUBCOMMANDS
 

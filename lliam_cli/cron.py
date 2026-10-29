@@ -57,27 +57,34 @@ def _cron_api(**kwargs):
     return json.loads(cronjob_tool(**kwargs))
 
 
-def _warn_if_gateway_not_running() -> None:
-    """Warn that scheduled jobs won't fire unless the gateway is running.
+def _ticker_age_threshold() -> int:
+    """Seconds without a ticker heartbeat before the scheduler counts as down."""
+    from cron.jobs import TICKER_INTERVAL_SECONDS
 
-    The cron ticker only runs inside the gateway (``_start_cron_ticker`` in
-    gateway/run.py); there is no standalone cron daemon. Without a running
-    gateway, ``next_run_at`` passes but jobs never fire and ``last_run_at``
-    stays null — the most common cron support report (#51038). Surfacing this
-    at create/list time, when the user is right there, prevents it.
+    # Allow ~3 missed ticker iterations (+ a little slack).
+    return TICKER_INTERVAL_SECONDS * 3 + 20
+
+
+def _warn_if_ticker_not_running() -> None:
+    """Warn that scheduled jobs won't fire unless the desktop app is running.
+
+    The cron ticker runs inside the desktop backend (``lliam-gov dashboard``
+    with LLIAM_DESKTOP=1); there is no standalone cron daemon. Without it,
+    ``next_run_at`` passes but jobs never fire (#51038). Surfacing this at
+    create/list time, when the user is right there, prevents it.
     """
     try:
-        from lliam_cli.gateway import find_gateway_pids
+        from cron.jobs import get_ticker_heartbeat_age
 
-        if find_gateway_pids():
+        age = get_ticker_heartbeat_age()
+        if age is not None and age <= _ticker_age_threshold():
             return
     except Exception:
-        # If we can't determine gateway state, stay quiet rather than nag.
+        # If we can't determine ticker state, stay quiet rather than nag.
         return
 
-    print(color("  ⚠  Gateway is not running — jobs won't fire automatically.", Colors.YELLOW))
-    print(color("     Start it with: lliam-gov gateway install", Colors.DIM))
-    print(color("                    sudo lliam-gov gateway install --system  # Linux servers", Colors.DIM))
+    print(color("  ⚠  The cron ticker is not running — jobs won't fire automatically.", Colors.YELLOW))
+    print(color("     Open the Lliam-GOV desktop app (it runs the scheduler).", Colors.DIM))
     print(color("     Check status:  lliam-gov cron status", Colors.DIM))
 
 
@@ -161,7 +168,7 @@ def cron_list(show_all: bool = False):
 
         print()
 
-    _warn_if_gateway_not_running()
+    _warn_if_ticker_not_running()
 
 
 def cron_tick():
@@ -172,62 +179,40 @@ def cron_tick():
 
 def cron_status():
     """Show cron execution status."""
-    from cron.jobs import list_jobs
-    from lliam_cli.gateway import find_gateway_pids
+    from cron.jobs import (
+        get_ticker_heartbeat_age,
+        get_ticker_success_age,
+        list_jobs,
+    )
 
     print()
 
-    pids = find_gateway_pids()
-    if pids:
-        # The gateway PROCESS is alive — but the cron ticker THREAD inside it
-        # can die silently, or stay alive while every tick fails. Check both
-        # the liveness heartbeat and the last-successful-tick marker so we
-        # don't report "will fire" when the ticker is dead or failing
-        # (#32612, #32895).
-        from cron.jobs import (
-            get_ticker_heartbeat_age,
-            get_ticker_success_age,
-            TICKER_INTERVAL_SECONDS,
-        )
+    # The ticker runs inside the desktop backend. Check both the liveness
+    # heartbeat and the last-successful-tick marker so we don't report "will
+    # fire" when the ticker is dead or failing (#32612, #32895).
+    stale_after = _ticker_age_threshold()
+    hb_age = get_ticker_heartbeat_age()
+    ok_age = get_ticker_success_age()
 
-        # Allow ~3 missed ticker iterations (+ a little slack) before declaring
-        # trouble. Derived from the shared interval constant so this threshold
-        # tracks the ticker cadence instead of assuming a hardcoded 60s.
-        STALE_AFTER = TICKER_INTERVAL_SECONDS * 3 + 20  # = 200s at the 60s default
-        hb_age = get_ticker_heartbeat_age()
-        ok_age = get_ticker_success_age()
-
-        if hb_age is not None and hb_age > STALE_AFTER:
-            # No heartbeat at all → the ticker thread is gone.
-            print(color(
-                "⚠ Gateway is running but the cron ticker looks STALLED — "
-                f"no heartbeat for {int(hb_age)}s (expected every ~60s).",
-                Colors.YELLOW,
-            ))
-            print(f"  PID: {', '.join(map(str, pids))}")
-            print("  Cron jobs may NOT be firing. Restart: lliam-gov gateway restart")
-        elif hb_age is not None and ok_age is not None and ok_age > STALE_AFTER:
-            # Loop is alive (fresh heartbeat) but no tick has SUCCEEDED in a
-            # long time → ticks are failing every iteration.
-            print(color(
-                "⚠ Gateway and cron ticker are running, but no tick has "
-                f"succeeded in {int(ok_age)}s — ticks may be failing.",
-                Colors.YELLOW,
-            ))
-            print(f"  PID: {', '.join(map(str, pids))}")
-            print("  Check the gateway log for 'Cron tick error'.")
-        else:
-            print(color("✓ Gateway is running — cron jobs will fire automatically", Colors.GREEN))
-            print(f"  PID: {', '.join(map(str, pids))}")
-            if hb_age is not None:
-                print(f"  Ticker heartbeat: {int(hb_age)}s ago")
-    else:
-        print(color("✗ Gateway is not running — cron jobs will NOT fire", Colors.RED))
+    if hb_age is None or hb_age > stale_after:
+        print(color("✗ The cron ticker is not running — cron jobs will NOT fire", Colors.RED))
+        if hb_age is not None:
+            print(f"  Last ticker heartbeat: {int(hb_age)}s ago")
         print()
-        print("  To enable automatic execution:")
-        print("    lliam-gov gateway install    # Install as a user service")
-        print("    sudo lliam-gov gateway install --system  # Linux servers: boot-time system service")
-        print("    lliam-gov gateway            # Or run in foreground")
+        print("  The scheduler runs inside the Lliam-GOV desktop app.")
+        print("  Open the app, or run due jobs once with: lliam-gov cron tick")
+    elif ok_age is not None and ok_age > stale_after:
+        # Loop is alive (fresh heartbeat) but no tick has SUCCEEDED in a
+        # long time → ticks are failing every iteration.
+        print(color(
+            "⚠ The cron ticker is running, but no tick has "
+            f"succeeded in {int(ok_age)}s — ticks may be failing.",
+            Colors.YELLOW,
+        ))
+        print("  Check the agent log for 'Cron tick error'.")
+    else:
+        print(color("✓ The cron ticker is running — cron jobs will fire automatically", Colors.GREEN))
+        print(f"  Ticker heartbeat: {int(hb_age)}s ago")
 
     print()
 
@@ -258,10 +243,9 @@ def cron_create(args):
             pass
     if _contains_gateway_lifecycle_command(combined):
         print(color(
-            "Blocked: cron job contains a gateway lifecycle command "
+            "Blocked: cron job contains a Lliam-GOV process lifecycle command "
             "(restart/stop/kill).\n"
-            "This is blocked to prevent restart loops (#30719).\n"
-            "Use `lliam-gov gateway restart` from a shell outside the gateway.",
+            "This is blocked to prevent restart loops (#30719).",
             Colors.RED,
         ))
         return 1
@@ -271,7 +255,6 @@ def cron_create(args):
         schedule=args.schedule,
         prompt=args.prompt,
         name=getattr(args, "name", None),
-        deliver=getattr(args, "deliver", None),
         repeat=getattr(args, "repeat", None),
         skill=getattr(args, "skill", None),
         skills=_normalize_skills(getattr(args, "skill", None), getattr(args, "skills", None)),
@@ -295,7 +278,7 @@ def cron_create(args):
     if job_data.get("workdir"):
         print(f"  Workdir: {job_data['workdir']}")
     print(f"  Next run: {result['next_run_at']}")
-    _warn_if_gateway_not_running()
+    _warn_if_ticker_not_running()
     return 0
 
 
@@ -335,7 +318,6 @@ def cron_edit(args):
         schedule=getattr(args, "schedule", None),
         prompt=getattr(args, "prompt", None),
         name=getattr(args, "name", None),
-        deliver=getattr(args, "deliver", None),
         repeat=getattr(args, "repeat", None),
         skills=final_skills,
         script=getattr(args, "script", None),

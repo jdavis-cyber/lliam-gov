@@ -15,7 +15,6 @@ import asyncio
 import base64
 import binascii
 from dataclasses import dataclass
-from datetime import datetime, timezone
 import hmac
 import importlib.util
 import json
@@ -66,21 +65,12 @@ from lliam_cli.config import (
     format_docker_update_message,
     recommended_update_command_for_method,
     redact_key,
-    write_platform_config_field,
     _deep_merge,
 )
 from lliam_cli.memory_providers import (
     MemoryProvider,
     ProviderField,
     get_memory_provider,
-)
-from gateway.status import (
-    derive_gateway_busy,
-    derive_gateway_drainable,
-    get_running_pid,
-    get_runtime_status_running_pid,
-    parse_active_agents,
-    read_runtime_status,
 )
 from utils import env_var_enabled
 
@@ -133,38 +123,19 @@ _log = logging.getLogger(__name__)
 def _start_desktop_cron_ticker(stop_event: "threading.Event", interval: int = 60) -> None:
     """Tick the cron scheduler from inside the desktop dashboard backend.
 
-    The scheduler tick loop normally lives in ``lliam-gov gateway run`` — but the
-    desktop app spawns a ``lliam-gov dashboard`` backend, not a gateway, so a cron
-    a user creates in the app would never fire. We run the resolved cron
-    scheduler provider here (no live adapters; delivery falls back to the
-    per-platform send path).
+    The desktop backend is the only long-running Lliam-GOV process, so it
+    hosts the cron tick loop. Job output is delivered locally (saved under
+    the cron output directory and surfaced in the desktop Cron screen).
 
     Cross-process safe: the built-in provider's ``cron.scheduler.tick`` takes
-    the ``cron/.tick.lock`` file lock, so this never double-fires alongside a
-    real gateway on the same HERMES_HOME — whichever process grabs the lock
-    first wins the tick.
+    the ``cron/.tick.lock`` file lock, so two backends on the same home never
+    double-fire — whichever process grabs the lock first wins the tick.
     """
     from cron.scheduler_provider import resolve_cron_scheduler
 
     provider = resolve_cron_scheduler()
     _log.info("Desktop cron scheduler started (provider=%s, interval=%ds)", provider.name, interval)
     provider.start(stop_event, interval=interval)
-
-
-def _warm_gateway_module() -> None:
-    try:
-        import lliam_cli.gateway  # noqa: F401
-    except Exception:
-        pass
-
-
-def _resolve_restart_drain_timeout() -> float:
-    try:
-        from lliam_cli.gateway import _get_restart_drain_timeout
-        return _get_restart_drain_timeout()
-    except ImportError:
-        from gateway.restart import DEFAULT_GATEWAY_RESTART_DRAIN_TIMEOUT
-        return DEFAULT_GATEWAY_RESTART_DRAIN_TIMEOUT
 
 
 @asynccontextmanager
@@ -178,17 +149,7 @@ async def _lifespan(app: "FastAPI"):
     # event loop during lifespan startup — see _get_event_state's docstring.
     app.state.chat_argv_lock = asyncio.Lock()
 
-    # Fire lliam_cli.gateway import into a background thread so the event
-    # loop is not blocked and HERMES_DASHBOARD_READY fires without delay.
-    # On a cold Windows install the module chain triggers .pyc compilation
-    # and Defender real-time scans that can stall the event loop for 15-30s.
-    # Running in an executor means the cost is paid in a worker thread while
-    # the server socket is already open and accepting probes.
-    asyncio.get_event_loop().run_in_executor(None, _warm_gateway_module)
-
-    # Desktop-spawned backends (LLIAM_DESKTOP=1) fire cron jobs themselves,
-    # since the app has no gateway running the scheduler. Server `lliam-gov
-    # dashboard` is unaffected — it relies on its own gateway.
+    # Desktop-spawned backends (LLIAM_DESKTOP=1) fire cron jobs themselves.
     from lliam_cli.env_compat import getenv_compat
 
     cron_stop: "threading.Event | None" = None
@@ -661,10 +622,6 @@ _CATEGORY_MERGE: Dict[str, str] = {
     # (`onboarding.seen` is an internal latch dict, not a user setting), so fold
     # it into the agent tab rather than spawning a one-field orphan category.
     "onboarding": "agent",
-    # Only `telegram.reactions` currently lives under telegram — fold it in
-    # with the other messaging-platform config (discord) so it isn't an
-    # orphan tab of one field.
-    "telegram": "discord",
     # `computer_use.cua_telemetry` is the only schema-surfaced computer_use
     # field — fold it into the agent tab rather than spawning a one-field
     # orphan category.
@@ -675,7 +632,7 @@ _CATEGORY_MERGE: Dict[str, str] = {
 _CATEGORY_ORDER = [
     "general", "agent", "terminal", "display", "delegation",
     "memory", "compression", "security", "browser", "voice",
-    "tts", "stt", "logging", "discord", "auxiliary",
+    "tts", "stt", "logging", "auxiliary",
 ]
 
 
@@ -777,24 +734,6 @@ class EnvVarReveal(BaseModel):
 
 class MemoryProviderConfigUpdate(BaseModel):
     values: Dict[str, str] = {}
-
-
-class MessagingPlatformUpdate(BaseModel):
-    enabled: Optional[bool] = None
-    env: Dict[str, str] = {}
-    clear_env: List[str] = []
-    # Explicit body profile beats the query param injected by the global
-    # dashboard profile switcher (same precedence as other scoped writes).
-    profile: Optional[str] = None
-
-
-class TelegramOnboardingStart(BaseModel):
-    bot_name: Optional[str] = None
-
-
-class TelegramOnboardingApply(BaseModel):
-    allowed_user_ids: List[str]
-    profile: Optional[str] = None
 
 
 class AudioTranscriptionRequest(BaseModel):
@@ -1018,66 +957,6 @@ def _apply_main_model_assignment(
         clear_model_endpoint_credentials(model_cfg, clear_api_key=False)
     model_cfg.pop("context_length", None)
     return model_cfg
-
-
-_GATEWAY_HEALTH_URL = os.getenv("GATEWAY_HEALTH_URL")
-try:
-    _GATEWAY_HEALTH_TIMEOUT = float(os.getenv("GATEWAY_HEALTH_TIMEOUT", "3"))
-except (ValueError, TypeError):
-    _log.warning(
-        "Invalid GATEWAY_HEALTH_TIMEOUT value %r — using default 3.0s",
-        os.getenv("GATEWAY_HEALTH_TIMEOUT"),
-    )
-    _GATEWAY_HEALTH_TIMEOUT = 3.0
-
-# DEPRECATED (scheduled for removal): GATEWAY_HEALTH_URL / GATEWAY_HEALTH_TIMEOUT.
-# Cross-container / cross-host gateway liveness detection will be folded into a
-# first-class dashboard config key so it's no longer Docker-adjacent lore buried
-# in env vars.  The env vars still work for now so existing Compose deployments
-# don't break.  Do not add new callers — wire new uses through the planned
-# config surface.
-
-
-def _probe_gateway_health() -> tuple[bool, dict | None]:
-    """Probe the gateway via its HTTP health endpoint (cross-container).
-
-    .. deprecated::
-        Driven by the deprecated ``GATEWAY_HEALTH_URL`` /
-        ``GATEWAY_HEALTH_TIMEOUT`` env vars.  Scheduled for removal alongside
-        a move to a first-class dashboard config key.  See
-        :data:`_GATEWAY_HEALTH_URL` for context.
-
-    Uses ``/health/detailed`` first (returns full state), falling back to
-    the simpler ``/health`` endpoint.  Returns ``(is_alive, body_dict)``.
-
-    Accepts any of these as ``GATEWAY_HEALTH_URL``:
-    - ``http://gateway:8642``                (base URL — recommended)
-    - ``http://gateway:8642/health``         (explicit health path)
-    - ``http://gateway:8642/health/detailed`` (explicit detailed path)
-
-    This is a **blocking** call — run via ``run_in_executor`` from async code.
-    """
-    if not _GATEWAY_HEALTH_URL:
-        return False, None
-
-    # Normalise to base URL so we always probe the right paths regardless of
-    # whether the user included /health or /health/detailed in the env var.
-    base = _GATEWAY_HEALTH_URL.rstrip("/")
-    if base.endswith("/health/detailed"):
-        base = base[: -len("/health/detailed")]
-    elif base.endswith("/health"):
-        base = base[: -len("/health")]
-
-    for path in (f"{base}/health/detailed", f"{base}/health"):
-        try:
-            req = urllib.request.Request(path, method="GET")
-            with urllib.request.urlopen(req, timeout=_GATEWAY_HEALTH_TIMEOUT) as resp:
-                if resp.status == 200:
-                    body = json.loads(resp.read())
-                    return True, body
-        except Exception:
-            continue
-    return False, None
 
 
 # Image MIME types this endpoint will serve. Extension-allowlisted so an
@@ -1920,96 +1799,19 @@ async def get_status(profile: Optional[str] = None):
     requested_profile = (profile or "").strip()
     # Plain /api/status stays the machine-level public liveness probe. The
     # dashboard adds ?profile= when its management switcher targets another
-    # profile, so its gateway badge reflects the selected profile.
+    # profile.
     #
-    # Use the config-only (contextvar) scope, NOT _profile_scope: this handler
-    # awaits the remote-health probe, and _profile_scope swaps process-global
-    # skills-module attributes that a concurrent request would cross-restore
-    # across that await. Status only resolves get_lliam_home() at call time
-    # (config/env/gateway state), which the task-local contextvar covers.
+    # Use the config-only (contextvar) scope, NOT _profile_scope:
+    # _profile_scope swaps process-global skills-module attributes that a
+    # concurrent request would cross-restore. Status only resolves
+    # get_lliam_home() at call time (config/env), which the task-local
+    # contextvar covers.
     if requested_profile and requested_profile.lower() != "current":
         status_scope = _config_profile_scope(requested_profile)
         status_scope.__enter__()
 
     try:
         current_ver, latest_ver = check_config_version()
-        # --- Gateway liveness detection ---
-        # Try local PID check first (same-host).  If that fails and a remote
-        # GATEWAY_HEALTH_URL is configured, probe the gateway over HTTP so the
-        # dashboard works when the gateway runs in a separate container.
-        gateway_pid = get_running_pid()
-        gateway_running = gateway_pid is not None
-        remote_health_body: dict | None = None
-
-        if not gateway_running and _GATEWAY_HEALTH_URL:
-            loop = asyncio.get_running_loop()
-            alive, remote_health_body = await loop.run_in_executor(
-                None, _probe_gateway_health
-            )
-            if alive:
-                gateway_running = True
-                # PID from the remote container (display only — not locally valid)
-                if remote_health_body:
-                    gateway_pid = remote_health_body.get("pid")
-
-        gateway_state = None
-        gateway_platforms: dict = {}
-        gateway_exit_reason = None
-        gateway_updated_at = None
-        configured_gateway_platforms: set[str] | None = None
-        try:
-            from gateway.config import load_gateway_config
-
-            gateway_config = load_gateway_config()
-            configured_gateway_platforms = {
-                platform.value for platform in gateway_config.get_connected_platforms()
-            }
-        except Exception:
-            configured_gateway_platforms = None
-
-        # Prefer the detailed health endpoint response (has full state) when the
-        # local runtime status file is absent or stale (cross-container).
-        local_runtime = read_runtime_status()
-        runtime = local_runtime
-        if runtime is None and remote_health_body and remote_health_body.get("gateway_state"):
-            runtime = remote_health_body
-        # The runtime-status PID fallback validates liveness with a local
-        # os.kill() probe, so it must only run against the LOCAL status file —
-        # never the remote health body, whose PID belongs to another host and
-        # is display-only. (Running os.kill on a remote PID is both wrong and
-        # trips the test live-system guard.)
-        if not gateway_running and local_runtime is not None:
-            runtime_pid = get_runtime_status_running_pid(local_runtime)
-            if runtime_pid is not None:
-                gateway_running = True
-                gateway_pid = runtime_pid
-
-        if runtime:
-            gateway_state = runtime.get("gateway_state")
-            gateway_platforms = runtime.get("platforms") or {}
-            if configured_gateway_platforms is not None:
-                gateway_platforms = {
-                    key: value
-                    for key, value in gateway_platforms.items()
-                    if key in configured_gateway_platforms
-                }
-            gateway_exit_reason = runtime.get("exit_reason")
-            gateway_updated_at = runtime.get("updated_at")
-            if not gateway_running:
-                gateway_state = gateway_state if gateway_state in {"stopped", "startup_failed"} else "stopped"
-                gateway_platforms = {}
-            elif gateway_running and remote_health_body is not None:
-                # The health probe confirmed the gateway is alive, but the local
-                # runtime status file may be stale (cross-container).  Override
-                # stopped/None state so the dashboard shows the correct badge.
-                if gateway_state in {None, "stopped"}:
-                    gateway_state = "running"
-
-        # If there was no runtime info at all but the health probe confirmed alive,
-        # ensure we still report the gateway as running (no shared volume scenario).
-        if gateway_running and gateway_state is None and remote_health_body is not None:
-            gateway_state = "running"
-
         active_sessions = 0
         try:
             from lliam_state import SessionDB
@@ -2026,33 +1828,6 @@ async def get_status(profile: Optional[str] = None):
                 db.close()
         except Exception:
             pass
-
-        # Busy/drainable readout (NAS lifecycle-safety gate).  active_agents is
-        # the in-flight gateway-turn count the gateway now persists at every
-        # turn boundary; gateway_busy/gateway_drainable are derived from it +
-        # liveness via the single shared contract in gateway.status.  Liveness
-        # keys off gateway_running (a live PID/health probe), NEVER
-        # gateway_updated_at — a healthy idle gateway never advances that.
-        active_agents = parse_active_agents((runtime or {}).get("active_agents", 0))
-        gateway_busy = derive_gateway_busy(
-            gateway_running=gateway_running,
-            gateway_state=gateway_state,
-            active_agents=active_agents,
-        )
-        gateway_drainable = derive_gateway_drainable(
-            gateway_running=gateway_running,
-            gateway_state=gateway_state,
-        )
-        # Resolved drain timeout (seconds) so NAS can size its poll deadline
-        # without out-of-band knowledge.  Offload to a thread: on a cold
-        # Windows install the first import of lliam_cli.gateway blocks the
-        # asyncio event loop for 15-30s (.pyc compilation + Defender scans),
-        # exceeding the desktop handshake's 15s socket timeout.  After the
-        # first call the module is in sys.modules and run_in_executor returns
-        # in microseconds.
-        restart_drain_timeout = await asyncio.get_running_loop().run_in_executor(
-            None, _resolve_restart_drain_timeout
-        )
 
         # Dashboard auth gate (Phase 7): surface whether the gate is engaged
         # and which providers are registered so ``lliam-gov status`` and the
@@ -2077,26 +1852,16 @@ async def get_status(profile: Optional[str] = None):
             "config_version": current_ver,
             "latest_config_version": latest_ver,
             "can_update_hermes": not _dashboard_local_update_managed_externally(),
-            "gateway_running": gateway_running,
-            "gateway_state": gateway_state,
-            "gateway_platforms": gateway_platforms,
-            "gateway_exit_reason": gateway_exit_reason,
-            "gateway_updated_at": gateway_updated_at,
-            "active_agents": active_agents,
-            "gateway_busy": gateway_busy,
-            "gateway_drainable": gateway_drainable,
-            "restart_drain_timeout": restart_drain_timeout,
             "active_sessions": active_sessions,
             "auth_required": auth_required,
             "auth_providers": auth_providers,
         }
 
-        # Absolute host paths, the gateway PID, and the internal gateway health
-        # URL are deployment recon a liveness probe never needs. ``/api/status``
+        # Absolute host paths are deployment recon a liveness probe never needs. ``/api/status``
         # is in ``PUBLIC_API_PATHS`` so it bypasses dashboard auth; on a
         # network-exposed (gated) bind that means *any* unauthenticated caller
         # reaches it, and leaking host metadata there contradicts the allowlist's
-        # own contract ("version, gateway state, active session count, and the
+        # own contract ("version, active session count, and the
         # dashboard auth-gate shape. No bodies, no session content, no secrets").
         # Surface this detail only on a loopback / ``--insecure`` bind, where the
         # dashboard is local-only and the caller is already inside the trust
@@ -2106,8 +1871,6 @@ async def get_status(profile: Optional[str] = None):
                 "hermes_home": str(get_lliam_home()),
                 "config_path": str(get_config_path()),
                 "env_path": str(get_env_path()),
-                "gateway_pid": gateway_pid,
-                "gateway_health_url": _GATEWAY_HEALTH_URL,
             })
 
         return status
@@ -2439,9 +2202,6 @@ _ACTION_LOG_DIR: Path = get_lliam_home() / "logs"
 
 # Short ``name`` (from the URL) → absolute log file path.
 _ACTION_LOG_FILES: Dict[str, str] = {
-    "gateway-restart": "gateway-restart.log",
-    "gateway-start": "gateway-start.log",
-    "gateway-stop": "gateway-stop.log",
     "hermes-update": "hermes-update.log",
     "doctor": "action-doctor.log",
     "security-audit": "action-security-audit.log",
@@ -2548,176 +2308,6 @@ def _tail_lines(path: Path, n: int) -> List[str]:
         return []
     lines = text.splitlines()
     return lines[-n:] if n > 0 else lines
-
-
-def _gateway_subcommand(profile: Optional[str], verb: str) -> List[str]:
-    return _profile_cli_args(profile) + ["gateway", verb]
-
-
-def _gateway_display_command(profile: Optional[str], verb: str) -> str:
-    return " ".join(["lliam-gov", *_gateway_subcommand(profile, verb)])
-
-
-# Slack member IDs (users U..., Enterprise Grid W...). Kept in sync with the
-# frontend SLACK_MEMBER_ID_RE in web/src/pages/ChannelsPage.tsx.
-_SLACK_MEMBER_ID_RE = re.compile(r"[UW][A-Z0-9]{2,}")
-
-
-def _validate_messaging_env_value(platform_id: str, key: str, value: str) -> None:
-    """Reject platform credentials that are clearly in the wrong field."""
-    if platform_id != "slack" or not value:
-        return
-
-    if key == "SLACK_BOT_TOKEN" and not value.startswith("xoxb-"):
-        raise HTTPException(
-            status_code=400,
-            detail="Slack Bot Token must start with xoxb-. Paste the bot token from OAuth & Permissions.",
-        )
-    if key == "SLACK_APP_TOKEN" and not value.startswith("xapp-"):
-        raise HTTPException(
-            status_code=400,
-            detail="Slack App Token must start with xapp-. Paste the app-level token from Basic Information > App-Level Tokens.",
-        )
-    if key == "SLACK_ALLOWED_USERS":
-        # Mirror the gateway's parse (gateway/platforms/slack.py): split on comma,
-        # strip, and drop empty entries so a trailing/interior comma isn't rejected
-        # here when the runtime would accept it. "*" is the allow-all wildcard.
-        user_ids = [part.strip() for part in value.split(",") if part.strip()]
-        invalid = [
-            user_id
-            for user_id in user_ids
-            if user_id != "*" and not _SLACK_MEMBER_ID_RE.fullmatch(user_id)
-        ]
-        if invalid:
-            raise HTTPException(
-                status_code=400,
-                detail="Slack allowed user IDs must be comma-separated member IDs like U01ABC2DEF3.",
-            )
-
-
-def _spawn_gateway_restart(profile: Optional[str] = None) -> Tuple[subprocess.Popen, bool]:
-    """Spawn ``lliam-gov gateway restart``, reusing an in-flight restart.
-
-    Multiple dashboard paths can request a restart in quick succession
-    (restart button double-click, or a stale cached frontend firing its own
-    restart after the server already auto-restarted post-onboarding). Two
-    concurrent ``lliam-gov gateway restart`` children race each other on the
-    manual kill-and-start path, so reuse the live one instead.
-
-    Returns ``(proc, reused)``.
-    """
-    subcommand = _gateway_subcommand(profile, "restart")
-    existing = _ACTION_PROCS.get("gateway-restart")
-    if existing is not None and existing.poll() is None:
-        existing_command = _ACTION_COMMANDS.get("gateway-restart")
-        if existing_command is None or existing_command == tuple(subcommand):
-            return existing, True
-        raise RuntimeError("gateway restart already in progress for another profile")
-    return _spawn_lliam_action(subcommand, "gateway-restart"), False
-
-
-def _restart_gateway_after_webhook_enable(profile: Optional[str] = None) -> dict[str, Any]:
-    """Best-effort gateway restart after enabling the webhook platform."""
-    try:
-        proc, reused = _spawn_gateway_restart(profile)
-    except Exception as exc:
-        _log.exception("Failed to auto-restart gateway after enabling webhooks")
-        return {
-            "restart_started": False,
-            "restart_error": str(exc),
-        }
-    if reused:
-        _log.info(
-            "Webhook enable: reusing in-flight gateway restart (pid %s)",
-            proc.pid,
-        )
-    return {
-        "restart_started": True,
-        "restart_action": "gateway-restart",
-        "restart_pid": proc.pid,
-    }
-
-
-@app.post("/api/gateway/restart")
-async def restart_gateway(profile: Optional[str] = None):
-    """Kick off a ``lliam-gov gateway restart`` in the background."""
-    try:
-        proc, _reused = _spawn_gateway_restart(profile)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        _log.exception("Failed to spawn gateway restart")
-        raise HTTPException(status_code=500, detail=f"Failed to restart gateway: {exc}")
-    return {
-        "ok": True,
-        "pid": proc.pid,
-        "name": "gateway-restart",
-    }
-
-
-@app.post("/api/gateway/drain")
-async def gateway_drain(request: Request):
-    """Begin or cancel an external (NAS-driven) gateway drain.
-
-    Authenticated by the non-interactive token-auth seam: the
-    ``dashboard_auth/drain`` plugin registers this exact path as a token route
-    and verifies the ``Authorization`` bearer secret. If that plugin isn't
-    active (no ``HERMES_DASHBOARD_DRAIN_SECRET``), the route is NOT a token
-    route, so on a gated bind the cookie gate handles it (a browser session can
-    still drive it from the dashboard) and on a loopback bind the legacy
-    session-token gate applies — either way it is never unauthenticated on a
-    network-exposed bind.
-
-    Body: ``{"action": "drain"}`` (begin) or ``{"action": "cancel"}`` (cancel).
-    Begin writes the ``.drain_request.json`` marker the gateway's
-    ``_drain_control_watcher`` observes (flip to ``draining`` + refuse new
-    turns); cancel removes it (revert to ``running`` + re-accept). Idempotent
-    on both sides. This endpoint only writes/removes the marker — the gateway
-    process owns the actual state transition (there is no HTTP control channel
-    into the running gateway; the marker IS the channel, decisions.md Q-B).
-
-    The force-override (D6: "unless a user commands it") is NOT here — an
-    immediate, drain-skipping action maps onto the existing
-    ``POST /api/gateway/restart`` force path, which supersedes a drain.
-    """
-    from gateway.drain_control import (
-        clear_drain_request,
-        drain_requested,
-        write_drain_request,
-    )
-
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-    action = str((body or {}).get("action", "drain")).strip().lower()
-
-    # Attribute the request to the verified token principal when present
-    # (token-auth seam attaches it); fall back to a generic label otherwise.
-    principal_obj = getattr(request.state, "token_principal", None)
-    principal = getattr(principal_obj, "principal", None) or "dashboard"
-
-    if action == "cancel":
-        existed = clear_drain_request()
-        _log.info("Gateway drain CANCEL requested by %s (existed=%s)", principal, existed)
-        return {"ok": True, "action": "cancel", "was_draining": existed}
-
-    if action != "drain":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown drain action {action!r}; expected 'drain' or 'cancel'",
-        )
-
-    payload = write_drain_request(principal=str(principal))
-    _log.info("Gateway drain BEGIN requested by %s", principal)
-    return {
-        "ok": True,
-        "action": "drain",
-        "requested_at": payload["requested_at"],
-        # Echo so a caller polling /api/status knows the marker is now set;
-        # the gateway watcher flips gateway_state -> draining within ~1s.
-        "draining": drain_requested(),
-    }
 
 
 @app.post("/api/hermes/update")
@@ -4272,8 +3862,6 @@ def _apply_model_assignment_sync(
     }
 
 
-
-
 def _infer_provider_on_model_change(model_val: str, prev_provider: str) -> tuple[str, str]:
     """Infer which provider serves ``model_val`` when the flat Config-page Model
     field changes, given the previously-saved ``prev_provider``.
@@ -4514,7 +4102,6 @@ def _catalog_provider_env_metadata() -> dict:
 async def get_env_vars(profile: Optional[str] = None):
     with _profile_scope(profile):
         env_on_disk = load_env()
-    channel_keys = _channel_managed_env_keys()
     catalog_meta = _catalog_provider_env_metadata()
 
     def _row(var_name: str, info: dict) -> dict:
@@ -4531,10 +4118,6 @@ async def get_env_vars(profile: Optional[str] = None):
             "is_password": info.get("password", cat_meta.get("is_password", False)),
             "tools": info.get("tools", []),
             "advanced": info.get("advanced", cat_meta.get("advanced", False)),
-            # True when this var is a messaging-platform credential owned by a
-            # Channels page card. The Keys/Env page uses this to hide it and
-            # avoid duplicating the (richer) Channels configuration UI.
-            "channel_managed": var_name in channel_keys,
             # Provider grouping hints derived from the unified provider catalog
             # so the desktop Keys tab groups by the SAME provider identity the
             # CLI `lliam-gov model` picker uses (not desktop-only prefix guesses).
@@ -4724,1166 +4307,6 @@ async def reveal_env_var(
 
     _log.info("env/reveal: %s", body.key)
     return {"key": body.key, "value": value}
-
-
-# Entries omit fields they don't need to override; the catalog builder fills
-# in env_vars from OPTIONAL_ENV_VARS via prefix matching when not specified,
-# and pulls required_env from a plugin's PlatformEntry when available.
-_PLATFORM_OVERRIDES: dict[str, dict[str, Any]] = {
-    "telegram": {
-        "name": "Telegram",
-        "description": "Run Lliam-GOV from Telegram DMs, groups, and topics.",
-        "docs_url": "https://core.telegram.org/bots/features#botfather",
-        "env_vars": ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS", "TELEGRAM_PROXY"),
-        "required_env": ("TELEGRAM_BOT_TOKEN",),
-    },
-    "discord": {
-        "name": "Discord",
-        "description": "Connect Lliam-GOV to Discord DMs, channels, and threads.",
-        "docs_url": "https://discord.com/developers/applications",
-        "env_vars": (
-            "DISCORD_BOT_TOKEN",
-            "DISCORD_ALLOWED_USERS",
-            "DISCORD_REPLY_TO_MODE",
-        ),
-        "required_env": ("DISCORD_BOT_TOKEN",),
-    },
-    "slack": {
-        "name": "Slack",
-        "description": "Use Lliam-GOV from Slack via Socket Mode. Add allowed Slack member IDs so connected bots can respond.",
-        "docs_url": "https://api.slack.com/apps",
-        "env_vars": ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USERS"),
-        "required_env": ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN"),
-    },
-    "mattermost": {
-        "name": "Mattermost",
-        "description": "Connect Lliam-GOV to Mattermost channels and direct messages.",
-        "docs_url": "https://mattermost.com/deploy/",
-        "env_vars": ("MATTERMOST_URL", "MATTERMOST_TOKEN", "MATTERMOST_ALLOWED_USERS"),
-        "required_env": ("MATTERMOST_URL", "MATTERMOST_TOKEN"),
-    },
-    "matrix": {
-        "name": "Matrix",
-        "description": "Use Lliam-GOV in Matrix rooms and direct messages.",
-        "docs_url": "https://matrix.org/ecosystem/servers/",
-        "env_vars": (
-            "MATRIX_HOMESERVER",
-            "MATRIX_ACCESS_TOKEN",
-            "MATRIX_USER_ID",
-            "MATRIX_ALLOWED_USERS",
-        ),
-        "required_env": ("MATRIX_HOMESERVER", "MATRIX_ACCESS_TOKEN", "MATRIX_USER_ID"),
-    },
-    "signal": {
-        "name": "Signal",
-        "description": "Connect through a signal-cli REST bridge.",
-        "docs_url": "https://github.com/bbernhard/signal-cli-rest-api",
-        "env_vars": ("SIGNAL_HTTP_URL", "SIGNAL_ACCOUNT", "SIGNAL_ALLOWED_USERS"),
-        "required_env": ("SIGNAL_HTTP_URL", "SIGNAL_ACCOUNT"),
-    },
-    "whatsapp": {
-        "name": "WhatsApp",
-        "description": "Use Lliam-GOV through the bundled WhatsApp bridge with QR-based auth.",
-        "docs_url": "https://github.com/tulir/whatsmeow",
-        "env_vars": ("WHATSAPP_ENABLED", "WHATSAPP_MODE", "WHATSAPP_ALLOWED_USERS"),
-        "required_env": (),
-    },
-    "homeassistant": {
-        "name": "Home Assistant",
-        "description": "Control your smart home from Lliam-GOV via Home Assistant.",
-        "docs_url": "https://www.home-assistant.io/docs/authentication/",
-        "env_vars": ("HASS_URL", "HASS_TOKEN"),
-        "required_env": ("HASS_URL", "HASS_TOKEN"),
-    },
-    "email": {
-        "name": "Email",
-        "description": "Talk to Lliam-GOV through an IMAP/SMTP mailbox.",
-        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/",
-        "env_vars": (
-            "EMAIL_ADDRESS",
-            "EMAIL_PASSWORD",
-            "EMAIL_IMAP_HOST",
-            "EMAIL_SMTP_HOST",
-        ),
-        "required_env": (
-            "EMAIL_ADDRESS",
-            "EMAIL_PASSWORD",
-            "EMAIL_IMAP_HOST",
-            "EMAIL_SMTP_HOST",
-        ),
-    },
-    "sms": {
-        "name": "SMS (Twilio)",
-        "description": "Send and receive text messages via Twilio.",
-        "docs_url": "https://www.twilio.com/console",
-        "env_vars": ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"),
-        "required_env": ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"),
-    },
-    "dingtalk": {
-        "name": "DingTalk",
-        "description": "Connect Lliam-GOV to DingTalk groups (钉钉).",
-        "docs_url": "https://open.dingtalk.com/document/orgapp/the-robot-development-process",
-        "env_vars": ("DINGTALK_CLIENT_ID", "DINGTALK_CLIENT_SECRET"),
-        "required_env": ("DINGTALK_CLIENT_ID", "DINGTALK_CLIENT_SECRET"),
-    },
-    "feishu": {
-        "name": "Feishu / Lark",
-        "description": "Use Lliam-GOV inside Feishu / Lark.",
-        "docs_url": "https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/intro",
-        "env_vars": (
-            "FEISHU_APP_ID",
-            "FEISHU_APP_SECRET",
-            "FEISHU_ENCRYPT_KEY",
-            "FEISHU_VERIFICATION_TOKEN",
-        ),
-        "required_env": ("FEISHU_APP_ID", "FEISHU_APP_SECRET"),
-    },
-    "google_chat": {
-        "name": "Google Chat",
-        "description": "Connect Lliam-GOV to Google Chat via Cloud Pub/Sub.",
-        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/google_chat",
-    },
-    "wecom": {
-        "name": "WeCom (group bot)",
-        "description": "Send-only WeCom group bot via webhook.",
-        "docs_url": "https://developer.work.weixin.qq.com/document/path/91770",
-        "env_vars": ("WECOM_BOT_ID", "WECOM_SECRET"),
-        "required_env": ("WECOM_BOT_ID",),
-    },
-    "wecom_callback": {
-        "name": "WeCom (app)",
-        "description": "Two-way WeCom integration via callback app.",
-        "docs_url": "https://developer.work.weixin.qq.com/document/path/90930",
-        "env_vars": (
-            "WECOM_CALLBACK_CORP_ID",
-            "WECOM_CALLBACK_CORP_SECRET",
-            "WECOM_CALLBACK_AGENT_ID",
-            "WECOM_CALLBACK_TOKEN",
-            "WECOM_CALLBACK_ENCODING_AES_KEY",
-        ),
-        "required_env": (
-            "WECOM_CALLBACK_CORP_ID",
-            "WECOM_CALLBACK_CORP_SECRET",
-            "WECOM_CALLBACK_AGENT_ID",
-        ),
-    },
-    "weixin": {
-        "name": "Weixin / WeChat (Personal)",
-        "description": "Connect a personal WeChat account through Tencent's iLink Bot API.",
-        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/weixin/",
-        "env_vars": ("WEIXIN_ACCOUNT_ID", "WEIXIN_TOKEN", "WEIXIN_BASE_URL"),
-        "required_env": ("WEIXIN_ACCOUNT_ID", "WEIXIN_TOKEN"),
-    },
-    "bluebubbles": {
-        "name": "BlueBubbles (iMessage)",
-        "description": "Use Lliam-GOV through iMessage via a BlueBubbles server.",
-        "docs_url": "https://bluebubbles.app/",
-        "env_vars": (
-            "BLUEBUBBLES_SERVER_URL",
-            "BLUEBUBBLES_PASSWORD",
-            "BLUEBUBBLES_ALLOWED_USERS",
-        ),
-        "required_env": ("BLUEBUBBLES_SERVER_URL", "BLUEBUBBLES_PASSWORD"),
-    },
-    "qqbot": {
-        "name": "QQ Bot",
-        "description": "Connect Lliam-GOV to a QQ Bot from the QQ Open Platform.",
-        "docs_url": "https://q.qq.com",
-        "env_vars": ("QQ_APP_ID", "QQ_CLIENT_SECRET", "QQ_ALLOWED_USERS"),
-        "required_env": ("QQ_APP_ID", "QQ_CLIENT_SECRET"),
-    },
-    # Teams ships as a platform plugin, so its name/env vars come from the
-    # plugin registry. Only the docs link needs an override here so the
-    # Channels page can point at the Microsoft Teams setup guide.
-    "teams": {
-        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/teams",
-    },
-    "yuanbao": {
-        "name": "Yuanbao (元宝)",
-        "description": "Connect Lliam-GOV to Tencent Yuanbao.",
-        "docs_url": "",
-        "required_env": (),
-    },
-    "api_server": {
-        "name": "API server",
-        "description": "Expose Lliam-GOV as an OpenAI-compatible HTTP API for tools like Open WebUI.",
-        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/",
-        "env_vars": (
-            "API_SERVER_ENABLED",
-            "API_SERVER_KEY",
-            "API_SERVER_PORT",
-            "API_SERVER_HOST",
-            "API_SERVER_MODEL_NAME",
-        ),
-        "required_env": (),
-    },
-    "webhook": {
-        "name": "Webhooks",
-        "description": "Receive events from GitHub, GitLab, and other webhook sources.",
-        "docs_url": "https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks/",
-        "env_vars": ("WEBHOOK_ENABLED", "WEBHOOK_PORT", "WEBHOOK_SECRET"),
-        "required_env": (),
-    },
-}
-
-# Display order: well-known platforms surface first; unknown plugins fall to
-# the end alphabetically.
-_PLATFORM_ORDER: tuple[str, ...] = (
-    "telegram",
-    "discord",
-    "slack",
-    "mattermost",
-    "matrix",
-    "whatsapp",
-    "signal",
-    "bluebubbles",
-    "homeassistant",
-    "email",
-    "sms",
-    "dingtalk",
-    "feishu",
-    "google_chat",
-    "wecom",
-    "wecom_callback",
-    "weixin",
-    "qqbot",
-    "yuanbao",
-    "api_server",
-    "webhook",
-)
-
-# Display labels for env vars not in OPTIONAL_ENV_VARS (HOME_CHANNEL_*, bridge
-# toggles, Twilio, HASS, Email, etc.). Anything missing from OPTIONAL_ENV_VARS
-# falls back here so the UI can still render a friendly label.
-_MESSAGING_ENV_FALLBACKS: dict[str, dict[str, Any]] = {
-    "SIGNAL_HTTP_URL": {
-        "description": "signal-cli REST API base URL, e.g. http://127.0.0.1:8080",
-        "prompt": "Signal bridge URL",
-        "url": "https://github.com/bbernhard/signal-cli-rest-api",
-    },
-    "SIGNAL_ACCOUNT": {
-        "description": "Signal account phone number registered with the bridge",
-        "prompt": "Signal account",
-    },
-    "SIGNAL_ALLOWED_USERS": {
-        "description": "Comma-separated Signal users allowed to use the bot",
-        "prompt": "Allowed Signal users",
-    },
-    "WHATSAPP_ENABLED": {
-        "description": "Enable the WhatsApp gateway adapter",
-        "prompt": "Enable WhatsApp",
-        "advanced": True,
-    },
-    "WHATSAPP_MODE": {
-        "description": "WhatsApp bridge mode",
-        "prompt": "WhatsApp mode",
-        "advanced": True,
-    },
-    "WHATSAPP_ALLOWED_USERS": {
-        "description": "Comma-separated WhatsApp users allowed to use the bot",
-        "prompt": "Allowed WhatsApp users",
-    },
-    "HASS_URL": {
-        "description": "Home Assistant base URL, e.g. https://homeassistant.local:8123",
-        "prompt": "Home Assistant URL",
-    },
-    "HASS_TOKEN": {
-        "description": "Long-lived access token from Home Assistant (Profile → Security)",
-        "prompt": "Home Assistant access token",
-        "password": True,
-    },
-    "EMAIL_ADDRESS": {
-        "description": "Email address to send and receive from",
-        "prompt": "Email address",
-    },
-    "EMAIL_PASSWORD": {
-        "description": "Email account password or app password",
-        "prompt": "Email password",
-        "password": True,
-    },
-    "EMAIL_IMAP_HOST": {
-        "description": "IMAP server host (e.g. imap.gmail.com)",
-        "prompt": "IMAP host",
-    },
-    "EMAIL_SMTP_HOST": {
-        "description": "SMTP server host (e.g. smtp.gmail.com)",
-        "prompt": "SMTP host",
-    },
-    "TWILIO_ACCOUNT_SID": {
-        "description": "Twilio Account SID",
-        "prompt": "Twilio Account SID",
-        "url": "https://www.twilio.com/console",
-    },
-    "TWILIO_AUTH_TOKEN": {
-        "description": "Twilio Auth Token",
-        "prompt": "Twilio Auth Token",
-        "password": True,
-    },
-    "WECOM_BOT_ID": {"description": "WeCom group bot ID", "prompt": "WeCom Bot ID"},
-    "WECOM_SECRET": {
-        "description": "WeCom group bot secret",
-        "prompt": "WeCom Secret",
-        "password": True,
-    },
-    "WECOM_CALLBACK_CORP_ID": {
-        "description": "WeCom corp ID",
-        "prompt": "WeCom Corp ID",
-    },
-    "WECOM_CALLBACK_CORP_SECRET": {
-        "description": "WeCom app corp secret",
-        "prompt": "WeCom Corp Secret",
-        "password": True,
-    },
-    "WECOM_CALLBACK_AGENT_ID": {
-        "description": "WeCom app agent ID",
-        "prompt": "WeCom Agent ID",
-    },
-    "WECOM_CALLBACK_TOKEN": {
-        "description": "WeCom callback verification token",
-        "prompt": "WeCom Token",
-    },
-    "WECOM_CALLBACK_ENCODING_AES_KEY": {
-        "description": "WeCom callback AES encoding key",
-        "prompt": "WeCom AES Key",
-        "password": True,
-    },
-    "WEIXIN_ACCOUNT_ID": {
-        "description": "iLink Bot account ID obtained through QR login in lliam-gov gateway setup",
-        "prompt": "iLink Bot account ID",
-    },
-    "WEIXIN_TOKEN": {
-        "description": "iLink Bot token obtained through QR login in lliam-gov gateway setup",
-        "prompt": "iLink Bot token",
-        "password": True,
-    },
-    "WEIXIN_BASE_URL": {
-        "description": "iLink API base URL saved by QR login (default: https://ilinkai.weixin.qq.com)",
-        "prompt": "iLink API base URL",
-    },
-    "FEISHU_APP_ID": {"description": "Feishu / Lark app ID", "prompt": "App ID"},
-    "FEISHU_APP_SECRET": {
-        "description": "Feishu / Lark app secret",
-        "prompt": "App secret",
-        "password": True,
-    },
-    "FEISHU_ENCRYPT_KEY": {
-        "description": "Feishu / Lark encrypt key",
-        "prompt": "Encrypt key",
-        "password": True,
-    },
-    "FEISHU_VERIFICATION_TOKEN": {
-        "description": "Feishu / Lark verification token",
-        "prompt": "Verification token",
-        "password": True,
-    },
-    "DINGTALK_CLIENT_ID": {
-        "description": "DingTalk client ID (App key)",
-        "prompt": "Client ID",
-    },
-    "DINGTALK_CLIENT_SECRET": {
-        "description": "DingTalk client secret (App secret)",
-        "prompt": "Client secret",
-        "password": True,
-    },
-}
-
-
-def _messaging_platform_catalog() -> tuple[dict[str, Any], ...]:
-    """Build the messaging catalog from the gateway's Platform enum + plugin registry.
-
-    Built-in platforms come from ``gateway.config.Platform`` (LOCAL is excluded).
-    Plugin platforms come from ``gateway.platform_registry.plugin_entries()``,
-    which lets newly installed adapters (e.g. IRC) appear without a code change
-    here. Per-platform UI metadata (description, docs URL, env-var picks) lives
-    in :data:`_PLATFORM_OVERRIDES`; anything not overridden gets reasonable
-    defaults derived from the platform id and required_env.
-    """
-    from gateway.config import Platform
-
-    seen: set[str] = set()
-    entries: list[dict[str, Any]] = []
-
-    for member in Platform.__members__.values():
-        if member.value == "local":
-            continue
-        if member.value in seen:
-            continue
-        seen.add(member.value)
-        entries.append(_build_catalog_entry(member.value))
-
-    try:
-        from gateway.platform_registry import platform_registry
-
-        for plugin_entry in platform_registry.plugin_entries():
-            if plugin_entry.name in seen:
-                continue
-            seen.add(plugin_entry.name)
-            entries.append(_build_catalog_entry(plugin_entry.name, plugin_entry))
-    except Exception:
-        _log.debug("plugin platform registry unavailable", exc_info=True)
-
-    order = {pid: idx for idx, pid in enumerate(_PLATFORM_ORDER)}
-    entries.sort(
-        key=lambda e: (order.get(e["id"], len(_PLATFORM_ORDER)), e["name"].lower())
-    )
-    return tuple(entries)
-
-
-def _channel_managed_env_keys() -> frozenset[str]:
-    """Env-var keys owned by a Channels page platform card.
-
-    The Channels page is the canonical surface for configuring messaging
-    platform credentials (with connection status, test, enable toggle and
-    gateway restart). The Keys/Env page consults this set to hide those vars
-    so the same fields aren't duplicated in a plainer UI. Best-effort: if the
-    gateway catalog can't be built, nothing is flagged and Keys shows it all.
-    """
-    try:
-        keys: set[str] = set()
-        for entry in _messaging_platform_catalog():
-            keys.update(entry.get("env_vars", ()))
-        return frozenset(keys)
-    except Exception:
-        _log.debug("could not build channel-managed env key set", exc_info=True)
-        return frozenset()
-
-
-# Cross-cutting gateway / relay knobs stay on the Keys → Settings tab even though
-# they use the ``messaging`` category in OPTIONAL_ENV_VARS. Platform-scoped vars
-# (``DISCORD_*``, ``MATRIX_*``, …) are owned by the Messaging UI instead.
-_MESSAGING_KEYS_PAGE_KEYS = frozenset({
-    "GATEWAY_ALLOW_ALL_USERS",
-    "GATEWAY_PROXY_KEY",
-    "GATEWAY_PROXY_URL",
-})
-
-
-def _platform_env_prefixes(platform_id: str) -> tuple[str, ...]:
-    """Env-var prefixes owned by a messaging platform card."""
-    aliases: dict[str, tuple[str, ...]] = {
-        "email": ("EMAIL_",),
-        "homeassistant": ("HASS_",),
-        "qqbot": ("QQ_", "QQBOT_"),
-        "sms": ("TWILIO_",),
-        "wecom": ("WECOM_BOT_", "WECOM_SECRET"),
-        "wecom_callback": ("WECOM_CALLBACK_",),
-    }
-    if platform_id in aliases:
-        return aliases[platform_id]
-    return (platform_id.upper().replace("-", "_") + "_",)
-
-
-def _discover_platform_env_vars(platform_id: str) -> tuple[str, ...]:
-    """All messaging-category env vars for a platform (override + plugin + prefix)."""
-    prefixes = _platform_env_prefixes(platform_id)
-    keys: list[str] = []
-    for name, info in OPTIONAL_ENV_VARS.items():
-        if info.get("category") != "messaging":
-            continue
-        if name in _MESSAGING_KEYS_PAGE_KEYS:
-            continue
-        if not any(name.startswith(prefix) for prefix in prefixes):
-            continue
-        keys.append(name)
-    return tuple(sorted(set(keys)))
-
-
-def _merge_platform_env_vars(
-    platform_id: str,
-    override: dict[str, Any],
-    plugin_entry: Any | None,
-) -> tuple[str, ...]:
-    """Canonical env-var list for a messaging platform card."""
-    discovered = _discover_platform_env_vars(platform_id)
-    if "env_vars" in override:
-        return tuple(dict.fromkeys((*override["env_vars"], *discovered)))
-    if plugin_entry is not None and plugin_entry.required_env:
-        return tuple(dict.fromkeys((*tuple(plugin_entry.required_env), *discovered)))
-    return discovered
-
-
-def _build_catalog_entry(
-    platform_id: str, plugin_entry: Any | None = None
-) -> dict[str, Any]:
-    override = _PLATFORM_OVERRIDES.get(platform_id, {})
-
-    env_vars = _merge_platform_env_vars(platform_id, override, plugin_entry)
-
-    if "required_env" in override:
-        required_env = tuple(override["required_env"])
-    elif plugin_entry is not None:
-        required_env = tuple(plugin_entry.required_env or ())
-    else:
-        required_env = ()
-
-    if override.get("name"):
-        name = override["name"]
-    elif plugin_entry is not None and plugin_entry.label:
-        name = plugin_entry.label
-    else:
-        name = platform_id.replace("_", " ").title()
-
-    description = override.get("description")
-    if not description and plugin_entry is not None:
-        description = plugin_entry.install_hint or ""
-
-    return {
-        "id": platform_id,
-        "name": name,
-        "description": description or "",
-        "docs_url": override.get("docs_url", ""),
-        "env_vars": env_vars,
-        "required_env": required_env,
-    }
-
-
-def _catalog_lookup(platform_id: str) -> dict[str, Any] | None:
-    for entry in _messaging_platform_catalog():
-        if entry["id"] == platform_id:
-            return entry
-    return None
-
-
-def _messaging_env_info(key: str) -> dict[str, Any]:
-    info = OPTIONAL_ENV_VARS.get(key) or _MESSAGING_ENV_FALLBACKS.get(key) or {}
-    return {
-        "description": info.get("description", ""),
-        "prompt": info.get("prompt", key),
-        "help": info.get("help", ""),
-        "url": info.get("url"),
-        "is_password": info.get("password", False),
-        "advanced": info.get("advanced", False),
-    }
-
-
-def _gateway_platform_config(platform_id: str):
-    from gateway.config import Platform, load_gateway_config
-
-    config = load_gateway_config()
-    platform = Platform(platform_id)
-    platform_config = config.platforms.get(platform)
-    return config, platform, platform_config
-
-
-def _messaging_platform_payload(
-    entry: dict[str, Any],
-    env_on_disk: dict[str, str],
-    runtime: dict | None,
-    scoped: bool = False,
-) -> dict[str, Any]:
-    platform_id = entry["id"]
-    runtime_platforms = runtime.get("platforms") if runtime else {}
-    runtime_platform = (
-        runtime_platforms.get(platform_id, {})
-        if isinstance(runtime_platforms, dict)
-        else {}
-    )
-    gateway_running = (
-        get_running_pid() is not None
-        or get_runtime_status_running_pid(runtime) is not None
-    )
-    env_vars = []
-
-    for key in entry["env_vars"]:
-        # When profile-scoped, judge only the profile's own .env — the
-        # dashboard process's os.environ carries the ROOT install's .env
-        # (loaded at startup) and would falsely report the root credentials
-        # as the profile's.
-        value = env_on_disk.get(key) or ("" if scoped else os.getenv(key, ""))
-        env_vars.append(
-            {
-                "key": key,
-                "required": key in entry["required_env"],
-                "is_set": bool(value),
-                "redacted_value": redact_key(value) if value else None,
-                **_messaging_env_info(key),
-            }
-        )
-
-    if scoped:
-        # Profile-scoped view: derive enablement/configuration from the
-        # profile's config.yaml + .env only. load_gateway_config()'s
-        # env-override layer reads os.environ and would leak the root
-        # install's tokens into the profile's reported state.
-        try:
-            cfg = load_config()
-            platforms_cfg = cfg.get("platforms") or {}
-            plat_cfg = platforms_cfg.get(platform_id)
-            if not isinstance(plat_cfg, dict):
-                plat_cfg = {}
-            enabled = bool(plat_cfg.get("enabled"))
-            hc = plat_cfg.get("home_channel")
-            home_channel = hc if isinstance(hc, dict) else None
-        except Exception:
-            enabled = False
-            home_channel = None
-        configured = all(env_on_disk.get(key) for key in entry["required_env"])
-    else:
-        try:
-            gateway_config, platform, platform_config = _gateway_platform_config(
-                platform_id
-            )
-            enabled = bool(platform_config and platform_config.enabled)
-            configured = bool(
-                platform_config
-                and gateway_config._is_platform_connected(platform, platform_config)
-            )
-            home_channel = (
-                platform_config.home_channel.to_dict()
-                if platform_config and platform_config.home_channel
-                else None
-            )
-        except Exception:
-            enabled = False
-            configured = all(
-                env_on_disk.get(key) or os.getenv(key, "")
-                for key in entry["required_env"]
-            )
-            home_channel = None
-
-    state = (
-        runtime_platform.get("state") if isinstance(runtime_platform, dict) else None
-    )
-    runtime_gateway_state = runtime.get("gateway_state") if isinstance(runtime, dict) else None
-    runtime_gateway_error = runtime.get("exit_reason") if isinstance(runtime, dict) else None
-    if not enabled:
-        state = "disabled"
-    elif not configured:
-        state = "not_configured"
-    elif gateway_running and not state:
-        state = "pending_restart"
-    elif (
-        not gateway_running
-        and not state
-        and runtime_gateway_state == "startup_failed"
-    ):
-        state = "startup_failed"
-    elif not gateway_running and not state:
-        state = "gateway_stopped"
-
-    error_code = (
-        runtime_platform.get("error_code")
-        if isinstance(runtime_platform, dict)
-        else None
-    )
-    error_message = (
-        runtime_platform.get("error_message")
-        if isinstance(runtime_platform, dict)
-        else None
-    )
-    if state == "startup_failed":
-        error_code = error_code or "startup_failed"
-        error_message = error_message or runtime_gateway_error
-
-    return {
-        "id": platform_id,
-        "name": entry["name"],
-        "description": entry["description"],
-        "docs_url": entry["docs_url"],
-        "enabled": enabled,
-        "configured": configured,
-        "gateway_running": gateway_running,
-        "state": state,
-        "error_code": error_code,
-        "error_message": error_message,
-        "updated_at": (
-            runtime_platform.get("updated_at")
-            if isinstance(runtime_platform, dict)
-            else None
-        ),
-        "home_channel": home_channel,
-        "env_vars": env_vars,
-    }
-
-
-def _write_platform_enabled(platform_id: str, enabled: bool) -> None:
-    write_platform_config_field(platform_id, "enabled", enabled)
-
-
-_TELEGRAM_ONBOARDING_DEFAULT_URL = "https://setup.hermes-agent.nousresearch.com"
-_TELEGRAM_ONBOARDING_USER_AGENT = f"HermesDashboard/{__version__}"
-_TELEGRAM_USER_ID_RE = re.compile(r"^\d+$")
-
-
-@dataclass
-class _TelegramOnboardingPairing:
-    poll_token: str
-    expires_at: str
-    expires_at_ts: float
-    bot_token: str | None = None
-    bot_username: str | None = None
-    owner_user_id: str | None = None
-
-
-_telegram_onboarding_pairings: dict[str, _TelegramOnboardingPairing] = {}
-_telegram_onboarding_lock = threading.RLock()
-
-
-def _telegram_onboarding_base_url() -> str:
-    return (
-        os.getenv("TELEGRAM_ONBOARDING_URL", _TELEGRAM_ONBOARDING_DEFAULT_URL)
-        .strip()
-        .rstrip("/")
-    )
-
-
-def _parse_expiry_ts(value: str) -> float:
-    try:
-        normalized = value.replace("Z", "+00:00")
-        parsed = datetime.fromisoformat(normalized)
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.timestamp()
-    except Exception:
-        return time.time() + 600
-
-
-def _prune_telegram_onboarding_pairings() -> None:
-    now = time.time()
-    expired = [
-        pairing_id
-        for pairing_id, record in _telegram_onboarding_pairings.items()
-        if record.expires_at_ts <= now
-    ]
-    for pairing_id in expired:
-        _telegram_onboarding_pairings.pop(pairing_id, None)
-
-
-def _normalize_telegram_user_id(value: Any) -> str | None:
-    normalized = str(value or "").strip()
-    if _TELEGRAM_USER_ID_RE.fullmatch(normalized):
-        return normalized
-    return None
-
-
-def _telegram_onboarding_error_message(error: str, fallback: str) -> str:
-    return {
-        "not_found": "Telegram pairing was not found. Start a new setup.",
-        "expired": "Telegram setup expired. Start a new setup.",
-        "claimed": "Telegram setup was already claimed. Start a new setup.",
-        "unauthorized": "Telegram setup service rejected this request.",
-        "telegram_manager_bot_token_not_configured": "Telegram setup service is not configured.",
-        "telegram_token_fetch_failed": "Telegram could not finish bot setup. Try again.",
-    }.get(error, fallback)
-
-
-def _telegram_onboarding_request_sync(
-    method: str,
-    path: str,
-    *,
-    body: dict[str, Any] | None = None,
-    bearer_token: str | None = None,
-) -> dict[str, Any]:
-    import httpx
-
-    headers = {
-        "Accept": "application/json",
-        "User-Agent": _TELEGRAM_ONBOARDING_USER_AGENT,
-    }
-    request_kwargs: dict[str, Any] = {}
-    if body is not None:
-        headers["Content-Type"] = "application/json"
-        request_kwargs["json"] = body
-    if bearer_token:
-        headers["Authorization"] = f"Bearer {bearer_token}"
-
-    url = f"{_telegram_onboarding_base_url()}{path}"
-    try:
-        with httpx.Client(timeout=httpx.Timeout(10.0)) as client:
-            response = client.request(
-                method,
-                url,
-                headers=headers,
-                **request_kwargs,
-            )
-            response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        try:
-            parsed = exc.response.json()
-        except Exception:
-            parsed = {}
-        error = str(parsed.get("error") or parsed.get("status") or "")
-        detail = _telegram_onboarding_error_message(
-            error,
-            "Telegram setup service returned an error.",
-        )
-        status_code = 404 if exc.response.status_code == 404 else 502
-        if error in {"expired", "claimed"}:
-            status_code = 410
-        raise HTTPException(status_code=status_code, detail=detail) from exc
-    except httpx.RequestError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail="Telegram setup service is unavailable. Try again shortly.",
-        ) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail="Telegram setup service is unavailable. Try again shortly.",
-        ) from exc
-
-    try:
-        parsed = response.json()
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail="Telegram setup service returned an invalid response.",
-        ) from exc
-    if not isinstance(parsed, dict):
-        raise HTTPException(
-            status_code=502,
-            detail="Telegram setup service returned an invalid response.",
-        )
-    return parsed
-
-
-async def _telegram_onboarding_request(
-    method: str,
-    path: str,
-    *,
-    body: dict[str, Any] | None = None,
-    bearer_token: str | None = None,
-) -> dict[str, Any]:
-    return await asyncio.to_thread(
-        _telegram_onboarding_request_sync,
-        method,
-        path,
-        body=body,
-        bearer_token=bearer_token,
-    )
-
-
-@app.post("/api/messaging/telegram/onboarding/start")
-async def start_telegram_onboarding(body: TelegramOnboardingStart):
-    bot_name = (body.bot_name or "Lliam-GOV").strip() or "Lliam-GOV"
-    payload = await _telegram_onboarding_request(
-        "POST",
-        "/v1/telegram/pairings",
-        body={"bot_name": bot_name},
-    )
-
-    pairing_id = str(payload.get("pairing_id") or "").strip()
-    poll_token = str(payload.get("poll_token") or "").strip()
-    expires_at = str(payload.get("expires_at") or "").strip()
-    deep_link = str(payload.get("deep_link") or "").strip()
-    qr_payload = str(payload.get("qr_payload") or deep_link).strip()
-    suggested_username = str(payload.get("suggested_username") or "").strip()
-    if not pairing_id or not poll_token or not expires_at or not deep_link:
-        raise HTTPException(
-            status_code=502,
-            detail="Telegram setup service returned an incomplete response.",
-        )
-
-    with _telegram_onboarding_lock:
-        _prune_telegram_onboarding_pairings()
-        _telegram_onboarding_pairings[pairing_id] = _TelegramOnboardingPairing(
-            poll_token=poll_token,
-            expires_at=expires_at,
-            expires_at_ts=_parse_expiry_ts(expires_at),
-        )
-
-    return {
-        "pairing_id": pairing_id,
-        "suggested_username": suggested_username,
-        "deep_link": deep_link,
-        "qr_payload": qr_payload,
-        "expires_at": expires_at,
-    }
-
-
-@app.get("/api/messaging/telegram/onboarding/{pairing_id}")
-async def get_telegram_onboarding_status(pairing_id: str):
-    with _telegram_onboarding_lock:
-        _prune_telegram_onboarding_pairings()
-        record = _telegram_onboarding_pairings.get(pairing_id)
-        if not record:
-            raise HTTPException(
-                status_code=404,
-                detail="Telegram setup session was not found. Start a new setup.",
-            )
-        if record.bot_token:
-            return {
-                "status": "ready",
-                "bot_username": record.bot_username,
-                "owner_user_id": record.owner_user_id,
-                "expires_at": record.expires_at,
-            }
-        poll_token = record.poll_token
-
-    payload = await _telegram_onboarding_request(
-        "GET",
-        f"/v1/telegram/pairings/{urllib.parse.quote(pairing_id, safe='')}",
-        bearer_token=poll_token,
-    )
-    status = str(payload.get("status") or "").strip()
-    if status == "waiting":
-        with _telegram_onboarding_lock:
-            current = _telegram_onboarding_pairings.get(pairing_id)
-            expires_at = current.expires_at if current else ""
-        return {"status": "waiting", "expires_at": expires_at}
-
-    if status == "ready":
-        bot_token = str(payload.get("token") or "").strip()
-        bot_username = str(payload.get("bot_username") or "").strip()
-        if not bot_token:
-            raise HTTPException(
-                status_code=502,
-                detail="Telegram setup service returned an incomplete response.",
-            )
-        owner_user_id = _normalize_telegram_user_id(payload.get("owner_user_id"))
-        with _telegram_onboarding_lock:
-            record = _telegram_onboarding_pairings.get(pairing_id)
-            if not record:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Telegram setup session was not found. Start a new setup.",
-                )
-            record.bot_token = bot_token
-            record.bot_username = bot_username or None
-            record.owner_user_id = owner_user_id
-            return {
-                "status": "ready",
-                "bot_username": record.bot_username,
-                "owner_user_id": record.owner_user_id,
-                "expires_at": record.expires_at,
-            }
-
-    if status in {"expired", "claimed"}:
-        with _telegram_onboarding_lock:
-            _telegram_onboarding_pairings.pop(pairing_id, None)
-        raise HTTPException(
-            status_code=410,
-            detail=_telegram_onboarding_error_message(
-                status,
-                "Telegram setup is no longer available. Start a new setup.",
-            ),
-        )
-
-    raise HTTPException(
-        status_code=502,
-        detail="Telegram setup service returned an unknown status.",
-    )
-
-
-def _restart_gateway_after_telegram_onboarding(profile: Optional[str] = None) -> dict[str, Any]:
-    """Best-effort gateway restart after saving Telegram QR onboarding.
-
-    The QR flow naturally pulls users into Telegram on another device. If the
-    saved token waits on a separate dashboard restart click, Lliam-GOV appears
-    broken from the chat side. Keep the config save authoritative, but report
-    restart failures so the UI can fall back to the existing manual banner.
-    """
-    try:
-        proc, reused = _spawn_gateway_restart(profile)
-    except Exception as exc:
-        _log.exception("Failed to auto-restart gateway after Telegram onboarding")
-        return {
-            "restart_started": False,
-            "restart_error": str(exc),
-        }
-    if reused:
-        _log.info(
-            "Telegram onboarding: reusing in-flight gateway restart (pid %s)",
-            proc.pid,
-        )
-    return {
-        "restart_started": True,
-        "restart_action": "gateway-restart",
-        "restart_pid": proc.pid,
-    }
-
-
-@app.post("/api/messaging/telegram/onboarding/{pairing_id}/apply")
-async def apply_telegram_onboarding(
-    pairing_id: str, body: TelegramOnboardingApply, profile: Optional[str] = None
-):
-    allowed_user_ids = []
-    seen = set()
-    for raw_id in body.allowed_user_ids:
-        normalized = _normalize_telegram_user_id(raw_id)
-        if not normalized:
-            raise HTTPException(
-                status_code=400,
-                detail="Allowed Telegram user IDs must be numeric.",
-            )
-        if normalized not in seen:
-            seen.add(normalized)
-            allowed_user_ids.append(normalized)
-    if not allowed_user_ids:
-        raise HTTPException(
-            status_code=400,
-            detail="Add at least one allowed Telegram user ID.",
-        )
-
-    with _telegram_onboarding_lock:
-        _prune_telegram_onboarding_pairings()
-        record = _telegram_onboarding_pairings.get(pairing_id)
-        if not record:
-            raise HTTPException(
-                status_code=404,
-                detail="Telegram setup session was not found. Start a new setup.",
-            )
-        bot_token = record.bot_token
-        bot_username = record.bot_username
-        if not bot_token:
-            raise HTTPException(
-                status_code=409,
-                detail="Telegram setup is not ready yet.",
-            )
-
-    effective_profile = body.profile or profile
-    try:
-        with _profile_scope(effective_profile):
-            save_env_value("TELEGRAM_BOT_TOKEN", bot_token)
-            save_env_value("TELEGRAM_ALLOWED_USERS", ",".join(allowed_user_ids))
-            _write_platform_enabled("telegram", True)
-    except HTTPException:
-        raise
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        _log.exception("Telegram onboarding apply failed")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to save Telegram setup.",
-        ) from exc
-
-    with _telegram_onboarding_lock:
-        _telegram_onboarding_pairings.pop(pairing_id, None)
-
-    restart_result = _restart_gateway_after_telegram_onboarding(effective_profile)
-
-    return {
-        "ok": True,
-        "platform": "telegram",
-        "bot_username": bot_username,
-        "needs_restart": not restart_result["restart_started"],
-        **restart_result,
-    }
-
-
-@app.delete("/api/messaging/telegram/onboarding/{pairing_id}")
-async def cancel_telegram_onboarding(pairing_id: str):
-    with _telegram_onboarding_lock:
-        _telegram_onboarding_pairings.pop(pairing_id, None)
-    return {"ok": True}
-
-
-@app.get("/api/messaging/platforms")
-async def get_messaging_platforms(profile: Optional[str] = None):
-    # Profile-scoped so the dashboard's global profile switcher shows the
-    # TARGET profile's channel credentials/state, not the root install's.
-    # Inside _profile_scope, load_env()/read_runtime_status()/get_running_pid()
-    # all resolve against the requested profile's HERMES_HOME.
-    with _profile_scope(profile) as scoped_dir:
-        env_on_disk = load_env()
-        runtime = read_runtime_status()
-        return {
-            "env_path": str(get_env_path()),
-            "gateway_start_command": _gateway_display_command(profile, "start"),
-            "platforms": [
-                _messaging_platform_payload(
-                    entry, env_on_disk, runtime, scoped=scoped_dir is not None
-                )
-                for entry in _messaging_platform_catalog()
-            ]
-        }
-
-
-@app.put("/api/messaging/platforms/{platform_id}")
-async def update_messaging_platform(
-    platform_id: str, body: MessagingPlatformUpdate, profile: Optional[str] = None
-):
-    entry = _catalog_lookup(platform_id)
-    if not entry:
-        raise HTTPException(
-            status_code=404, detail=f"Unknown messaging platform: {platform_id}"
-        )
-
-    allowed_env = set(entry["env_vars"])
-    try:
-        with _profile_scope(body.profile or profile):
-            for key in body.clear_env:
-                if key not in allowed_env:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"{key} is not configurable for {entry['name']}",
-                    )
-                remove_env_value(key)
-
-            for key, value in body.env.items():
-                if key not in allowed_env:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"{key} is not configurable for {entry['name']}",
-                    )
-                trimmed = value.strip()
-                if trimmed:
-                    _validate_messaging_env_value(platform_id, key, trimmed)
-                    save_env_value(key, trimmed)
-
-            if body.enabled is not None:
-                _write_platform_enabled(platform_id, body.enabled)
-
-        return {"ok": True, "platform": platform_id}
-    except HTTPException:
-        raise
-    except Exception:
-        _log.exception("PUT /api/messaging/platforms/%s failed", platform_id)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@app.post("/api/messaging/platforms/{platform_id}/test")
-async def test_messaging_platform(platform_id: str, profile: Optional[str] = None):
-    entry = _catalog_lookup(platform_id)
-    if not entry:
-        raise HTTPException(
-            status_code=404, detail=f"Unknown messaging platform: {platform_id}"
-        )
-
-    with _profile_scope(profile) as scoped_dir:
-        env_on_disk = load_env()
-        payload = _messaging_platform_payload(
-            entry, env_on_disk, read_runtime_status(), scoped=scoped_dir is not None
-        )
-    if not payload["enabled"]:
-        message = f"{entry['name']} is disabled. Enable it, then restart the gateway."
-        return {"ok": False, "state": payload["state"], "message": message}
-    if not payload["configured"]:
-        missing = [
-            field["key"]
-            for field in payload["env_vars"]
-            if field["required"] and not field["is_set"]
-        ]
-        message = (
-            f"Missing required setup: {', '.join(missing)}"
-            if missing
-            else "Platform setup is incomplete."
-        )
-        return {"ok": False, "state": payload["state"], "message": message}
-    if not payload["gateway_running"]:
-        return {
-            "ok": False,
-            "state": payload["state"],
-            "message": "Gateway is not running. Restart the gateway to connect this platform.",
-        }
-    if payload["state"] == "connected":
-        return {
-            "ok": True,
-            "state": payload["state"],
-            "message": f"{entry['name']} is connected.",
-        }
-    if payload.get("error_message"):
-        return {
-            "ok": False,
-            "state": payload["state"],
-            "message": payload["error_message"],
-        }
-    return {
-        "ok": False,
-        "state": payload["state"],
-        "message": "Setup looks complete, but the gateway has not reported a connection yet. Restart the gateway.",
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -7517,7 +5940,6 @@ async def cancel_oauth_session(
 # ---------------------------------------------------------------------------
 
 
-
 def _session_latest_descendant(session_id: str):
     """Resolve a session id to the newest child leaf session.
 
@@ -7762,7 +6184,6 @@ async def get_session_detail(session_id: str, profile: Optional[str] = None):
         return session
     finally:
         db.close()
-
 
 
 @app.get("/api/sessions/{session_id}/latest-descendant")
@@ -8298,34 +6719,6 @@ async def create_cron_job(body: CronJobCreate, profile: str = "default"):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/api/cron/delivery-targets")
-async def get_cron_delivery_targets():
-    """Delivery targets the cron dropdown should offer.
-
-    Always includes the implicit ``local`` option. Beyond that, the list is
-    derived dynamically from the configured gateway platforms via
-    ``cron.scheduler.cron_delivery_targets()`` — no hardcoded platform list. A
-    configured platform that hasn't set its cron home channel is still returned
-    with ``home_target_set: false`` so the UI can surface it as "configure a
-    home channel first" rather than hiding it.
-    """
-    targets = [
-        {
-            "id": "local",
-            "name": "Local (save only)",
-            "home_target_set": True,
-            "home_env_var": None,
-        }
-    ]
-    try:
-        from cron.scheduler import cron_delivery_targets
-
-        targets.extend(cron_delivery_targets())
-    except Exception:
-        _log.exception("GET /api/cron/delivery-targets failed")
-    return {"targets": targets}
-
-
 @app.put("/api/cron/jobs/{job_id}")
 async def update_cron_job(job_id: str, body: CronJobUpdate, profile: Optional[str] = None):
     selected = profile or _find_cron_job_profile(job_id)
@@ -8414,10 +6807,8 @@ def _fire_cron_job_for_profile(profile: str, job_id: str) -> bool:
 
     Retargets the ``cron.jobs`` module globals to the profile's cron dir under
     the shared lock — same mechanism as ``_call_cron_for_profile`` — so the
-    claim and the run operate on the right profile's ``jobs.json``. Runs with
-    no live adapters; delivery falls back to the per-platform send path (the
-    dashboard process has no gateway adapter handles, exactly like the desktop
-    cron path above).
+    claim and the run operate on the right profile's ``jobs.json``. Output is
+    saved locally, exactly like the desktop cron ticker.
     """
     _profile_name, home = _cron_profile_home(profile)
     with _CRON_PROFILE_LOCK:
@@ -8432,7 +6823,7 @@ def _fire_cron_job_for_profile(profile: str, job_id: str) -> bool:
         cron_jobs.OUTPUT_DIR = cron_jobs.CRON_DIR / "output"
         try:
             provider = resolve_cron_scheduler()
-            return bool(provider.fire_due(job_id, adapters=None, loop=None))
+            return bool(provider.fire_due(job_id))
         finally:
             cron_jobs.CRON_DIR = old_cron_dir
             cron_jobs.JOBS_FILE = old_jobs_file
@@ -8509,31 +6900,13 @@ class AutomationBlueprintInstantiate(BaseModel):
 async def list_cron_blueprints():
     """Return the blueprint catalog as form schemas for the dashboard gallery.
 
-    The ``deliver`` slot's options are rewritten from the user's actually
-    configured gateway platforms (plus the universal origin/local/all), so the
-    form never offers a platform that isn't connected.
+    Blueprint jobs deliver locally (output saved and shown in the Cron
+    screen); there is no ``deliver`` slot.
     """
     try:
         from cron.blueprint_catalog import CATALOG, blueprint_catalog_entry
 
-        deliver_options = None
-        try:
-            from cron.scheduler import cron_delivery_targets
-
-            platforms = [t["id"] for t in cron_delivery_targets() if t.get("id")]
-            deliver_options = ["origin", "local", *platforms]
-        except Exception:
-            _log.debug("cron_delivery_targets unavailable; using static deliver options", exc_info=True)
-
-        entries = []
-        for r in CATALOG:
-            entry = blueprint_catalog_entry(r)
-            if deliver_options:
-                for f in entry.get("fields", []):
-                    if f.get("name") == "deliver":
-                        f["options"] = deliver_options
-            entries.append(entry)
-        return {"blueprints": entries}
+        return {"blueprints": [blueprint_catalog_entry(r) for r in CATALOG]}
     except Exception as e:
         _log.exception("GET /api/cron/blueprints failed")
         raise HTTPException(status_code=500, detail=str(e))
@@ -8553,8 +6926,7 @@ async def instantiate_blueprint(body: AutomationBlueprintInstantiate, profile: s
         except BlueprintFillError as exc:
             # Field-level validation error — 422 so the form can show it inline.
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        # Blueprint-created jobs deliver to the dashboard's configured target by
-        # default; the form's deliver slot overrides via spec["deliver"].
+        # Blueprint-created jobs deliver locally (blueprint deliver_default).
         spec.pop("origin", None)
         return _call_cron_for_profile(profile, "create_job", **spec)
     except HTTPException:
@@ -8897,282 +7269,6 @@ async def install_mcp_catalog_entry(body: MCPCatalogInstall, profile: Optional[s
 # Register the mcp-install action log so /api/actions/mcp-install/status works.
 _ACTION_LOG_FILES.setdefault("mcp-install", "action-mcp-install.log")
 _ACTION_LOG_FILES.setdefault("computer-use-grant", "action-computer-use-grant.log")
-
-
-# ---------------------------------------------------------------------------
-# Pairing endpoints — approve / revoke / list messaging pairing codes.
-#
-# These are how a remote admin onboards messaging users (Telegram, Discord, …)
-# without shell access.  Wraps gateway.pairing.PairingStore directly.
-# ---------------------------------------------------------------------------
-
-
-class PairingApprove(BaseModel):
-    platform: str
-    code: str
-
-
-class PairingRevoke(BaseModel):
-    platform: str
-    user_id: str
-
-
-def _pairing_store():
-    from gateway.pairing import PairingStore
-
-    return PairingStore()
-
-
-@app.get("/api/pairing")
-async def list_pairing():
-    store = _pairing_store()
-    return {
-        "pending": store.list_pending(),
-        "approved": store.list_approved(),
-    }
-
-
-@app.post("/api/pairing/approve")
-async def approve_pairing(body: PairingApprove):
-    store = _pairing_store()
-    platform = (body.platform or "").lower().strip()
-    code = (body.code or "").upper().strip()
-    if not platform or not code:
-        raise HTTPException(status_code=400, detail="platform and code are required")
-
-    result = store.approve_code(platform, code)
-    if result:
-        return {"ok": True, "user": result}
-    if store._is_locked_out(platform):
-        raise HTTPException(
-            status_code=429,
-            detail=f"Platform '{platform}' is locked out after too many failed approvals.",
-        )
-    raise HTTPException(
-        status_code=404,
-        detail=f"Code '{code}' not found or expired for platform '{platform}'.",
-    )
-
-
-@app.post("/api/pairing/revoke")
-async def revoke_pairing(body: PairingRevoke):
-    store = _pairing_store()
-    platform = (body.platform or "").lower().strip()
-    if not platform or not body.user_id:
-        raise HTTPException(status_code=400, detail="platform and user_id are required")
-    if store.revoke(platform, body.user_id):
-        return {"ok": True}
-    raise HTTPException(
-        status_code=404,
-        detail=f"User {body.user_id} not found in approved list for {platform}.",
-    )
-
-
-@app.post("/api/pairing/clear-pending")
-async def clear_pending_pairing():
-    store = _pairing_store()
-    count = store.clear_pending()
-    return {"ok": True, "cleared": count}
-
-
-# ---------------------------------------------------------------------------
-# Webhook subscription endpoints — list / subscribe / remove.
-#
-# Wraps the same JSON store the CLI uses (lliam_cli.webhook); the webhook
-# adapter hot-reloads it without a gateway restart.  Per-route HMAC secrets
-# are redacted on read and surfaced once on create.
-# ---------------------------------------------------------------------------
-
-
-class WebhookCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    events: List[str] = []
-    prompt: Optional[str] = None
-    skills: List[str] = []
-    deliver: str = "log"
-    deliver_only: bool = False
-    deliver_chat_id: Optional[str] = None
-    # secret: omit to auto-generate
-    secret: Optional[str] = None
-
-
-def _webhook_route_summary(name: str, route: Dict[str, Any], base_url: str) -> Dict[str, Any]:
-    return {
-        "name": name,
-        "description": route.get("description", ""),
-        "events": list(route.get("events") or []),
-        "deliver": route.get("deliver", "log"),
-        "deliver_only": bool(route.get("deliver_only")),
-        "prompt": route.get("prompt", ""),
-        "skills": list(route.get("skills") or []),
-        "created_at": route.get("created_at"),
-        "url": f"{base_url}/webhooks/{name}",
-        # Secret is masked on read; full value only returned on create.
-        "secret_set": bool(route.get("secret")),
-        # Default-enabled; only an explicit enabled:false turns a route off.
-        "enabled": route.get("enabled", True) is not False,
-    }
-
-
-@app.get("/api/webhooks")
-async def list_webhooks():
-    import lliam_cli.webhook as wh
-
-    base_url = wh._get_webhook_base_url()
-    subs = wh._load_subscriptions()
-    return {
-        "enabled": wh._is_webhook_enabled(),
-        "base_url": base_url,
-        "subscriptions": [
-            _webhook_route_summary(name, route, base_url)
-            for name, route in subs.items()
-        ],
-    }
-
-
-@app.post("/api/webhooks/enable")
-async def enable_webhooks():
-    try:
-        _write_platform_enabled("webhook", True)
-    except Exception as exc:
-        _log.exception("Failed to enable webhook platform from dashboard")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to enable webhook platform.",
-        ) from exc
-
-    restart_result = _restart_gateway_after_webhook_enable()
-    return {
-        "ok": True,
-        "platform": "webhook",
-        "enabled": True,
-        "needs_restart": not restart_result["restart_started"],
-        **restart_result,
-    }
-
-
-@app.post("/api/webhooks")
-async def create_webhook(body: WebhookCreate):
-    import re as _re
-    import secrets as _secrets
-    import time as _time
-    import lliam_cli.webhook as wh
-
-    if not wh._is_webhook_enabled():
-        raise HTTPException(
-            status_code=400,
-            detail="Webhook platform is not enabled. Enable it from the Webhooks page first.",
-        )
-
-    name = (body.name or "").strip().lower().replace(" ", "-")
-    if not _re.match(r"^[a-z0-9][a-z0-9_-]*$", name):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid name. Use lowercase alphanumeric with hyphens/underscores.",
-        )
-
-    if body.deliver_only and body.deliver == "log":
-        raise HTTPException(
-            status_code=400,
-            detail="Direct delivery requires a real target (telegram, discord, …), not 'log'.",
-        )
-
-    secret = body.secret or _secrets.token_urlsafe(32)
-    route: Dict[str, Any] = {
-        "description": body.description or f"Dashboard-created subscription: {name}",
-        "events": [e.strip() for e in body.events if e.strip()],
-        "secret": secret,
-        "prompt": body.prompt or "",
-        "skills": [s.strip() for s in body.skills if s.strip()],
-        "deliver": body.deliver or "log",
-        "created_at": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
-    }
-    if body.deliver_only:
-        route["deliver_only"] = True
-    if body.deliver_chat_id:
-        route["deliver_extra"] = {"chat_id": body.deliver_chat_id}
-
-    subs = wh._load_subscriptions()
-    subs[name] = route
-    wh._save_subscriptions(subs)
-
-    base_url = wh._get_webhook_base_url()
-    summary = _webhook_route_summary(name, route, base_url)
-    # Surface the secret exactly once, on create.
-    summary["secret"] = secret
-    return summary
-
-
-@app.delete("/api/webhooks/{name}")
-async def delete_webhook(name: str):
-    import lliam_cli.webhook as wh
-
-    key = (name or "").strip().lower()
-    subs = wh._load_subscriptions()
-    if key not in subs:
-        raise HTTPException(status_code=404, detail=f"No subscription named '{key}'")
-    del subs[key]
-    wh._save_subscriptions(subs)
-    return {"ok": True}
-
-
-class WebhookEnabledToggle(BaseModel):
-    enabled: bool
-
-
-@app.put("/api/webhooks/{name}/enabled")
-async def set_webhook_enabled(name: str, body: WebhookEnabledToggle):
-    """Enable or disable a webhook route.
-
-    Disabled routes stay in the subscriptions file (so they can be
-    re-enabled) but the gateway rejects incoming events with 403.  The
-    gateway hot-reloads the subscriptions file, so this takes effect on the
-    next event without a restart.
-    """
-    import lliam_cli.webhook as wh
-
-    key = (name or "").strip().lower()
-    subs = wh._load_subscriptions()
-    if key not in subs:
-        raise HTTPException(status_code=404, detail=f"No subscription named '{key}'")
-    subs[key]["enabled"] = bool(body.enabled)
-    wh._save_subscriptions(subs)
-    return {"ok": True, "name": key, "enabled": bool(body.enabled)}
-
-
-# ---------------------------------------------------------------------------
-# Gateway lifecycle endpoints — start / stop.
-#
-# restart + update already exist above; these complete the lifecycle so a
-# remote admin can bring the gateway up or down without shell access.  Both
-# spawn the real `lliam-gov gateway <verb>` so behaviour matches the CLI exactly.
-# Status is already surfaced by /api/status (gateway_running/state/platforms).
-# ---------------------------------------------------------------------------
-
-
-@app.post("/api/gateway/start")
-async def start_gateway(profile: Optional[str] = None):
-    try:
-        proc = _spawn_lliam_action(_gateway_subcommand(profile, "start"), "gateway-start")
-    except HTTPException:
-        raise
-    except Exception as exc:
-        _log.exception("Failed to spawn gateway start")
-        raise HTTPException(status_code=500, detail=f"Failed to start gateway: {exc}")
-    return {"ok": True, "pid": proc.pid, "name": "gateway-start"}
-
-
-@app.post("/api/gateway/stop")
-async def stop_gateway(profile: Optional[str] = None):
-    try:
-        proc = _spawn_lliam_action(_gateway_subcommand(profile, "stop"), "gateway-stop")
-    except HTTPException:
-        raise
-    except Exception as exc:
-        _log.exception("Failed to spawn gateway stop")
-        raise HTTPException(status_code=500, detail=f"Failed to stop gateway: {exc}")
-    return {"ok": True, "pid": proc.pid, "name": "gateway-stop"}
 
 
 # ---------------------------------------------------------------------------
@@ -10166,7 +8262,6 @@ def _profile_to_dict(info) -> Dict[str, Any]:
         "provider": _profile_attr(info, "provider"),
         "has_env": bool(_profile_attr(info, "has_env", False)),
         "skill_count": int(_profile_attr(info, "skill_count", 0) or 0),
-        "gateway_running": bool(_profile_attr(info, "gateway_running", False)),
         "description": _profile_attr(info, "description", "") or "",
         "description_auto": bool(_profile_attr(info, "description_auto", False)),
         "distribution_name": _profile_attr(info, "distribution_name"),
@@ -10195,7 +8290,6 @@ def _fallback_profile_dicts(profiles_mod) -> List[Dict[str, Any]]:
             "provider": provider,
             "has_env": (default_home / ".env").exists(),
             "skill_count": _safe(lambda: profiles_mod._count_skills(default_home), 0),
-            "gateway_running": _safe(lambda: profiles_mod._check_gateway_running(default_home), False),
             "description": _safe(lambda: profiles_mod.read_profile_meta(default_home).get("description", ""), ""),
             "description_auto": _safe(lambda: profiles_mod.read_profile_meta(default_home).get("description_auto", False), False),
             "distribution_name": None,
@@ -10218,7 +8312,6 @@ def _fallback_profile_dicts(profiles_mod) -> List[Dict[str, Any]]:
                 "provider": provider,
                 "has_env": (entry / ".env").exists(),
                 "skill_count": _safe(lambda entry=entry: profiles_mod._count_skills(entry), 0),
-                "gateway_running": _safe(lambda entry=entry: profiles_mod._check_gateway_running(entry), False),
                 "description": _safe(lambda entry=entry: profiles_mod.read_profile_meta(entry).get("description", ""), ""),
                 "description_auto": _safe(lambda entry=entry: profiles_mod.read_profile_meta(entry).get("description_auto", False), False),
                 "distribution_name": None,

@@ -142,7 +142,7 @@ def _prepare_cli_with_active_session(tmp_path):
 
 @pytest.fixture(autouse=True)
 def _reset_session_id_context():
-    from gateway.session_context import _UNSET, _VAR_MAP
+    from agent.session_context import _UNSET, _VAR_MAP
 
     yield
     # rename R.8a: producers write LLIAM_SESSION_ID; clear both for isolation.
@@ -178,7 +178,7 @@ def test_new_command_creates_real_fresh_session_and_resets_agent_state(tmp_path)
 
 
 def test_new_command_rotates_lliam_session_id_env_and_context(tmp_path):
-    from gateway.session_context import _VAR_MAP, get_session_env
+    from agent.session_context import _VAR_MAP, get_session_env
 
     cli = _prepare_cli_with_active_session(tmp_path)
     old_session_id = cli.session_id

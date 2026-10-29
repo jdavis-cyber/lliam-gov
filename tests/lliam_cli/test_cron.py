@@ -51,7 +51,6 @@ class TestCronCommandLifecycle:
                 schedule="every 2h",
                 prompt="Revised prompt",
                 name="Edited Job",
-                deliver=None,
                 repeat=None,
                 skill=None,
                 skills=["maps", "blogwatcher"],
@@ -71,7 +70,6 @@ class TestCronCommandLifecycle:
                 schedule=None,
                 prompt=None,
                 name=None,
-                deliver=None,
                 repeat=None,
                 skill=None,
                 skills=None,
@@ -92,7 +90,6 @@ class TestCronCommandLifecycle:
                 schedule="every 1h",
                 prompt="Use both skills",
                 name="Skill combo",
-                deliver=None,
                 repeat=None,
                 skill=None,
                 skills=["blogwatcher", "maps"],
@@ -123,22 +120,21 @@ class TestCronCommandLifecycle:
         assert "Repeat:    ∞" in out
 
 
-class TestGatewayNotRunningWarning:
-    """`cron create` / `cron list` must warn when the gateway (and thus the
-    cron ticker) isn't running, since jobs only fire inside the gateway.
+class TestTickerNotRunningWarning:
+    """`cron create` / `cron list` must warn when the cron ticker (hosted by
+    the desktop backend) isn't running, since jobs only fire inside it.
     Regression guard for #51038 — the most common cron 'jobs never fired'
-    report was simply a gateway that was never started.
+    report was simply a scheduler host that was never started.
     """
 
-    def test_create_warns_when_gateway_absent(self, tmp_cron_dir, capsys, monkeypatch):
-        monkeypatch.setattr("lliam_cli.gateway.find_gateway_pids", lambda: [])
+    def test_create_warns_when_ticker_absent(self, tmp_cron_dir, capsys, monkeypatch):
+        monkeypatch.setattr("cron.jobs.get_ticker_heartbeat_age", lambda: None)
         cron_command(
             Namespace(
                 cron_command="create",
                 schedule="0 11 * * *",
                 prompt="Daily report",
                 name="Daily 1130",
-                deliver=None,
                 repeat=None,
                 skill=None,
                 skills=None,
@@ -149,17 +145,16 @@ class TestGatewayNotRunningWarning:
         )
         out = capsys.readouterr().out
         assert "Created job" in out
-        assert "Gateway is not running" in out
+        assert "cron ticker is not running" in out
 
-    def test_create_silent_when_gateway_running(self, tmp_cron_dir, capsys, monkeypatch):
-        monkeypatch.setattr("lliam_cli.gateway.find_gateway_pids", lambda: [4242])
+    def test_create_silent_when_ticker_running(self, tmp_cron_dir, capsys, monkeypatch):
+        monkeypatch.setattr("cron.jobs.get_ticker_heartbeat_age", lambda: 5.0)
         cron_command(
             Namespace(
                 cron_command="create",
                 schedule="0 11 * * *",
                 prompt="Daily report",
                 name="Daily 1130",
-                deliver=None,
                 repeat=None,
                 skill=None,
                 skills=None,
@@ -170,11 +165,11 @@ class TestGatewayNotRunningWarning:
         )
         out = capsys.readouterr().out
         assert "Created job" in out
-        assert "Gateway is not running" not in out
+        assert "cron ticker is not running" not in out
 
-    def test_list_warns_when_gateway_absent(self, tmp_cron_dir, capsys, monkeypatch):
+    def test_list_warns_when_ticker_absent(self, tmp_cron_dir, capsys, monkeypatch):
         create_job(prompt="Daily report", schedule="0 11 * * *")
-        monkeypatch.setattr("lliam_cli.gateway.find_gateway_pids", lambda: [])
+        monkeypatch.setattr("cron.jobs.get_ticker_heartbeat_age", lambda: None)
         cron_command(Namespace(cron_command="list", all=True))
         out = capsys.readouterr().out
-        assert "Gateway is not running" in out
+        assert "cron ticker is not running" in out

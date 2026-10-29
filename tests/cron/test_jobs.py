@@ -308,12 +308,14 @@ class TestJobCRUD:
         job = create_job(prompt="Recurring", schedule="every 1h")
         assert job["repeat"]["times"] is None
 
-    def test_default_delivery_origin(self, tmp_cron_dir):
+    def test_delivery_is_always_local(self, tmp_cron_dir):
+        """Chat-platform delivery was removed (JER-198): even a job carrying a
+        chat origin or an explicit platform target is stored as local."""
         job = create_job(
-            prompt="Test", schedule="30m",
+            prompt="Test", schedule="30m", deliver="telegram",
             origin={"platform": "telegram", "chat_id": "123"},
         )
-        assert job["deliver"] == "origin"
+        assert job["deliver"] == "local"
 
     def test_default_delivery_local_no_origin(self, tmp_cron_dir):
         job = create_job(prompt="Test", schedule="30m")

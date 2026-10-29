@@ -85,35 +85,32 @@ def test_status_preserves_existing_fields(loopback_client):
     body = r.json()
     expected_keys = {
         "version", "release_date", "hermes_home", "config_path", "env_path",
-        "config_version", "latest_config_version", "gateway_running",
-        "gateway_pid", "gateway_health_url", "gateway_state",
-        "gateway_platforms", "gateway_exit_reason", "gateway_updated_at",
+        "config_version", "latest_config_version",
         "active_sessions", "auth_required", "auth_providers",
     }
     missing = expected_keys - set(body.keys())
     assert not missing, f"/api/status dropped fields: {missing}"
 
 
-# Host-local detail (absolute paths, PID, internal gateway URL) is deployment
+# Host-local detail (absolute paths) is deployment
 # recon a liveness probe never needs. ``/api/status`` bypasses dashboard auth
 # (it is in ``PUBLIC_API_PATHS``), so on a network-exposed bind it must not
 # leak that detail to anonymous callers.
 _HOST_DETAIL_FIELDS = frozenset({
-    "hermes_home", "config_path", "env_path", "gateway_pid",
-    "gateway_health_url",
+    "hermes_home", "config_path", "env_path",
 })
 
 
 def test_status_withholds_host_detail_in_gated_mode(gated_client):
     """On a gated (non-loopback) bind, the public ``/api/status`` probe must
-    expose only the liveness + auth-gate shape — never absolute host paths,
-    the gateway PID, or the internal gateway health URL. The endpoint
+    expose only the liveness + auth-gate shape — never absolute host paths.
+    The endpoint
     bypasses dashboard auth, so anyone who can reach the host hits it cold."""
     r = gated_client.get("/api/status")
     assert r.status_code == 200
     body = r.json()
     # Liveness / auth-gate shape stays public.
-    for key in ("version", "gateway_state", "auth_required", "auth_providers"):
+    for key in ("version", "active_sessions", "auth_required", "auth_providers"):
         assert key in body, f"liveness field {key!r} must stay public"
     # Deployment recon must be withheld from the anonymous public probe.
     leaked = _HOST_DETAIL_FIELDS & set(body.keys())
@@ -122,7 +119,7 @@ def test_status_withholds_host_detail_in_gated_mode(gated_client):
 
 def test_status_includes_host_detail_in_loopback_mode(loopback_client):
     """Counterpart to the gated case: a loopback bind is local-only, so the
-    full payload (including host paths and PID) is still served — preserving
+    full payload (including host paths) is still served — preserving
     the StatusPage / ``lliam-gov status`` experience for local operators."""
     r = loopback_client.get("/api/status")
     assert r.status_code == 200

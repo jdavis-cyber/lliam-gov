@@ -5,8 +5,7 @@ Modular wizard with independently-runnable sections:
   1. Model & Provider — choose your AI provider and model
   2. Terminal Backend — where your agent runs commands
   3. Agent Settings — iterations, compression, session reset
-  4. Messaging Platforms — connect Telegram, Discord, etc.
-  5. Tools — configure TTS, web search, image generation, etc.
+  4. Tools — configure TTS, web search, image generation, etc.
 
 Config files are stored in ~/.hermes/ for easy access.
 """
@@ -127,8 +126,6 @@ def _set_reasoning_effort(config: Dict[str, Any], effort: str) -> None:
     agent_cfg["reasoning_effort"] = effort
 
 
-
-
 # Import config helpers
 from lliam_cli.config import (
     cfg_get,
@@ -227,7 +224,6 @@ def _curses_prompt_choice(question: str, choices: list, default: int = 0, descri
     """Single-select menu using curses. Delegates to curses_radiolist."""
     from lliam_cli.curses_ui import curses_radiolist
     return curses_radiolist(question, choices, selected=default, cancel_returns=-1, description=description)
-
 
 
 def prompt_choice(question: str, choices: list, default: int = 0, description: str | None = None) -> int:
@@ -643,7 +639,6 @@ def _print_setup_summary(config: dict, lliam_home):
     print(f"   {color('lliam-gov setup', Colors.GREEN)}          Re-run the full wizard")
     print(f"   {color('lliam-gov setup model', Colors.GREEN)}    Change model/provider")
     print(f"   {color('lliam-gov setup terminal', Colors.GREEN)} Change terminal backend")
-    print(f"   {color('lliam-gov setup gateway', Colors.GREEN)}  Configure messaging")
     print(f"   {color('lliam-gov setup tools', Colors.GREEN)}    Configure tool providers")
     print()
     print(f"   {color('lliam-gov config', Colors.GREEN)}         View current settings")
@@ -663,7 +658,6 @@ def _print_setup_summary(config: dict, lliam_home):
     print(color("🚀 Ready to go!", Colors.CYAN, Colors.BOLD))
     print()
     print(f"   {color('lliam-gov', Colors.GREEN)}           Start chatting")
-    print(f"   {color('lliam-gov gateway', Colors.GREEN)}   Start messaging gateway")
     print(f"   {color('lliam-gov doctor', Colors.GREEN)}    Check for issues")
     print()
 
@@ -717,7 +711,6 @@ def _prompt_container_resources(config: dict):
 # =============================================================================
 # Section 1: Model & Provider Configuration
 # =============================================================================
-
 
 
 def setup_model_provider(config: dict, *, quick: bool = False):
@@ -1664,534 +1657,6 @@ def setup_agent_settings(config: dict):
 
 
 # =============================================================================
-# Section 4: Messaging Platforms (Gateway)
-# =============================================================================
-
-
-_TELEGRAM_BOT_TOKEN_RE = re.compile(r"^\d+:[A-Za-z0-9_-]{30,}$")
-
-
-def _is_valid_telegram_bot_token(token: str) -> bool:
-    return bool(_TELEGRAM_BOT_TOKEN_RE.match(token))
-
-
-def _setup_telegram_auto_result():
-    """Attempt automatic Telegram bot creation via managed QR onboarding."""
-    try:
-        from lliam_cli.telegram_managed_bot import auto_setup_telegram_bot_result
-    except ImportError:
-        return None
-
-    profile_name: str | None = None
-    try:
-        profile_name = _profile_name_from_lliam_home(Path(get_lliam_home()))
-    except Exception:
-        pass
-
-    return auto_setup_telegram_bot_result(profile_name=profile_name)
-
-
-def _profile_name_from_lliam_home(lliam_home) -> str | None:
-    """Return the active profile name when HERMES_HOME is a profile dir."""
-    if lliam_home.parent.name == "profiles":
-        return lliam_home.name
-    return None
-
-
-def _setup_telegram_auto() -> str | None:
-    """Attempt automatic Telegram bot creation and return only the token."""
-    result = _setup_telegram_auto_result()
-    return result.token if result else None
-
-
-def _prompt_telegram_bot_token() -> str | None:
-    print_info("Create a bot via @BotFather on Telegram")
-    while True:
-        token = prompt("Telegram bot token", password=True)
-        if not token:
-            return None
-        if not _is_valid_telegram_bot_token(token):
-            print_error(
-                "Invalid token format. Expected: <numeric_id>:<alphanumeric_hash> "
-                "(e.g., 123456789:ABCdefGHI-jklMNOpqrSTUvwxYZ)"
-            )
-            continue
-        return token
-
-
-def _setup_telegram():
-    """Configure Telegram bot credentials and allowlist."""
-    print_header("Telegram")
-    existing = get_env_value("TELEGRAM_BOT_TOKEN")
-    if existing:
-        print_info("Telegram: already configured")
-        if not prompt_yes_no("Reconfigure Telegram?", False):
-            # Check missing allowlist on existing config
-            if not get_env_value("TELEGRAM_ALLOWED_USERS"):
-                print_info("⚠️  Telegram has no user allowlist - anyone can use your bot!")
-                if prompt_yes_no("Add allowed users now?", True):
-                    print_info("   To find your Telegram user ID: message @userinfobot")
-                    allowed_users = prompt("Allowed user IDs (comma-separated)")
-                    if allowed_users:
-                        save_env_value("TELEGRAM_ALLOWED_USERS", allowed_users.replace(" ", ""))
-                        print_success("Telegram allowlist configured")
-            return
-
-    print_info("How would you like to create your Telegram bot?")
-    print()
-    print_info("  [1] Automatic (recommended)")
-    print_info("      Scan a QR code → confirm in Telegram → done.")
-    print_info("      No token copy-paste needed.")
-    print()
-    print_info("  [2] Manual")
-    print_info("      Create a bot via @BotFather yourself and paste the token.")
-    print()
-
-    choice = prompt("Choice [1/2]", default="1")
-    token = None
-    setup_result = None
-
-    if choice.strip() == "1":
-        setup_result = _setup_telegram_auto_result()
-        if setup_result:
-            token = setup_result.token
-            if not _is_valid_telegram_bot_token(token):
-                print_error("Automatic setup returned an invalid Telegram bot token.")
-                token = None
-                setup_result = None
-        else:
-            token = None
-        if not token:
-            print()
-            print_info("Falling back to manual setup...")
-            print()
-
-    if not token:
-        token = _prompt_telegram_bot_token()
-    if not token:
-        return
-
-    save_env_value("TELEGRAM_BOT_TOKEN", token)
-    print_success("Telegram token saved")
-
-    print()
-    print_info("🔒 Security: Restrict who can use your bot")
-    print_info("   To find your Telegram user ID:")
-    print_info("   1. Message @userinfobot on Telegram")
-    print_info("   2. It will reply with your numeric ID (e.g., 123456789)")
-    print()
-
-    detected_user_id = getattr(setup_result, "owner_user_id", None)
-    if detected_user_id:
-        detected_id = str(detected_user_id)
-        print_success(f"Detected your Telegram user ID: {detected_id}")
-        if prompt_yes_no("Allow this Telegram account to use the bot?", True):
-            extra = prompt("Additional allowed user IDs (comma-separated, optional)")
-            ids = [detected_id]
-            for uid in extra.replace(" ", "").split(","):
-                if uid and uid not in ids:
-                    ids.append(uid)
-            allowed_users = ",".join(ids)
-        else:
-            allowed_users = prompt(
-                "Allowed user IDs (comma-separated, leave empty for open access)"
-            )
-    else:
-        allowed_users = prompt(
-            "Allowed user IDs (comma-separated, leave empty for open access)"
-        )
-
-    if allowed_users:
-        allowed_users = allowed_users.replace(" ", "")
-        save_env_value("TELEGRAM_ALLOWED_USERS", allowed_users)
-        print_success("Telegram allowlist configured - only listed users can use the bot")
-    else:
-        print_info("⚠️  No allowlist set - anyone who finds your bot can use it!")
-
-    print()
-    print_info("📬 Home Channel: where Lliam-GOV delivers cron job results,")
-    print_info("   cross-platform messages, and notifications.")
-    print_info("   For Telegram DMs, this is your user ID (same as above).")
-
-    first_user_id = allowed_users.split(",")[0].strip() if allowed_users else ""
-    if first_user_id:
-        if prompt_yes_no(f"Use your user ID ({first_user_id}) as the home channel?", True):
-            save_env_value("TELEGRAM_HOME_CHANNEL", first_user_id)
-            print_success(f"Telegram home channel set to {first_user_id}")
-        else:
-            home_channel = prompt("Home channel ID (or leave empty to set later with /set-home in Telegram)")
-            if home_channel:
-                save_env_value("TELEGRAM_HOME_CHANNEL", home_channel)
-    else:
-        print_info("   You can also set this later by typing /set-home in your Telegram chat.")
-        home_channel = prompt("Home channel ID (leave empty to set later)")
-        if home_channel:
-            save_env_value("TELEGRAM_HOME_CHANNEL", home_channel)
-
-
-# _setup_slack and _write_slack_manifest_and_instruct moved to the slack
-# plugin: plugins/platforms/slack/adapter.py::interactive_setup (registered
-# via setup_fn and dispatched through the plugin path). #41112 / #3823.
-
-
-# _setup_matrix moved to plugins/platforms/matrix/adapter.py::interactive_setup
-# (registered via setup_fn, dispatched through the plugin path). #41112.
-
-
-def _setup_bluebubbles():
-    """Configure BlueBubbles iMessage gateway."""
-    print_header("BlueBubbles (iMessage)")
-    existing = get_env_value("BLUEBUBBLES_SERVER_URL")
-    if existing:
-        print_info("BlueBubbles: already configured")
-        if not prompt_yes_no("Reconfigure BlueBubbles?", False):
-            return
-
-    print_info("Connects Lliam-GOV to iMessage via BlueBubbles — a free, open-source")
-    print_info("macOS server that bridges iMessage to any device.")
-    print_info("   Requires a Mac running BlueBubbles Server v1.0.0+")
-    print_info("   Download: https://bluebubbles.app/")
-    print()
-    print_info("In BlueBubbles Server → Settings → API, note your Server URL and Password.")
-    print()
-
-    server_url = prompt("BlueBubbles server URL (e.g. http://192.168.1.10:1234)")
-    if not server_url:
-        print_warning("Server URL is required — skipping BlueBubbles setup")
-        return
-    save_env_value("BLUEBUBBLES_SERVER_URL", server_url.rstrip("/"))
-
-    password = prompt("BlueBubbles server password", password=True)
-    if not password:
-        print_warning("Password is required — skipping BlueBubbles setup")
-        return
-    save_env_value("BLUEBUBBLES_PASSWORD", password)
-    print_success("BlueBubbles credentials saved")
-
-    print()
-    print_info("🔒 Security: Restrict who can message your bot")
-    print_info("   Use iMessage addresses: email (user@icloud.com) or phone (+15551234567)")
-    print()
-    allowed_users = prompt("Allowed iMessage addresses (comma-separated, leave empty for open access)")
-    if allowed_users:
-        save_env_value("BLUEBUBBLES_ALLOWED_USERS", allowed_users.replace(" ", ""))
-        print_success("BlueBubbles allowlist configured")
-    else:
-        print_info("⚠️  No allowlist set — anyone who can iMessage you can use the bot!")
-
-    print()
-    print_info("📬 Home Channel: phone or email for cron job delivery and notifications.")
-    print_info("   You can also set this later with /set-home in your iMessage chat.")
-    home_channel = prompt("Home channel address (leave empty to set later)")
-    if home_channel:
-        save_env_value("BLUEBUBBLES_HOME_CHANNEL", home_channel)
-
-    print()
-    print_info("Advanced settings (defaults are fine for most setups):")
-    if prompt_yes_no("Configure webhook listener settings?", False):
-        webhook_port = prompt("Webhook listener port (default: 8645)")
-        if webhook_port:
-            try:
-                save_env_value("BLUEBUBBLES_WEBHOOK_PORT", str(int(webhook_port)))
-                print_success(f"Webhook port set to {webhook_port}")
-            except ValueError:
-                print_warning("Invalid port number, using default 8645")
-
-    print()
-    print_info("Requires the BlueBubbles Private API helper for typing indicators,")
-    print_info("read receipts, and tapback reactions. Basic messaging works without it.")
-    print_info("   Install: https://docs.bluebubbles.app/helper-bundle/installation")
-
-
-def _setup_qqbot():
-    """Configure QQ Bot (Official API v2) via gateway setup."""
-    from lliam_cli.gateway import _setup_qqbot as _gateway_setup_qqbot
-    _gateway_setup_qqbot()
-
-
-def _setup_webhooks():
-    """Configure webhook integration."""
-    print_header("Webhooks")
-    existing = get_env_value("WEBHOOK_ENABLED")
-    if existing:
-        print_info("Webhooks: already configured")
-        if not prompt_yes_no("Reconfigure webhooks?", False):
-            return
-
-    print()
-    print_warning("⚠  Webhook and SMS platforms require exposing gateway ports to the")
-    print_warning("   internet. For security, run the gateway in a sandboxed environment")
-    print_warning("   (Docker, VM, etc.) to limit blast radius from prompt injection.")
-    print()
-    print_info("   Full guide: https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks/")
-    print()
-
-    port = prompt("Webhook port (default 8644)")
-    if port:
-        try:
-            save_env_value("WEBHOOK_PORT", str(int(port)))
-            print_success(f"Webhook port set to {port}")
-        except ValueError:
-            print_warning("Invalid port number, using default 8644")
-
-    secret = prompt("Global HMAC secret (shared across all routes)", password=True)
-    if secret:
-        save_env_value("WEBHOOK_SECRET", secret)
-        print_success("Webhook secret saved")
-    else:
-        print_warning("No secret set — you must configure per-route secrets in config.yaml")
-
-    save_env_value("WEBHOOK_ENABLED", "true")
-    print()
-    print_success("Webhooks enabled! Next steps:")
-    from lliam_constants import display_lliam_home as _dhh
-    print_info(f"   1. Define webhook routes in {_dhh()}/config.yaml")
-    print_info("   2. Point your service (GitHub, GitLab, etc.) at:")
-    print_info("      http://your-server:8644/webhooks/<route-name>")
-    print()
-    print_info("   Route configuration guide:")
-    print_info("   https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks/#configuring-routes")
-    print()
-    print_info("   Open config in your editor:  lliam-gov config edit")
-    print_info("   Open config in your editor:  lliam-gov config edit")
-
-
-def setup_gateway(config: dict):
-    """Configure messaging platform integrations."""
-    from lliam_cli.gateway import _all_platforms, _platform_status, _configure_platform
-
-    print_header("Messaging Platforms")
-    print_info("Connect to messaging platforms to chat with Lliam-GOV from anywhere.")
-    print_info("Toggle with Space, confirm with Enter.")
-    print()
-
-    platforms = _all_platforms()
-
-    # Build checklist, pre-selecting already-configured platforms.
-    items = []
-    pre_selected = []
-    for i, plat in enumerate(platforms):
-        status = _platform_status(plat)
-        items.append(f"{plat['emoji']} {plat['label']}  ({status})")
-        if status == "configured":
-            pre_selected.append(i)
-
-    selected = prompt_checklist("Select platforms to configure:", items, pre_selected)
-
-    if not selected:
-        print_info("No platforms selected. Run 'lliam-gov setup gateway' later to configure.")
-        return
-
-    for idx in selected:
-        _configure_platform(platforms[idx])
-
-    # ── Gateway Service Setup ──
-    # Count any platform (built-in or plugin) the user configured during this
-    # setup pass — reuses ``_platform_status`` so plugin platforms like IRC
-    # are picked up without another hard-coded env-var list.
-    def _is_progress(status: str) -> bool:
-        s = status.lower()
-        return not (
-            s == "not configured"
-            or s.startswith("partially")
-            or s.startswith("plugin disabled")
-        )
-
-    any_messaging = any(
-        _is_progress(_platform_status(p)) for p in _all_platforms()
-    )
-    if any_messaging:
-        print()
-        print_info("━" * 50)
-        print_success("Messaging platforms configured!")
-
-        # Check if any home channels are missing
-        missing_home = []
-        if get_env_value("TELEGRAM_BOT_TOKEN") and not get_env_value(
-            "TELEGRAM_HOME_CHANNEL"
-        ):
-            missing_home.append("Telegram")
-        if get_env_value("DISCORD_BOT_TOKEN") and not get_env_value(
-            "DISCORD_HOME_CHANNEL"
-        ):
-            missing_home.append("Discord")
-        if get_env_value("SLACK_BOT_TOKEN") and not get_env_value("SLACK_HOME_CHANNEL"):
-            missing_home.append("Slack")
-        if get_env_value("BLUEBUBBLES_SERVER_URL") and not get_env_value("BLUEBUBBLES_HOME_CHANNEL"):
-            missing_home.append("BlueBubbles")
-        if get_env_value("QQ_APP_ID") and not (
-            get_env_value("QQBOT_HOME_CHANNEL") or get_env_value("QQ_HOME_CHANNEL")
-        ):
-            missing_home.append("QQBot")
-
-        if missing_home:
-            print()
-            print_warning(f"No home channel set for: {', '.join(missing_home)}")
-            print_info("   Without a home channel, cron jobs and cross-platform")
-            print_info("   messages can't be delivered to those platforms.")
-            print_info("   Set one later with /set-home in your chat, or:")
-            for plat in missing_home:
-                print_info(
-                    f"     lliam-gov config set {plat.upper()}_HOME_CHANNEL <channel_id>"
-                )
-
-        # Offer to install the gateway as a system service
-        import platform as _platform
-
-        _is_linux = _platform.system() == "Linux"
-        _is_macos = _platform.system() == "Darwin"
-        _is_windows = _platform.system() == "Windows"
-
-        from lliam_cli.gateway import (
-            _is_service_installed,
-            _is_service_running,
-            supports_systemd_services,
-            has_conflicting_systemd_units,
-            has_legacy_lliam_units,
-            install_linux_gateway_from_setup,
-            print_systemd_scope_conflict_warning,
-            print_legacy_unit_warning,
-            systemd_start,
-            systemd_restart,
-            launchd_install,
-            launchd_start,
-            launchd_restart,
-            UserSystemdUnavailableError,
-            SystemScopeRequiresRootError,
-            _system_scope_wizard_would_need_root,
-            _print_system_scope_remediation,
-        )
-
-        service_installed = _is_service_installed()
-        service_running = _is_service_running()
-        supports_systemd = supports_systemd_services()
-        supports_service_manager = supports_systemd or _is_macos or _is_windows
-
-        print()
-        if supports_systemd and has_conflicting_systemd_units():
-            print_systemd_scope_conflict_warning()
-            print()
-
-        if supports_systemd and has_legacy_lliam_units():
-            print_legacy_unit_warning()
-            print()
-
-        if service_running:
-            if supports_systemd and _system_scope_wizard_would_need_root():
-                _print_system_scope_remediation("restart")
-            elif prompt_yes_no("  Restart the gateway to pick up changes?", True):
-                try:
-                    if supports_systemd:
-                        systemd_restart()
-                    elif _is_macos:
-                        launchd_restart()
-                    elif _is_windows:
-                        from lliam_cli import gateway_windows
-                        gateway_windows.restart()
-                except UserSystemdUnavailableError as e:
-                    print_error("  Restart failed — user systemd not reachable:")
-                    for line in str(e).splitlines():
-                        print(f"  {line}")
-                except SystemScopeRequiresRootError as e:
-                    # Defense in depth: the pre-check above should have
-                    # caught this, but a race (unit file appearing mid-run)
-                    # could still land here. Previously this exited the
-                    # whole wizard via sys.exit(1).
-                    print_error(f"  Restart failed: {e}")
-                    _print_system_scope_remediation("restart")
-                except Exception as e:
-                    print_error(f"  Restart failed: {e}")
-        elif service_installed:
-            if supports_systemd and _system_scope_wizard_would_need_root():
-                _print_system_scope_remediation("start")
-            elif prompt_yes_no("  Start the gateway service?", True):
-                try:
-                    if supports_systemd:
-                        systemd_start()
-                    elif _is_macos:
-                        launchd_start()
-                    elif _is_windows:
-                        from lliam_cli import gateway_windows
-                        gateway_windows.start()
-                except UserSystemdUnavailableError as e:
-                    print_error("  Start failed — user systemd not reachable:")
-                    for line in str(e).splitlines():
-                        print(f"  {line}")
-                except SystemScopeRequiresRootError as e:
-                    print_error(f"  Start failed: {e}")
-                    _print_system_scope_remediation("start")
-                except Exception as e:
-                    print_error(f"  Start failed: {e}")
-        elif supports_service_manager:
-            if supports_systemd:
-                svc_name = "systemd"
-            elif _is_macos:
-                svc_name = "launchd"
-            else:
-                svc_name = "Scheduled Task"
-            if prompt_yes_no(
-                f"  Install the gateway as a {svc_name} service? (runs in background, starts on boot)",
-                True,
-            ):
-                try:
-                    installed_scope = None
-                    did_install = False
-                    started_inline = False
-                    if supports_systemd:
-                        installed_scope, did_install = install_linux_gateway_from_setup(force=False)
-                    elif _is_macos:
-                        launchd_install(force=False)
-                        did_install = True
-                    else:
-                        # gateway_windows.install() registers the Scheduled
-                        # Task AND starts it immediately (via schtasks /Run
-                        # or a direct spawn fallback), so no separate start
-                        # prompt is needed here.
-                        from lliam_cli import gateway_windows
-                        gateway_windows.install(force=False)
-                        did_install = True
-                        started_inline = True
-                    print()
-                    if did_install and not started_inline and prompt_yes_no("  Start the service now?", True):
-                        try:
-                            if supports_systemd:
-                                systemd_start(system=installed_scope == "system")
-                            elif _is_macos:
-                                launchd_start()
-                        except UserSystemdUnavailableError as e:
-                            print_error("  Start failed — user systemd not reachable:")
-                            for line in str(e).splitlines():
-                                print(f"  {line}")
-                        except SystemScopeRequiresRootError as e:
-                            print_error(f"  Start failed: {e}")
-                            _print_system_scope_remediation("start")
-                        except Exception as e:
-                            print_error(f"  Start failed: {e}")
-                except Exception as e:
-                    print_error(f"  Install failed: {e}")
-                    print_info("  You can try manually: lliam-gov gateway install")
-            else:
-                print_info("  You can install later: lliam-gov gateway install")
-                if supports_systemd and os.geteuid() == 0:  # windows-footgun: ok — guarded by supports_systemd (Linux only)
-                    print_info("  Or as a boot-time service: lliam-gov gateway install --system")
-                print_info("  Or run in foreground:  lliam-gov gateway")
-        else:
-            from lliam_constants import is_container
-            if is_container():
-                print_info("Start the gateway to bring your bots online:")
-                print_info("   lliam-gov gateway run          # Run as container main process")
-                print_info("")
-                print_info("For automatic restarts, use a Docker restart policy:")
-                print_info("   docker run --restart unless-stopped ...")
-                print_info("   docker restart <container>  # Manual restart")
-            else:
-                print_info("Start the gateway to bring your bots online:")
-                print_info("   lliam-gov gateway              # Run in foreground")
-
-        print_info("━" * 50)
-
-
-# =============================================================================
 # Section 5: Tool Configuration (delegates to unified tools_config.py)
 # =============================================================================
 
@@ -2278,12 +1743,6 @@ def _model_section_has_credentials(config: dict) -> bool:
     return False
 
 
-def _gateway_platform_short_label(label: str) -> str:
-    """Strip trailing parenthetical qualifiers from a gateway platform label."""
-    base = label.split("(", 1)[0].strip()
-    return base or label
-
-
 def _get_section_config_summary(config: dict, section_key: str) -> Optional[str]:
     """Return a short summary if a setup section is already configured, else None.
 
@@ -2308,21 +1767,6 @@ def _get_section_config_summary(config: dict, section_key: str) -> Optional[str]
     elif section_key == "agent":
         max_turns = cfg_get(config, "agent", "max_turns", default=90)
         return f"max turns: {max_turns}"
-
-    elif section_key == "gateway":
-        from lliam_cli.gateway import _all_platforms, _platform_status
-        # Count any non-empty status other than the "not configured" sentinel —
-        # platforms like WhatsApp ("enabled, not paired"), Matrix ("configured
-        # + E2EE"), and Signal ("partially configured") all indicate the user
-        # has already started setup and we shouldn't force the section to rerun.
-        configured = [
-            _gateway_platform_short_label(plat["label"])
-            for plat in _all_platforms()
-            if _platform_status(plat) and _platform_status(plat) != "not configured"
-        ]
-        if configured:
-            return ", ".join(configured)
-        return None  # No platforms configured — section must run
 
     elif section_key == "tools":
         tools = []
@@ -2617,7 +2061,6 @@ SETUP_SECTIONS = [
     ("model", "Model & Provider", setup_model_provider),
     ("tts", "Text-to-Speech", setup_tts),
     ("terminal", "Terminal Backend", setup_terminal_backend),
-    ("gateway", "Messaging Platforms (Gateway)", setup_gateway),
     ("tools", "Tools", setup_tools),
     ("agent", "Agent Settings", setup_agent_settings),
 ]
@@ -2715,7 +2158,6 @@ def run_setup_wizard(args):
       lliam-gov setup model     — just model/provider
       lliam-gov setup tts       — just text-to-speech
       lliam-gov setup terminal  — just terminal backend
-      lliam-gov setup gateway   — just messaging platforms
       lliam-gov setup tools     — just tool configuration
       lliam-gov setup agent     — just agent settings
     """
@@ -2860,7 +2302,7 @@ def run_setup_wizard(args):
         print_info("Press Enter to keep it, or type a new value to change it.")
         print_info("")
         print_info("Tip: jump straight to a section with 'lliam-gov setup model|terminal|")
-        print_info("     gateway|tools|agent', or fill only missing items with --quick.")
+        print_info("     tools|agent', or fill only missing items with --quick.")
         # Fall through to the "Full Setup — run all sections" block below.
         # --reconfigure is now the default on existing installs; the flag
         # is preserved for backwards compatibility but is a no-op here.
@@ -2925,11 +2367,7 @@ def run_setup_wizard(args):
     if not is_existing:
         _apply_default_agent_settings(config)
 
-    # Section 4: Messaging Platforms
-    if not (migration_ran and _skip_configured_section(config, "gateway", "Messaging Platforms")):
-        setup_gateway(config)
-
-    # Section 5: Tools
+    # Section 4: Tools
     if not (migration_ran and _skip_configured_section(config, "tools", "Tools")):
         setup_tools(config, first_install=not is_existing)
 
@@ -2943,11 +2381,10 @@ def run_setup_wizard(args):
 
 
 def _run_first_time_quick_setup(config: dict, lliam_home, is_existing: bool):
-    """Streamlined first-time setup via Nous Portal: OAuth, model, terminal & messaging.
+    """Streamlined first-time setup via Nous Portal: OAuth, model, terminal.
 
     Routes straight to the Nous Portal provider — runs the device-code OAuth
-    login, picks a Nous model, then configures the terminal backend and (optionally)
-    a messaging platform. Applies sensible defaults for everything else (agent
+    login, picks a Nous model, then configures the terminal backend. Applies sensible defaults for everything else (agent
     settings, tools); the user can customize later via ``lliam-gov setup <section>``
     or switch providers with ``lliam-gov model``.
     """
@@ -2989,27 +2426,10 @@ def _run_first_time_quick_setup(config: dict, lliam_home, is_existing: bool):
 
     save_config(config)
 
-    # Step 4: Offer messaging gateway setup
-    print()
-    gateway_choice = prompt_choice(
-        "Connect a messaging platform? (Telegram, Discord, etc.)",
-        [
-            "Set up messaging now (recommended)",
-            "Skip — set up later with 'lliam-gov setup gateway'",
-        ],
-        0,
-    )
-
-    if gateway_choice == 0:
-        setup_gateway(config)
-        save_config(config)
-
     print()
     print_success("Setup complete! You're ready to go.")
     print()
     print_info("  Configure all settings:    lliam-gov setup")
-    if gateway_choice != 0:
-        print_info("  Connect Telegram/Discord:  lliam-gov setup gateway")
     print()
 
     _print_setup_summary(config, lliam_home)
@@ -3164,7 +2584,7 @@ def _run_blank_slate_setup(config: dict, lliam_home, is_existing: bool):
 
 
 def _blank_slate_walkthrough(config: dict, lliam_home):
-    """Opt-in walkthrough for Blank Slate: skills, tools, plugins, MCP, gateway."""
+    """Opt-in walkthrough for Blank Slate: skills, tools, plugins, MCP."""
     from lliam_cli.config import load_config
 
     # ── Bundled skills — default to NONE, offer to seed all ──
@@ -3227,11 +2647,6 @@ def _blank_slate_walkthrough(config: dict, lliam_home):
         print_info("Add servers with `lliam-gov mcp add <name> --url ... | --command ...`.")
     else:
         print_info("No MCP servers configured. Add later with `lliam-gov mcp add`.")
-
-    # ── Optional messaging gateway ──
-    print()
-    if prompt_yes_no("Connect a messaging platform (Telegram, Discord, …)?", default=False):
-        setup_gateway(config)
 
     save_config(config)
 
@@ -3309,11 +2724,6 @@ def _run_quick_setup(config: dict, lliam_home):
 
     # Split missing optional vars by category
     missing_tools = [v for v in missing_optional if v.get("category") == "tool"]
-    missing_messaging = [
-        v
-        for v in missing_optional
-        if v.get("category") == "messaging" and not v.get("advanced")
-    ]
 
     # ── Tool API keys (checklist) ──
     if missing_tools:
@@ -3334,66 +2744,6 @@ def _run_quick_setup(config: dict, lliam_home):
         for idx in selected_indices:
             var = missing_tools[idx]
             _prompt_api_key(var)
-
-    # ── Messaging platforms (checklist then prompt for selected) ──
-    if missing_messaging:
-        print()
-        print_header("Messaging Platforms")
-        print_info("Connect Lliam-GOV to messaging apps to chat from anywhere.")
-        print_info("You can configure these later with 'lliam-gov setup gateway'.")
-
-        # Group by platform (preserving order)
-        platform_order = []
-        platforms = {}
-        for var in missing_messaging:
-            name = var["name"]
-            if "TELEGRAM" in name:
-                plat = "Telegram"
-            elif "DISCORD" in name:
-                plat = "Discord"
-            elif "SLACK" in name:
-                plat = "Slack"
-            else:
-                continue
-            if plat not in platforms:
-                platform_order.append(plat)
-            platforms.setdefault(plat, []).append(var)
-
-        platform_labels = [
-            {
-                "Telegram": "📱 Telegram",
-                "Discord": "💬 Discord",
-                "Slack": "💼 Slack",
-            }.get(p, p)
-            for p in platform_order
-        ]
-
-        selected_indices = prompt_checklist(
-            "Which platforms would you like to set up?",
-            platform_labels,
-        )
-
-        for idx in selected_indices:
-            plat = platform_order[idx]
-            vars_list = platforms[plat]
-            emoji = {"Telegram": "📱", "Discord": "💬", "Slack": "💼"}.get(plat, "")
-            print()
-            print(color(f"  ─── {emoji} {plat} ───", Colors.CYAN))
-            print()
-            for var in vars_list:
-                print_info(f"  {var.get('description', '')}")
-                if var.get("url"):
-                    print_info(f"  {var['url']}")
-                if var.get("password"):
-                    value = prompt(f"  {var.get('prompt', var['name'])}", password=True)
-                else:
-                    value = prompt(f"  {var.get('prompt', var['name'])}")
-                if value:
-                    save_env_value(var["name"], value)
-                    print_success("  ✓ Saved")
-                else:
-                    print_warning("  Skipped")
-                print()
 
     # Handle missing config fields
     if missing_config:
