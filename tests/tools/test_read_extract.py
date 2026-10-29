@@ -244,7 +244,8 @@ class TestXlsxExtraction(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def _build(self, path, *, include_hidden=True):
+    @staticmethod
+    def _build(path, *, include_hidden=True):
         r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
         hidden_sheet = (f'<sheet name="Hidden" sheetId="2" state="hidden" '
                         f'xmlns:r="{r}" r:id="rId2"/>') if include_hidden else ""
@@ -695,7 +696,7 @@ def _build_tracking_document(tmp_path, kind):
                            '</w:body></w:document>'))
     else:
         path = tmp_path / "tracked.xlsx"
-        TestXlsxExtraction._build(None, str(path))
+        TestXlsxExtraction._build(str(path))
     return path
 
 
@@ -723,6 +724,31 @@ def test_extracted_read_tracked_after_file_change(tmp_path, pdf_task):
     os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
     again = json.loads(read_file_tool(str(path), task_id=pdf_task))
     assert again["content"] == "1|Version two"
+
+
+@pytest.mark.parametrize("how", ["rewrite", "replace"])
+def test_extracted_replacement_with_preserved_mtime_is_reread(tmp_path, pdf_task, how):
+    path = tmp_path / "restored.pdf"
+    _write_pdf(path, [["Version one"]])
+    first = json.loads(read_file_tool(str(path), task_id=pdf_task))
+    assert first["content"] == "1|Version one"
+    old = path.stat()
+
+    if how == "rewrite":
+        _write_pdf(path, [["Version two"]])
+    else:
+        staged = tmp_path / "staged.pdf"
+        _write_pdf(staged, [["Version two"]])
+        os.replace(staged, path)
+    # Restore the original mtime, as a backup restore or `cp -p` would.
+    os.utime(path, ns=(old.st_atime_ns, old.st_mtime_ns))
+    assert path.stat().st_mtime_ns == old.st_mtime_ns
+
+    second = json.loads(read_file_tool(str(path), task_id=pdf_task))
+    assert second.get("dedup") is not True
+    assert second["content"] == "1|Version two"
+    third = json.loads(read_file_tool(str(path), task_id=pdf_task))
+    assert third.get("dedup") is True
 
 
 def test_extracted_read_recorded_for_staleness(tmp_path, pdf_task):

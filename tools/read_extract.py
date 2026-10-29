@@ -26,6 +26,7 @@ __all__ = [
     "ExtractedDocument",
     "ExtractionError",
     "clear_extraction_cache",
+    "document_signature",
     "extract_document",
     "extract_document_text",
     "is_extractable_document",
@@ -94,14 +95,23 @@ def _pdf_char_budget() -> int:
     return 8 * _get_max_read_chars()
 
 
+def document_signature(path: str) -> tuple:
+    """Return the file identity that extraction caching and read dedup share.
+
+    ctime and inode change on rewrite, chmod, chown or rename-over even when
+    the mtime is preserved (``cp -p``, backup restore). Raises ``OSError``.
+    """
+    st = os.stat(path)
+    return (st.st_dev, st.st_ino, st.st_mtime_ns, st.st_ctime_ns, st.st_size)
+
+
 def _cache_key(path: str, ext: str) -> tuple | None:
     try:
-        st = os.stat(path)
+        signature = document_signature(path)
     except OSError:
         return None  # Let the extractor report the error.
     budget = _pdf_char_budget() if ext == ".pdf" else None
-    # ctime also changes on chmod, chown or rename-over, which mtime can miss.
-    return (path, st.st_dev, st.st_ino, st.st_mtime_ns, st.st_ctime_ns, st.st_size, budget)
+    return (path, signature, budget)
 
 
 def _cache_get(key: tuple) -> ExtractedDocument | None:

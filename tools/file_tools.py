@@ -1093,7 +1093,12 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
         # fall through to the normal path/binary guard. A successful extraction
         # is paged below through the same dedup, loop-guard and read tracking
         # as a plain-text read.
-        from tools.read_extract import ExtractionError, extract_document, is_extractable_document
+        from tools.read_extract import (
+            ExtractionError,
+            document_signature,
+            extract_document,
+            is_extractable_document,
+        )
         from tools.terminal_tool import _get_env_config
 
         missing_pdf = False
@@ -1147,7 +1152,13 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
 
         if cached_mtime is not None:
             try:
-                current_mtime = os.path.getmtime(resolved_str)
+                # Extracted documents dedup on the extraction cache's file
+                # signature, so a replacement that keeps the mtime is re-read.
+                current_mtime = (
+                    document_signature(resolved_str)
+                    if extracted is not None
+                    else os.path.getmtime(resolved_str)
+                )
                 if current_mtime == cached_mtime:
                     # Count repeated stub returns so weak tool-followers that
                     # ignore the "refer to earlier result" hint don't burn
@@ -1265,7 +1276,9 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = 
             #    the agent last read it (external edit, concurrent agent, etc.).
             try:
                 _mtime_now = os.path.getmtime(resolved_str)
-                task_data["dedup"][dedup_key] = _mtime_now
+                task_data["dedup"][dedup_key] = (
+                    document_signature(resolved_str) if extracted is not None else _mtime_now
+                )
                 task_data.setdefault("read_timestamps", {})[resolved_str] = _mtime_now
             except OSError:
                 pass  # Can't stat — skip tracking for this entry
