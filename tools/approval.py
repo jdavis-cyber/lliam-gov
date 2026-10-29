@@ -1630,7 +1630,12 @@ DANGEROUS_PATTERNS = [
      "file/directory delete via trash"),
     # git stash -u/-a (--include-untracked/--all) removes untracked (and with
     # --all, ignored) files from the working tree; a later drop loses them.
-    (rf'{_DELETE_COMMAND_START}git\s+stash(?:\s+(?:push|save))?'
+    # Git's global options may come first (-C <path>, -c <k=v>, --git-dir=,
+    # -P, --bare, ...); any option is read as maybe taking a value word, so
+    # an unknown option before stash fails closed.
+    (rf'{_DELETE_COMMAND_START}git'
+     r'(?:\s+-[^\s;|&]*(?:\s+(?:"[^"]*"|' r"'[^']*'" r'|[^\s;|&"\'-][^\s;|&]*))?)*?'
+     r'\s+stash(?:\s+(?:push|save))?'
      r'(?:\s+(?:-m|--message)(?:\s+|=)(?:"[^"]*"|' r"'[^']*'" r'|[^\s;|&]+)|\s+-[^\s;|&]*)*?'
      r'\s+(?:-[a-z]*[ua][a-z]*|--include-untracked|--all)(?=[\s;|&]|$)',
      "file/directory delete via git stash of untracked files"),
@@ -1686,68 +1691,10 @@ _COMPRESSORS = {
     "zstd": _ZSTD, "unzstd": _ZSTD, "zstdmt": _ZSTD,
     "lz4": _LZ4, "unlz4": _LZ4,
 }
-_FIND_EXEC_ACTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
 # Options that name the input files in a list (xz --files[=FILE] and
 # --files0[=FILE], whose value is optional and only attached, read stdin
 # without one; zstd --filelist FILE).
 _COMPRESSOR_FILE_LISTS = frozenset({"--files", "--files0", "--filelist"})
-# xargs' own options (GNU and BSD), so the command it runs is found: short
-# flags without a value, short flags taking a value, short flags whose value
-# is optional and only attached (-i[R], -l[N], -e[E]), long options without a
-# separate value (--replace[=R] takes it only attached), long options taking
-# a value. An unknown option is read both with and without a value.
-_XARGS_SHORT_FLAGS = "0oprtx"
-_XARGS_SHORT_VALUES = "adEIJLnPRSs"
-_XARGS_SHORT_OPTIONAL = "eil"
-_XARGS_LONG_FLAGS = frozenset({
-    "--eof", "--exit", "--help", "--interactive", "--max-lines", "--no-run-if-empty",
-    "--null", "--open-tty", "--replace", "--show-limits", "--verbose", "--version",
-})
-_XARGS_LONG_VALUES = frozenset({
-    "--arg-file", "--delimiter", "--max-args", "--max-chars", "--max-procs", "--process-slot-var",
-})
-
-
-def _xargs_command_starts(args: list) -> set:
-    """Indices in xargs' *args* where the command it runs may start, past
-    xargs' own options (several when an option is unknown)."""
-    starts: set = set()
-
-    def walk(j: int) -> None:
-        if len(starts) >= _MAX_COMMAND_READINGS:
-            return
-        while j < len(args):
-            arg = args[j]
-            if arg == "--":
-                j += 1
-                break
-            if not arg.startswith("-") or arg == "-":
-                break
-            if arg.startswith("--"):
-                key, has_value, _ = arg.partition("=")
-                if key in _XARGS_LONG_VALUES and not has_value:
-                    j += 2
-                    continue
-                if not (has_value or key in _XARGS_LONG_FLAGS or key in _XARGS_LONG_VALUES):
-                    walk(j + 2)  # unknown long option: maybe it takes a value
-                j += 1
-                continue
-            step = 1
-            for k, flag in enumerate(arg[1:]):
-                if flag in _XARGS_SHORT_VALUES:
-                    if k == len(arg) - 2:
-                        step = 2  # the value is the next word
-                    break
-                if flag in _XARGS_SHORT_OPTIONAL:
-                    break  # the rest of the word is the value
-                if flag not in _XARGS_SHORT_FLAGS:
-                    walk(j + 2)  # unknown short flag: maybe it takes a value
-                    break
-            j += step
-        starts.add(j)
-
-    walk(0)
-    return starts
 
 
 def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> bool:
@@ -1793,16 +1740,15 @@ def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> 
     return removes if family == "rm" else True
 
 
-def _simple_command_deletes(words: list, operands_supplied: bool, scripts: list,
-                            depth: int = 0) -> bool:
+def _simple_command_deletes(words: list, operands_supplied: bool, scripts: list) -> bool:
     """True when the simple command *words* runs a compressor that deletes
-    its inputs, directly, as the command xargs runs, or through find -exec."""
-    for start in _command_word_indices(words, scripts):
-        if start >= len(words):
-            continue
-        base = words[start].rsplit("/", 1)[-1]
-        args = words[start + 1:]
-        if base in _COMPRESSORS and _compressor_call_deletes(base, args, operands_supplied):
+    its inputs, directly or as the command xargs or find -exec runs (see
+    ``_command_invocations``, shared with ``_env_write_targets``)."""
+    for command_words, via in _command_invocations(words, scripts):
+        base = command_words[0].rsplit("/", 1)[-1]
+        args = command_words[1:]
+        # xargs and find supply operands to the command they run.
+        if base in _COMPRESSORS and _compressor_call_deletes(base, args, operands_supplied or via):
             return True
         # Literal eval arguments and a shell's -c script run as commands,
         # as in _env_write_targets; the caller scans *scripts*.
@@ -1814,19 +1760,6 @@ def _simple_command_deletes(words: list, operands_supplied: bool, scripts: list,
                 if flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:]:
                     scripts.append(args[j + 1])
                     break
-        if depth >= _MAX_NESTED_SCRIPT_DEPTH:
-            continue
-        if base == "xargs":
-            # xargs supplies the operands to the one command it runs.
-            if any(_simple_command_deletes(args[j:], True, scripts, depth + 1)
-                   for j in _xargs_command_starts(args)):
-                return True
-        if base == "find":
-            for j, action in enumerate(args):
-                if action in _FIND_EXEC_ACTIONS:
-                    end = next((k for k in range(j + 1, len(args)) if args[k] in {";", "+"}), len(args))
-                    if _simple_command_deletes(args[j + 1:end], True, scripts, depth + 1):
-                        return True
     return False
 
 
