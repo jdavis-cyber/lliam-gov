@@ -142,6 +142,29 @@ BLOCKED = [
     # A substitution whose end is unsure falls back to the raw-text check.
     "cat <<EOF > README.md\n$(true # )\necho K=v > .env\n)\nEOF",
     "cat <<EOF > README.md\n$(case x in a) echo K=v > .env;; esac)\nEOF",
+    # GitHub Codex P1 on #145: the word after a reserved word is a command.
+    "if true; then tee .env < secrets; fi",
+    "if true; then tee .env <<< K=v; fi",
+    "! tee .env <<< K=v",
+    "{ tee .env <<< K=v; }",
+    "while true; do tee .env < secrets; done",
+    "if tee .env < secrets; then :; fi",
+    "until false; do bash -c 'echo k > .env'; done",
+    "if true; then eval 'echo k > .env'; else :; fi",
+    "coproc tee .env < secrets",
+    "function f { tee .env < secrets; }",
+    # GitHub Codex P2 on #145: $'...' is decoded and $"..." reads as "...".
+    "echo K=v > $'.env'",
+    "echo K=v > $'.e\\x6ev'",
+    "echo K=v > $'.e\\156v'",
+    "echo K=v > $'.e\\u006ev'",
+    "echo K=v > $'.env\\0junk'",
+    'echo K=v > $".env"',
+    "echo K=v | tee $'.env.local'",
+    # A glob target can expand to a protected file, so it fails closed.
+    "echo K=v > .en?",
+    "echo K=v > .env*",
+    "echo K=v > .[e]nv",
 ]
 
 ALLOWED = [
@@ -206,6 +229,12 @@ ALLOWED = [
     "mkdir -p docs && cat <<'EOF' > docs/README.md\necho K=v > .env\nEOF",
     "cat <<'EOF' | sudo tee docs/README.md\necho K=v > .env\nEOF",
     "cat <<'EOF' | grep K | sort\necho K=v > .env\nEOF",
+    "if true; then cat .env; fi",
+    "{ grep KEY .env; }",
+    "echo $'a > .env'",
+    "echo K=v > $'.env.example'",
+    "echo K=v > *.log",
+    "for f in tee .env; do echo $f; done",
 ]
 
 
