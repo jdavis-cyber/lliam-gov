@@ -32,7 +32,7 @@ def test_output_path_rejects_bare_dotdot():
     assert "traversal" in result["error"].lower()
 
 
-def test_output_path_absolute_path_passes_guard(tmp_path, monkeypatch):
+def test_output_path_absolute_path_passes_guard(tmp_path, monkeypatch, unavailable_optional_dependencies):
     """Explicit absolute paths must pass the traversal guard.
 
     The agent legitimately writes audio to user-specified absolute paths;
@@ -49,7 +49,7 @@ def test_output_path_absolute_path_passes_guard(tmp_path, monkeypatch):
     assert "traversal" not in error.lower()
 
 
-def test_output_path_relative_no_dotdot_passes_guard(tmp_path, monkeypatch):
+def test_output_path_relative_no_dotdot_passes_guard(tmp_path, monkeypatch, unavailable_optional_dependencies):
     """Relative paths without '..' components must pass the guard."""
     monkeypatch.chdir(tmp_path)
     result = json.loads(text_to_speech_tool(
