@@ -40,6 +40,18 @@ def home(tmp_path, monkeypatch):
     return tmp_path
 
 
+def _command(args) -> str:
+    reply = handle_pending_subcommand("skills", args)
+    assert reply is not None
+    return reply
+
+
+def _pending(pending_id) -> dict:
+    record = write_approval.get_pending("skills", pending_id)
+    assert record is not None
+    return record
+
+
 def _stage_create(name="local-file-tasks", content=CONTENT):
     result = json.loads(manager.skill_manage("create", name, content=content))
     assert result["staged"] is True
@@ -74,6 +86,42 @@ def test_file_safety_refuses_skill_store_writes(home, relative):
 def test_file_safety_refuses_other_profile_skill_store(home):
     for relative in ("profiles/coder/skills/x/SKILL.md", "profiles/coder/pending/skills/a.json"):
         assert get_write_block_error(str(home / relative), cwd="/") is not None
+
+
+@pytest.mark.parametrize("store, relative", [
+    ("skills", "skills/local-file-tasks/SKILL.md"),
+    ("pending", "pending/skills/abc12345.json"),
+    ("profiles/coder/skills", "profiles/coder/skills/x/SKILL.md"),
+    ("profiles/coder/pending", "profiles/coder/pending/skills/a.json"),
+])
+def test_file_safety_refuses_symlinked_skill_store(home, tmp_path_factory, store, relative):
+    """Codex P1 on #143: a store that is a symlink to a directory outside the
+    home must still be protected, by the literal name and by its target."""
+    outside = tmp_path_factory.mktemp("outside-library")
+    link = home / store
+    if link.exists():
+        link.rmdir()
+    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("Symlinks not supported")
+    inside = Path(*Path(relative).parts[len(Path(store).parts):])
+    assert get_write_block_error(str(home / relative), cwd="/") is not None
+    assert get_write_block_error(str(outside / inside), cwd="/") is not None
+    assert get_write_block_error(str(outside.parent / "unrelated.md"), cwd="/") is None
+
+
+def test_write_file_tool_refuses_symlinked_skill_store(home, tmp_path_factory):
+    from tools.file_tools import write_file_tool
+
+    outside = tmp_path_factory.mktemp("outside-library")
+    (home / "skills").rmdir()
+    (home / "skills").symlink_to(outside, target_is_directory=True)
+    result = json.loads(write_file_tool(
+        str(home / "skills" / "local-file-tasks" / "SKILL.md"), CONTENT))
+    assert "error" in result, result
+    assert not (outside / "local-file-tasks").exists()
 
 
 def test_file_safety_still_allows_other_home_files(home):
@@ -141,20 +189,20 @@ def test_terminal_reads_of_skill_store_are_not_gated(home, command):
 def test_diff_and_list_show_the_payload_hash(home):
     pending_id = _stage_create()
     digest = write_approval.payload_sha256(
-        write_approval.get_pending("skills", pending_id)["payload"]
+        _pending(pending_id)["payload"]
     )
-    assert digest in handle_pending_subcommand("skills", ["diff", pending_id])
-    assert digest[:12] in handle_pending_subcommand("skills", ["pending"])
+    assert digest in _command(["diff", pending_id])
+    assert digest[:12] in _command(["pending"])
 
 
 @pytest.mark.parametrize("shown_with", ["diff", "pending"])
 def test_approve_refuses_proposal_changed_after_it_was_shown(home, shown_with):
     pending_id = _stage_create()
     args = [shown_with, pending_id] if shown_with == "diff" else [shown_with]
-    handle_pending_subcommand("skills", args)
+    _command(args)
     _tamper(home, pending_id)
 
-    reply = handle_pending_subcommand("skills", ["approve", pending_id])
+    reply = _command(["approve", pending_id])
 
     assert "Approved 0" in reply
     assert "changed since it was shown" in reply
@@ -172,7 +220,7 @@ def test_apply_refuses_proposal_changed_after_the_decision_was_logged(home, monk
         return audit
 
     monkeypatch.setattr(write_approval, "record_write_decision", record_then_tamper)
-    reply = handle_pending_subcommand("skills", ["approve", pending_id])
+    reply = _command(["approve", pending_id])
 
     assert "Approved 0" in reply
     assert "sha256" in reply
@@ -183,8 +231,8 @@ def test_apply_refuses_proposal_changed_after_the_decision_was_logged(home, monk
 
 def test_unchanged_proposal_still_applies_after_diff(home):
     pending_id = _stage_create()
-    handle_pending_subcommand("skills", ["diff", pending_id])
-    reply = handle_pending_subcommand("skills", ["approve", pending_id])
+    _command(["diff", pending_id])
+    reply = _command(["approve", pending_id])
     assert "Approved 1" in reply
     assert (home / "skills" / "local-file-tasks" / "SKILL.md").read_text(encoding="utf-8") == CONTENT
 
@@ -204,7 +252,7 @@ def test_direct_apply_without_operator_decision_is_refused(home):
 
 def test_approval_is_single_use(home):
     pending_id = _stage_create()
-    record = write_approval.get_pending("skills", pending_id)
+    record = _pending(pending_id)
     write_approval.record_write_decision("skills", record, "approve")
     assert json.loads(manager.apply_skill_pending(pending_id))["success"] is True
     again = json.loads(manager.apply_skill_pending(pending_id))
@@ -213,7 +261,7 @@ def test_approval_is_single_use(home):
 
 def test_reject_decision_does_not_authorize_apply(home):
     pending_id = _stage_create()
-    record = write_approval.get_pending("skills", pending_id)
+    record = _pending(pending_id)
     write_approval.record_write_decision("skills", record, "reject")
     assert json.loads(manager.apply_skill_pending(pending_id))["success"] is False
     assert not (home / "skills" / "local-file-tasks").exists()
