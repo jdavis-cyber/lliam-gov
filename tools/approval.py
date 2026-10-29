@@ -570,19 +570,23 @@ def _shell_tokens(command: str, comments: bool = False) -> Optional[list]:
     and only unquoted, unescaped punctuation forms an operator: ``grep '>'``
     passes ``>`` as an argument, it does not redirect. With *comments*, an
     unquoted ``#`` that starts a word comments out the rest of the line.
+    Unquoted digits written right before ``<`` or ``>`` (``2>``, ``1>&2``,
+    ``3<>``) are the redirect's fd number and belong to the operator.
     """
     tokens: list = []
     word: list = []
     in_word = False
+    word_quoted = False
     operator: list = []
     i, n = 0, len(command)
 
     def end_word() -> None:
-        nonlocal in_word
+        nonlocal in_word, word_quoted
         if in_word:
             tokens.append(("".join(word), False))
             word.clear()
             in_word = False
+        word_quoted = False
 
     def end_operator() -> None:
         if operator:
@@ -597,6 +601,10 @@ def _shell_tokens(command: str, comments: bool = False) -> Optional[list]:
             i += 1
             continue
         if ch in _SHELL_PUNCTUATION:
+            if ch in "<>" and in_word and not word_quoted and "".join(word).isdigit():
+                operator.extend(word)  # fd number: ``2>`` is one operator
+                word.clear()
+                in_word = False
             end_word()
             operator.append(ch)
             i += 1
@@ -607,6 +615,8 @@ def _shell_tokens(command: str, comments: bool = False) -> Optional[list]:
             i = n if newline < 0 else newline
             continue
         in_word = True
+        if ch in "\\'\"":
+            word_quoted = True
         if ch == "\\":
             if i + 1 >= n:
                 return None
@@ -1099,7 +1109,7 @@ _GZIP = ("replace", "S", {"--suffix"}, "cklthLV",
 _BZIP2 = ("replace", "", set(), "ckthLV",
           {"--keep", "--stdout", "--test", "--help", "--license", "--version"})
 _XZ = ("replace", "CFMST",
-       {"--block-list", "--block-size", "--check", "--files", "--files0", "--filters", "--flush-timeout",
+       {"--block-list", "--block-size", "--check", "--filters", "--flush-timeout",
         "--format", "--memlimit", "--memlimit-compress", "--memlimit-decompress", "--memlimit-mt",
         "--suffix", "--threads"},
        "ckltHhV",
@@ -1119,6 +1129,10 @@ _COMPRESSORS = {
     "lz4": _LZ4, "unlz4": _LZ4,
 }
 _FIND_EXEC_ACTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+# Options that name the input files in a list (xz --files[=FILE] and
+# --files0[=FILE], whose value is optional and only attached, read stdin
+# without one; zstd --filelist FILE).
+_COMPRESSOR_FILE_LISTS = frozenset({"--files", "--files0", "--filelist"})
 
 
 def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> bool:
@@ -1138,6 +1152,8 @@ def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> 
             continue
         if arg.startswith("--"):
             key, has_value, _ = arg.partition("=")
+            if key in _COMPRESSOR_FILE_LISTS:
+                has_operand = True  # input names come from a list file or stdin
             if key in long_values and not has_value:
                 i += 1
             elif key in keep_long:
