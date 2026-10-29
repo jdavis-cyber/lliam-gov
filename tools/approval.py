@@ -119,6 +119,39 @@ def reset_cron_session(token: contextvars.Token[bool]) -> None:
     _approval_cron_session.reset(token)
 
 
+# Set by cli.main for a single-query (`chat -q`) run: nobody is present to
+# answer a prompt, whatever surface flags the process inherited from its
+# parent (AI-1172). Process-local on purpose — an env var would leak into
+# every child process the run starts.
+_oneshot_process: bool = False
+
+
+def mark_oneshot_process() -> None:
+    """Mark this process as a one-shot run: dangerous commands are refused."""
+    global _oneshot_process
+    _oneshot_process = True
+
+
+def _approval_surfaces() -> tuple:
+    """Return (is_cron, is_cli, is_gateway, is_ask) for the current call.
+
+    Cron policy beats interactive/exec-ask flags a cron job inherits from its
+    host process (the gateway sets exec-ask process-wide). A one-shot run has
+    no surface at all, so it always takes the no-approver path.
+    """
+    is_cron = _is_cron_session()
+    if is_cron:
+        return True, False, False, False
+    if _oneshot_process:
+        return False, False, False, False
+    return (
+        False,
+        _surface_flag("INTERACTIVE"),
+        _is_gateway_approval_context(),
+        _surface_flag("EXEC_ASK"),
+    )
+
+
 def _is_cron_session() -> bool:
     """True inside a cron job.
 
@@ -1670,10 +1703,7 @@ def check_dangerous_command(command: str, env_type: str,
     # exec-ask surface queues the command for approval below, as in
     # check_all_command_guards; only a session with no surface at all is a
     # no-approver session.
-    is_cron = _is_cron_session()
-    is_cli = not is_cron and _surface_flag("INTERACTIVE")
-    is_gateway = _is_gateway_approval_context()
-    is_ask = not is_cron and _surface_flag("EXEC_ASK")
+    is_cron, is_cli, is_gateway, is_ask = _approval_surfaces()
 
     if not is_cli and not is_gateway and not is_ask:
         # LG-HO-02 (additive @ P2.2): under strict posture the legacy
@@ -2022,10 +2052,7 @@ def check_all_command_guards(command: str, env_type: str,
 
     # Cron policy beats interactive/exec-ask flags inherited from the host
     # process (see check_dangerous_command).
-    is_cron = _is_cron_session()
-    is_cli = not is_cron and _surface_flag("INTERACTIVE")
-    is_gateway = _is_gateway_approval_context()
-    is_ask = not is_cron and _surface_flag("EXEC_ASK")
+    is_cron, is_cli, is_gateway, is_ask = _approval_surfaces()
 
     # Outside CLI/gateway/ask flows there is no approver: we skip external
     # guard work and refuse dangerous commands (AI-1172) unless an explicit
@@ -2417,8 +2444,7 @@ def check_execute_code_guard(code: str, env_type: str) -> dict:
     if _YOLO_MODE_FROZEN or is_current_session_yolo_enabled() or approval_mode == "off":
         return {"approved": True, "message": None}
 
-    is_gateway = _is_gateway_approval_context()
-    is_ask = _surface_flag("EXEC_ASK")
+    _is_cron, _is_cli, is_gateway, is_ask = _approval_surfaces()
 
     # Cron: no user is present to approve arbitrary code.
     if _is_cron_session():

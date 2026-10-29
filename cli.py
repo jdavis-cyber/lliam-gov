@@ -15264,8 +15264,15 @@ def main(
         pass
 
     # Signal to terminal_tool that we're in interactive mode
-    # This enables interactive sudo password prompts with timeout
-    os.environ["LLIAM_INTERACTIVE"] = "1"
+    # This enables interactive sudo password prompts with timeout.
+    # A single-query run (-q / --image) is not interactive: nobody answers a
+    # prompt, and piped stdin must never approve a command. Mark it one-shot
+    # so dangerous commands are refused outright (AI-1172).
+    if (query or q or image) and not gateway:
+        from tools.approval import mark_oneshot_process
+        mark_oneshot_process()
+    else:
+        os.environ["LLIAM_INTERACTIVE"] = "1"
     
     # Handle gateway mode (messaging + cron)
     if gateway:
