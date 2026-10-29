@@ -1000,6 +1000,8 @@ def _shell_tokens(command: str, comments: bool = False,
     and only unquoted, unescaped punctuation forms an operator: ``grep '>'``
     passes ``>`` as an argument, it does not redirect. With *comments*, an
     unquoted ``#`` that starts a word comments out the rest of the line.
+    Unquoted digits written right before ``<`` or ``>`` (``2>``, ``1>&2``,
+    ``3<>``) are the redirect's fd number and belong to the operator.
 
     With *heredocs*, a here-document body (the lines after the line holding
     ``<<WORD``, up to the line ``WORD``) is not tokenized. It is appended to
@@ -1100,9 +1102,14 @@ def _shell_tokens(command: str, comments: bool = False,
             i += 1
             continue
         if ch in _SHELL_PUNCTUATION:
+            if ch in "<>" and in_word and not word_quoted and "".join(word).isdigit():
+                operator.extend(word)  # fd number: ``2>`` is one operator
+                word.clear()
+                word_bare.clear()
+                in_word = False
             end_word()
-            if "".join(operator) + ch not in _SHELL_OPERATORS:
-                end_operator()  # ``;>`` is ``;`` then ``>``
+            if "".join(operator).lstrip("0123456789") + ch not in _SHELL_OPERATORS:
+                end_operator()  # ``;>`` is ``;`` then ``>``; ``2>`` keeps its fd
             operator.append(ch)
             i += 1
             if ch == "\n" and pending:
@@ -1674,6 +1681,8 @@ def _sudo_stdin_block_result(description: str) -> dict:
 # Executable positions, including common command wrappers and find actions.
 _DELETE_COMMAND_START = (
     r'(?:^|[;&|\n]|\$\(|`)\s*'
+    # leading redirects (``>/dev/null rm x``, ``2>&1 rm x``)
+    r'(?:\d*(?:&>>?|[<>][>&|]?)\s*[^\s;|&<>()]+\s+)*'
     r'(?:(?:xargs|sudo|env|command|exec|nohup)\s+(?:[^;|&\n]*?\s+)?'
     r'|find\b[^;|&\n]*?-exec(?:dir)?\s+)?'
     r'(?:[^\s\'";|&`()]*/)?'
@@ -1877,6 +1886,35 @@ DANGEROUS_PATTERNS = [
      "file/directory delete via rsync"),
     (rf'{_DELETE_COMMAND_START}tar\b[^;|&\n]*?\s+--remove-files\b',
      "file/directory delete via tar"),
+    # AI-1181: compressors replace (delete) the original file unless told to
+    # keep it. detect_all_dangerous_commands decides this from the tool's own
+    # arguments with _command_delete_kinds (case-sensitive, per tool,
+    # zstd/lz4 only with --rm); this case-folded pattern is only the fallback
+    # for a command that can't be tokenized.
+    (rf'{_DELETE_COMMAND_START}(?:gzip|gunzip|xz|unxz|bzip2|bunzip2|lzma|unlzma)(?=\s)'
+     r'(?![^;|&\n]*?\s(?:-[a-z0-9]*[kc][a-z0-9]*|-[tl]'
+     r'|--(?:keep|stdout|to-stdout|test|list))(?=[\s;|&]|$))'
+     r'(?:\s+-[^\s;|&<>]*)*\s+[^\s;|&<>-]',
+     "file/directory delete via compressor replacing original"),
+    # Trash is still a delete from the working tree; trash-rm/trash-empty and
+    # gio remove delete permanently.
+    (rf'{_DELETE_COMMAND_START}(?:trash(?:-put|-rm|-empty)?|gio\s+(?:trash|remove))(?=\s|[;&|)]|$)',
+     "file/directory delete via trash"),
+    # git stash -u/-a (--include-untracked/--all) removes untracked (and with
+    # --all, ignored) files from the working tree; a later drop loses them.
+    # Git's global options may come first (-C <path>, -c <k=v>, --git-dir=,
+    # -P, --bare, ...); any option is read as maybe taking a value word, so
+    # an unknown option before stash fails closed.
+    (rf'{_DELETE_COMMAND_START}git'
+     r'(?:\s+-[^\s;|&]*(?:\s+(?:"[^"]*"|' r"'[^']*'" r'|[^\s;|&"\'-][^\s;|&]*))?)*?'
+     r'\s+stash(?:\s+(?:push|save))?'
+     r'(?:\s+(?:-m|--message)(?:\s+|=)(?:"[^"]*"|' r"'[^']*'" r'|[^\s;|&]+)|\s+-[^\s;|&]*)*?'
+     r'\s+(?:-[a-z]*[ua][a-z]*|--include-untracked|--all)(?=[\s;|&]|$)',
+     "file/directory delete via git stash of untracked files"),
+    # macOS Finder scripting: delete / move to trash / empty trash.
+    (rf'{_DELETE_COMMAND_START}osascript\b[^\n]*?\bfinder\b[^\n]*?'
+     r'\b(?:delete|empty\s+(?:the\s+)?trash|move\b[^\n]*?\bto\s+(?:the\s+)?trash)\b',
+     "file/directory delete via osascript Finder"),
 ]
 
 
@@ -1893,6 +1931,243 @@ DANGEROUS_PATTERNS_COMPILED = [
     (re.compile(pattern, _RE_FLAGS), description)
     for pattern, description in DANGEROUS_PATTERNS
 ]
+
+# AI-1181: whether a compressor replaces (deletes) its input files, read from
+# its real argument list: words before a redirect target, comment or command
+# separator. Flags are case-sensitive and per tool (xz -C takes a check name,
+# -c writes to stdout). gzip, bzip2 and xz delete the input unless a flag in
+# "keeps" is given; zstd and lz4 keep it unless --rm is given.
+_COMPRESSOR_DELETE = "file/directory delete via compressor replacing original"
+_GZIP = ("replace", "S", {"--suffix"}, "cklthLV",
+         {"--keep", "--stdout", "--to-stdout", "--list", "--test", "--help", "--license", "--version"})
+_BZIP2 = ("replace", "", set(), "ckthLV",
+          {"--keep", "--stdout", "--test", "--help", "--license", "--version"})
+_XZ = ("replace", "CFMST",
+       {"--block-list", "--block-size", "--check", "--filters", "--flush-timeout",
+        "--format", "--memlimit", "--memlimit-compress", "--memlimit-decompress", "--memlimit-mt",
+        "--suffix", "--threads"},
+       "ckltHhV",
+       {"--keep", "--stdout", "--to-stdout", "--list", "--test", "--help", "--long-help", "--version",
+        "--info-memory"})
+_ZSTD = ("rm", "Do", {"--filelist", "--output-dir-flat", "--output-dir-mirror", "--trace"}, "chltV",
+         {"--stdout", "--list", "--test", "--help", "--version"})
+_LZ4 = ("rm", "", set(), "chtV", {"--stdout", "--to-stdout", "--list", "--test", "--help", "--version"})
+# tool: (deletes unless kept / only with --rm, short flags taking a value,
+#        long options taking a value, short flags that keep the input,
+#        long options that keep the input). For the "rm" tools -k/--keep and
+#        --rm override each other and the last one wins.
+_COMPRESSORS = {
+    "gzip": _GZIP, "gunzip": _GZIP,
+    "bzip2": _BZIP2, "bunzip2": _BZIP2,
+    "xz": _XZ, "unxz": _XZ, "lzma": _XZ, "unlzma": _XZ,
+    "zstd": _ZSTD, "unzstd": _ZSTD, "zstdmt": _ZSTD,
+    "lz4": _LZ4, "unlz4": _LZ4,
+}
+# Options that name the input files in a list (xz --files[=FILE] and
+# --files0[=FILE], whose value is optional and only attached, read stdin
+# without one; zstd --filelist FILE).
+_COMPRESSOR_FILE_LISTS = frozenset({"--files", "--files0", "--filelist"})
+
+
+def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> bool:
+    """True when compressor *name* run with *args* replaces its input files."""
+    family, short_values, long_values, keep_short, keep_long = _COMPRESSORS[name]
+    has_operand = operands_supplied
+    keeps = removes = False
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        i += 1
+        if arg == "--":
+            has_operand = has_operand or any(a for a in args[i:])
+            break
+        if arg == "-" or not arg.startswith("-"):
+            has_operand = has_operand or arg != "-"
+            continue
+        if arg.startswith("--"):
+            key, has_value, _ = arg.partition("=")
+            if key in _COMPRESSOR_FILE_LISTS:
+                has_operand = True  # input names come from a list file or stdin
+            if key in long_values and not has_value:
+                i += 1
+            elif key in keep_long:
+                keeps = True
+            elif key == "--rm":
+                removes = True
+            elif key == "--keep" and family == "rm":
+                removes = False  # the later of --keep and --rm wins
+            continue
+        cluster = arg[1:]
+        for k, flag in enumerate(cluster):
+            if flag in short_values:
+                if k == len(cluster) - 1:
+                    i += 1  # the value is the next word
+                break
+            if flag in keep_short:
+                keeps = True
+            elif flag == "k" and family == "rm":
+                removes = False
+    if not has_operand or keeps:
+        return False
+    return removes if family == "rm" else True
+
+
+_FILE_DELETE = "file/directory delete"
+_FILE_DELETE_COMMANDS = frozenset({"rm", "unlink", "rmdir"})
+_TRASH_DELETE = "file/directory delete via trash"
+_STASH_DELETE = "file/directory delete via git stash of untracked files"
+_FINDER_DELETE = "file/directory delete via osascript Finder"
+_TRASH_COMMANDS = frozenset({"trash", "trash-put", "trash-rm", "trash-empty"})
+# git's global options that take a value word (unless written --opt=value).
+_GIT_GLOBAL_VALUES = frozenset({
+    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--super-prefix",
+    "--attr-source", "--list-cmds",
+})
+_FINDER_DELETE_RE = re.compile(
+    r"\bfinder\b.*?\b(?:delete|empty\s+(?:the\s+)?trash|move\b.*?\bto\s+(?:the\s+)?trash)\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _git_subcommand_starts(args: list) -> set:
+    """Indices in git's *args* where the subcommand may be, past git's
+    global options; an unknown option is read both with and without a value."""
+    starts: set = set()
+
+    def walk(j: int) -> None:
+        if len(starts) >= _MAX_COMMAND_READINGS:
+            return
+        while j < len(args) and args[j].startswith("-") and args[j] != "-":
+            key = args[j].partition("=")[0]
+            if key in _GIT_GLOBAL_VALUES and "=" not in args[j]:
+                j += 2
+                continue
+            walk(j + 2)  # fail closed: any other option may take a value word
+            j += 1
+        starts.add(j)
+
+    walk(0)
+    return starts
+
+
+def _stash_keeps_untracked_out(args: list) -> bool:
+    """True when ``git stash`` with *args* stashes untracked files (-u/-a,
+    --include-untracked/--all), which removes them from the working tree."""
+    if args and not args[0].startswith("-"):
+        if args[0] not in ("push", "save"):
+            return False  # list, show, pop, apply, drop, ...
+        args = args[1:]
+    j = 0
+    while j < len(args):
+        arg = args[j]
+        j += 1
+        if arg == "--":
+            break
+        if arg in ("--include-untracked", "--all"):
+            return True
+        if arg in ("-m", "--message"):
+            j += 1
+            continue
+        if arg.startswith("--") or not arg.startswith("-"):
+            continue
+        for flag in arg[1:]:
+            if flag == "m":
+                break  # the rest of the word is the message
+            if flag in "ua":
+                return True
+    return False
+
+
+def _invocation_delete_kinds(base: str, args: list, operands_supplied: bool) -> set:
+    """The once-only delete kinds one command invocation performs."""
+    kinds: set = set()
+    if base in _FILE_DELETE_COMMANDS or (base == "find" and "-delete" in args):
+        kinds.add(_FILE_DELETE)
+    if base in _COMPRESSORS and _compressor_call_deletes(base, args, operands_supplied):
+        kinds.add(_COMPRESSOR_DELETE)
+    if base in _TRASH_COMMANDS or (base == "gio" and args[:1] in (["trash"], ["remove"])):
+        kinds.add(_TRASH_DELETE)
+    if base == "git":
+        for j in _git_subcommand_starts(args):
+            if j < len(args) and args[j] == "stash" and _stash_keeps_untracked_out(args[j + 1:]):
+                kinds.add(_STASH_DELETE)
+            if j < len(args) and args[j] == "rm":
+                kinds.add(_FILE_DELETE)
+    if base == "osascript" and _FINDER_DELETE_RE.search(" ".join(args)):
+        kinds.add(_FINDER_DELETE)
+    return kinds
+
+
+def _simple_command_delete_kinds(words: list, scripts: list) -> set:
+    """The delete kinds the simple command *words* performs, at every command
+    position ``_command_invocations`` finds (shared with ``_env_write_targets``):
+    after reserved words and wrappers, and as the command xargs or find -exec
+    runs (which supply its operands)."""
+    kinds: set = set()
+    for command_words, via in _command_invocations(words, scripts):
+        base = command_words[0].rsplit("/", 1)[-1]
+        args = command_words[1:]
+        kinds |= _invocation_delete_kinds(base, args, via)
+        # Literal eval arguments and a shell's -c script run as commands,
+        # as in _env_write_targets; the caller scans *scripts*.
+        if base == "eval":
+            scripts.append(" ".join(args))
+        elif base in _NESTED_SHELLS:
+            scripts.extend(_shell_c_scripts(base, args))
+    return kinds
+
+
+# The delete rules decided from the tokenized command; their patterns are a
+# fallback (the compressor's only for a command that can't be tokenized).
+_TOKENIZED_DELETE_KINDS = frozenset({
+    _FILE_DELETE, _COMPRESSOR_DELETE, _TRASH_DELETE, _STASH_DELETE, _FINDER_DELETE,
+})
+
+
+def _command_delete_kinds(command: str, depth: int = 0) -> Optional[set]:
+    """The tokenized delete kinds *command* performs, including nested
+    scripts; None when it (or, with nothing found, a nested script) can't
+    be tokenized."""
+    command = re.sub(r"\$\{IFS\}|\$IFS\b", " ", command, flags=re.IGNORECASE)
+    heredocs: list = []
+    nested: list = []  # "$(...)" / `...` scripts and heredoc bodies that run
+    tokens = _shell_tokens(command, comments=True, heredocs=heredocs, substitutions=nested)
+    if tokens is None:
+        return None
+    nested.extend(_heredoc_scripts(tokens, heredocs))
+    segments: list = [[]]
+    outer: list = []  # commands around an open ( (see _env_write_targets)
+    skip_target = False
+    for text, is_operator in tokens:
+        if skip_target and not is_operator:
+            skip_target = False  # a redirect's target is not an argument
+            continue
+        skip_target = False
+        if not is_operator:
+            segments[-1].append(text)
+        elif text.endswith("("):
+            outer.append((segments.pop(), text != "("))
+            segments.append([])  # the subshell or substitution's own commands
+        elif text == ")" and outer:
+            saved, substitution = outer.pop()
+            segments.append(saved + (["/dev/fd/63"] if substitution else []))
+        elif ">" not in text and "<" not in text:
+            segments.append([])  # separator, pipe
+        else:
+            skip_target = True
+    scripts: list = []  # eval, sh -c and env -S command lines
+    kinds: set = set()
+    for words in segments:
+        kinds |= _simple_command_delete_kinds(words, scripts)
+    unknown = False
+    if depth < _MAX_NESTED_SCRIPT_DEPTH:
+        for script in scripts + nested:
+            reading = _command_delete_kinds(script, depth + 1)
+            if reading is None:
+                unknown = True
+            else:
+                kinds |= reading
+    return None if unknown and not kinds else kinds
 
 
 def _legacy_pattern_key(pattern: str) -> str:
@@ -2130,8 +2405,23 @@ def detect_all_dangerous_commands(command: str) -> list[tuple[str, str]]:
         for language, (interpreter, flag) in script_specs.items()
     }
     delete_contexts = [_normalize_delete_words(context) for context in contexts]
+    # Compressor flags are case-sensitive, so read them from the unfolded command.
+    unfolded = _normalize_command_for_detection(command, preserve_shell_quotes=True)
+    unfolded_contexts = [unfolded, *_script_bodies(unfolded, r"(?:bash|sh|zsh|ksh)", r"-[^\s]*c")]
+    delete_kinds = None  # tokenized delete kinds per context, computed once
     matches = []
     for pattern_re, description in DANGEROUS_PATTERNS_COMPILED:
+        if description in _TOKENIZED_DELETE_KINDS:
+            if delete_kinds is None:
+                delete_kinds = [_command_delete_kinds(context) for context in unfolded_contexts]
+            found = any(kinds and description in kinds for kinds in delete_kinds)
+            # The compressor pattern is only the fallback for a command that
+            # can't be tokenized; the others still match on their own.
+            if description != _COMPRESSOR_DELETE or None in delete_kinds:
+                found = found or any(pattern_re.search(c) for c in delete_contexts)
+            if found and (description, description) not in matches:
+                matches.append((description, description))  # several share one
+            continue
         candidates = delete_contexts if description.startswith("file/directory delete") else contexts
         for language, bodies in script_bodies.items():
             if description.startswith(f"file/directory delete via {language}"):

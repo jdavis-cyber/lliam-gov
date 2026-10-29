@@ -434,3 +434,304 @@ def test_cli_delete_answers_do_not_persist(desktop_terminal, monkeypatch, guard,
     assert requests == [{"allow_permanent": False, "allow_session": False}] * 2
     assert not approval.is_approved(session, "file/directory delete")
     assert not (get_lliam_home() / "config.yaml").exists()
+
+
+# --- AI-1181: residual deleters -------------------------------------------
+
+_COMPRESS = "file/directory delete via compressor replacing original"
+_TRASH = "file/directory delete via trash"
+_STASH = "file/directory delete via git stash of untracked files"
+_FINDER = "file/directory delete via osascript Finder"
+_FILE = "file/directory delete"
+
+
+@pytest.mark.parametrize("command,delete_description", [
+    ("gzip notes.txt", _COMPRESS),
+    ("gzip -9 notes.txt", _COMPRESS),
+    ("gzip -r logs/", _COMPRESS),
+    ("gunzip notes.txt.gz", _COMPRESS),
+    ("gzip -d notes.txt.gz", _COMPRESS),
+    ("xz notes.txt", _COMPRESS),
+    ("xz -T0 -9 notes.txt", _COMPRESS),
+    ("unxz notes.txt.xz", _COMPRESS),
+    ("bzip2 notes.txt", _COMPRESS),
+    ("bunzip2 notes.txt.bz2", _COMPRESS),
+    ("cd logs && gzip *.log", _COMPRESS),
+    ("sudo xz --force notes.txt", _COMPRESS),
+    # Codex P2 on #147: only the compressor's own arguments count.
+    ("gzip notes.txt > -k", _COMPRESS),
+    ("gzip notes.txt >> --keep", _COMPRESS),
+    ("gzip notes.txt # -k", _COMPRESS),
+    ("gzip notes.txt; echo -k", _COMPRESS),
+    ("gzip notes.txt && ls -c", _COMPRESS),
+    ("gzip notes.txt | tee -c", _COMPRESS),
+    # Codex P2 on #147: flags are case-sensitive and per tool; values are consumed.
+    ("xz -C crc32 notes.txt", _COMPRESS),
+    ("xz --check=crc32 notes.txt", _COMPRESS),
+    ("xz -T 4 notes.txt", _COMPRESS),
+    ("xz -S .z notes.txt", _COMPRESS),
+    ("gzip -S .z notes.txt", _COMPRESS),
+    ("gzip -K notes.txt", _COMPRESS),
+    ("bzip2 -C notes.txt", _COMPRESS),
+    ("gzip -- -k", _COMPRESS),
+    ("zstd --rm notes.txt", _COMPRESS),
+    ("zstd -q --rm -19 notes.txt", _COMPRESS),
+    ("unzstd --rm notes.txt.zst", _COMPRESS),
+    ("lz4 --rm notes.txt", _COMPRESS),
+    ("sudo -n gzip notes.txt", _COMPRESS),
+    ("find . -name '*.log' -exec gzip {} +", _COMPRESS),
+    ("ls *.log | xargs gzip", _COMPRESS),
+    ("GZIP=-9 gzip notes.txt", _COMPRESS),
+    # A digit word set apart from the redirect is a file operand, not an fd.
+    ("gzip 2 > out.gz", _COMPRESS),
+    ("gzip '2'>out.gz", _COMPRESS),
+    # Codex P2 on #147 (round 2): inputs from a list file are still replaced.
+    ("xz --files=list.txt", _COMPRESS),
+    ("xz --files list.txt", _COMPRESS),
+    ("xz --files0=list0.txt", _COMPRESS),
+    ("xz --files0 list0.txt", _COMPRESS),
+    ("xz --files < list.txt", _COMPRESS),
+    ("find . -name '*.log' -print0 | xz --files0", _COMPRESS),
+    ("zstd --rm --filelist list.txt", _COMPRESS),
+    ("zstd --rm --filelist=list.txt", _COMPRESS),
+    # Codex P2 on #147 (round 4): the later of -k/--keep and --rm wins.
+    ("zstd --keep --rm notes.txt", _COMPRESS),
+    ("zstd -k --rm notes.txt", _COMPRESS),
+    ("zstd --rm -k --rm notes.txt", _COMPRESS),
+    ("lz4 -k --rm notes.txt", _COMPRESS),
+    # Codex P2 on #147 (round 4): xargs runs the command after its own options.
+    ("printf '%s\\n' notes.txt | xargs gzip", _COMPRESS),
+    ("find . -name '*.log' -print0 | xargs -0 -n1 gzip", _COMPRESS),
+    ("xargs -n 1 gzip", _COMPRESS),
+    ("xargs -I {} gzip {}", _COMPRESS),
+    ("xargs -I{} gzip {}", _COMPRESS),
+    ("xargs -i gzip {}", _COMPRESS),
+    ("xargs --max-args 1 gzip", _COMPRESS),
+    ("xargs -a list.txt -d , gzip", _COMPRESS),
+    ("xargs sudo gzip", _COMPRESS),
+    ("xargs --unknown-option 1 gzip", _COMPRESS),
+    ("find . -exec sudo gzip {} ;", _COMPRESS),
+    # A heredoc body a shell runs and a command substitution still count.
+    ("cat <<'EOF' | sh\ngzip notes.txt\nEOF", _COMPRESS),
+    ('echo "$(gzip notes.txt)"', _COMPRESS),
+    ("echo `gzip notes.txt`", _COMPRESS),
+    # Codex P2 on #147 (round 5): subshells and groups keep the heredoc's
+    # pipeline; an unquoted body expands $(...) after # and inside '.
+    ("cat <<'EOF' | (sh)\ngzip notes.txt\nEOF", _COMPRESS),
+    ("cat <<'EOF' | { sh; }\ngzip notes.txt\nEOF", _COMPRESS),
+    ("cat <<'EOF' | (bash -s)\ngzip notes.txt\nEOF", _COMPRESS),
+    ("cat <<EOF\n# $(gzip notes.txt)\nEOF", _COMPRESS),
+    ("cat <<EOF > README.md\n'$(gzip notes.txt)'\nEOF", _COMPRESS),
+    ("cat <<EOF > README.md\n# `gzip notes.txt`\nEOF", _COMPRESS),
+    ("cat <<EOF > README.md\n$(true # )\ngzip notes.txt\n)\nEOF", _COMPRESS),
+    # GitHub Codex P1 on #147: the word after a reserved word is a command.
+    ("if true; then gzip notes.txt; fi", _COMPRESS),
+    ("! gzip notes.txt", _COMPRESS),
+    ("{ gzip notes.txt; }", _COMPRESS),
+    ('while read f; do gzip "$f"; done < list.txt', _COMPRESS),
+    ("if true; then zstd --rm notes.txt; fi", _COMPRESS),
+    # GitHub Codex P2 on #147: literal eval arguments run as commands.
+    ("eval 'gzip notes.txt'", _COMPRESS),
+    ("eval gzip notes.txt", _COMPRESS),
+    ("if true; then eval 'gzip notes.txt'; fi", _COMPRESS),
+    ("sudo bash -c 'gzip notes.txt'", _COMPRESS),
+    # GitHub Codex P1 on #145 (round 7): a here-string a shell runs is a script.
+    ("bash <<< 'gzip notes.txt'", _COMPRESS),
+    ('sh <<< "gzip notes.txt"', _COMPRESS),
+    ("cat <<< 'gzip notes.txt' | sh", _COMPRESS),
+    # GitHub Codex P1 on #147 (round 8): the -c script after -- and options.
+    ("bash -c -- 'gzip notes.txt'", _COMPRESS),
+    ("bash -ec 'gzip notes.txt'", _COMPRESS),
+    ("bash -c -e 'gzip notes.txt'", _COMPRESS),
+    ("bash -o pipefail -c 'gzip notes.txt'", _COMPRESS),
+    ("sudo sh -c - 'zstd --rm notes.txt'", _COMPRESS),
+    # GitHub Codex P1 on #147 (round 9): brace alternatives and env -S.
+    ("gzip notes{,2}.txt", _COMPRESS),
+    ("env -S gzip notes.txt", _COMPRESS),
+    ("env -S 'bash -c' 'gzip notes.txt'", _COMPRESS),
+    ("trash notes.txt", _TRASH),
+    ("trash-put notes.txt", _TRASH),
+    ("trash-rm notes.txt", _TRASH),
+    ("trash-empty", _TRASH),
+    ("gio trash notes.txt", _TRASH),
+    ("gio remove notes.txt", _TRASH),
+    ("git stash -u", _STASH),
+    ("git stash push -u -m wip", _STASH),
+    ("git stash --include-untracked", _STASH),
+    ("git stash save --include-untracked wip", _STASH),
+    ("git stash -a", _STASH),
+    ("git stash push --all", _STASH),
+    ("git stash -ku", _STASH),
+    # GitHub Codex P2 on #147 (round 7): git's global options come first.
+    ("git -C /path/to/repo stash -u", _STASH),
+    ("git -c core.x=y stash -u", _STASH),
+    ("git --git-dir=/x/.git --work-tree=/x stash push --all", _STASH),
+    ("git --git-dir /x/.git stash -u", _STASH),
+    ("git -P stash -u", _STASH),
+    ("git --no-pager stash --include-untracked", _STASH),
+    ('git -C "/my path" stash -u', _STASH),
+    ("git --bare --no-replace-objects stash -a", _STASH),
+    ("git --unknown-option value stash -u", _STASH),
+    # GitHub Codex P2 on #147 (round 9): stash, trash and Finder deletes at
+    # reserved-word, eval and xargs/find command positions.
+    ("if true; then git stash -u; fi", _STASH),
+    ("! git -C /repo stash -a", _STASH),
+    ("while true; do git stash push --include-untracked; done", _STASH),
+    ("eval 'git stash -u'", _STASH),
+    ("if true; then trash notes.txt; fi", _TRASH),
+    ("{ trash-put notes.txt; }", _TRASH),
+    ("if true; then gio trash notes.txt; fi", _TRASH),
+    ("""if true; then osascript -e 'tell app "Finder" to delete POSIX file "/tmp/x"'; fi""", _FINDER),
+    ("""osascript -e 'tell application "Finder" to delete POSIX file "/tmp/x"'""", _FINDER),
+    ("""osascript -e 'tell app "Finder" to move POSIX file "/tmp/x" to trash'""", _FINDER),
+    ("""osascript -e 'tell application "Finder" to empty trash'""", _FINDER),
+    # GitHub Codex P1 on #147 (round 10): ;> is ; then a redirect, so the
+    # next word is still the command; leading redirects don't hide it.
+    ("true;>/dev/null gzip notes.txt", _COMPRESS),
+    ("true;2>/dev/null gzip notes.txt", _COMPRESS),
+    ("true|>/dev/null gzip notes.txt", _COMPRESS),
+    ("gzip >(cat) notes.txt", _COMPRESS),
+    ("true;>/dev/null git stash -u", _STASH),
+    ("true;>/dev/null trash notes.txt", _TRASH),
+    ("true;>/dev/null rm -f notes.txt", _FILE),
+    (">/dev/null rm notes.txt", _FILE),
+    ("true; 2>&1 unlink notes.txt", _FILE),
+    ("&>/dev/null rmdir build", _FILE),
+    # rm, unlink, rmdir, git rm and find -delete at reserved-word and
+    # subshell command positions.
+    ("if true; then rm notes.txt; fi", _FILE),
+    ("(rm notes.txt)", _FILE),
+    ("{ rm notes.txt; }", _FILE),
+    ("while true; do unlink notes.txt; done", _FILE),
+    ("! git rm notes.txt", _FILE),
+    ("if true; then find . -name x -delete; fi", _FILE),
+])
+def test_residual_deleters_are_once_only_deletes(command, delete_description):
+    keys = [key for key, _ in approval.detect_all_dangerous_commands(command)]
+    assert delete_description in keys, keys
+    assert delete_description in approval._ONCE_ONLY_DELETE_KEYS
+
+
+@pytest.mark.parametrize("command", [
+    "gzip -k notes.txt",
+    "gzip --keep notes.txt",
+    "gzip -c notes.txt > notes.txt.gz",
+    "gzip -9c notes.txt > notes.txt.gz",
+    "gzip --stdout notes.txt > notes.txt.gz",
+    "gunzip -c notes.txt.gz",
+    "gzip -l notes.txt.gz",
+    "gzip -t notes.txt.gz",
+    "tar cf - src | gzip > src.tar.gz",
+    "gzip < notes.txt > notes.txt.gz",
+    "xz -k notes.txt",
+    "xz -dc notes.txt.xz",
+    "xz --list notes.txt.xz",
+    "bzip2 -k notes.txt",
+    "bzip2 -c notes.txt > notes.txt.bz2",
+    "xz -C crc32 -k notes.txt",
+    "xz -k -C crc32 notes.txt",
+    "xz --check=crc32 -c notes.txt > notes.txt.xz",
+    "zstd notes.txt",
+    "zstd -19 -o notes.txt.zst notes.txt",
+    "zstd --rm -c notes.txt > notes.txt.zst",
+    "zstd --rm --stdout notes.txt > notes.txt.zst",
+    "zstd -l notes.txt.zst",
+    "lz4 notes.txt",
+    "lz4 -d notes.txt.lz4",
+    "unzstd notes.txt.zst",
+    "gzip -9 -c notes.txt > 'out -k.gz'",
+    "gzip -kv notes.txt",
+    "gzip -h",
+    "gzip --version",
+    "echo gzip notes.txt",
+    "grep -c gzip notes.txt",
+    # Codex P2 on #147 (round 2): fd numbers on a redirect are not operands.
+    "gzip < notes.txt 2>/dev/null",
+    "gzip < notes.txt 2>> gzip.log > notes.txt.gz",
+    "gzip < notes.txt > notes.txt.gz 2>&1",
+    "gzip 2>/dev/null < notes.txt > notes.txt.gz",
+    "gzip <&0 1>&2",
+    "gzip 0< notes.txt 1> notes.txt.gz",
+    "gzip < notes.txt 3<> lock.file > notes.txt.gz",
+    "cat notes.txt | xz 2>/dev/null > notes.txt.xz",
+    "xz -k --files=list.txt",
+    "xz --files=list.txt -c > all.xz",
+    "xz --files -k < list.txt",
+    "zstd --filelist list.txt",
+    # Codex P2 on #147 (round 4): a later -k/--keep overrides --rm.
+    "zstd --rm --keep notes.txt",
+    "zstd --rm -k notes.txt",
+    "zstd --rm -qk notes.txt",
+    "lz4 --rm -k notes.txt",
+    "lz4 --rm --keep notes.txt",
+    # Codex P2 on #147 (round 4): only the command xargs runs counts.
+    "printf '%s\\n' notes.txt | xargs echo gzip",
+    "xargs -n 1 echo gzip",
+    "xargs grep gzip",
+    "xargs -I {} echo gzip {}",
+    "xargs -P 4 -n 1 gzip -k",
+    "find . -exec echo gzip {} +",
+    # Codex P2 on #147 (round 4): a heredoc body is input, not commands.
+    "cat <<'EOF' > README.md\ngzip notes.txt\nEOF",
+    "cat <<'EOF' | grep gzip\ngzip notes.txt\nEOF",
+    "cat <<'EOF' > README.md\n# $(gzip notes.txt)\nEOF",
+    "cat <<EOF > README.md\ngzip notes.txt\nEOF",
+    "if true; then gzip -k notes.txt; fi",
+    "eval 'gzip -k notes.txt'",
+    "eval 'echo gzip notes.txt'",
+    "cat <<< 'gzip notes.txt'",
+    "bash -c -- 'gzip -k notes.txt'",
+    "env -S gzip",
+    "if true; then git stash list; fi",
+    "true;>/dev/null gzip -k notes.txt",
+    "echo >notes.txt rm",
+    "echo a 2>/dev/null rmx",
+    "if true; then echo rm notes.txt; fi",
+    "man rm",
+    "git stash show -u",
+    "if true; then trash-list; fi",
+    "echo git stash -u",
+    "for f in gzip notes.txt; do echo $f; done",
+    "zcat notes.txt.gz",
+    "trash-list",
+    "echo trash notes.txt",
+    "gio info notes.txt",
+    "git stash",
+    "git stash push -m wip",
+    "git -C /path stash",
+    "git -C /path stash list",
+    "git -C /path stash push -m wip",
+    "git -C /path status -u",
+    "git -C /path log --all",
+    "git stash pop",
+    "git stash show -u",
+    "git stash list",
+    "osascript -e 'tell application \"Finder\" to activate'",
+    "osascript -e 'display notification \"delete done\"'",
+])
+def test_residual_deleters_leave_safe_forms_alone(command):
+    keys = [key for key, _ in approval.detect_all_dangerous_commands(command)]
+    assert not [key for key in keys if key in approval._ONCE_ONLY_DELETE_KEYS], keys
+
+
+@pytest.mark.parametrize("command", [
+    "gzip notes.txt",
+    "trash-put notes.txt",
+    "git stash -u",
+    """osascript -e 'tell application "Finder" to delete POSIX file "/tmp/x"'""",
+])
+def test_residual_deleters_offer_only_once(desktop_terminal, command):
+    _, session = desktop_terminal
+    requests = []
+
+    def respond(data):
+        requests.append(data)
+        approval.resolve_gateway_approval(session, "always")
+
+    approval.register_gateway_notify(session, respond)
+    for _ in range(2):
+        assert approval.check_all_command_guards(command, "local")["approved"]
+    assert len(requests) == 2
+    for request in requests:
+        assert request["allow_permanent"] is False
+        assert request["allow_session"] is False
