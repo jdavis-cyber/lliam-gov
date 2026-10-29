@@ -43,3 +43,11 @@ async def test_skills_review_available_with_setting_off(tmp_path, monkeypatch):
     for unsupported in ("install x", "search x", "approval off", "mode on"):
         assert "Unknown" in await command(unsupported)
     assert config.read_bytes() == original_config
+
+
+def test_skills_slack_route_preserves_existing_native_commands(tmp_path, monkeypatch):
+    from lliam_cli.commands import slack_native_slashes, slack_subcommand_map
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    (tmp_path / "config.yaml").write_text("skills:\n  write_approval: false\n", encoding="utf-8")
+    assert slack_subcommand_map()["skills"] == "/skills"
+    assert {"version", "hermes"} <= {name for name, _, _ in slack_native_slashes()}

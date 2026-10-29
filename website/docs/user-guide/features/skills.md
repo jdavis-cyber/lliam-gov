@@ -470,7 +470,10 @@ You can review from the interactive CLI or gateway. Gateway diff output is
 truncated for chat bubbles; use the CLI or pending JSON file for the full diff.
 The CLI accepts `/skills approval on|off` for compatibility, but both values
 leave approval required and save no setting. The gateway supports only
-pending, approve, reject, and diff.
+pending, approve, reject, and diff. On Slack, use the existing catch-all command:
+`/hermes skills pending`, `/hermes skills diff <id>`, `/hermes skills approve <id>`,
+or `/hermes skills reject <id>`. This preserves existing native Slack commands
+within its command-slot limit.
 
 Before applying or discarding a proposal, Lliam-GOV appends and syncs a decision
 to `<LLIAM_HOME>/logs/write-approvals.jsonl`. Each record includes the UTC time,
