@@ -11,9 +11,10 @@ uses to render a system line and fire the kickoff prompt.
 from __future__ import annotations
 
 import importlib
+import sys
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -26,35 +27,43 @@ def lliam_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(home))
 
     # Bust the goal-module DB cache so it re-resolves HERMES_HOME.
+    import lliam_state
     from lliam_cli import goals
 
+    # SessionDB() falls back to DEFAULT_DB_PATH, which is computed once at
+    # import. The import is kept for the whole file, so point it at this
+    # test's home or every test would share the first test's database.
+    monkeypatch.setattr(lliam_state, "DEFAULT_DB_PATH", home / "state.db")
     goals._DB_CACHE.clear()
     yield home
     goals._DB_CACHE.clear()
 
 
 @pytest.fixture()
-def server(lliam_home):
-    with patch.dict(
-        "sys.modules",
-        {
-            "lliam_cli.env_loader": MagicMock(),
-            "lliam_cli.banner": MagicMock(),
-        },
-    ):
-        mod = importlib.import_module("tui_gateway.server")
-        yield mod
-        # Reset module-level session state without re-importing. importlib.reload
-        # would re-register the module's atexit hooks (ThreadPoolExecutor
-        # shutdown, _shutdown_sessions); the duplicates race the stderr
-        # buffer at interpreter shutdown and surface as Fatal Python error:
-        # _enter_buffered_busy. Clearing the per-session dicts gives the
-        # next test a clean slate; _methods is NOT cleared because it's
-        # populated at module import time and re-registration only happens
-        # via reload (which we don't do).
-        mod._sessions.clear()
-        mod._pending.clear()
-        mod._answers.clear()
+def server(lliam_home, monkeypatch):
+    # Stub only these two keys. patch.dict("sys.modules") restores the whole
+    # dict on exit and drops every module the import pulled in, so each test
+    # re-imported tui_gateway.server and all of its gateway dependencies.
+    # CI installs without bytecode caches, which made that several seconds per
+    # test and pushed this file past the runner's 300 s per-file cap.
+    monkeypatch.setitem(sys.modules, "lliam_cli.env_loader", MagicMock())
+    monkeypatch.setitem(sys.modules, "lliam_cli.banner", MagicMock())
+    mod = importlib.import_module("tui_gateway.server")
+    # _lliam_home is read once at import; rebind it so _load_cfg reads this
+    # test's config.yaml rather than the first test's.
+    monkeypatch.setattr(mod, "_lliam_home", lliam_home)
+    yield mod
+    # Reset module-level session state without re-importing. importlib.reload
+    # would re-register the module's atexit hooks (ThreadPoolExecutor
+    # shutdown, _shutdown_sessions); the duplicates race the stderr
+    # buffer at interpreter shutdown and surface as Fatal Python error:
+    # _enter_buffered_busy. Clearing the per-session dicts gives the
+    # next test a clean slate; _methods is NOT cleared because it's
+    # populated at module import time and re-registration only happens
+    # via reload (which we don't do).
+    mod._sessions.clear()
+    mod._pending.clear()
+    mod._answers.clear()
 
 
 @pytest.fixture()
@@ -247,6 +256,9 @@ moa:
         provider: openrouter
         model: anthropic/claude-opus-4.8
 """)
+    # The handler must read THIS test's config, or "default" below would
+    # pass for the wrong reason (an empty config also normalizes to it).
+    assert "review" in server._load_cfg()["moa"]["presets"]
     sid, _, s = session
     r = _call(server, "command.dispatch", name="moa", arg="review", session_id=sid)
     result = r["result"]
