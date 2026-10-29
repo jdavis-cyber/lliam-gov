@@ -8,7 +8,7 @@ platforms: [linux, macos, windows]
 metadata:
   lliam-gov:
     tags: [powerpoint, pptx, python-pptx, presentation, finance]
-    related_skills: [excel-author, powerpoint]
+    related_skills: [excel-author]
 ---
 
 # pptx-author
@@ -17,7 +17,7 @@ Produce a .pptx file on disk using `python-pptx`. Use when you need to deliver a
 
 Adapted from Anthropic's `pptx-author` and `pitch-deck` skills in [anthropics/financial-services](https://github.com/anthropics/financial-services). The MCP / Office-JS branches of the originals are dropped — this assumes headless Python.
 
-For the broader, already-shipped PowerPoint authoring skill (slides, speaker notes, embeds, media), see the built-in `powerpoint` skill. This skill is a lighter-weight pattern tuned for model-backed decks (pitch decks, IC memos, earnings notes) where every number must trace to a source workbook.
+This skill is a lighter-weight pattern tuned for model-backed decks (pitch decks, IC memos, earnings notes) where every number must trace to a source workbook.
 
 ## Output contract
 
@@ -165,8 +165,8 @@ A typical banking pitch deck follows this structure. Not prescriptive, but usefu
 ## When NOT to use this skill
 
 - Users in a live PowerPoint session with an Office MCP available — drive their live doc instead.
-- Non-financial slideware (quarterly all-hands, marketing decks) — use the broader `powerpoint` skill.
-- Decks with heavy animation, transitions, or speaker notes — use the broader `powerpoint` skill.
+- Non-financial slideware (quarterly all-hands, marketing decks).
+- Decks with heavy animation, transitions, or speaker notes.
 
 ## Attribution
 
