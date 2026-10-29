@@ -1,5 +1,6 @@
 """Tests for tui_gateway JSON-RPC protocol plumbing."""
 
+import copy
 import io
 import json
 import sys
@@ -38,21 +39,34 @@ def _server_module():
 @pytest.fixture()
 def server(_server_module):
     mod = _server_module
-    real_stdout = mod._real_stdout
+    # The module is shared across the file, so snapshot its globals and the
+    # contents of its module-level dicts/lists/sets (handler registry, session
+    # maps, ...). Tests assign to these directly; the old per-test re-import
+    # used to throw those changes away. importlib.reload is not an option:
+    # it would re-register the module's atexit hooks (ThreadPoolExecutor
+    # shutdown, _shutdown_sessions), and the duplicates race the stderr
+    # buffer at interpreter shutdown (Fatal Python error:
+    # _enter_buffered_busy).
+    attrs = dict(vars(mod))
+    containers = {
+        name: copy.copy(value)
+        for name, value in attrs.items()
+        # Skip dunders: __builtins__ is the interpreter's shared builtins dict.
+        if type(value) in (dict, list, set) and not name.startswith("__")
+    }
     yield mod
-    # Reset module-level session state without re-importing. importlib.reload
-    # would re-register the module's atexit hooks (ThreadPoolExecutor
-    # shutdown, _shutdown_sessions); the duplicates race the stderr
-    # buffer at interpreter shutdown and surface as Fatal Python error:
-    # _enter_buffered_busy. Clearing the per-session dicts gives the
-    # next test a clean slate; _methods is NOT cleared because it's
-    # populated at module import time and re-registration only happens
-    # via reload (which we don't do). Several tests swap _real_stdout
-    # directly, so put the original back too.
-    mod._real_stdout = real_stdout
-    mod._sessions.clear()
-    mod._pending.clear()
-    mod._answers.clear()
+    for name in set(vars(mod)) - set(attrs):
+        delattr(mod, name)
+    for name, value in attrs.items():
+        if vars(mod).get(name) is not value:
+            setattr(mod, name, value)
+    for name, saved in containers.items():
+        live = attrs[name]
+        live.clear()
+        if isinstance(live, list):
+            live.extend(saved)
+        else:
+            live.update(saved)
 
 
 @pytest.fixture()
