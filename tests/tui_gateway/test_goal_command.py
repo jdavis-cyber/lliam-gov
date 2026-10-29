@@ -27,8 +27,13 @@ def lliam_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(home))
 
     # Bust the goal-module DB cache so it re-resolves HERMES_HOME.
+    import lliam_state
     from lliam_cli import goals
 
+    # SessionDB() falls back to DEFAULT_DB_PATH, which is computed once at
+    # import. The import is kept for the whole file, so point it at this
+    # test's home or every test would share the first test's database.
+    monkeypatch.setattr(lliam_state, "DEFAULT_DB_PATH", home / "state.db")
     goals._DB_CACHE.clear()
     yield home
     goals._DB_CACHE.clear()
@@ -44,6 +49,9 @@ def server(lliam_home, monkeypatch):
     monkeypatch.setitem(sys.modules, "lliam_cli.env_loader", MagicMock())
     monkeypatch.setitem(sys.modules, "lliam_cli.banner", MagicMock())
     mod = importlib.import_module("tui_gateway.server")
+    # _lliam_home is read once at import; rebind it so _load_cfg reads this
+    # test's config.yaml rather than the first test's.
+    monkeypatch.setattr(mod, "_lliam_home", lliam_home)
     yield mod
     # Reset module-level session state without re-importing. importlib.reload
     # would re-register the module's atexit hooks (ThreadPoolExecutor
@@ -248,6 +256,9 @@ moa:
         provider: openrouter
         model: anthropic/claude-opus-4.8
 """)
+    # The handler must read THIS test's config, or "default" below would
+    # pass for the wrong reason (an empty config also normalizes to it).
+    assert "review" in server._load_cfg()["moa"]["presets"]
     sid, _, s = session
     r = _call(server, "command.dispatch", name="moa", arg="review", session_id=sid)
     result = r["result"]
