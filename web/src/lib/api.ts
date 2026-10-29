@@ -60,19 +60,16 @@ export function getManagementProfile(): string {
 
 // Endpoint families that honor ?profile= on the backend (web_server.py
 // _profile_scope or explicit per-profile DB opens). Anything else — ops,
-// pairing, cron (which has its own per-job profile params), profiles
+// cron (which has its own per-job profile params), profiles
 // themselves — is machine-global or self-scoped and must NOT be rewritten.
 const PROFILE_SCOPED_PREFIXES = [
   "/api/status",
-  "/api/gateway",
   "/api/analytics",
   "/api/skills",
   "/api/tools/toolsets",
   "/api/config",
   "/api/env",
   "/api/mcp",
-  "/api/messaging/platforms",
-  "/api/messaging/telegram/onboarding",
   "/api/model/info",
   "/api/model/set",
   "/api/model/auxiliary",
@@ -528,8 +525,6 @@ export const api = {
   // Cron jobs
   getCronJobs: (profile = "all") =>
     fetchJSON<CronJob[]>(`/api/cron/jobs?profile=${encodeURIComponent(profile)}`),
-  getCronDeliveryTargets: () =>
-    fetchJSON<{ targets: CronDeliveryTarget[] }>("/api/cron/delivery-targets"),
   createCronJob: (job: CronJobMutation, profile = "default") =>
     fetchJSON<CronJob>(`/api/cron/jobs?profile=${encodeURIComponent(profile)}`, {
       method: "POST",
@@ -801,57 +796,7 @@ export const api = {
     );
   },
 
-  // Messaging platforms (gateway channels)
-  getMessagingPlatforms: () =>
-    fetchJSON<MessagingPlatformsResponse>("/api/messaging/platforms"),
-  updateMessagingPlatform: (id: string, body: MessagingPlatformUpdate) =>
-    fetchJSON<{ ok: boolean; platform: string }>(
-      `/api/messaging/platforms/${encodeURIComponent(id)}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    ),
-  testMessagingPlatform: (id: string) =>
-    fetchJSON<MessagingPlatformTestResult>(
-      `/api/messaging/platforms/${encodeURIComponent(id)}/test`,
-      { method: "POST" },
-    ),
-  startTelegramOnboarding: (body: { bot_name?: string }) =>
-    fetchJSON<TelegramOnboardingStartResponse>(
-      "/api/messaging/telegram/onboarding/start",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    ),
-  getTelegramOnboardingStatus: (pairingId: string) =>
-    fetchJSON<TelegramOnboardingStatusResponse>(
-      `/api/messaging/telegram/onboarding/${encodeURIComponent(pairingId)}`,
-    ),
-  applyTelegramOnboarding: (
-    pairingId: string,
-    body: { allowed_user_ids: string[]; profile?: string },
-  ) =>
-    fetchJSON<TelegramOnboardingApplyResponse>(
-      `/api/messaging/telegram/onboarding/${encodeURIComponent(pairingId)}/apply`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    ),
-  cancelTelegramOnboarding: (pairingId: string) =>
-    fetchJSON<{ ok: boolean }>(
-      `/api/messaging/telegram/onboarding/${encodeURIComponent(pairingId)}`,
-      { method: "DELETE" },
-    ),
-
-  // Gateway / update actions
-  restartGateway: () =>
-    fetchJSON<ActionResponse>("/api/gateway/restart", { method: "POST" }),
+  // Update actions
   updateLliam: () =>
     fetchJSON<ActionResponse>("/api/hermes/update", { method: "POST" }),
   checkLliamUpdate: (force = false) =>
@@ -981,49 +926,6 @@ export const api = {
       },
     ),
 
-  // ── Admin: Pairing ──────────────────────────────────────────────────
-  getPairing: () => fetchJSON<PairingResponse>("/api/pairing"),
-  approvePairing: (platform: string, code: string) =>
-    fetchJSON<{ ok: boolean; user: PairingUser }>("/api/pairing/approve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ platform, code }),
-    }),
-  revokePairing: (platform: string, user_id: string) =>
-    fetchJSON<{ ok: boolean }>("/api/pairing/revoke", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ platform, user_id }),
-    }),
-  clearPendingPairing: () =>
-    fetchJSON<{ ok: boolean; cleared: number }>("/api/pairing/clear-pending", {
-      method: "POST",
-    }),
-
-  // ── Admin: Webhooks ─────────────────────────────────────────────────
-  getWebhooks: () => fetchJSON<WebhooksResponse>("/api/webhooks"),
-  enableWebhooks: () =>
-    fetchJSON<WebhookEnableResponse>("/api/webhooks/enable", { method: "POST" }),
-  createWebhook: (body: WebhookCreate) =>
-    fetchJSON<WebhookRoute & { secret: string }>("/api/webhooks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  deleteWebhook: (name: string) =>
-    fetchJSON<{ ok: boolean }>(`/api/webhooks/${encodeURIComponent(name)}`, {
-      method: "DELETE",
-    }),
-  setWebhookEnabled: (name: string, enabled: boolean) =>
-    fetchJSON<{ ok: boolean; name: string; enabled: boolean }>(
-      `/api/webhooks/${encodeURIComponent(name)}/enabled`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-      },
-    ),
-
   // ── Admin: Credential pool ──────────────────────────────────────────
   getCredentialPool: () =>
     fetchJSON<{ providers: CredentialPoolProvider[] }>("/api/credentials/pool"),
@@ -1060,12 +962,6 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ target }),
     }),
-
-  // ── Admin: Gateway lifecycle ────────────────────────────────────────
-  startGateway: () =>
-    fetchJSON<ActionResponse>("/api/gateway/start", { method: "POST" }),
-  stopGateway: () =>
-    fetchJSON<ActionResponse>("/api/gateway/stop", { method: "POST" }),
 
   // ── Admin: Operations ───────────────────────────────────────────────
   runDoctor: () =>
@@ -1360,112 +1256,6 @@ export interface McpTestResult {
   tools: Array<{ name: string; description: string }>;
 }
 
-export interface MessagingPlatformEnvVar {
-  key: string;
-  required: boolean;
-  is_set: boolean;
-  redacted_value: string | null;
-  description: string;
-  prompt: string;
-  help: string;
-  url: string | null;
-  is_password: boolean;
-  advanced: boolean;
-}
-
-export interface MessagingPlatform {
-  id: string;
-  name: string;
-  description: string;
-  docs_url: string;
-  enabled: boolean;
-  configured: boolean;
-  gateway_running: boolean;
-  /**
-   * "connected" | "disabled" | "not_configured" | "pending_restart" |
-   * "gateway_stopped" | "startup_failed" | "disconnected" | "fatal" | string
-   */
-  state: string;
-  error_code: string | null;
-  error_message: string | null;
-  updated_at: string | null;
-  home_channel: { platform: string; chat_id: string; name: string; thread_id?: string } | null;
-  env_vars: MessagingPlatformEnvVar[];
-}
-
-export interface MessagingPlatformsResponse {
-  env_path: string;
-  gateway_start_command: string;
-  platforms: MessagingPlatform[];
-}
-
-export interface MessagingPlatformUpdate {
-  enabled?: boolean;
-  env?: Record<string, string>;
-  clear_env?: string[];
-}
-
-export interface MessagingPlatformTestResult {
-  ok: boolean;
-  state: string;
-  message: string;
-}
-
-export interface PairingUser {
-  platform: string;
-  user_id: string;
-  user_name?: string;
-  code?: string;
-  age_minutes?: number;
-}
-
-export interface PairingResponse {
-  pending: PairingUser[];
-  approved: PairingUser[];
-}
-
-export interface WebhookRoute {
-  name: string;
-  description: string;
-  events: string[];
-  deliver: string;
-  deliver_only: boolean;
-  prompt: string;
-  skills: string[];
-  created_at: string | null;
-  url: string;
-  secret_set: boolean;
-  enabled: boolean;
-}
-
-export interface WebhooksResponse {
-  enabled: boolean;
-  base_url: string;
-  subscriptions: WebhookRoute[];
-}
-
-export interface WebhookEnableResponse {
-  ok: boolean;
-  platform: "webhook";
-  enabled: true;
-  needs_restart: boolean;
-  restart_started?: boolean;
-  restart_action?: string;
-  restart_pid?: number | null;
-  restart_error?: string;
-}
-
-export interface WebhookCreate {
-  name: string;
-  description?: string;
-  events?: string[];
-  prompt?: string;
-  skills?: string[];
-  deliver?: string;
-  deliver_only?: boolean;
-  deliver_chat_id?: string;
-}
-
 export interface CredentialPoolEntry {
   index: number;
   id: string | null;
@@ -1679,36 +1469,6 @@ export interface EnvVarInfo {
   is_password: boolean;
   tools: string[];
   advanced: boolean;
-  /** True when this var is a messaging-platform credential owned by the Channels page. */
-  channel_managed?: boolean;
-}
-
-export interface TelegramOnboardingStartResponse {
-  pairing_id: string;
-  suggested_username: string;
-  deep_link: string;
-  qr_payload: string;
-  expires_at: string;
-}
-
-export type TelegramOnboardingStatusResponse =
-  | { status: "waiting"; expires_at: string }
-  | {
-      status: "ready";
-      bot_username: string;
-      owner_user_id?: string;
-      expires_at: string;
-    };
-
-export interface TelegramOnboardingApplyResponse {
-  ok: boolean;
-  platform: "telegram";
-  bot_username?: string;
-  needs_restart: boolean;
-  restart_started?: boolean;
-  restart_action?: string;
-  restart_pid?: number | null;
-  restart_error?: string;
 }
 
 export interface SessionMessage {
@@ -1945,13 +1705,6 @@ export interface CronJob {
   last_status?: string | null;
   last_error?: string | null;
   last_delivery_error?: string | null;
-}
-
-export interface CronDeliveryTarget {
-  id: string;
-  name: string;
-  home_target_set: boolean;
-  home_env_var: string | null;
 }
 
 export interface AutomationBlueprintField {
