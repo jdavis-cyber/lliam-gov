@@ -39,7 +39,7 @@ risk_acceptance:
 
 baseline:
   git_tag: gov-P7-good
-  git_commit: ae63d51b3a510180e4e157abb50e1c6330b6307d
+  git_commit: c84c93b86f2355fadd2e1f76a10371c8610723bb
   overlay: cli-config.gov.yaml
 
 issued: 2026-07-16
