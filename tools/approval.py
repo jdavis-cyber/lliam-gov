@@ -16,6 +16,7 @@ import logging
 import os
 from lliam_cli.env_compat import getenv_compat
 import re
+import shlex
 import sys
 import threading
 import time
@@ -507,6 +508,1147 @@ def _hardline_block_result(description: str) -> dict:
             "approvals.mode=off, or cron approve mode. If you genuinely "
             "need to run it, run it yourself in a terminal outside the "
             "agent."
+        ),
+    }
+
+
+# =========================================================================
+# Environment-file write floor (AI-1178 / DEF-018)
+# =========================================================================
+# A shell redirect or tee into a project/user environment file is refused
+# outright, like the hardline list: no prompt, and yolo, approvals.mode=off,
+# cron approve mode and stored approvals do not lift it. Reads are untouched.
+# The name rule mirrors agent/file_safety.is_project_env_basename (#141):
+# .env, .envrc, and every .env.<suffix> except .env.example / .env.sample.
+# cp/mv/sed -i/dd and interpreter writes into .env stay approval-gated in
+# DANGEROUS_PATTERNS; this floor covers redirection and tee only, including
+# inside a literal ``sh -c`` / ``bash -c`` script or ``eval`` argument.
+
+_ENV_TEMPLATE_BASENAMES = frozenset({".env.example", ".env.sample"})
+_SHELL_PUNCTUATION = "();<>|&\n"
+# The operators Bash reads from adjacent punctuation, longest first by
+# maximal munch; every prefix of one is itself an operator. Any other run
+# (``;>``, ``|>``, ``)>``) is several operators: ``true;>/dev/null tee .env``
+# is ``true``, ``;``, then a redirect, then ``tee``. ``>(`` and ``<(`` open a
+# process substitution.
+_SHELL_OPERATORS = frozenset({
+    "(", ")", ";", ";;", ";&", ";;&", "<", ">", "|", "&", "\n",
+    "&&", "||", "|&", ">>", "<<", "<<<", ">|", "&>", "&>>", ">&", "<&", "<>",
+    ">(", "<(",
+})
+# Command wrappers and their options, so the wrapped command is found:
+# (short flags without a value, short flags taking a value, long options
+# without a value, long options taking a value, positional words before the
+# command). An option a table does not know is read both ways (with and
+# without a value), so an unknown flag can only widen detection.
+_WRAPPER_OPTIONS = {
+    "sudo": ("AbBEeHiKklNnPSsVv", "CDghpRrTtUu",
+             {"--askpass", "--background", "--bell", "--edit", "--help", "--list", "--login",
+              "--non-interactive", "--preserve-env", "--preserve-groups", "--remove-timestamp",
+              "--reset-timestamp", "--set-home", "--shell", "--stdin", "--validate", "--version"},
+             {"--chdir", "--chroot", "--close-from", "--command-timeout", "--group", "--host",
+              "--other-user", "--prompt", "--role", "--type", "--user"}, 0),
+    "doas": ("Lns", "Cu", set(), set(), 0),
+    "env": ("0iv", "CSu", {"--debug", "--ignore-environment", "--null"},
+            {"--chdir", "--split-string", "--unset"}, 0),
+    "nice": ("", "n", set(), {"--adjustment"}, 0),
+    "ionice": ("t", "cnpPu", {"--ignore"}, {"--class", "--classdata", "--pid", "--pgid", "--uid"}, 0),
+    "timeout": ("fpv", "ks", {"--foreground", "--preserve-status", "--verbose"},
+                {"--kill-after", "--signal"}, 1),
+    "stdbuf": ("", "eio", set(), {"--error", "--input", "--output"}, 0),
+    "setsid": ("cfw", "", {"--ctty", "--fork", "--wait"}, set(), 0),
+    "nohup": ("", "", set(), set(), 0),
+    "time": ("apqv", "fo", {"--append", "--portability", "--quiet", "--verbose"},
+             {"--format", "--output"}, 0),
+    "command": ("pVv", "", set(), set(), 0),
+    "builtin": ("", "", set(), set(), 0),
+    "exec": ("cl", "a", set(), set(), 0),
+}
+_COMMAND_WRAPPERS = frozenset(_WRAPPER_OPTIONS)
+_MAX_COMMAND_READINGS = 64
+_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# Shells whose ``-c`` script (and ``eval``'s arguments) are scanned as a
+# nested command, so ``bash -c "echo k > .env"`` is refused too.
+_NESTED_SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "busybox"})
+_MAX_NESTED_SCRIPT_DEPTH = 3
+# Shell invocation options: long options taking a value, and long options
+# known to take none. Short -o/+o and -O/+O take a value word.
+_SHELL_LONG_VALUES = frozenset({"--rcfile", "--init-file"})
+_SHELL_LONG_FLAGS = frozenset({
+    "--debug", "--debugger", "--dump-po-strings", "--dump-strings", "--help", "--login",
+    "--noediting", "--noprofile", "--norc", "--posix", "--pretty-print", "--protected",
+    "--restricted", "--verbose", "--version", "--wordexp",
+})
+
+
+def _shell_c_scripts(name: str, args: list) -> list:
+    """The ``-c`` script that shell *name* run with *args* executes, as
+    Bash reads its invocation: options may come before and after ``-c``
+    (``-ec``, ``-c -e``, ``-o opt``, ``+o opt``, ``-O shopt``), ``--`` or ``-``
+    ends them, and the first word after them is the script. With no ``-c``
+    there is none. When the position is unsure (an unknown long option, an
+    option missing its value), every word after ``-c`` is returned."""
+    if name == "busybox":  # ``busybox sh -c ...``: the applet comes first
+        if args and args[0].rsplit("/", 1)[-1] in _NESTED_SHELLS - {"busybox"}:
+            return _shell_c_scripts(args[0].rsplit("/", 1)[-1], args[1:])
+        return []
+    has_c = unsure = False
+    first_c = None  # index of the word holding -c
+    i = 0
+    while i < len(args):
+        word = args[i]
+        if word in ("--", "-"):
+            i += 1
+            break
+        if word.startswith("--"):
+            key = word.partition("=")[0]
+            if key in _SHELL_LONG_VALUES and "=" not in word:
+                i += 2
+                unsure = unsure or i > len(args)
+            else:
+                unsure = unsure or key not in _SHELL_LONG_FLAGS | _SHELL_LONG_VALUES
+                i += 1
+            continue
+        if len(word) < 2 or word[0] not in "-+":
+            break
+        i += 1
+        for flag in word[1:]:
+            if flag == "c" and word[0] == "-":
+                has_c = True
+                first_c = i if first_c is None else first_c
+            elif flag in "oO":
+                i += 1  # -o / +o / -O / +O name the option in the next word
+                unsure = unsure or i > len(args)
+    if not has_c:
+        return []
+    if unsure or i >= len(args):
+        return list(args[first_c:])
+    return [args[i]]
+
+
+# Fallback when the command cannot be tokenized (unbalanced quotes, e.g. a
+# heredoc body containing an apostrophe): look for a redirect operator or a
+# tee word followed by a token whose basename looks like an env file.
+_ENV_TOKEN = r"""["']?(?P<target>[^\s;|&<>()"'`]*\.env[^\s;|&<>()"'`]*)["']?"""
+_ENV_REDIRECT_FALLBACK_RE = re.compile(r"(?:>>?\|?|&>>?|>&)\s*" + _ENV_TOKEN)
+_ENV_TEE_FALLBACK_RE = re.compile(r"(?<![\w.-])tee\b[^;&|\n]*?\s" + _ENV_TOKEN)
+
+
+def _is_protected_env_basename(path: str) -> bool:
+    """True when *path* names a protected environment file (see block above)."""
+    name = unicodedata.normalize("NFKC", path).replace("\\", "/")
+    name = name.rsplit("/", 1)[-1].split(":", 1)[0].rstrip(" .").casefold()
+    if name in _ENV_TEMPLATE_BASENAMES:
+        return False
+    return name in {".env", ".envrc"} or name.startswith(".env.")
+
+
+def _is_heredoc_operator(text: str) -> bool:
+    """True for a here-document operator (``<<`` or ``<<-``), not ``<<<``."""
+    text = text[:-1] if text.endswith("<<-") else text
+    return text.endswith("<<") and not text.endswith("<<<")
+
+
+def _substitution_end(command: str, start: int) -> Optional[int]:
+    """Index just past the ``$(...)`` or backquoted command substitution that
+    begins at *start*, or None when it is not closed or its end is unsure: a
+    ``$(...)`` holding ``#`` (a comment can hide a ``)``), ``<<`` (a nested
+    heredoc) or ``case`` (a pattern's bare ``)``)."""
+    n = len(command)
+    if command[start] == "`":
+        k = start + 1
+        while k < n:
+            if command[k] == "\\":
+                k += 2
+                continue
+            if command[k] == "`":
+                return k + 1
+            k += 1
+        return None
+    depth, k = 1, start + 2
+    while k < n:
+        ch = command[k]
+        if ch == "\\":
+            k += 2
+            continue
+        if ch in "'\"":
+            close = k + 1
+            while close < n and command[close] != ch:
+                close += 2 if ch == '"' and command[close] == "\\" else 1
+            if close >= n:
+                return None
+            k = close + 1
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                span = command[start + 2:k]
+                if "#" in span or "<<" in span or re.search(r"(?<![\w-])case(?![\w-])", span):
+                    return None
+                return k + 1
+        k += 1
+    return None
+
+
+def _heredoc_substitutions(body: str) -> Optional[list]:
+    """The scripts of the command substitutions an unquoted heredoc *body*
+    expands, or None when unsure. In such a body only a backslash escapes:
+    ``#`` and ``'`` are plain text, so ``# $(cmd)`` and ``'$(cmd)'`` run cmd."""
+    scripts: list = []
+    i, n = 0, len(body)
+    while i < n:
+        if body[i] == "\\":
+            i += 2
+            continue
+        if body[i] == "`" or body.startswith("$(", i):
+            end = _substitution_end(body, i)
+            if end is None:
+                return None
+            scripts.append(body[i + (1 if body[i] == "`" else 2):end - 1])
+            i = end
+            continue
+        i += 1
+    return scripts
+
+
+_ANSI_C_ESCAPES = {
+    "a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r",
+    "t": "\t", "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?",
+}
+
+
+def _ansi_c_quoted(command: str, start: int) -> tuple:
+    """Decode the ``$'...'`` string whose text begins at *start*, as Bash
+    does; return ``(text, index past the closing quote)`` or ``(None, None)``
+    when it is not closed. A NUL ends the value, as in Bash."""
+    out: list = []
+    ended = False  # a NUL was decoded: Bash drops the rest of the value
+    k, n = start, len(command)
+
+    def emit(text: str) -> None:
+        nonlocal ended
+        if not ended:
+            if "\0" in text:
+                text, ended = text.split("\0", 1)[0], True
+            out.append(text)
+
+    while k < n:
+        ch = command[k]
+        if ch == "'":
+            return "".join(out), k + 1
+        if ch != "\\":
+            emit(ch)
+            k += 1
+            continue
+        if k + 1 >= n:
+            return None, None
+        esc = command[k + 1]
+        k += 2
+        if esc in _ANSI_C_ESCAPES:
+            emit(_ANSI_C_ESCAPES[esc])
+        elif esc in "01234567":
+            digits = esc
+            while len(digits) < 3 and k < n and command[k] in "01234567":
+                digits += command[k]
+                k += 1
+            emit(chr(int(digits, 8) & 0xFF))
+        elif esc in "xuU":
+            width = {"x": 2, "u": 4, "U": 8}[esc]
+            digits = ""
+            while len(digits) < width and k < n and command[k] in "0123456789abcdefABCDEF":
+                digits += command[k]
+                k += 1
+            if not digits:
+                emit("\\" + esc)
+            elif int(digits, 16) > 0x10FFFF:
+                return None, None
+            else:
+                emit(chr(int(digits, 16)))
+        elif esc == "c":
+            if k >= n:
+                return None, None
+            emit(chr(ord(command[k]) & 0x1F))
+            k += 1
+        else:
+            emit("\\" + esc)  # an unknown escape stays as written
+    return None, None
+
+
+def _glob_elements(pattern: str) -> list:
+    """Split a glob into ``("lit", ch)``, ``("any",)``, ``("star",)`` and
+    ``("class", negated, members)`` elements; an unclosed ``[`` is a literal."""
+    elements: list = []
+    i, n = 0, len(pattern)
+    while i < n:
+        ch = pattern[i]
+        if ch == "*":
+            elements.append(("star",))
+        elif ch == _BRACE_ANY:
+            elements.append(("anything",))
+        elif ch == "?":
+            elements.append(("any",))
+        elif ch == "[":
+            j = i + 1
+            negated = j < n and pattern[j] in "!^"
+            if negated:
+                j += 1
+            k = j + 1 if j < n and pattern[j] == "]" else j  # a leading ] is a member
+            while k < n and pattern[k] != "]":
+                k += 1
+            if k >= n:
+                elements.append(("lit", ch))
+            else:
+                body, members, m = pattern[j:k], set(), 0
+                while m < len(body):
+                    if m + 2 < len(body) and body[m + 1] == "-":
+                        low, high = sorted((body[m], body[m + 2]))
+                        members.update(chr(c) for c in range(ord(low), min(ord(high), ord(low) + 4096) + 1))
+                        m += 3
+                    else:
+                        members.add(body[m])
+                        m += 1
+                elements.append(("class", negated, frozenset(members)))
+                i = k
+        else:
+            elements.append(("lit", ch))
+        i += 1
+    return elements
+
+
+def _glob_after_prefix(elements: list, prefix: str, dotglob: bool) -> set:
+    """Positions in *elements* the glob may be at after matching *prefix*
+    (case-insensitively). A ``*`` or ``?`` can't match a leading ``.``
+    unless *dotglob*, as in Bash."""
+
+    def closure(states: set) -> set:
+        out, todo = set(states), list(states)
+        while todo:
+            s = todo.pop()
+            if s < len(elements) and elements[s][0] in ("star", "anything") and s + 1 not in out:
+                out.add(s + 1)
+                todo.append(s + 1)
+        return out
+
+    states = closure({0})
+    for pos, ch in enumerate(prefix):
+        wild_ok = dotglob or not (pos == 0 and ch == ".")
+        step: set = set()
+        for s in states:
+            if s >= len(elements):
+                continue
+            kind = elements[s][0]
+            if kind == "anything":
+                step.add(s)
+            elif kind == "star":
+                if wild_ok:
+                    step.add(s)
+            elif kind == "any":
+                if wild_ok:
+                    step.add(s + 1)
+            elif kind == "lit":
+                if elements[s][1].casefold() == ch:
+                    step.add(s + 1)
+            else:
+                _, negated, members = elements[s]
+                hit = ch in members or ch.upper() in members
+                if hit != negated:
+                    step.add(s + 1)
+        states = closure(step)
+        if not states:
+            break
+    return states
+
+
+def _glob_may_name_env(path: str, dotglob: bool = False) -> bool:
+    """True when *path*'s file name is a glob that may match a protected
+    environment file: ``.env``, ``.envrc`` or any ``.env.<suffix>`` other
+    than the templates (quoting is gone here, so a quoted ``*`` counts too).
+    Bash expands a redirect target that matches one file, so ``> .en?`` or
+    ``> .[e]nv.staging`` can write a protected file. Unsure means True."""
+    name = unicodedata.normalize("NFKC", path).replace("\\", "/").rsplit("/", 1)[-1]
+    name = name.split(":", 1)[0].rstrip(" .")
+    if not any(ch in name for ch in "*?[" + _BRACE_ANY):
+        return False
+    elements = _glob_elements(name)
+    for exact in (".env", ".envrc"):
+        if len(elements) in _glob_after_prefix(elements, exact, dotglob):
+            return True  # the rest of the glob can be empty
+    for state in _glob_after_prefix(elements, ".env.", dotglob):
+        rest = elements[state:]
+        if any(element[0] != "lit" for element in rest):
+            return True  # some suffix other than a template name fits
+        if _is_protected_env_basename(".env." + "".join(element[1] for element in rest)):
+            return True
+    return False
+
+
+_BRACE_LIMIT = 64  # more alternatives than this: fall back to a glob
+_BRACE_ANY = "\ue000"  # stands for an unresolved brace group: matches anything
+_BRACE_SEQUENCE_RE = re.compile(r"^(-?\d+|[A-Za-z])\.\.(-?\d+|[A-Za-z])(?:\.\.(-?\d+))?$")
+
+
+def _brace_groups(chars: list, bare: list) -> list:
+    """``(open, close)`` of each outermost unquoted ``{...}`` in *chars*,
+    skipping ``${...}`` parameter expansions."""
+    groups: list = []
+    k, n = 0, len(chars)
+    while k < n:
+        if bare[k] and chars[k] == "{":
+            depth, m = 1, k + 1
+            while m < n and depth:
+                if bare[m] and chars[m] == "{":
+                    depth += 1
+                elif bare[m] and chars[m] == "}":
+                    depth -= 1
+                m += 1
+            if depth == 0:
+                if not (k and bare[k - 1] and chars[k - 1] == "$"):
+                    groups.append((k, m - 1))
+                k = m
+                continue
+        k += 1
+    return groups
+
+
+def _brace_alternatives(chars: list, bare: list, start: int, end: int) -> Optional[list]:
+    """The alternatives of the brace group ``chars[start:end+1]`` as
+    ``(chars, bare)`` pairs, or None when it is not brace syntax (``{x}``,
+    ``{}``)."""
+    body, body_bare = chars[start + 1:end], bare[start + 1:end]
+    parts, depth, last = [], 0, 0
+    for k, (ch, b) in enumerate(zip(body, body_bare)):
+        if b and ch == "{":
+            depth += 1
+        elif b and ch == "}":
+            depth -= 1
+        elif b and ch == "," and depth == 0:
+            parts.append((body[last:k], body_bare[last:k]))
+            last = k + 1
+    if parts:
+        parts.append((body[last:], body_bare[last:]))
+        return parts
+    text = "".join(body)
+    match = _BRACE_SEQUENCE_RE.match(text) if all(body_bare) else None
+    if not match:
+        return None
+    first, last_, step = match.group(1), match.group(2), abs(int(match.group(3) or 1)) or 1
+    if first.lstrip("-").isdigit() != last_.lstrip("-").isdigit():
+        return None
+    if first.lstrip("-").isdigit():
+        a, z = int(first), int(last_)
+        if abs(z - a) // step + 1 > _BRACE_LIMIT:
+            return [([_BRACE_ANY], [False])]
+        width = max(len(first), len(last_)) if (first.lstrip("-").startswith("0") or last_.lstrip("-").startswith("0")) else 0
+        values = range(a, z + (1 if z >= a else -1), step if z >= a else -step)
+        return [(list(str(v).zfill(width) if width else str(v)), [False] * len(str(v).zfill(width) if width else str(v))) for v in values]
+    a, z = ord(first), ord(last_)
+    values = range(a, z + (1 if z >= a else -1), step if z >= a else -step)
+    return [([chr(v)], [False]) for v in values]
+
+
+def _brace_expand(pieces: list, pieces_bare: list) -> list:
+    """The words Bash's brace expansion makes of a word given as *pieces*
+    with, per piece, whether it was unquoted. Empty results are dropped. Past
+    ``_BRACE_LIMIT`` words, each brace group becomes ``_BRACE_ANY`` (which the
+    glob check reads as "anything"), so detection fails closed."""
+    chars: list = []
+    bare: list = []
+    for piece, is_bare in zip(pieces, pieces_bare):
+        chars.extend(piece)
+        bare.extend([is_bare] * len(piece))
+    if "{" not in [c for c, b in zip(chars, bare) if b]:
+        return ["".join(chars)]
+    results: list = []
+
+    def expand(chars: list, bare: list) -> bool:
+        for start, end in _brace_groups(chars, bare):
+            alternatives = _brace_alternatives(chars, bare, start, end)
+            if alternatives is None:
+                continue
+            for alt_chars, alt_bare in alternatives:
+                if not expand(chars[:start] + alt_chars + chars[end + 1:],
+                              bare[:start] + alt_bare + bare[end + 1:]):
+                    return False
+            return True
+        if len(results) >= _BRACE_LIMIT:
+            return False
+        results.append("".join(chars))
+        return True
+
+    if expand(chars, bare):
+        words = [word for word in results if word]
+        return words or [""]
+    approx: list = []
+    last = 0
+    for start, end in _brace_groups(chars, bare):
+        approx.extend(chars[last:start])
+        approx.append(_BRACE_ANY)
+        last = end + 1
+    approx.extend(chars[last:])
+    return ["".join(approx)]
+
+
+def _shell_tokens(command: str, comments: bool = False,
+                  heredocs: Optional[list] = None,
+                  substitutions: Optional[list] = None) -> Optional[list]:
+    """Split *command* into ``(text, is_operator)`` pairs, or None on error.
+
+    Quotes and backslash escapes are removed from words, as the shell does
+    (``$'...'`` is decoded and ``$"..."`` reads as ``"..."``),
+    and only unquoted, unescaped punctuation forms an operator: ``grep '>'``
+    passes ``>`` as an argument, it does not redirect. With *comments*, an
+    unquoted ``#`` that starts a word comments out the rest of the line.
+
+    With *heredocs*, a here-document body (the lines after the line holding
+    ``<<WORD``, up to the line ``WORD``) is not tokenized. It is appended to
+    *heredocs*, one entry per ``<<`` / ``<<-`` operator, in order;
+    ``_heredoc_scripts`` decides whether it runs. Without *heredocs* the body
+    is tokenized like other lines.
+
+    With *substitutions*, the script of each command substitution the lexer
+    keeps inside a word (``"$(...)"`` or a backquoted one) or finds in an
+    unquoted heredoc body is appended to it, so the caller can scan it. An
+    unquoted ``$(`` already splits into tokens. A substitution whose end is
+    unsure (see ``_substitution_end``) makes the command untokenizable.
+
+    Unquoted brace alternatives are expanded as Bash does (``.env{,.local}``
+    is two words, see ``_brace_expand``); quoted braces stay literal.
+    """
+    tokens: list = []
+    word: list = []  # pieces of the current word
+    word_bare: list = []  # per piece: unquoted and unescaped (brace syntax)
+    in_word = False
+    word_quoted = False  # the current word has a quote or backslash
+    operator: list = []
+    pending: list = []  # heredocs opened on this line: (delimiter, quoted, strip_tabs)
+    want = None  # strip_tabs of a heredoc operator still awaiting its delimiter
+    i, n = 0, len(command)
+
+    def add(piece: str, bare: bool = False) -> None:
+        word.append(piece)
+        word_bare.append(bare)
+
+    def end_word() -> None:
+        nonlocal in_word, word_quoted, want
+        if in_word:
+            text = "".join(word)
+            if want is not None:  # a heredoc delimiter is not brace-expanded
+                tokens.append((text, False))
+                pending.append((text, word_quoted, want))
+                want = None
+            else:
+                alternatives = _brace_expand(word, word_bare)
+                redirect = tokens[-1][0] if tokens and tokens[-1][1] else ""
+                if len(alternatives) > 1 and ("<" in redirect or ">" in redirect) \
+                        and "(" not in redirect and not _is_heredoc_operator(redirect):
+                    # Bash refuses an ambiguous redirect, other shells write
+                    # each word: keep every alternative a redirect target.
+                    tokens.append((alternatives[0], False))
+                    for alternative in alternatives[1:]:
+                        tokens.extend(((redirect, True), (alternative, False)))
+                else:
+                    tokens.extend((alternative, False) for alternative in alternatives)
+            word.clear()
+            word_bare.clear()
+            in_word = False
+        word_quoted = False
+
+    def end_operator() -> None:
+        nonlocal want
+        if operator:
+            text = "".join(operator)
+            tokens.append((text, True))
+            operator.clear()
+            want = None
+            if heredocs is not None and _is_heredoc_operator(text):
+                want = text.endswith("-")
+
+    def read_bodies(i: int) -> Optional[int]:
+        """Skip the pending heredoc bodies, which start at *i*; return the
+        index just past the last delimiter line (or the end), or None when an
+        unquoted body's substitutions can't be read."""
+        for delimiter, delimiter_quoted, strip_tabs in pending:
+            start, end = i, n  # an unterminated body runs to the end
+            while i < n:
+                newline = command.find("\n", i)
+                line_end = n if newline < 0 else newline
+                line = command[i:line_end]
+                at_delimiter = (line.lstrip("\t") if strip_tabs else line) == delimiter
+                if at_delimiter:
+                    end = i
+                i = n if newline < 0 else newline + 1
+                if at_delimiter:
+                    break
+            body = command[start:end]
+            heredocs.append(body)
+            if not delimiter_quoted:  # the shell expands $(...) and `...` in it
+                scripts = _heredoc_substitutions(body)
+                if scripts is None or (scripts and substitutions is None):
+                    return None
+                if scripts:
+                    substitutions.extend(scripts)
+        pending.clear()
+        return i
+
+    while i < n:
+        ch = command[i]
+        if ch in " \t\r":
+            end_operator()
+            end_word()
+            i += 1
+            continue
+        if ch in _SHELL_PUNCTUATION:
+            end_word()
+            if "".join(operator) + ch not in _SHELL_OPERATORS:
+                end_operator()  # ``;>`` is ``;`` then ``>``
+            operator.append(ch)
+            i += 1
+            if ch == "\n" and pending:
+                end_operator()
+                i = read_bodies(i)
+                if i is None:
+                    return None
+            continue
+        if ch == "-" and heredocs is not None and _is_heredoc_operator("".join(operator)) \
+                and not "".join(operator).endswith("-"):
+            operator.append(ch)  # ``<<-``: the body's leading tabs are stripped
+            i += 1
+            continue
+        end_operator()
+        if comments and ch == "#" and not in_word:
+            newline = command.find("\n", i)
+            i = n if newline < 0 else newline
+            continue
+        in_word = True
+        if ch in "\\'\"":
+            word_quoted = True
+        if ch == "$" and i + 1 < n and command[i + 1] in "'\"":
+            word_quoted = True
+            if command[i + 1] == '"':
+                i += 1  # $"..." (locale translation) reads like "..."
+                continue
+            decoded, end = _ansi_c_quoted(command, i + 2)
+            if end is None:
+                return None
+            add(decoded)
+            i = end
+            continue
+        if ch == "\\":
+            if i + 1 >= n:
+                return None
+            if command[i + 1] != "\n":  # backslash-newline continues the line
+                add(command[i + 1])
+            i += 2
+        elif ch == "'":
+            close = command.find("'", i + 1)
+            if close < 0:
+                return None
+            add(command[i + 1:close])
+            i = close + 1
+        elif ch == '"':
+            j = i + 1
+            while j < n and command[j] != '"':
+                if command[j] == "\\" and j + 1 < n and command[j + 1] in '\\"$`\n':
+                    if command[j + 1] != "\n":
+                        add(command[j + 1])
+                    j += 2
+                    continue
+                if substitutions is not None and (command[j] == "`" or command.startswith("$(", j)):
+                    end = _substitution_end(command, j)
+                    if end is None:
+                        return None
+                    skip = 1 if command[j] == "`" else 2
+                    substitutions.append(command[j + skip:end - 1])
+                    add(command[j:end])
+                    j = end
+                    continue
+                add(command[j])
+                j += 1
+            if j >= n:
+                return None
+            i = j + 1
+        elif ch == "`" and substitutions is not None:
+            end = _substitution_end(command, i)
+            if end is None:
+                return None
+            substitutions.append(command[i + 1:end - 1])
+            add(command[i:end])
+            i = end
+        else:
+            add(ch, True)
+            i += 1
+    end_operator()
+    end_word()
+    return tokens
+
+
+def _wrapper_option_ends(words: list, start: int, name: str, scripts: list) -> set:
+    """Indices just past wrapper *name*'s options and positionals.
+
+    More than one index means an option was not in the wrapper's table and
+    could take a value or not; both readings are returned. ``env -S``'s
+    value is a command line and is added to *scripts*.
+    """
+    short_flags, short_values, long_flags, long_values, positionals = _WRAPPER_OPTIONS[name]
+    ends: set = set()
+
+    def walk(j: int) -> None:
+        if len(ends) >= _MAX_COMMAND_READINGS:
+            return
+        while j < len(words):
+            word = words[j]
+            if word == "--":
+                j += 1
+                break
+            if name == "env" and word == "-":
+                j += 1
+                continue
+            if not word.startswith("-") or word == "-":
+                break
+            if word.startswith("--"):
+                key, has_value, value = word.partition("=")
+                if key in long_values and not has_value:
+                    if name == "env" and key == "--split-string" and j + 1 < len(words):
+                        scripts.append(words[j + 1])
+                    j += 2
+                    continue
+                if key == "--split-string" and name == "env" and has_value:
+                    scripts.append(value)
+                if has_value or key in long_flags or key in long_values:
+                    j += 1
+                    continue
+                walk(j + 2)  # unknown long option: maybe it takes a value
+                j += 1
+                continue
+            cluster = word[1:]
+            if name == "nice" and cluster.lstrip("-").isdigit():
+                j += 1  # nice -5 / nice --5: the adjustment is attached
+                continue
+            step = 1
+            for k, flag in enumerate(cluster):
+                if flag in short_values:
+                    attached = cluster[k + 1:]
+                    if not attached:
+                        step = 2
+                    if name == "env" and flag == "S":
+                        if attached:
+                            scripts.append(attached)
+                        elif j + 1 < len(words):
+                            scripts.append(words[j + 1])
+                    break
+                if flag not in short_flags:
+                    walk(j + 2)  # unknown short flag: maybe it takes a value
+                    break
+            j += step
+        ends.add(j + positionals)
+
+    walk(start)
+    return ends
+
+
+# Shell reserved words at a command position. After these the next word is
+# again a command position (``then tee .env``, ``! tee .env``, ``{ tee .env;
+# }``); after ``function`` / ``coproc`` a name may come first, so both
+# readings count; after ``case`` / ``for`` / ``select`` / ``[[`` the rest of
+# the simple command is not a command.
+_RESERVED_BEFORE_COMMAND = frozenset({
+    "!", "{", "}", "do", "done", "elif", "else", "esac", "fi", "if", "then", "until", "while",
+})
+_RESERVED_BEFORE_NAME = frozenset({"coproc", "function"})
+_RESERVED_NO_COMMAND = frozenset({"[[", "case", "for", "select"})
+
+
+def _command_word_indices(words: list, scripts: list) -> set:
+    """Where the real command word of a simple command may be, after
+    reserved words, assignments, wrappers and their options; several when a
+    wrapper option is unknown (detection then considers every reading)."""
+    found: set = set()
+    seen: set = set()
+
+    def visit(i: int) -> None:
+        if i in seen or len(found) >= _MAX_COMMAND_READINGS:
+            return
+        seen.add(i)
+        while i < len(words):
+            word = words[i]
+            base = word.rsplit("/", 1)[-1]
+            if word in _RESERVED_BEFORE_COMMAND:
+                i += 1
+                continue
+            if word in _RESERVED_BEFORE_NAME:
+                visit(i + 1)  # ``coproc tee .env``
+                i += 2  # ``coproc NAME { ...``, ``function NAME { ...``
+                continue
+            if word in _RESERVED_NO_COMMAND:
+                i = len(words)
+                break
+            if _ASSIGNMENT_RE.match(word) or (word.isdigit() and i > 0):
+                i += 1  # VAR=value, or a stray fd number (``sudo 2>/dev/null tee``)
+                continue
+            if base in _WRAPPER_OPTIONS:
+                for end in _wrapper_option_ends(words, i + 1, base, scripts):
+                    visit(end)
+                return
+            break
+        found.add(i)
+
+    visit(0)
+    return found
+
+
+_FIND_EXEC_ACTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+# xargs' own options (GNU and BSD), so the command it runs is found: short
+# flags without a value, short flags taking a value, short flags whose value
+# is optional and only attached (-i[R], -l[N], -e[E]), long options without a
+# separate value (--replace[=R] takes it only attached), long options taking
+# a value. An unknown option is read both with and without a value.
+_XARGS_SHORT_FLAGS = "0oprtx"
+_XARGS_SHORT_VALUES = "adEIJLnPRSs"
+_XARGS_SHORT_OPTIONAL = "eil"
+_XARGS_LONG_FLAGS = frozenset({
+    "--eof", "--exit", "--help", "--interactive", "--max-lines", "--no-run-if-empty",
+    "--null", "--open-tty", "--replace", "--show-limits", "--verbose", "--version",
+})
+_XARGS_LONG_VALUES = frozenset({
+    "--arg-file", "--delimiter", "--max-args", "--max-chars", "--max-procs", "--process-slot-var",
+})
+
+
+def _xargs_command_starts(args: list) -> set:
+    """Indices in xargs' *args* where the command it runs may start, past
+    xargs' own options (several when an option is unknown)."""
+    starts: set = set()
+
+    def walk(j: int) -> None:
+        if len(starts) >= _MAX_COMMAND_READINGS:
+            return
+        while j < len(args):
+            arg = args[j]
+            if arg == "--":
+                j += 1
+                break
+            if not arg.startswith("-") or arg == "-":
+                break
+            if arg.startswith("--"):
+                key, has_value, _ = arg.partition("=")
+                if key in _XARGS_LONG_VALUES and not has_value:
+                    j += 2
+                    continue
+                if not (has_value or key in _XARGS_LONG_FLAGS or key in _XARGS_LONG_VALUES):
+                    walk(j + 2)  # unknown long option: maybe it takes a value
+                j += 1
+                continue
+            step = 1
+            for k, flag in enumerate(arg[1:]):
+                if flag in _XARGS_SHORT_VALUES:
+                    if k == len(arg) - 2:
+                        step = 2  # the value is the next word
+                    break
+                if flag in _XARGS_SHORT_OPTIONAL:
+                    break  # the rest of the word is the value
+                if flag not in _XARGS_SHORT_FLAGS:
+                    walk(j + 2)  # unknown short flag: maybe it takes a value
+                    break
+            j += step
+        starts.add(j)
+
+    walk(0)
+    return starts
+
+
+def _env_split_words(words: list, k: int) -> Optional[list]:
+    """*words* with the ``env`` at *k*'s ``-S STRING`` / ``--split-string``
+    replaced by the words STRING splits into, so they join the rest of the
+    invocation (``env -S tee .env`` runs ``tee .env``); None without -S."""
+    j = k + 1
+    while j < len(words):
+        word = words[j]
+        value = rest = None
+        if word == "--" or not word.startswith("-") or word == "-":
+            if _ASSIGNMENT_RE.match(word):
+                j += 1
+                continue
+            return None
+        if word == "--split-string" or word.startswith("--split-string="):
+            attached = word.partition("=")[2] if "=" in word else None
+            value = attached if attached is not None else (words[j + 1] if j + 1 < len(words) else "")
+            rest = j + (1 if attached is not None else 2)
+            prefix = []
+        elif word.startswith("--"):
+            j += 2 if word in ("--unset", "--chdir") else 1
+            continue
+        else:
+            flags = word[1:]
+            at = flags.find("S")
+            if at < 0:
+                j += 2 if flags[-1:] in ("u", "C") else 1
+                continue
+            attached = flags[at + 1:]
+            value = attached or (words[j + 1] if j + 1 < len(words) else "")
+            rest = j + (1 if attached else 2)
+            prefix = ["-" + flags[:at]] if at else []
+        try:
+            split = shlex.split(value)
+        except ValueError:
+            split = value.split()
+        return words[:j] + prefix + split + words[rest:]
+    return None
+
+
+def _command_invocations(words: list, scripts: list, depth: int = 0, via: bool = False) -> list:
+    """Every command the simple command *words* may run, as ``(words, via)``
+    with the command word first: its own command word (in every wrapper
+    reading, with ``env -S``'s split words joined to the rest), and the
+    command xargs or find -exec/-execdir/-ok/-okdir runs, recursively. *via*
+    is True for those last ones, whose operands xargs/find add."""
+    found: list = []
+    if depth < _MAX_NESTED_SCRIPT_DEPTH:
+        # env -S's words join the rest of its invocation; any ``env`` word
+        # is tried (an argument named env only widens detection).
+        for k, word in enumerate(words):
+            if word.rsplit("/", 1)[-1] == "env":
+                split = _env_split_words(words, k)
+                if split is not None:
+                    found.extend(_command_invocations(split, scripts, depth + 1, via))
+    for start in sorted(_command_word_indices(words, scripts)):
+        if start >= len(words):
+            continue
+        found.append((words[start:], via))
+        if depth >= _MAX_NESTED_SCRIPT_DEPTH:
+            continue
+        base = words[start].rsplit("/", 1)[-1]
+        args = words[start + 1:]
+        if base == "xargs":
+            for j in sorted(_xargs_command_starts(args)):
+                found.extend(_command_invocations(args[j:], scripts, depth + 1, True))
+        elif base == "find":
+            for j, action in enumerate(args):
+                if action in _FIND_EXEC_ACTIONS:
+                    end = next((k for k in range(j + 1, len(args)) if args[k] in {";", "+"}), len(args))
+                    found.extend(_command_invocations(args[j + 1:end], scripts, depth + 1, True))
+    return found
+
+
+# A heredoc body is input, not commands, only when it is clearly safe: every
+# command of the pipeline it feeds reads stdin as data and never runs it.
+_HEREDOC_DATA_COMMANDS = frozenset({
+    "base64", "cat", "cksum", "cmp", "column", "comm", "cut", "diff", "egrep", "expand",
+    "fgrep", "fmt", "fold", "grep", "head", "iconv", "md5sum", "nl", "od", "paste", "rev",
+    "sha1sum", "sha256sum", "sha512sum", "sort", "tac", "tail", "tee", "tr", "unexpand",
+    "uniq", "wc", "xxd",
+})
+# Anything that can change what a later command name runs, or hide which
+# pipeline a heredoc feeds, makes every heredoc body count as commands:
+# a ( ) operator (subshell, function definition, substitution), these words
+# as a command, and these assignments.
+_HEREDOC_UNSAFE_WORDS = frozenset({
+    "!", "{", "}", "[[", "case", "coproc", "do", "done", "elif", "else", "esac", "fi",
+    "for", "function", "if", "select", "then", "until", "while",
+    "alias", "bind", "declare", "enable", "eval", "export", "hash", "local", "readonly",
+    "set", "shopt", "source", ".", "trap", "typeset", "unalias", "unset",
+})
+_HEREDOC_UNSAFE_ASSIGNMENT = re.compile(r"^(?:PATH|BASH_ENV|ENV|BASH_FUNC_[^=]*|IFS|SHELLOPTS|BASHOPTS)\+?=")
+
+
+def _heredoc_scripts(tokens: list, heredocs: list) -> list:
+    """The heredoc bodies (from ``_shell_tokens(..., heredocs=)``) and
+    here-strings (``<<< WORD``) of *tokens* to scan as commands. A body is
+    input only when every command of its pipeline is in
+    ``_HEREDOC_DATA_COMMANDS`` and nothing in the whole command is unsafe
+    (see ``_HEREDOC_UNSAFE_WORDS``); otherwise every body counts."""
+    bodies = iter(heredocs)
+    every_body: list = []  # heredoc bodies and here-strings, in order
+    here_string = False  # the next word is a here-string
+    pipelines: list = []  # [bodies fed into the pipeline, all commands read data]
+    current: list = [[], True]
+    words: list = []  # words of the current simple command
+    unsafe = skip_target = after_pipe = False
+
+    def end_command() -> None:
+        nonlocal unsafe
+        if not words:
+            return
+        if words[0] in _HEREDOC_UNSAFE_WORDS or any(_HEREDOC_UNSAFE_ASSIGNMENT.match(w) for w in words):
+            unsafe = True
+        for i in _command_word_indices(words, []):
+            name = words[i].rsplit("/", 1)[-1] if i < len(words) else ""
+            if name in _HEREDOC_UNSAFE_WORDS:
+                unsafe = True
+            if name not in _HEREDOC_DATA_COMMANDS:
+                current[1] = False
+        words.clear()
+
+    def end_pipeline() -> None:
+        nonlocal current
+        if current[0]:
+            pipelines.append(current)
+        current = [[], True]
+
+    for text, is_operator in tokens:
+        if not is_operator:
+            if here_string:  # ``bash <<< 'cmd'`` feeds cmd to bash's stdin
+                current[0].append(text)
+                every_body.append(text)
+            elif not skip_target:  # a redirect's target is not a command word
+                words.append(text)
+            skip_target = after_pipe = here_string = False
+            continue
+        skip_target = here_string = False
+        if "(" in text or ")" in text:
+            unsafe = True  # subshell, group, function or substitution
+        if _is_heredoc_operator(text):
+            body = next(bodies, None)
+            if body is None:
+                unsafe = True
+            else:
+                current[0].append(body)
+                every_body.append(body)
+            skip_target = True
+        elif text.endswith("<<<"):
+            here_string = True
+        elif ">" in text or "<" in text:
+            skip_target = True
+        else:
+            end_command()
+            separator = text.strip("\n")
+            if separator in ("|", "|&"):
+                after_pipe = True  # newlines after a pipe continue the pipeline
+            elif separator or not after_pipe:
+                end_pipeline()
+                after_pipe = False
+    end_command()
+    end_pipeline()
+    if unsafe or next(bodies, None) is not None:
+        return every_body + list(bodies)
+    return [body for fed, data_only in pipelines if not data_only for body in fed]
+
+
+def _env_write_targets_or_fallback(command: str, depth: int = 0) -> list:
+    """Return redirect/tee targets, using the regex fallback if untokenizable."""
+    targets = _env_write_targets(command, depth)
+    if targets is not None:
+        return targets
+    folded = _normalize_command_for_detection(command)
+    return [
+        match.group("target")
+        for regex in (_ENV_REDIRECT_FALLBACK_RE, _ENV_TEE_FALLBACK_RE)
+        for match in regex.finditer(folded)
+    ]
+
+
+def _operands(args: list) -> list:
+    """The operands of a GNU-style command line: words that are not
+    options, and every word after the ``--`` option terminator
+    (``tee -- -dir/.env`` writes ``-dir/.env``)."""
+    if "--" not in args:
+        return [w for w in args if not w.startswith("-") or w == "-"]
+    end = args.index("--")
+    return [w for w in args[:end] if not w.startswith("-") or w == "-"] + args[end + 1:]
+
+
+def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
+    """Return the redirect/tee targets of *command*, or None if untokenizable.
+
+    The script of ``sh -c`` / ``bash -c`` (any shell in ``_NESTED_SHELLS``)
+    and the arguments of ``eval`` are scanned as nested commands, up to
+    ``_MAX_NESTED_SCRIPT_DEPTH`` levels deep.
+    """
+    # A commented-out redirect writes nothing: ``cat .env # > .env`` is a read.
+    heredocs: list = []
+    nested: list = []  # scripts: sh -c, eval, "$(...)", `...`, heredocs that run
+    tokens = _shell_tokens(command, comments=True, heredocs=heredocs, substitutions=nested)
+    if tokens is None:
+        return None
+    nested.extend(_heredoc_scripts(tokens, heredocs))
+    targets: list = []
+    words: list = []  # words of the current simple command
+
+    def _flush_segment() -> None:
+        # The command itself, and any command xargs or find -exec runs.
+        for command_words, _via in _command_invocations(words, nested):
+            base = command_words[0].rsplit("/", 1)[-1]
+            args = command_words[1:]
+            if base == "tee":
+                targets.extend(_operands(args))
+            elif base == "eval":
+                nested.append(" ".join(args))
+            elif base in _NESTED_SHELLS:
+                nested.extend(_shell_c_scripts(base, args))
+        words.clear()
+
+    pending_redirect = None  # operator awaiting its target word
+    # Each open ( pushes the words of the command around it, and the
+    # matching ) restores them: ``tee >(cat) .env`` is still one tee, with
+    # the process substitution standing in as a /dev/fd operand.
+    outer: list = []
+    for token, is_operator in tokens:
+        if pending_redirect is not None:
+            if not is_operator:
+                fd_dup = pending_redirect.endswith("&") and (token.isdigit() or token == "-")
+                if ">" in pending_redirect and not fd_dup:
+                    targets.append(token)
+                pending_redirect = None
+                continue
+            pending_redirect = None
+        if not is_operator:
+            words.append(token)
+            continue
+        if token.endswith("("):
+            outer.append((list(words), token != "("))
+            words.clear()  # the subshell or substitution's own commands
+            continue
+        if token == ")" and outer:
+            _flush_segment()
+            saved, substitution = outer.pop()
+            words.extend(saved)
+            if substitution:
+                words.append("/dev/fd/63")
+            continue
+        if ">" not in token and "<" not in token:
+            _flush_segment()  # separator
+            continue
+        pending_redirect = token
+    _flush_segment()
+    if depth < _MAX_NESTED_SCRIPT_DEPTH:
+        for script in nested:
+            targets.extend(_env_write_targets_or_fallback(script, depth + 1))
+    return targets
+
+
+def detect_env_file_write(command: str) -> tuple:
+    """Detect a shell redirect or tee into a protected environment file.
+
+    Returns:
+        (True, description) when a target is a protected env file, else
+        (False, None).
+    """
+    normalized = _normalize_command_for_detection(command, preserve_shell_quotes=True)
+    # dotglob (or a GLOBIGNORE, which sets it) lets * and ? match a leading dot.
+    dotglob = re.search(r"dotglob|globignore", command, re.IGNORECASE) is not None
+    for target in _env_write_targets_or_fallback(normalized):
+        if _is_protected_env_basename(target):
+            return (True, f"shell write into protected environment file {target}")
+        if _glob_may_name_env(target, dotglob):
+            shown = target.replace(_BRACE_ANY, "*")  # the marker is not printable text
+            return (True, f"shell write into {shown}, a glob that may match a protected .env file")
+    return (False, None)
+
+
+def _env_write_block_result(description: str) -> dict:
+    """Build the block result for a shell write into a protected env file."""
+    return {
+        "approved": False,
+        "hardline": True,
+        "description": description,
+        "message": (
+            f"BLOCKED (protected environment file): {description}. "
+            "Writing an environment file through shell redirection or tee is "
+            "refused without a prompt — not even --yolo, /yolo, "
+            "approvals.mode=off, or cron approve mode lifts it. Reading the "
+            "file is still allowed. If the file genuinely needs to change, "
+            "edit it yourself outside the agent."
         ),
     }
 
@@ -1712,6 +2854,13 @@ def check_dangerous_command(command: str, env_type: str,
         logger.warning("Hardline block: %s (command: %s)", hardline_desc, command[:200])
         return _hardline_block_result(hardline_desc)
 
+    # Env-file write floor (AI-1178): redirect/tee into .env is refused with
+    # no prompt, before any yolo / mode=off / cron / stored-approval bypass.
+    is_env_write, env_write_desc = detect_env_file_write(command)
+    if is_env_write:
+        logger.warning("Env-file write block: %s (command: %s)", env_write_desc, command[:200])
+        return _env_write_block_result(env_write_desc)
+
     # --yolo: bypass all approval prompts. Gateway /yolo is session-scoped;
     # CLI --yolo remains process-scoped via the env var for local use.
     if _YOLO_MODE_FROZEN or is_current_session_yolo_enabled():
@@ -2059,6 +3208,13 @@ def check_all_command_guards(command: str, env_type: str,
     if is_hardline:
         logger.warning("Hardline block: %s (command: %s)", hardline_desc, command[:200])
         return _hardline_block_result(hardline_desc)
+
+    # Env-file write floor (AI-1178): redirect/tee into .env is refused with
+    # no prompt, before any yolo / mode=off / cron / stored-approval bypass.
+    is_env_write, env_write_desc = detect_env_file_write(command)
+    if is_env_write:
+        logger.warning("Env-file write block: %s (command: %s)", env_write_desc, command[:200])
+        return _env_write_block_result(env_write_desc)
 
     # == Sudo stdin guard ==
     # Like the hardline floor above, this is unconditional: there is never a
