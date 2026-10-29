@@ -126,8 +126,16 @@ def _block_lazy_installs(request, monkeypatch):
                 )
             return real_run(command, *args, **kwargs)
 
-        # Replace only lazy_deps' subprocess reference; tests that stub
-        # subprocess.run themselves still take precedence.
+        # Tests run as if security.allow_lazy_installs were false: a missing
+        # optional SDK reads as unavailable (FeatureUnavailable) instead of
+        # being installed into the shared venv, e.g. by tool availability
+        # checks during AIAgent setup. Installer tests opt back in.
+        # lazy_deps' own unit tests exercise the real gate with a mocked
+        # installer, so they keep it.
+        if not request.module.__name__.rsplit(".", 1)[-1].startswith("test_lazy_deps"):
+            monkeypatch.setattr(lazy_deps, "_allow_lazy_installs", lambda: False)
+        # Backstop for tests that force installs on: replace only lazy_deps'
+        # subprocess reference; tests that stub subprocess.run still win.
         monkeypatch.setattr(
             lazy_deps, "subprocess", SimpleNamespace(**{**vars(subprocess), "run": blocked})
         )
