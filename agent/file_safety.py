@@ -116,7 +116,7 @@ def get_write_block_error(path: str, *, cwd: str) -> Optional[str]:
     expanded = os.path.join(cwd, os.path.expanduser(str(path)))
     resolved = os.path.realpath(expanded)
     if any(
-        _is_project_env_basename(os.path.basename(candidate))
+        is_project_env_basename(os.path.basename(candidate))
         for candidate in (expanded, resolved)
     ):
         return (
@@ -219,7 +219,7 @@ _BLOCKED_PROJECT_ENV_BASENAMES: set[str] = {
 }
 
 
-def _is_project_env_basename(name: str) -> bool:
+def is_project_env_basename(name: str) -> bool:
     """Block normalized .env / .env.* / .envrc names, except example shapes."""
     name = unicodedata.normalize("NFKC", name)
     name = name.replace("\\", "/").rsplit("/", 1)[-1]
@@ -366,7 +366,7 @@ def get_read_block_error(path: str) -> Optional[str]:
     # terminal tool can still ``cat .env``; this is defense-in-depth, not a
     # boundary (see get_read_block_error's docstring).
     if any(
-        _is_project_env_basename(name)
+        is_project_env_basename(name)
         for name in (Path(path).name, resolved.name)
     ):
         return (

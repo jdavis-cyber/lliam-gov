@@ -42,6 +42,7 @@ from pathlib import Path
 from lliam_constants import get_lliam_home, display_lliam_home
 from typing import Dict, Any, List, Optional, Tuple
 
+from agent.file_safety import is_project_env_basename
 from utils import atomic_replace, is_truthy_value
 from lliam_cli.config import cfg_get
 
@@ -650,7 +651,20 @@ def _validate_file_path(file_path: str) -> Optional[str]:
     if len(normalized.parts) < 2:
         return f"Provide a file path, not just a directory. Example: '{normalized.parts[0]}/myfile.md'"
 
+    # Same .env rule as the file tools (AI-1182): skill supporting files must
+    # not create, patch, or remove .env, .env.*, or .envrc files.
+    if is_project_env_basename(normalized.name):
+        return _env_file_error(file_path)
+
     return None
+
+
+def _env_file_error(file_path: str) -> str:
+    return (
+        f"Write denied: '{file_path}' is a protected environment file. "
+        "Skill supporting files cannot be .env, .env.*, or .envrc files; "
+        "use .env.example or .env.sample to document the shape."
+    )
 
 
 def _resolve_skill_target(skill_dir: Path, file_path: str) -> Tuple[Optional[Path], Optional[str]]:
@@ -661,6 +675,9 @@ def _resolve_skill_target(skill_dir: Path, file_path: str) -> Tuple[Optional[Pat
     error = validate_within_dir(target, skill_dir)
     if error:
         return None, error
+    # A symlinked name can still point at an in-skill .env file.
+    if is_project_env_basename(os.path.realpath(target)):
+        return None, _env_file_error(file_path)
     return target, None
 
 
@@ -1275,6 +1292,10 @@ def skill_manage(
         return tool_error(f"file_path is required for '{action}'. Example: 'references/api-guide.md'", success=False)
     if action == "write_file" and file_content is None:
         return tool_error("file_content is required for 'write_file'.", success=False)
+    # Never queue a .env supporting-file change for operator approval (AI-1182).
+    if action in {"patch", "write_file", "remove_file"} and file_path:
+        if is_project_env_basename(Path(file_path).name):
+            return tool_error(_env_file_error(file_path), success=False)
 
     # Stage all agent proposals outside the skill library. Only an operator's
     # approval replay may bypass this gate; staging never invalidates caches.
