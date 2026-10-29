@@ -48,7 +48,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
-from utils import env_var_enabled
+from utils import is_truthy_value
 
 logger = logging.getLogger(__name__)
 
@@ -295,13 +295,23 @@ def _validate_workdir(workdir: str) -> str | None:
     return None
 
 
+def _surface_flag_enabled(suffix: str) -> bool:
+    """True when ``LLIAM_<suffix>`` (or its legacy fallback) is truthy (AI-1187).
+
+    The CLI, gateway, TUI gateway and cron scheduler set the ``LLIAM_`` names
+    since the rename; ``getenv_compat`` reads that name first and falls back
+    to the legacy one.
+    """
+    return is_truthy_value(getenv_compat(suffix, ""), default=False)
+
+
 def _handle_sudo_failure(output: str, env_type: str) -> str:
     """
     Check for sudo failure and add helpful message for messaging contexts.
     
     Returns enhanced output if sudo failed in messaging context, else original.
     """
-    is_gateway = env_var_enabled("HERMES_GATEWAY_SESSION")
+    is_gateway = _surface_flag_enabled("GATEWAY_SESSION")
     
     if not is_gateway:
         return output
@@ -908,7 +918,7 @@ def _transform_sudo_command(command: str | None) -> tuple[str | None, str | None
 
     has_sudo_prompt_callback = _get_sudo_password_callback() is not None
     should_prompt_for_sudo = (
-        env_var_enabled("HERMES_INTERACTIVE") or has_sudo_prompt_callback
+        _surface_flag_enabled("INTERACTIVE") or has_sudo_prompt_callback
     )
     if not has_configured_password and not sudo_password and should_prompt_for_sudo:
         sudo_password = _prompt_for_sudo_password(timeout_seconds=45)
@@ -2955,7 +2965,7 @@ def terminal_tool(
             )
             if sudo_cache_cleared:
                 has_sudo_prompt_callback = _get_sudo_password_callback() is not None
-                if has_sudo_prompt_callback or env_var_enabled("HERMES_INTERACTIVE"):
+                if has_sudo_prompt_callback or _surface_flag_enabled("INTERACTIVE"):
                     output += (
                         "\n\n⚠️ Sudo authentication failed — cached password "
                         "cleared. You will be prompted again on the next sudo "
