@@ -495,7 +495,8 @@ def _hardline_block_result(description: str) -> dict:
 # The name rule mirrors agent/file_safety.is_project_env_basename (#141):
 # .env, .envrc, and every .env.<suffix> except .env.example / .env.sample.
 # cp/mv/sed -i/dd and interpreter writes into .env stay approval-gated in
-# DANGEROUS_PATTERNS; this floor covers redirection and tee only.
+# DANGEROUS_PATTERNS; this floor covers redirection and tee only, including
+# inside a literal ``sh -c`` / ``bash -c`` script or ``eval`` argument.
 
 _ENV_TEMPLATE_BASENAMES = frozenset({".env.example", ".env.sample"})
 _SHELL_PUNCTUATION = "();<>|&\n"
@@ -505,6 +506,10 @@ _COMMAND_WRAPPERS = frozenset({
 })
 _WRAPPER_FLAGS_WITH_VALUE = frozenset({"-u", "-g", "-n", "-c"})
 _ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# Shells whose ``-c`` script (and ``eval``'s arguments) are scanned as a
+# nested command, so ``bash -c "echo k > .env"`` is refused too.
+_NESTED_SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "busybox"})
+_MAX_NESTED_SCRIPT_DEPTH = 3
 # Fallback when the command cannot be tokenized (unbalanced quotes, e.g. a
 # heredoc body containing an apostrophe): look for a redirect operator or a
 # tee word followed by a token whose basename looks like an env file.
@@ -536,13 +541,32 @@ def _shell_tokens(command: str) -> Optional[list]:
         return None
 
 
-def _env_write_targets(command: str) -> Optional[list]:
-    """Return the redirect/tee targets of *command*, or None if untokenizable."""
+def _env_write_targets_or_fallback(command: str, depth: int = 0) -> list:
+    """Return redirect/tee targets, using the regex fallback if untokenizable."""
+    targets = _env_write_targets(command, depth)
+    if targets is not None:
+        return targets
+    folded = _normalize_command_for_detection(command)
+    return [
+        match.group("target")
+        for regex in (_ENV_REDIRECT_FALLBACK_RE, _ENV_TEE_FALLBACK_RE)
+        for match in regex.finditer(folded)
+    ]
+
+
+def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
+    """Return the redirect/tee targets of *command*, or None if untokenizable.
+
+    The script of ``sh -c`` / ``bash -c`` (any shell in ``_NESTED_SHELLS``)
+    and the arguments of ``eval`` are scanned as nested commands, up to
+    ``_MAX_NESTED_SCRIPT_DEPTH`` levels deep.
+    """
     tokens = _shell_tokens(command)
     if tokens is None:
         return None
     targets: list = []
     words: list = []  # words of the current simple command
+    nested: list = []  # scripts handed to sh -c / eval
 
     def _flush_segment() -> None:
         # Find the real command word after wrappers, assignments and flags.
@@ -558,8 +582,17 @@ def _env_write_targets(command: str) -> Optional[list]:
                 i += 1
             else:
                 break
-        if i < len(words) and words[i].rsplit("/", 1)[-1] == "tee":
+        base = words[i].rsplit("/", 1)[-1] if i < len(words) else ""
+        if base == "tee":
             targets.extend(w for w in words[i + 1:] if not w.startswith("-"))
+        elif base == "eval":
+            nested.append(" ".join(words[i + 1:]))
+        elif base in _NESTED_SHELLS:
+            for j in range(i + 1, len(words) - 1):
+                flag = words[j]
+                if flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:]:
+                    nested.append(words[j + 1])
+                    break
         words.clear()
 
     pending_redirect = None  # operator awaiting its target word
@@ -581,6 +614,9 @@ def _env_write_targets(command: str) -> Optional[list]:
             continue
         pending_redirect = token
     _flush_segment()
+    if depth < _MAX_NESTED_SCRIPT_DEPTH:
+        for script in nested:
+            targets.extend(_env_write_targets_or_fallback(script, depth + 1))
     return targets
 
 
@@ -592,15 +628,7 @@ def detect_env_file_write(command: str) -> tuple:
         (False, None).
     """
     normalized = _normalize_command_for_detection(command, preserve_shell_quotes=True)
-    targets = _env_write_targets(normalized)
-    if targets is None:
-        folded = _normalize_command_for_detection(command)
-        targets = [
-            match.group("target")
-            for regex in (_ENV_REDIRECT_FALLBACK_RE, _ENV_TEE_FALLBACK_RE)
-            for match in regex.finditer(folded)
-        ]
-    for target in targets:
+    for target in _env_write_targets_or_fallback(normalized):
         if _is_protected_env_basename(target):
             return (True, f"shell write into protected environment file {target}")
     return (False, None)

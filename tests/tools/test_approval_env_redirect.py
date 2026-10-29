@@ -49,6 +49,14 @@ BLOCKED = [
     "cmd >(tee .env)",
     "/usr/bin/tee .env < secrets",
     "env FOO=1 tee .env < secrets",
+    "echo x 1> .env",
+    "echo x 2>> .env",
+    "echo x &>> .env",
+    "tee --append .env < secrets",
+    'bash -c "echo x > .env"',
+    "sh -c 'cat k | tee -a .env.local'",
+    "sudo bash -lc 'echo k >> ./x/.env'",
+    "eval 'echo k > .env'",
 ]
 
 ALLOWED = [
@@ -68,6 +76,8 @@ ALLOWED = [
     "ls 2>&1",
     "echo done >&2",
     "cat secrets | tee out.log",
+    'bash -c "cat .env"',
+    "sh -c 'grep KEY .env > out.txt'",
 ]
 
 
