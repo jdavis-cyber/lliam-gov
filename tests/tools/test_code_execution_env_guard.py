@@ -198,3 +198,95 @@ def test_remote_ships_guard_and_puts_it_on_pythonpath():
     sandbox_dir = guard_paths[0].rsplit("/", 1)[0]
     run_cmd = next(c for c in env.commands if "python3 script.py" in c)
     assert f"PYTHONPATH={sandbox_dir}" in run_cmd
+
+
+# --- dir_fd-relative targets (Codex review on #141) -------------------------
+#
+# The "open" audit event carries no dir_fd, and the os.* events carry it as
+# an fd. Relative names must be resolved against that directory, not the
+# process CWD.
+
+
+def _dir_fd_script(data_dir: str, cwd: str, body: str) -> str:
+    return textwrap.dedent(f"""
+        import os
+        os.chdir({cwd!r})
+        dfd = os.open({data_dir!r}, os.O_RDONLY)
+        try:
+            {body}
+            print("WROTE")
+        except PermissionError as exc:
+            print("BLOCKED", exc)
+    """)
+
+
+def _data_with_env_symlink(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    env_file = data / ".env"
+    env_file.write_text("API_KEY=old")
+    (data / "notes.txt").symlink_to(".env")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    return data, env_file, elsewhere
+
+
+def test_os_open_dir_fd_symlink_to_env_refused(tmp_path):
+    """Exact repro: data/notes.txt -> .env opened relative to a dir_fd."""
+    data, env_file, elsewhere = _data_with_env_symlink(tmp_path)
+    body = "os.close(os.open('notes.txt', os.O_WRONLY | os.O_TRUNC, dir_fd=dfd))"
+    result = _run(_dir_fd_script(str(data), str(elsewhere), body))
+    assert "BLOCKED" in result["output"], result["output"]
+    assert env_file.read_text() == "API_KEY=old"
+
+
+def test_open_with_dir_fd_opener_refused(tmp_path):
+    data, env_file, elsewhere = _data_with_env_symlink(tmp_path)
+    body = ("open('notes.txt', 'w', opener=lambda p, f: os.open(p, f, dir_fd=dfd))"
+            ".write('API_KEY=new')")
+    result = _run(_dir_fd_script(str(data), str(elsewhere), body))
+    assert "BLOCKED" in result["output"], result["output"]
+    assert env_file.read_text() == "API_KEY=old"
+
+
+def test_link_with_src_dir_fd_to_env_refused(tmp_path):
+    data, env_file, elsewhere = _data_with_env_symlink(tmp_path)
+    body = "os.link('notes.txt', 'hard.txt', src_dir_fd=dfd, dst_dir_fd=dfd)"
+    result = _run(_dir_fd_script(str(data), str(elsewhere), body))
+    assert "BLOCKED" in result["output"], result["output"]
+    assert not (data / "hard.txt").exists()
+
+
+def test_dir_fd_write_ignores_cwd_namesake(tmp_path):
+    """A CWD notes.txt -> .env must not block a write to data/notes.txt."""
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "notes.txt").write_text("plain")
+    (data / "a.txt").write_text("a")
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    cwd_env = cwd / ".env"
+    cwd_env.write_text("API_KEY=old")
+    (cwd / "notes.txt").symlink_to(".env")
+    body = (
+        "fd = os.open('notes.txt', os.O_WRONLY | os.O_TRUNC, dir_fd=dfd); "
+        "os.write(fd, b'new'); os.close(fd); "
+        "os.rename('a.txt', 'notes.txt', src_dir_fd=dfd, dst_dir_fd=dfd)"
+    )
+    result = _run(_dir_fd_script(str(data), str(cwd), body))
+    assert "WROTE" in result["output"], result["output"]
+    assert (data / "notes.txt").read_text() == "a"
+    assert cwd_env.read_text() == "API_KEY=old"
+
+
+def test_unresolvable_dir_fd_write_fails_closed(tmp_path):
+    body = "os.open('x.txt', os.O_WRONLY | os.O_CREAT, dir_fd=987654)"
+    result = _run(_dir_fd_script(str(tmp_path), str(tmp_path), body))
+    assert "BLOCKED" in result["output"], result["output"]
+    assert not (tmp_path / "x.txt").exists()
+
+
+def test_guarded_os_open_keeps_dir_fd_support():
+    """shutil and others probe os.open in os.supports_dir_fd."""
+    result = _run("import os; print('DIRFD', os.open in os.supports_dir_fd)")
+    assert "DIRFD True" in result["output"], result["output"]
