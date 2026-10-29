@@ -526,6 +526,16 @@ def _hardline_block_result(description: str) -> dict:
 
 _ENV_TEMPLATE_BASENAMES = frozenset({".env.example", ".env.sample"})
 _SHELL_PUNCTUATION = "();<>|&\n"
+# The operators Bash reads from adjacent punctuation, longest first by
+# maximal munch; every prefix of one is itself an operator. Any other run
+# (``;>``, ``|>``, ``)>``) is several operators: ``true;>/dev/null tee .env``
+# is ``true``, ``;``, then a redirect, then ``tee``. ``>(`` and ``<(`` open a
+# process substitution.
+_SHELL_OPERATORS = frozenset({
+    "(", ")", ";", ";;", ";&", ";;&", "<", ">", "|", "&", "\n",
+    "&&", "||", "|&", ">>", "<<", "<<<", ">|", "&>", "&>>", ">&", "<&", "<>",
+    ">(", "<(",
+})
 # Command wrappers and their options, so the wrapped command is found:
 # (short flags without a value, short flags taking a value, long options
 # without a value, long options taking a value, positional words before the
@@ -1098,6 +1108,8 @@ def _shell_tokens(command: str, comments: bool = False,
                 word_bare.clear()
                 in_word = False
             end_word()
+            if "".join(operator) + ch not in _SHELL_OPERATORS:
+                end_operator()  # ``;>`` is ``;`` then ``>``
             operator.append(ch)
             i += 1
             if ch == "\n" and pending:
@@ -1533,6 +1545,16 @@ def _env_write_targets_or_fallback(command: str, depth: int = 0) -> list:
     ]
 
 
+def _operands(args: list) -> list:
+    """The operands of a GNU-style command line: words that are not
+    options, and every word after the ``--`` option terminator
+    (``tee -- -dir/.env`` writes ``-dir/.env``)."""
+    if "--" not in args:
+        return [w for w in args if not w.startswith("-") or w == "-"]
+    end = args.index("--")
+    return [w for w in args[:end] if not w.startswith("-") or w == "-"] + args[end + 1:]
+
+
 def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
     """Return the redirect/tee targets of *command*, or None if untokenizable.
 
@@ -1556,7 +1578,7 @@ def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
             base = command_words[0].rsplit("/", 1)[-1]
             args = command_words[1:]
             if base == "tee":
-                targets.extend(w for w in args if not w.startswith("-"))
+                targets.extend(_operands(args))
             elif base == "eval":
                 nested.append(" ".join(args))
             elif base in _NESTED_SHELLS:
@@ -1564,6 +1586,10 @@ def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
         words.clear()
 
     pending_redirect = None  # operator awaiting its target word
+    # Each open ( pushes the words of the command around it, and the
+    # matching ) restores them: ``tee >(cat) .env`` is still one tee, with
+    # the process substitution standing in as a /dev/fd operand.
+    outer: list = []
     for token, is_operator in tokens:
         if pending_redirect is not None:
             if not is_operator:
@@ -1576,8 +1602,19 @@ def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
         if not is_operator:
             words.append(token)
             continue
-        if token.endswith("(") or (">" not in token and "<" not in token):
-            _flush_segment()  # separator, subshell or process substitution
+        if token.endswith("("):
+            outer.append((list(words), token != "("))
+            words.clear()  # the subshell or substitution's own commands
+            continue
+        if token == ")" and outer:
+            _flush_segment()
+            saved, substitution = outer.pop()
+            words.extend(saved)
+            if substitution:
+                words.append("/dev/fd/63")
+            continue
+        if ">" not in token and "<" not in token:
+            _flush_segment()  # separator
             continue
         pending_redirect = token
     _flush_segment()

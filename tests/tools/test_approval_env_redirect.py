@@ -230,6 +230,20 @@ BLOCKED = [
     "env -S 'FOO=1 tee' .env < secrets",
     "env -u X -S tee .env < secrets",
     "sudo env -S tee .env < secrets",
+    # GitHub Codex P2/P1 on #145/#147 (round 10): adjacent punctuation is
+    # split at shell operator boundaries, so ;> is ; then >.
+    "true;>/dev/null tee .env <<< K=v",
+    "true;>.env",
+    "true&&>.env echo K=v",
+    "echo K=v |>.env cat",
+    "true;<<-EOF tee .env\n\tK=v\nEOF",
+    "(echo K=v)>.env",
+    # A process substitution does not end the command around it.
+    "tee >(cat) .env < secrets",
+    "tee <(true) >(grep x) .env.local < secrets",
+    # GitHub Codex P2 on #147 (round 10): operands after -- are files.
+    "tee -- -dir/.env < secrets",
+    "tee -a -- .env < secrets",
 ]
 
 ALLOWED = [
@@ -322,6 +336,11 @@ ALLOWED = [
     "echo K=v > {a,b}",
     "env -S cat .env",
     "env -S 'grep KEY' .env",
+    "true;>/dev/null tee notes.txt <<< K=v",
+    "true;>notes.txt cat .env",
+    "tee >(cat) notes.txt < .env",
+    "diff <(cat .env) <(cat .env.example) > out.txt",
+    "tee -- -notes.txt < .env",
 ]
 
 
