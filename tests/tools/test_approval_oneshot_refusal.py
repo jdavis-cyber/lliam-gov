@@ -212,3 +212,78 @@ class TestSurfaceFlagsUnderCurrentNames:
     def test_flag_set_to_false_is_off(self, monkeypatch):
         monkeypatch.setenv("LLIAM_INTERACTIVE", "0")
         _assert_refused(check_all_command_guards(DANGEROUS, "local"))
+
+
+# ---------------------------------------------------------------------------
+# Cron marker: context-local, and it beats inherited exec-ask/interactive flags
+# ---------------------------------------------------------------------------
+
+class TestCronMarkerIsContextLocal:
+    def _gateway_turn(self, monkeypatch):
+        """A live gateway turn: process-wide exec-ask plus a bound platform."""
+        from gateway.session_context import set_session_vars
+
+        monkeypatch.setenv("LLIAM_EXEC_ASK", "1")
+        return set_session_vars(platform="telegram", chat_id="42")
+
+    def test_marker_does_not_leak_out_of_the_job_context(self):
+        import contextvars
+
+        seen = {}
+
+        def _job():
+            token = approval_module.set_cron_session()
+            try:
+                seen["inside"] = approval_module._is_cron_session()
+            finally:
+                approval_module.reset_cron_session(token)
+
+        contextvars.copy_context().run(_job)
+        assert seen["inside"] is True
+        assert approval_module._is_cron_session() is False
+
+    @pytest.mark.parametrize("cron_mode", ["deny", "approve"])
+    def test_gateway_execute_code_unaffected_by_a_cron_job_elsewhere(
+        self, monkeypatch, cron_mode,
+    ):
+        """A cron job in another context must not turn a live gateway turn into cron."""
+        import contextvars
+
+        from gateway.session_context import clear_session_vars
+
+        monkeypatch.setattr("tools.approval._get_cron_approval_mode", lambda: cron_mode)
+        contextvars.copy_context().run(approval_module.set_cron_session)
+        tokens = self._gateway_turn(monkeypatch)
+        try:
+            result = approval_module.check_execute_code_guard("print(1)", "local")
+        finally:
+            clear_session_vars(tokens)
+        assert result["approved"] is False
+        assert result.get("status") == "pending_approval"
+
+    @pytest.mark.parametrize("guard", [check_all_command_guards, check_dangerous_command])
+    def test_cron_approve_beats_inherited_exec_ask(self, monkeypatch, guard):
+        monkeypatch.setenv("LLIAM_EXEC_ASK", "1")
+        monkeypatch.setenv("LLIAM_INTERACTIVE", "1")
+        monkeypatch.setattr("tools.approval._get_cron_approval_mode", lambda: "approve")
+        token = approval_module.set_cron_session()
+        try:
+            result = guard(DANGEROUS, "local")
+        finally:
+            approval_module.reset_cron_session(token)
+        assert result["approved"] is True
+        assert result.get("status") not in {"approval_required", "pending_approval"}
+
+    @pytest.mark.parametrize("guard", [check_all_command_guards, check_dangerous_command])
+    def test_cron_deny_beats_inherited_exec_ask(self, monkeypatch, guard):
+        monkeypatch.setenv("LLIAM_EXEC_ASK", "1")
+        monkeypatch.setenv("LLIAM_INTERACTIVE", "1")
+        monkeypatch.setattr("tools.approval._get_cron_approval_mode", lambda: "deny")
+        token = approval_module.set_cron_session()
+        try:
+            result = guard(DANGEROUS, "local")
+        finally:
+            approval_module.reset_cron_session(token)
+        assert result["approved"] is False
+        assert "cron_mode" in result["message"]
+        assert result.get("status") not in {"approval_required", "pending_approval"}

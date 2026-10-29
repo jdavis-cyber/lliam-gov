@@ -49,6 +49,13 @@ _approval_tool_call_id: contextvars.ContextVar[str] = contextvars.ContextVar(
     "approval_tool_call_id",
     default="",
 )
+# Cron job marker, bound by cron/scheduler.py around each job. Context-local
+# so a gateway that runs cron in-process does not classify its live turns
+# (or concurrent ones) as cron (AI-1172).
+_approval_cron_session: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "approval_cron_session",
+    default=False,
+)
 
 
 def _fire_approval_hook(hook_name: str, **kwargs) -> None:
@@ -100,6 +107,26 @@ def set_current_session_key(session_key: str) -> contextvars.Token[str]:
 def reset_current_session_key(token: contextvars.Token[str]) -> None:
     """Restore the prior approval session key context."""
     _approval_session_key.reset(token)
+
+
+def set_cron_session() -> contextvars.Token[bool]:
+    """Mark the current context as running a cron job (approvals.cron_mode applies)."""
+    return _approval_cron_session.set(True)
+
+
+def reset_cron_session(token: contextvars.Token[bool]) -> None:
+    """Restore the cron marker that was active before :func:`set_cron_session`."""
+    _approval_cron_session.reset(token)
+
+
+def _is_cron_session() -> bool:
+    """True inside a cron job.
+
+    The context-local marker covers the in-process scheduler (standalone or
+    inside the gateway). The ``LLIAM_CRON_SESSION`` env flag remains for a
+    cron run in a separate process that sets it in its own environment.
+    """
+    return _approval_cron_session.get() or _surface_flag("CRON_SESSION")
 
 
 def set_current_observability_context(
@@ -213,7 +240,7 @@ def _is_gateway_approval_context() -> bool:
     fall through to the gateway branch would submit a pending approval
     with no listener and block the job indefinitely.
     """
-    if _surface_flag("CRON_SESSION"):
+    if _is_cron_session():
         return False
     if _surface_flag("GATEWAY_SESSION"):
         return True
@@ -1638,13 +1665,16 @@ def check_dangerous_command(command: str, env_type: str,
     all_keys = [key for key, _ in warnings]
     description = "; ".join(desc for _, desc in warnings)
 
-    is_cli = _surface_flag("INTERACTIVE")
+    # Cron policy beats interactive/exec-ask flags a cron job inherits from
+    # its host process (the gateway sets exec-ask process-wide). Otherwise an
+    # exec-ask surface queues the command for approval below, as in
+    # check_all_command_guards; only a session with no surface at all is a
+    # no-approver session.
+    is_cron = _is_cron_session()
+    is_cli = not is_cron and _surface_flag("INTERACTIVE")
     is_gateway = _is_gateway_approval_context()
-    is_ask = _surface_flag("EXEC_ASK")
+    is_ask = not is_cron and _surface_flag("EXEC_ASK")
 
-    # An exec-ask surface queues the command for approval below, as in
-    # check_all_command_guards; only a session with no surface at all is
-    # a no-approver session.
     if not is_cli and not is_gateway and not is_ask:
         # LG-HO-02 (additive @ P2.2): under strict posture the legacy
         # auto-approve below is fail-closed DENY — a dangerous command with no
@@ -1678,7 +1708,7 @@ def check_dangerous_command(command: str, env_type: str,
                 ),
             }
         # Cron sessions: respect cron_mode config
-        if _surface_flag("CRON_SESSION"):
+        if is_cron:
             if _get_cron_approval_mode() == "deny":
                 return {
                     "approved": False,
@@ -1990,9 +2020,12 @@ def check_all_command_guards(command: str, env_type: str,
     if not has_delete and _command_matches_permanent_allowlist(command):
         return {"approved": True, "message": None}
 
-    is_cli = _surface_flag("INTERACTIVE")
+    # Cron policy beats interactive/exec-ask flags inherited from the host
+    # process (see check_dangerous_command).
+    is_cron = _is_cron_session()
+    is_cli = not is_cron and _surface_flag("INTERACTIVE")
     is_gateway = _is_gateway_approval_context()
-    is_ask = _surface_flag("EXEC_ASK")
+    is_ask = not is_cron and _surface_flag("EXEC_ASK")
 
     # Outside CLI/gateway/ask flows there is no approver: we skip external
     # guard work and refuse dangerous commands (AI-1172) unless an explicit
@@ -2027,7 +2060,7 @@ def check_all_command_guards(command: str, env_type: str,
                 ),
             }
         # Cron sessions: respect cron_mode config
-        if _surface_flag("CRON_SESSION"):
+        if is_cron:
             if _get_cron_approval_mode() == "deny":
                 # Run detection to get a description for the block message
                 is_dangerous, _pk, description = detect_dangerous_command(command)
@@ -2388,7 +2421,7 @@ def check_execute_code_guard(code: str, env_type: str) -> dict:
     is_ask = _surface_flag("EXEC_ASK")
 
     # Cron: no user is present to approve arbitrary code.
-    if _surface_flag("CRON_SESSION"):
+    if _is_cron_session():
         if _get_cron_approval_mode() == "deny":
             return {
                 "approved": False,
