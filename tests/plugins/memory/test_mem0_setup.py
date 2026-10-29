@@ -186,6 +186,9 @@ class TestPostSetup:
         monkeypatch.setattr("plugins.memory.mem0._setup.get_lliam_home", lambda: tmp_path)
         _inject_fake_lliam_cli(monkeypatch)
         monkeypatch.setattr("plugins.memory.mem0._setup._install_provider_deps", lambda l, e, v: None)
+        # The default qdrant path sits under the real legacy home; its
+        # writability check would create that directory.
+        monkeypatch.setattr("plugins.memory.mem0._setup._check_qdrant_path", lambda path: (True, "stub"))
         config = {"memory": {}}
         post_setup(str(tmp_path), config)
         assert config["memory"]["provider"] == "mem0"
@@ -221,6 +224,9 @@ class TestDryRun:
         monkeypatch.setattr("plugins.memory.mem0._setup.get_lliam_home", lambda: tmp_path)
         _inject_fake_lliam_cli(monkeypatch)
         monkeypatch.setattr("plugins.memory.mem0._setup._install_provider_deps", lambda l, e, v: None)
+        # The default qdrant path sits under the real legacy home; its
+        # writability check would create that directory.
+        monkeypatch.setattr("plugins.memory.mem0._setup._check_qdrant_path", lambda path: (True, "stub"))
         config = {"memory": {}}
         post_setup(str(tmp_path), config)
         assert not (tmp_path / ".env").exists()
