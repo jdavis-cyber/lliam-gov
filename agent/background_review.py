@@ -3,9 +3,10 @@
 After every turn, ``AIAgent.run_conversation`` may call
 :func:`spawn_background_review` to fire off a daemon thread that replays
 the conversation snapshot in a forked :class:`AIAgent` and asks itself
-"should any skill/memory be saved or updated?".  Writes go straight to
-the memory + skill stores.  Main conversation and prompt cache are never
-touched.
+"should any skill/memory be saved or updated?". Skill proposals are staged
+outside the skill library until the operator approves them. Memory writes
+follow the memory write-approval setting. Main conversation and prompt cache
+are never touched.
 
 The fork inherits the parent's live runtime (provider, model, base_url,
 credentials, cached system prompt) so it hits the same prefix cache and
@@ -455,6 +456,12 @@ def summarize_background_review_actions(
         detail = call_details.get(tcid, {})
         target = data.get("target", "") or detail.get("target", "")
         is_skill = detail.get("tool") == "skill_manage"
+
+        if data.get("staged"):
+            # A successful proposal is not an applied change, in either
+            # notification mode. Keep the operator's review instructions.
+            actions.append(message or f"{data.get('gist', 'Write')} pending approval.")
+            continue
 
         message_lower = message.lower()
         if not verbose:
