@@ -165,6 +165,34 @@ BLOCKED = [
     "echo K=v > .en?",
     "echo K=v > .env*",
     "echo K=v > .[e]nv",
+    # GitHub Codex P1 on #145 (round 7): a here-string a shell runs is a script.
+    "bash <<< 'echo K=v > .env'",
+    'sh <<< "echo K=v > .env"',
+    "sudo bash <<< 'echo K=v > .env'",
+    "bash -s <<< 'tee .env < secrets'",
+    "eval \"$(cat)\" <<< 'echo K=v > .env'",
+    "cat <<< 'echo K=v > .env' | sh",
+    "python3 <<< 'echo K=v > .env'",
+    # GitHub Codex P1 on #147 (round 7): tee run by xargs or find -exec.
+    "printf x | xargs tee .env",
+    "find . -maxdepth 0 -exec tee .env \\; <<< K=v",
+    "find . -execdir tee .env {} +",
+    "find . -ok tee -a .env.local \\;",
+    "xargs -n1 sudo tee .env",
+    "xargs sh -c 'echo k > .env'",
+    "find . -exec bash -c 'echo k > .env' \\;",
+    # GitHub Codex P2 on #145 (round 7): a glob is checked against every
+    # protected name, not a list of examples.
+    "echo K=v > .[e]nv.staging",
+    "echo K=v > .ENV.st[a]ging",
+    "echo K=v > .env.*",
+    "echo K=v > .e*",
+    "echo K=v > .*",
+    "echo K=v > .[a-z]nv",
+    "echo K=v > .[!x]nv",
+    "echo K=v > .envr?",
+    "echo K=v > .env.sampl?",
+    "shopt -s dotglob; echo K=v > ?env",
 ]
 
 ALLOWED = [
@@ -235,6 +263,16 @@ ALLOWED = [
     "echo K=v > $'.env.example'",
     "echo K=v > *.log",
     "for f in tee .env; do echo $f; done",
+    "cat <<< 'echo k > .env'",
+    "grep k <<< 'echo k > .env'",
+    "cat <<< 'echo k > .env' > notes.txt",
+    "xargs echo tee .env",
+    "find . -exec echo tee .env \\;",
+    "xargs tee out.log",
+    "echo K=v > ?env",
+    "echo K=v > *",
+    "echo K=v > .[x]nv",
+    "echo K=v > notes[12].txt",
 ]
 
 
@@ -338,6 +376,7 @@ def test_reads_still_run_under_yolo(monkeypatch):
 @pytest.mark.parametrize("command", [
     "grep '>' .env", 'grep ">>" .env', "grep \\| .env",
     "cat <<'EOF' > README.md\necho K=v > .env\nEOF",
+    "cat <<< 'echo k > .env'",
 ])
 def test_quoted_operator_read_runs_under_yolo(monkeypatch, guard, command):
     # Codex P2 on #145: a quoted > made both guards hard-block a plain read.
