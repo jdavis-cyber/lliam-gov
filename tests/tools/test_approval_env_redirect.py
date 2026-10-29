@@ -57,6 +57,39 @@ BLOCKED = [
     "sh -c 'cat k | tee -a .env.local'",
     "sudo bash -lc 'echo k >> ./x/.env'",
     "eval 'echo k > .env'",
+    # Wrapper flags parsed per wrapper (Codex P2 on #145: sudo -n takes no value).
+    "sudo -n tee .env < secrets",
+    "sudo -u root tee .env < secrets",
+    "sudo -E tee .env < secrets",
+    "sudo -- tee .env < secrets",
+    "sudo -n -u root -E -- tee -a .env < secrets",
+    "sudo -nE tee .env < secrets",
+    "sudo -uroot tee .env < secrets",
+    "sudo --non-interactive --user=root tee .env < secrets",
+    "sudo --user root tee .env < secrets",
+    "sudo --some-future-flag tee .env < secrets",
+    "sudo -Z tee .env < secrets",
+    "doas -n -u root tee .env < secrets",
+    "env -i PATH=/bin tee .env < secrets",
+    "env -u HOME tee .env < secrets",
+    "env -S 'tee .env' < secrets",
+    "nice -n 5 tee .env < secrets",
+    "nice -5 tee .env < secrets",
+    "timeout 5 tee .env < secrets",
+    "timeout -s KILL 5s tee .env < secrets",
+    "timeout --signal=KILL -k 2 5 tee .env < secrets",
+    "nohup tee .env < secrets",
+    "stdbuf -oL tee .env < secrets",
+    "stdbuf -o L -e 0 tee .env < secrets",
+    "ionice -c 3 tee .env < secrets",
+    "setsid -w tee .env < secrets",
+    "command -p tee .env < secrets",
+    "exec -a name tee .env < secrets",
+    "sudo -n bash -c 'echo k > .env'",
+    "sudo 2>/dev/null tee .env < secrets",
+    # A quoted operator next to a real redirect still counts the real one.
+    "echo '>' > .env",
+    "grep '|' notes | tee .env",
 ]
 
 ALLOWED = [
@@ -78,6 +111,22 @@ ALLOWED = [
     "cat secrets | tee out.log",
     'bash -c "cat .env"',
     "sh -c 'grep KEY .env > out.txt'",
+    # Quoted or escaped punctuation is an argument, not an operator (Codex P2 on #145).
+    "grep '>' .env",
+    'grep ">" .env',
+    "grep \\> .env",
+    "grep '>>' .env",
+    "grep \\>\\> .env",
+    'grep ">|" .env',
+    "grep '|' .env",
+    "grep \\| .env",
+    "awk '$1 > 2' .env",
+    "echo '|' tee .env",
+    "echo 'x; tee .env'",
+    "echo \\; tee .env",
+    'echo "a && tee .env"',
+    "sudo -n cat .env",
+    "sudo -u root grep KEY .env",
 ]
 
 
@@ -175,6 +224,16 @@ def test_permanent_approval_does_not_lift_it():
 def test_reads_still_run_under_yolo(monkeypatch):
     monkeypatch.setattr(approval_module, "_YOLO_MODE_FROZEN", True)
     assert check_all_command_guards("cat .env", "local")["approved"] is True
+
+
+@pytest.mark.parametrize("guard", [check_all_command_guards, check_dangerous_command])
+@pytest.mark.parametrize("command", ["grep '>' .env", 'grep ">>" .env', "grep \\| .env"])
+def test_quoted_operator_read_runs_under_yolo(monkeypatch, guard, command):
+    # Codex P2 on #145: a quoted > made both guards hard-block a plain read.
+    monkeypatch.setattr(approval_module, "_YOLO_MODE_FROZEN", True)
+    result = guard(command, "local")
+    assert result["approved"] is True, result
+    assert not result.get("hardline")
 
 
 def test_container_backend_unchanged():

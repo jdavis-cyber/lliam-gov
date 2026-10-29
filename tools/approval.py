@@ -511,11 +511,36 @@ def _hardline_block_result(description: str) -> dict:
 
 _ENV_TEMPLATE_BASENAMES = frozenset({".env.example", ".env.sample"})
 _SHELL_PUNCTUATION = "();<>|&\n"
-_COMMAND_WRAPPERS = frozenset({
-    "sudo", "doas", "env", "command", "builtin", "exec", "nohup", "time",
-    "nice", "ionice", "stdbuf", "setsid",
-})
-_WRAPPER_FLAGS_WITH_VALUE = frozenset({"-u", "-g", "-n", "-c"})
+# Command wrappers and their options, so the wrapped command is found:
+# (short flags without a value, short flags taking a value, long options
+# without a value, long options taking a value, positional words before the
+# command). An option a table does not know is read both ways (with and
+# without a value), so an unknown flag can only widen detection.
+_WRAPPER_OPTIONS = {
+    "sudo": ("AbBEeHiKklNnPSsVv", "CDghpRrTtUu",
+             {"--askpass", "--background", "--bell", "--edit", "--help", "--list", "--login",
+              "--non-interactive", "--preserve-env", "--preserve-groups", "--remove-timestamp",
+              "--reset-timestamp", "--set-home", "--shell", "--stdin", "--validate", "--version"},
+             {"--chdir", "--chroot", "--close-from", "--command-timeout", "--group", "--host",
+              "--other-user", "--prompt", "--role", "--type", "--user"}, 0),
+    "doas": ("Lns", "Cu", set(), set(), 0),
+    "env": ("0iv", "CSu", {"--debug", "--ignore-environment", "--null"},
+            {"--chdir", "--split-string", "--unset"}, 0),
+    "nice": ("", "n", set(), {"--adjustment"}, 0),
+    "ionice": ("t", "cnpPu", {"--ignore"}, {"--class", "--classdata", "--pid", "--pgid", "--uid"}, 0),
+    "timeout": ("fpv", "ks", {"--foreground", "--preserve-status", "--verbose"},
+                {"--kill-after", "--signal"}, 1),
+    "stdbuf": ("", "eio", set(), {"--error", "--input", "--output"}, 0),
+    "setsid": ("cfw", "", {"--ctty", "--fork", "--wait"}, set(), 0),
+    "nohup": ("", "", set(), set(), 0),
+    "time": ("apqv", "fo", {"--append", "--portability", "--quiet", "--verbose"},
+             {"--format", "--output"}, 0),
+    "command": ("pVv", "", set(), set(), 0),
+    "builtin": ("", "", set(), set(), 0),
+    "exec": ("cl", "a", set(), set(), 0),
+}
+_COMMAND_WRAPPERS = frozenset(_WRAPPER_OPTIONS)
+_MAX_COMMAND_READINGS = 64
 _ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # Shells whose ``-c`` script (and ``eval``'s arguments) are scanned as a
 # nested command, so ``bash -c "echo k > .env"`` is refused too.
@@ -539,17 +564,167 @@ def _is_protected_env_basename(path: str) -> bool:
 
 
 def _shell_tokens(command: str) -> Optional[list]:
-    """Split *command* into shell words and operator runs, or None on error."""
-    import shlex
+    """Split *command* into ``(text, is_operator)`` pairs, or None on error.
 
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=_SHELL_PUNCTUATION)
-    lexer.whitespace_split = True
-    lexer.whitespace = " \t\r"
-    lexer.commenters = ""
-    try:
-        return list(lexer)
-    except ValueError:
-        return None
+    Quotes and backslash escapes are removed from words, as the shell does,
+    and only unquoted, unescaped punctuation forms an operator: ``grep '>'``
+    passes ``>`` as an argument, it does not redirect.
+    """
+    tokens: list = []
+    word: list = []
+    in_word = False
+    operator: list = []
+    i, n = 0, len(command)
+
+    def end_word() -> None:
+        nonlocal in_word
+        if in_word:
+            tokens.append(("".join(word), False))
+            word.clear()
+            in_word = False
+
+    def end_operator() -> None:
+        if operator:
+            tokens.append(("".join(operator), True))
+            operator.clear()
+
+    while i < n:
+        ch = command[i]
+        if ch in " \t\r":
+            end_operator()
+            end_word()
+            i += 1
+            continue
+        if ch in _SHELL_PUNCTUATION:
+            end_word()
+            operator.append(ch)
+            i += 1
+            continue
+        end_operator()
+        in_word = True
+        if ch == "\\":
+            if i + 1 >= n:
+                return None
+            if command[i + 1] != "\n":  # backslash-newline continues the line
+                word.append(command[i + 1])
+            i += 2
+        elif ch == "'":
+            close = command.find("'", i + 1)
+            if close < 0:
+                return None
+            word.append(command[i + 1:close])
+            i = close + 1
+        elif ch == '"':
+            j = i + 1
+            while j < n and command[j] != '"':
+                if command[j] == "\\" and j + 1 < n and command[j + 1] in '\\"$`\n':
+                    if command[j + 1] != "\n":
+                        word.append(command[j + 1])
+                    j += 2
+                    continue
+                word.append(command[j])
+                j += 1
+            if j >= n:
+                return None
+            i = j + 1
+        else:
+            word.append(ch)
+            i += 1
+    end_operator()
+    end_word()
+    return tokens
+
+
+def _wrapper_option_ends(words: list, start: int, name: str, scripts: list) -> set:
+    """Indices just past wrapper *name*'s options and positionals.
+
+    More than one index means an option was not in the wrapper's table and
+    could take a value or not; both readings are returned. ``env -S``'s
+    value is a command line and is added to *scripts*.
+    """
+    short_flags, short_values, long_flags, long_values, positionals = _WRAPPER_OPTIONS[name]
+    ends: set = set()
+
+    def walk(j: int) -> None:
+        if len(ends) >= _MAX_COMMAND_READINGS:
+            return
+        while j < len(words):
+            word = words[j]
+            if word == "--":
+                j += 1
+                break
+            if name == "env" and word == "-":
+                j += 1
+                continue
+            if not word.startswith("-") or word == "-":
+                break
+            if word.startswith("--"):
+                key, has_value, value = word.partition("=")
+                if key in long_values and not has_value:
+                    if name == "env" and key == "--split-string" and j + 1 < len(words):
+                        scripts.append(words[j + 1])
+                    j += 2
+                    continue
+                if key == "--split-string" and name == "env" and has_value:
+                    scripts.append(value)
+                if has_value or key in long_flags or key in long_values:
+                    j += 1
+                    continue
+                walk(j + 2)  # unknown long option: maybe it takes a value
+                j += 1
+                continue
+            cluster = word[1:]
+            if name == "nice" and cluster.lstrip("-").isdigit():
+                j += 1  # nice -5 / nice --5: the adjustment is attached
+                continue
+            step = 1
+            for k, flag in enumerate(cluster):
+                if flag in short_values:
+                    attached = cluster[k + 1:]
+                    if not attached:
+                        step = 2
+                    if name == "env" and flag == "S":
+                        if attached:
+                            scripts.append(attached)
+                        elif j + 1 < len(words):
+                            scripts.append(words[j + 1])
+                    break
+                if flag not in short_flags:
+                    walk(j + 2)  # unknown short flag: maybe it takes a value
+                    break
+            j += step
+        ends.add(j + positionals)
+
+    walk(start)
+    return ends
+
+
+def _command_word_indices(words: list, scripts: list) -> set:
+    """Where the real command word of a simple command may be, after
+    assignments, wrappers and their options; several when a wrapper option
+    is unknown (detection then considers every reading)."""
+    found: set = set()
+    seen: set = set()
+
+    def visit(i: int) -> None:
+        if i in seen or len(found) >= _MAX_COMMAND_READINGS:
+            return
+        seen.add(i)
+        while i < len(words):
+            word = words[i]
+            base = word.rsplit("/", 1)[-1]
+            if _ASSIGNMENT_RE.match(word) or (word.isdigit() and i > 0):
+                i += 1  # VAR=value, or a stray fd number (``sudo 2>/dev/null tee``)
+                continue
+            if base in _WRAPPER_OPTIONS:
+                for end in _wrapper_option_ends(words, i + 1, base, scripts):
+                    visit(end)
+                return
+            break
+        found.add(i)
+
+    visit(0)
+    return found
 
 
 def _env_write_targets_or_fallback(command: str, depth: int = 0) -> list:
@@ -580,35 +755,22 @@ def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
     nested: list = []  # scripts handed to sh -c / eval
 
     def _flush_segment() -> None:
-        # Find the real command word after wrappers, assignments and flags.
-        i = 0
-        while i < len(words):
-            word = words[i]
-            base = word.rsplit("/", 1)[-1]
-            if _ASSIGNMENT_RE.match(word) or base in _COMMAND_WRAPPERS:
-                i += 1
-            elif word.startswith("-") and i > 0:
-                i += 2 if word in _WRAPPER_FLAGS_WITH_VALUE else 1
-            elif word.isdigit() and i > 0:
-                i += 1
-            else:
-                break
-        base = words[i].rsplit("/", 1)[-1] if i < len(words) else ""
-        if base == "tee":
-            targets.extend(w for w in words[i + 1:] if not w.startswith("-"))
-        elif base == "eval":
-            nested.append(" ".join(words[i + 1:]))
-        elif base in _NESTED_SHELLS:
-            for j in range(i + 1, len(words) - 1):
-                flag = words[j]
-                if flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:]:
-                    nested.append(words[j + 1])
-                    break
+        for i in sorted(_command_word_indices(words, nested)):
+            base = words[i].rsplit("/", 1)[-1] if i < len(words) else ""
+            if base == "tee":
+                targets.extend(w for w in words[i + 1:] if not w.startswith("-"))
+            elif base == "eval":
+                nested.append(" ".join(words[i + 1:]))
+            elif base in _NESTED_SHELLS:
+                for j in range(i + 1, len(words) - 1):
+                    flag = words[j]
+                    if flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:]:
+                        nested.append(words[j + 1])
+                        break
         words.clear()
 
     pending_redirect = None  # operator awaiting its target word
-    for token in tokens:
-        is_operator = bool(token) and all(ch in _SHELL_PUNCTUATION for ch in token)
+    for token, is_operator in tokens:
         if pending_redirect is not None:
             if not is_operator:
                 fd_dup = pending_redirect.endswith("&") and (token.isdigit() or token == "-")
