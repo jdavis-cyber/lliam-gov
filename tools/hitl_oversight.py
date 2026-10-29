@@ -221,6 +221,28 @@ def authorize_approval(
     return ApprovalAuthorization(False, None, UNAUTHENTICATED_APPROVER_REASON)
 
 
+def log_approval_resolution(
+    *, session_id: str, command: str, decision: str, approver: Optional[str],
+) -> None:
+    """Write a completed request to agent.log even when the ledger is off."""
+    try:
+        from agent.redact import redact_sensitive_text
+
+        metadata = json.dumps({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "decision": decision,
+            "approver": approver,
+        })
+        # Escape control characters to keep one physical log line. Keep command
+        # last and outside the JSON: the log formatter redacts again, and its
+        # assignment patterns can consume JSON delimiters after a masked value.
+        command_text = json.dumps(redact_sensitive_text(command, force=True))[1:-1]
+        logger.info("approval.decision %s command=%s", metadata, command_text)
+    except Exception:
+        logger.warning("Approval resolution log failed (non-blocking)", exc_info=True)
+
+
 def record_decision(
     *,
     decision: str,                    # approve | deny | halt | timeout | n/a
@@ -249,18 +271,9 @@ def record_decision(
     resolver's identity; None means no identified operator answered.
     """
     if session_id is not None:
-        try:
-            from agent.redact import redact_sensitive_text
-
-            logger.info("approval.decision %s", json.dumps({
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "session_id": session_id,
-                "command": redact_sensitive_text(target, force=True),
-                "decision": decision,
-                "approver": approver,
-            }))
-        except Exception:
-            logger.warning("Approval resolution log failed (non-blocking)", exc_info=True)
+        log_approval_resolution(
+            session_id=session_id, command=target, decision=decision, approver=approver,
+        )
 
     try:
         from agent.governance_audit_hooks import _current_subject, _enabled_ledger

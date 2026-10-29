@@ -1215,6 +1215,16 @@ def prompt_dangerous_approval(command: str, description: str,
     if _unauthenticated_approver_reason(command, description, origin="prompt"):
         return "deny"
 
+    def resolved(choice: str, *, timed_out: bool = False) -> str:
+        from tools.hitl_oversight import authenticated_principal, log_approval_resolution
+
+        decision = "timeout" if timed_out else ("deny" if choice == "deny" else "approve")
+        log_approval_resolution(
+            session_id=get_current_session_key(), command=command, decision=decision,
+            approver=None if timed_out else authenticated_principal(),
+        )
+        return choice
+
     if timeout_seconds is None:
         timeout_seconds = _get_approval_timeout()
 
@@ -1230,10 +1240,10 @@ def prompt_dangerous_approval(command: str, description: str,
                 ):
                     scope["allow_session"] = False
             choice = approval_callback(command, description, **scope)
-            return "once" if not allow_session and choice in {"session", "always"} else choice
+            return resolved("once" if not allow_session and choice in {"session", "always"} else choice)
         except Exception as e:
             logger.error("Approval callback failed: %s", e, exc_info=True)
-            return "deny"
+            return resolved("deny")
 
     # Fail-closed guard: if prompt_toolkit owns the terminal (interactive
     # CLI session) and no approval callback is registered on this thread,
@@ -1255,7 +1265,7 @@ def prompt_dangerous_approval(command: str, description: str,
                 "to avoid stdin deadlock. command=%r description=%r",
                 command, description,
             )
-            return "deny"
+            return resolved("deny")
     except Exception:
         # prompt_toolkit not installed, or detection failed -- fall through
         # to the legacy input() path (safe in non-TUI contexts: scripts,
@@ -1298,30 +1308,30 @@ def prompt_dangerous_approval(command: str, description: str,
 
             if thread.is_alive():
                 print("\n" + t("approval.timeout"))
-                return "deny"
+                return resolved("deny", timed_out=True)
 
             choice = result["choice"]
             if not allow_session and choice in {"s", "session", "a", "always"}:
                 choice = "once"
             if choice in {'o', 'once'}:
                 print(t("approval.allowed_once"))
-                return "once"
+                return resolved("once")
             elif choice in {'s', 'session'}:
                 print(t("approval.allowed_session"))
-                return "session"
+                return resolved("session")
             elif choice in {'a', 'always'}:
                 if not allow_permanent:
                     print(t("approval.allowed_session"))
-                    return "session"
+                    return resolved("session")
                 print(t("approval.allowed_always"))
-                return "always"
+                return resolved("always")
             else:
                 print(t("approval.denied"))
-                return "deny"
+                return resolved("deny")
 
     except (EOFError, KeyboardInterrupt):
         print("\n" + t("approval.cancelled"))
-        return "deny"
+        return resolved("deny")
     finally:
         # rename R.8a: clear the LLIAM_ name we set above.
         if "LLIAM_SPINNER_PAUSE" in os.environ:

@@ -18,12 +18,19 @@ SESSION = "approval-log-session"
 APPROVER = "local-operator:rome@desktop"
 
 
+def parse_record(line):
+    metadata, command = line.split("approval.decision ", 1)[1].split(" command=", 1)
+    record = json.loads(metadata)
+    record["command"] = command
+    return record
+
+
 @pytest.fixture
 def approval_log(monkeypatch, request):
     ledger_enabled = getattr(request, "param", False)
     home = get_lliam_home()
     (home / "config.yaml").write_text(
-        "approvals:\n  mode: manual\n  gateway_timeout: 1\n"
+        "approvals:\n  mode: manual\n  gateway_timeout: 1\n  timeout: 0\n"
         "security:\n  tirith_enabled: false\n  require_authenticated_approver: true\n"
         f"audit:\n  ledger_enabled: {str(ledger_enabled).lower()}\n",
         encoding="utf-8",
@@ -84,7 +91,7 @@ def test_resolution_writes_one_complete_record(approval_log, choice, decision):
     lines = [line for line in approval_log.read_text().splitlines()
              if "approval.decision " in line]
     assert len(lines) == 1
-    record = json.loads(lines[0].split("approval.decision ", 1)[1])
+    record = parse_record(lines[0])
     assert before <= datetime.fromisoformat(record.pop("timestamp")) <= after
     assert record == {
         "session_id": SESSION,
@@ -112,8 +119,8 @@ def test_command_secret_never_reaches_record(approval_log, monkeypatch, caplog, 
     records = [r for r in caplog.records if r.getMessage().startswith("approval.decision ")]
     assert len(records) == 1
     assert secret not in records[0].getMessage()
-    record = json.loads(records[0].getMessage().split("approval.decision ", 1)[1])
-    assert record["command"].startswith("rm -rf ./build\necho ")
+    record = parse_record(records[0].getMessage())
+    assert record["command"].startswith(r"rm -rf ./build\necho ")
     assert record["command"] != command
     assert len([line for line in text.splitlines() if "approval.decision " in line]) == 1
 
@@ -154,6 +161,48 @@ def test_refused_attempt_is_not_a_second_resolution(approval_log):
     lines = [line for line in approval_log.read_text().splitlines()
              if "approval.decision " in line]
     assert len(lines) == 1
-    record = json.loads(lines[0].split("approval.decision ", 1)[1])
+    record = parse_record(lines[0])
     assert record["decision"] == "deny"
     assert record["approver"] == APPROVER
+
+
+def test_environment_assignment_keeps_all_fields_with_default_redaction(approval_log):
+    approval.register_gateway_notify(SESSION, lambda data: resolve_from_desktop("once"))
+    approval.check_all_command_guards("rm -rf ./build; API_KEY=secret123", "local")
+
+    text = approval_log.read_text()
+    assert "secret123" not in text
+    lines = [line for line in text.splitlines() if "approval.decision " in line]
+    assert len(lines) == 1
+    record = parse_record(lines[0])
+    assert record["command"] == "rm -rf ./build; API_KEY=***"
+    assert record["decision"] == "approve"
+    assert record["session_id"] == SESSION
+    assert record["approver"] == APPROVER
+    assert datetime.fromisoformat(record["timestamp"]).tzinfo is not None
+
+
+@pytest.mark.parametrize("guard", [approval.check_all_command_guards, approval.check_dangerous_command])
+@pytest.mark.parametrize("choice,decision", [("once", "approve"), ("deny", "deny"), (None, "timeout")])
+def test_cli_resolution_writes_one_record(approval_log, monkeypatch, guard, choice, decision):
+    monkeypatch.delenv("HERMES_GATEWAY_SESSION")
+    monkeypatch.setenv("HERMES_INTERACTIVE", "1")
+    finished = threading.Event()
+    monkeypatch.setattr("builtins.input", lambda prompt: finished.wait(5) and "deny")
+    governance_audit_hooks.set_operator_subject(APPROVER, auth=LOCAL_OPERATOR_AUTH)
+    try:
+        callback = (lambda *args, **kwargs: choice) if choice else None
+        result = guard("rm -rf ./build", "local", approval_callback=callback)
+    finally:
+        finished.set()
+        governance_audit_hooks.set_operator_subject(None)
+
+    assert result["approved"] is (decision == "approve")
+    lines = [line for line in approval_log.read_text().splitlines()
+             if "approval.decision " in line]
+    assert len(lines) == 1
+    record = parse_record(lines[0])
+    assert record["command"] == "rm -rf ./build"
+    assert record["decision"] == decision
+    assert record["session_id"] == SESSION
+    assert record["approver"] == (APPROVER if choice else None)
