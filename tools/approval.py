@@ -1806,11 +1806,7 @@ def _simple_command_deletes(words: list, operands_supplied: bool, scripts: list)
         if base == "eval":
             scripts.append(" ".join(args))
         elif base in _NESTED_SHELLS:
-            for j in range(len(args) - 1):
-                flag = args[j]
-                if flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:]:
-                    scripts.append(args[j + 1])
-                    break
+            scripts.extend(_shell_c_scripts(base, args))
     return False
 
 
