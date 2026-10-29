@@ -948,8 +948,9 @@ class TestTranscribeAudioDispatch:
 
 
 @pytest.fixture
-def mock_mistral_module():
+def mock_mistral_module(monkeypatch):
     """Inject a fake mistralai module into sys.modules for testing."""
+    monkeypatch.setattr("tools.lazy_deps.ensure", lambda *args, **kwargs: None)
     mock_client = MagicMock()
     mock_client.__enter__ = MagicMock(return_value=mock_client)
     mock_client.__exit__ = MagicMock(return_value=False)

@@ -231,7 +231,7 @@ class TestDefaultConfig:
 class TestWebSearchUsesSearchBackend:
     """web_search_tool dispatches through _get_search_backend not _get_backend."""
 
-    def test_search_tool_calls_search_backend(self, monkeypatch):
+    def test_search_tool_calls_search_backend(self, monkeypatch, unavailable_optional_dependencies):
         from tools import web_tools
 
         called_with = []

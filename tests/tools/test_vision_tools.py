@@ -878,7 +878,7 @@ class TestResizeImageForVision:
             f"(h/w ratio {resized_ratio:.1f}, expected >5)"
         )
 
-    def test_no_pillow_returns_original(self, tmp_path):
+    def test_no_pillow_returns_original(self, tmp_path, unavailable_optional_dependencies):
         """Without Pillow, oversized images should be returned as-is."""
         # Create a dummy file
         path = tmp_path / "test.png"

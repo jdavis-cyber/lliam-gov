@@ -422,6 +422,12 @@ class TestExtractHttpStatus:
 class TestManagedGatewayErrorTranslation:
     """4xx from the Nous managed gateway should be translated to a user-actionable message."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_fal_sdk(self, image_tool, monkeypatch):
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(image_tool, "fal_client", MagicMock())
+
     def test_4xx_translates_to_value_error_with_remediation(self, image_tool, monkeypatch):
         """403 from managed gateway → ValueError mentioning FAL_KEY + lliam-gov tools."""
         from unittest.mock import MagicMock
