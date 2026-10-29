@@ -107,6 +107,7 @@ The blocklist is the floor below `--yolo`. It trips **before** the approval laye
 | `mkfs.*` on a mounted root device | Formats the live system |
 | `dd if=/dev/zero of=/dev/sd*` | Zeroes a physical disk |
 | Piping untrusted URLs to `sh` at the rootfs top level | Remote-code-execution attack vector too broad to approve |
+| `> .env`, `>> .env`, `1>`/`&>` redirects, `tee` / `tee -a` into `.env`, `.env.<suffix>` or `.envrc` (any directory, quoted or not, also inside a literal `bash -c` script or `eval`) | Environment files hold credentials and runtime policy. Reading them stays allowed, and so do `.env.example` / `.env.sample` |
 
 If you hit the blocklist, the tool call returns an explanatory error to the agent and nothing runs. If a legitimate workflow needs one of these commands (you're the operator of a wipe-and-reinstall pipeline, for example), run it outside the agent.
 
@@ -147,14 +148,35 @@ The following patterns trigger approval prompts (defined in `tools/approval.py`)
 | `python -e` / `perl -e` / `ruby -e` / `node -c` | Script execution via `-e`/`-c` flag |
 | `curl ... \| sh` / `wget ... \| sh` | Pipe remote content to shell |
 | `bash <(curl ...)` / `sh <(wget ...)` | Execute remote script via process substitution |
-| `tee` to `/etc/`, `~/.ssh/`, `~/.lliam/.env` | Overwrite sensitive file via tee |
-| `>` / `>>` to `/etc/`, `~/.ssh/`, `~/.lliam/.env` | Overwrite sensitive file via redirection |
+| `tee` to `/etc/`, `~/.ssh/`, shell rc and credential files | Overwrite sensitive file via tee (`.env` files are refused outright: see the hardline floor) |
+| `>` / `>>` to `/etc/`, `~/.ssh/`, shell rc and credential files | Overwrite sensitive file via redirection (`.env` files are refused outright: see the hardline floor) |
 | `xargs rm` | xargs with rm |
 | `find -exec rm` / `find -delete` | Find with destructive actions |
+| `rm` / `unlink` / `rmdir` / `git rm` (any path, including one file in the working directory) | File/directory delete |
+| `python -c` / `node -e` / `ruby -e` / `perl -e` / `deno eval` code that deletes files | File/directory delete via the named language |
+| `shred -u`, `rsync --delete` / `--remove-source-files`, `tar --remove-files` | File/directory delete via shred / rsync / tar |
+| `gzip`, `gunzip`, `xz`, `unxz`, `bzip2`, `bunzip2` on a file without `-k`/`--keep` or `-c`/`--stdout` | File/directory delete via compressor replacing original |
+| `trash`, `trash-put`, `trash-rm`, `trash-empty`, `gio trash`, `gio remove` | File/directory delete via trash |
+| `git stash -u` / `--include-untracked` / `-a` / `--all` | File/directory delete via git stash of untracked files |
+| `osascript` telling Finder to `delete`, `move ... to trash` or `empty trash` | File/directory delete via osascript Finder |
 | `cp`/`mv`/`install` to `/etc/` | Copy/move file into system config |
 | `sed -i` / `sed --in-place` on `/etc/` | In-place edit of system config |
 | `pkill`/`killall` lliam-gov/gateway | Self-termination prevention |
 | `gateway run` with `&`/`disown`/`nohup`/`setsid` | Prevents starting gateway outside service manager |
+
+#### Delete approvals are once-only
+
+Every **File/directory delete** rule above is approved for one execution only. The prompt offers just **once** and **deny**. A **session** or **always** answer, including `/approve session` or `/approve always` typed on a messaging platform whose buttons still show those choices, is downgraded to **once**. Delete patterns are never added to the session or permanent allowlist, so the next delete prompts again.
+
+#### Known limits
+
+These rules match the command text. They cannot see a delete that only appears when the shell runs, for example:
+
+- **Variable indirection:** `cmd=rm; $cmd file`, or a path or flag held in a variable.
+- **`eval` of a built string:** `eval "$(printf 'r%s' m) file"`, or any string assembled at runtime.
+- **A script written to a file and then run:** `printf 'rm file' > s.sh; sh s.sh`. The write and the later run are separate commands, and the script body is not inspected.
+
+Treat the delete rules as a consent prompt for ordinary commands, not a sandbox. Use a container backend when the agent must not be able to delete host files.
 
 :::info
 **Container bypass**: When running in `docker`, `singularity`, `modal`, or `daytona` backends, dangerous command checks are **skipped** because the container itself is the security boundary. Destructive commands inside a container can't harm the host.

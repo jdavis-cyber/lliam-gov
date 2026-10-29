@@ -879,6 +879,31 @@ DANGEROUS_PATTERNS = [
      "file/directory delete via rsync"),
     (rf'{_DELETE_COMMAND_START}tar\b[^;|&\n]*?\s+--remove-files\b',
      "file/directory delete via tar"),
+    # AI-1181: compressors replace (delete) the original file unless told to
+    # keep it (-k/--keep) or write to stdout (-c/--stdout). Listing (-l) and
+    # testing (-t) leave files alone. Short flags are matched case-folded, so
+    # combined flags count only for k/c; -t/-l must stand alone (xz -T0 is a
+    # thread count). Needs a file operand before any redirect: `... | gzip >
+    # out.gz` reads stdin and deletes nothing.
+    (rf'{_DELETE_COMMAND_START}(?:gzip|gunzip|xz|unxz|bzip2|bunzip2|lzma|unlzma)(?=\s)'
+     r'(?![^;|&\n]*?\s(?:-[a-z0-9]*[kc][a-z0-9]*|-[tl]'
+     r'|--(?:keep|stdout|to-stdout|test|list))(?=[\s;|&]|$))'
+     r'(?:\s+-[^\s;|&<>]*)*\s+[^\s;|&<>-]',
+     "file/directory delete via compressor replacing original"),
+    # Trash is still a delete from the working tree; trash-rm/trash-empty and
+    # gio remove delete permanently.
+    (rf'{_DELETE_COMMAND_START}(?:trash(?:-put|-rm|-empty)?|gio\s+(?:trash|remove))(?=\s|[;&|)]|$)',
+     "file/directory delete via trash"),
+    # git stash -u/-a (--include-untracked/--all) removes untracked (and with
+    # --all, ignored) files from the working tree; a later drop loses them.
+    (rf'{_DELETE_COMMAND_START}git\s+stash(?:\s+(?:push|save))?'
+     r'(?:\s+(?:-m|--message)(?:\s+|=)(?:"[^"]*"|' r"'[^']*'" r'|[^\s;|&]+)|\s+-[^\s;|&]*)*?'
+     r'\s+(?:-[a-z]*[ua][a-z]*|--include-untracked|--all)(?=[\s;|&]|$)',
+     "file/directory delete via git stash of untracked files"),
+    # macOS Finder scripting: delete / move to trash / empty trash.
+    (rf'{_DELETE_COMMAND_START}osascript\b[^\n]*?\bfinder\b[^\n]*?'
+     r'\b(?:delete|empty\s+(?:the\s+)?trash|move\b[^\n]*?\bto\s+(?:the\s+)?trash)\b',
+     "file/directory delete via osascript Finder"),
 ]
 
 

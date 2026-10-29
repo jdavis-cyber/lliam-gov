@@ -434,3 +434,103 @@ def test_cli_delete_answers_do_not_persist(desktop_terminal, monkeypatch, guard,
     assert requests == [{"allow_permanent": False, "allow_session": False}] * 2
     assert not approval.is_approved(session, "file/directory delete")
     assert not (get_lliam_home() / "config.yaml").exists()
+
+
+# --- AI-1181: residual deleters -------------------------------------------
+
+_COMPRESS = "file/directory delete via compressor replacing original"
+_TRASH = "file/directory delete via trash"
+_STASH = "file/directory delete via git stash of untracked files"
+_FINDER = "file/directory delete via osascript Finder"
+
+
+@pytest.mark.parametrize("command,delete_description", [
+    ("gzip notes.txt", _COMPRESS),
+    ("gzip -9 notes.txt", _COMPRESS),
+    ("gzip -r logs/", _COMPRESS),
+    ("gunzip notes.txt.gz", _COMPRESS),
+    ("gzip -d notes.txt.gz", _COMPRESS),
+    ("xz notes.txt", _COMPRESS),
+    ("xz -T0 -9 notes.txt", _COMPRESS),
+    ("unxz notes.txt.xz", _COMPRESS),
+    ("bzip2 notes.txt", _COMPRESS),
+    ("bunzip2 notes.txt.bz2", _COMPRESS),
+    ("cd logs && gzip *.log", _COMPRESS),
+    ("sudo xz --force notes.txt", _COMPRESS),
+    ("trash notes.txt", _TRASH),
+    ("trash-put notes.txt", _TRASH),
+    ("trash-rm notes.txt", _TRASH),
+    ("trash-empty", _TRASH),
+    ("gio trash notes.txt", _TRASH),
+    ("gio remove notes.txt", _TRASH),
+    ("git stash -u", _STASH),
+    ("git stash push -u -m wip", _STASH),
+    ("git stash --include-untracked", _STASH),
+    ("git stash save --include-untracked wip", _STASH),
+    ("git stash -a", _STASH),
+    ("git stash push --all", _STASH),
+    ("git stash -ku", _STASH),
+    ("""osascript -e 'tell application "Finder" to delete POSIX file "/tmp/x"'""", _FINDER),
+    ("""osascript -e 'tell app "Finder" to move POSIX file "/tmp/x" to trash'""", _FINDER),
+    ("""osascript -e 'tell application "Finder" to empty trash'""", _FINDER),
+])
+def test_residual_deleters_are_once_only_deletes(command, delete_description):
+    keys = [key for key, _ in approval.detect_all_dangerous_commands(command)]
+    assert delete_description in keys, keys
+    assert delete_description in approval._ONCE_ONLY_DELETE_KEYS
+
+
+@pytest.mark.parametrize("command", [
+    "gzip -k notes.txt",
+    "gzip --keep notes.txt",
+    "gzip -c notes.txt > notes.txt.gz",
+    "gzip -9c notes.txt > notes.txt.gz",
+    "gzip --stdout notes.txt > notes.txt.gz",
+    "gunzip -c notes.txt.gz",
+    "gzip -l notes.txt.gz",
+    "gzip -t notes.txt.gz",
+    "tar cf - src | gzip > src.tar.gz",
+    "gzip < notes.txt > notes.txt.gz",
+    "xz -k notes.txt",
+    "xz -dc notes.txt.xz",
+    "xz --list notes.txt.xz",
+    "bzip2 -k notes.txt",
+    "bzip2 -c notes.txt > notes.txt.bz2",
+    "zcat notes.txt.gz",
+    "trash-list",
+    "echo trash notes.txt",
+    "gio info notes.txt",
+    "git stash",
+    "git stash push -m wip",
+    "git stash pop",
+    "git stash show -u",
+    "git stash list",
+    "osascript -e 'tell application \"Finder\" to activate'",
+    "osascript -e 'display notification \"delete done\"'",
+])
+def test_residual_deleters_leave_safe_forms_alone(command):
+    keys = [key for key, _ in approval.detect_all_dangerous_commands(command)]
+    assert not [key for key in keys if key in approval._ONCE_ONLY_DELETE_KEYS], keys
+
+
+@pytest.mark.parametrize("command", [
+    "gzip notes.txt",
+    "trash-put notes.txt",
+    "git stash -u",
+    """osascript -e 'tell application "Finder" to delete POSIX file "/tmp/x"'""",
+])
+def test_residual_deleters_offer_only_once(desktop_terminal, command):
+    _, session = desktop_terminal
+    requests = []
+
+    def respond(data):
+        requests.append(data)
+        approval.resolve_gateway_approval(session, "always")
+
+    approval.register_gateway_notify(session, respond)
+    for _ in range(2):
+        assert approval.check_all_command_guards(command, "local")["approved"]
+    assert len(requests) == 2
+    for request in requests:
+        assert request["allow_permanent"] is False
+        assert request["allow_session"] is False
