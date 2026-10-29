@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { assistantTextPart, type ChatMessage } from '@/lib/chat-messages'
 import {
   $previewTarget,
+  $sessionPreviewRegistry,
   clearSessionPreviewRegistry,
   type PreviewTarget,
   registerSessionPreview
@@ -139,6 +140,7 @@ describe('usePreviewRouting', () => {
     act(() => handleEvent({ payload: { path: './dist/index.html' }, session_id: 'session-1', type: 'tool.complete' }))
 
     expect($previewTarget.get()).toBeNull()
-    expect(window.localStorage.getItem('lliam-gov.desktop.sessionPreviews.v1')).toBeNull()
+    expect($sessionPreviewRegistry.get()).toEqual({})
+    expect(JSON.parse(window.localStorage.getItem('lliam-gov.desktop.sessionPreviews.v1') ?? '{}')).toEqual({})
   })
 })

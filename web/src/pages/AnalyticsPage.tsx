@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -406,7 +406,9 @@ function SkillTable({ skills }: { skills: AnalyticsSkillEntry[] }) {
 export default function AnalyticsPage() {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<AnalyticsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadedRequest, setLoadedRequest] = useState<number | null>(null);
+  const loading = refreshing || loadedRequest !== days;
   const [error, setError] = useState<string | null>(null);
   // Gated on `dashboard.show_token_analytics` (default off).  When off the
   // page renders an explanation card instead of fetching analytics — the
@@ -426,15 +428,26 @@ export default function AnalyticsPage() {
       .catch(() => setShowTokens(false));
   }, []);
 
+  const requestSequence = useRef(0);
+
   const load = useCallback(() => {
     if (!showTokens) return;
-    setLoading(true);
-    setError(null);
+    const request = ++requestSequence.current;
     api
       .getAnalytics(days)
-      .then(setData)
-      .catch((err) => setError(String(err)))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (request !== requestSequence.current) return;
+        setData(data);
+        setError(null);
+      })
+      .catch((err) => {
+        if (request === requestSequence.current) setError(String(err));
+      })
+      .finally(() => {
+        if (request !== requestSequence.current) return;
+        setLoadedRequest(days);
+        setRefreshing(false);
+      });
   }, [days, showTokens]);
 
   useLayoutEffect(() => {
@@ -461,7 +474,11 @@ export default function AnalyticsPage() {
             ghost
             size="icon"
             className="text-muted-foreground hover:text-foreground"
-            onClick={load}
+            onClick={() => {
+              setRefreshing(true);
+              setError(null);
+              load();
+            }}
             disabled={loading}
             aria-label={t.common.refresh}
           >

@@ -56,16 +56,6 @@ def reset_provider_allowlist_cache() -> None:
     _POLICY_CACHE.clear()
 
 
-def _is_strict() -> bool:
-    try:
-        from lliam_cli import config as _cfg
-        from lliam_cli import posture_resolver as _pr
-        return _pr.is_strict(_cfg.load_config())
-    except Exception:
-        logger.warning("provider-allowlist posture resolution failed; enforcing", exc_info=True)
-        return True
-
-
 def _security_cfg() -> Dict[str, Any]:
     try:
         from lliam_cli import config as _cfg
@@ -74,11 +64,18 @@ def _security_cfg() -> Dict[str, Any]:
         return {}
 
 
-def enforcement_enabled() -> bool:
-    """True when the allowlist must be enforced (strict + enforce flag)."""
-    if not _is_strict():
-        return False
-    return bool(_security_cfg().get("provider_allowlist_enforce"))
+def enforcement_enabled(config: Optional[Dict[str, Any]] = None) -> bool:
+    """Enforce strict + flag, or fail closed if config cannot be read."""
+    try:
+        from lliam_cli import config as _cfg
+        from lliam_cli import posture_resolver as _pr
+        cfg = _cfg.load_config() if config is None else config
+        return _pr.is_strict(cfg) and bool(
+            (cfg.get("security") or {}).get("provider_allowlist_enforce")
+        )
+    except Exception:
+        logger.warning("provider-allowlist configuration unavailable; enforcing", exc_info=True)
+        return True
 
 
 def _candidate_paths() -> List[Path]:
@@ -165,7 +162,15 @@ def validate_provider(
     must be an approved host for that provider; for CUI, residency/no_train/TLS
     are required; high-sensitivity clamps non-local approved providers to HITL.
     """
-    if not enforcement_enabled():
+    try:
+        from lliam_cli import config as _cfg
+        config = _cfg.load_config()
+    except Exception:
+        return ProviderDecision(
+            disposition="deny", provider=provider, path=path,
+            reason="provider configuration unavailable — failing closed",
+        )
+    if not enforcement_enabled(config):
         return ProviderDecision(disposition="allow", provider=provider, path=path,
                                 reason="enforcement disabled (low-side / flag off)")
 

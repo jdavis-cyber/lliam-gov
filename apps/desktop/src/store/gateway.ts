@@ -1,8 +1,8 @@
 import type { ConnectionState, GatewayEvent } from '@lliam-gov/shared'
 import { atom } from 'nanostores'
 
-import { LliamGateway } from '@/lliam'
 import { resolveGatewayWsUrl } from '@/lib/gateway-ws-url'
+import { LliamGateway } from '@/lliam'
 import { setGatewayState } from '@/store/session'
 
 // ── Multi-profile gateway routing ──────────────────────────────────────────

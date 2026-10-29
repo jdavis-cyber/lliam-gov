@@ -190,6 +190,15 @@ def _record_codex_app_server_usage(agent, turn) -> dict[str, Any]:
     agent.session_cost_status = cost_result.status
     agent.session_cost_source = cost_result.source
 
+    # security.spend_ceiling accounting (shared with the main agent loop).
+    from lliam_cli.model_cost_guard import record_spend
+
+    record_spend(
+        agent,
+        total_tokens,
+        float(cost_result.amount_usd) if cost_result.amount_usd is not None else None,
+    )
+
     if agent._session_db and agent.session_id:
         try:
             if not agent._session_db_created:

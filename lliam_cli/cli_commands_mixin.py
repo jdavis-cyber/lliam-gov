@@ -1473,7 +1473,6 @@ class CLICommandsMixin:
             from tools import write_approval as wa
             out = handle_pending_subcommand(
                 wa.SKILLS, args,
-                set_mode_fn=lambda enabled: self._save_write_approval("skills", enabled),
             )
             if out is not None:
                 print(out)
@@ -1536,7 +1535,7 @@ class CLICommandsMixin:
         print(out)
 
     def _save_write_approval(self, subsystem: str, enabled: bool):
-        """Persist <subsystem>.write_approval to config (for /memory|/skills approval)."""
+        """Persist the memory write-approval setting (skills always require approval)."""
         from cli import save_config_value
         save_config_value(f"{subsystem}.write_approval", bool(enabled))
 

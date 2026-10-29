@@ -105,7 +105,7 @@ with a directory field, a URL field, and an open-ended text box; it composes a
 There is no model-tool footprint: `/learn` builds a standards-guided prompt and
 hands it to the agent as a normal turn. The agent saves the result with the
 `skill_manage` tool, so the [write-approval gate](#gating-agent-skill-writes-skillswrite_approval)
-applies if you have it on.
+always applies.
 
 ## Progressive Disclosure
 
@@ -445,36 +445,53 @@ The `patch` action is preferred for updates — it's more token-efficient than `
 
 ### Gating agent skill writes (`skills.write_approval`)
 
-By default the agent writes skills freely — including from the [background
-self-improvement review](/user-guide/features/memory#controlling-memory-writes-write_approval)
-that runs after a turn. If you'd rather approve every skill write first
-(small models that misjudge what they learned, secure environments, or just
-wanting eyes on the self-improvement loop), turn on the write-approval gate:
+Agent skill changes through `skill_manage` always need your approval, including
+changes proposed by the [background self-improvement review](/user-guide/features/memory#controlling-memory-writes-write_approval).
+`skills.write_approval` is **deprecated and ignored**. A value of `false` does
+not allow the agent to change loadable skills.
 
 ```yaml
 skills:
-  write_approval: false     # false = write freely (default) | true = require approval
+  write_approval: false     # deprecated and ignored
 ```
 
-When `write_approval: true`, every `skill_manage` write (create / edit /
-patch / delete / write_file / remove_file) is **staged** instead of committed —
-a SKILL.md is too large to review inline, so staging applies regardless of
-whether the write came from a foreground turn or the background review.
-Staged writes survive restarts under `~/.lliam/pending/skills/` and are
-reviewed with the same familiar approve/deny flow as dangerous commands:
+The agent submits create, edit, patch, delete, write_file, and remove_file
+proposals to `~/.lliam/pending/skills/`. They survive restarts. Review and
+decide with:
 
-```
-/skills pending             # list staged skill writes + a one-line gist each
-/skills diff <id>           # full unified diff (best viewed in CLI or dashboard)
+```text
+/skills pending             # list proposals and summaries
+/skills diff <id>           # inspect the proposed change
 /skills approve <id>        # apply it (or 'all')
-/skills reject <id>         # drop it (or 'all')
-/skills approval on         # turn the gate on (or 'off') and persist it
+/skills reject <id>         # discard it (or 'all')
 ```
 
-The review surface works in the interactive CLI and on messaging platforms
-(diff output is truncated for chat bubbles — read the full diff on the CLI or
-in the pending JSON file). Memory writes have the same gate under
-`memory.write_approval` — see [Controlling memory writes](/user-guide/features/memory#controlling-memory-writes-write_approval).
+You can review from the interactive CLI or gateway. Gateway diff output is
+truncated for chat bubbles; use the CLI or pending JSON file for the full diff.
+The CLI accepts `/skills approval on|off` for compatibility, but both values
+leave approval required and save no setting. The gateway supports only
+pending, approve, reject, and diff. On Slack, use the existing catch-all command:
+`/hermes skills pending`, `/hermes skills diff <id>`, `/hermes skills approve <id>`,
+or `/hermes skills reject <id>`. This preserves existing native Slack commands
+within its command-slot limit.
+
+Before applying or discarding a proposal, Lliam-GOV appends and syncs a decision
+to `<LLIAM_HOME>/logs/write-approvals.jsonl`. Each record includes the UTC time,
+decision, subsystem, pending ID, action, name, origin, summary, staged-payload
+SHA-256, approver, and result. The approver is the authenticated principal bound
+to the request, or the OS user when no principal is bound. The hash covers
+UTF-8 JSON with sorted keys and compact separators.
+
+The first record has `result: "pending"`; a second records `applied`,
+`discarded`, or `failed`. A crash before completion leaves the pending result
+for review. If the initial record cannot be written and synced, the decision
+stops and the proposal remains pending. An incomplete log line also blocks
+further decisions until the operator repairs the log. The optional oversight ledger also
+receives the decision when enabled. These records cover both skill and memory
+pending-review decisions.
+
+Memory retains its separate `memory.write_approval` setting. See
+[Controlling memory writes](/user-guide/features/memory#controlling-memory-writes-write_approval).
 
 > The separate `skills.guard_agent_created` setting is a content scanner
 > (dangerous-pattern heuristics), not an approval gate — the two are

@@ -1171,6 +1171,9 @@ DEFAULT_CONFIG = {
         # Default off because passing host directories into a sandbox weakens isolation.
         "docker_mount_cwd_to_workspace": False,
         "docker_extra_args": [],        # Extra flags passed verbatim to docker run
+        # Container networking. false runs the sandbox with --network=none
+        # (no egress at all); true keeps Docker's default bridge network.
+        "docker_network": True,
         # Explicit opt-in: run the Docker container as the host user's uid:gid
         # (via `--user`).  When enabled, files written into bind-mounted dirs
         # (docker_volumes, the persistent workspace, or the auto-mounted cwd)
@@ -2194,17 +2197,9 @@ DEFAULT_CONFIG = {
         # External hub installs (trusted/community sources) are always
         # scanned regardless of this setting.
         "guard_agent_created": False,
-        # Approval gate for skill_manage (create/edit/patch/write_file/delete/
-        # remove_file), applied to BOTH foreground agent turns and the
-        # background self-improvement review fork.
-        #   false (default) — write freely; the gate is off (pre-gate behaviour)
-        #   true            — require approval: stage the write for review
-        #                     instead of committing (a SKILL.md is too large to
-        #                     review inline, so skills always stage rather than
-        #                     prompt). List with /skills pending, inspect with
-        #                     /skills diff <id> (full diff — CLI/dashboard/file,
-        #                     never crammed into a chat bubble), apply with
-        #                     /skills approve <id> or drop with /skills reject <id>.
+        # Deprecated and ignored: agent skill changes always stage for approval.
+        # Review with /skills pending or /skills diff <id>, then
+        # /skills approve <id> or /skills reject <id>.
         "write_approval": False,
     },
 
@@ -6118,6 +6113,7 @@ TERMINAL_CONFIG_ENV_MAP = {
     "docker_env": "TERMINAL_DOCKER_ENV",
     "docker_mount_cwd_to_workspace": "TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE",
     "docker_extra_args": "TERMINAL_DOCKER_EXTRA_ARGS",
+    "docker_network": "TERMINAL_DOCKER_NETWORK",
     "docker_run_as_host_user": "TERMINAL_DOCKER_RUN_AS_HOST_USER",
     "docker_persist_across_processes": "TERMINAL_DOCKER_PERSIST_ACROSS_PROCESSES",
     "docker_orphan_reaper": "TERMINAL_DOCKER_ORPHAN_REAPER",

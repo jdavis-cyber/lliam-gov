@@ -136,3 +136,16 @@ def test_low_side_does_not_block(tmp_path, monkeypatch):
     cfg["security"]["posture"] = "permissive"
     monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
     assert sas.enforce_model_integrity_at_startup(config=cfg) is None
+
+
+def test_shipped_template_manifest_blocks_strict_startup_as_not_provisioned(tmp_path, monkeypatch):
+    # JER-78: the repo's shipped manifest carries a template signature and
+    # template skill hashes; even with a provisioned signer key it must block
+    # strict startup with a "not provisioned" reason (never verify).
+    from pathlib import Path
+
+    repo_manifest = Path(__file__).resolve().parents[2] / "model_manifest.yaml"
+    cfg = _cfg(tmp_path, primary_model="lmstudio/llama-3.1-8b-instruct", manifest=repo_manifest)
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
+    with pytest.raises(sas.ModelIntegrityError, match="not provisioned"):
+        sas.enforce_model_integrity_at_startup(config=cfg)

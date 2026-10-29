@@ -1,6 +1,5 @@
 import { atom, computed } from 'nanostores'
 
-import { getProfiles, setApiRequestProfile } from '@/lliam'
 import { queryClient } from '@/lib/query-client'
 import {
   arraysEqual,
@@ -11,6 +10,7 @@ import {
   storedStringArray,
   storedStringRecord
 } from '@/lib/storage'
+import { getProfiles, setApiRequestProfile } from '@/lliam'
 import { $gateway, ensureGatewayForProfile } from '@/store/gateway'
 import { setConnection } from '@/store/session'
 import type { ProfileInfo } from '@/types/lliam'

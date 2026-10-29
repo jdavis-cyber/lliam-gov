@@ -21,6 +21,7 @@ fail-closed. Never raises into the egress path.
 
 from __future__ import annotations
 
+import datetime
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,18 +49,57 @@ def reset_egress_cache() -> None:
     _POLICY_CACHE.clear()
 
 
+def _today() -> datetime.date:
+    """Use the real date in operation; tests replace this clock locally."""
+    return datetime.date.today()
+
+
+def _parse_expires(value: Any) -> Optional[datetime.date]:
+    """Coerce an entry's ``expires`` to a ``date``, or None if unparseable.
+
+    PyYAML parses an unquoted ISO date (``expires: 2026-10-13``) as a
+    ``datetime.date``; a quoted one stays a ``str``. Accept both. A datetime is
+    reduced to its date.
+    """
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, datetime.date):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return datetime.date.fromisoformat(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _expiry_defect(entry: Dict[str, Any], *, today: datetime.date) -> Optional[str]:
+    """Return why an allowlist entry is not currently approved, or None.
+
+    An entry is approved through its ``expires`` day inclusive and lapses the
+    day after. A missing or malformed ``expires`` is treated as lapsed so a
+    hand-edited entry without provenance cannot grant open-ended egress.
+    """
+    raw = entry.get("expires")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return "missing expires date"
+    expires = _parse_expires(raw)
+    if expires is None:
+        return f"malformed expires ({raw!r})"
+    if expires < today:
+        return f"expired {expires.isoformat()}"
+    return None
+
+
 def _strict_status() -> Tuple[bool, bool]:
     """Return ``(strict, config_error)`` so posture faults cannot fail open."""
-    try:
-        from lliam_cli import config as _cfg
-        from lliam_cli import posture_resolver as _pr
-        return _pr.is_strict(_cfg.load_config()), False
-    except Exception:
-        return False, True
+    from lliam_cli import posture_resolver as _pr
+    return _pr.strict_status()
 
 
 def _is_strict() -> bool:
-    return _strict_status()[0]
+    strict, config_error = _strict_status()
+    return strict or config_error
 
 
 def _egress_cfg() -> Dict[str, Any]:
@@ -157,8 +197,10 @@ def check_egress(
       1. low-side posture → allow (no-op; shipped behavior).
       2. air-gap (egress.mode == deny_all) → deny without DNS/network work.
       3. SSRF/private/metadata floor (url_safety) → deny UNCONDITIONALLY.
-      4. allowlisted host for this surface → allow.
-      5. otherwise → new_domain_disposition (default deny; fail-closed).
+      4. allowlisted, unexpired host for this surface → allow.
+      5. otherwise → new_domain_disposition (default deny; fail-closed). An
+         entry past its ``expires`` date (or without a valid one) is skipped,
+         so its host falls through here with the lapsed entry named.
     """
     strict, posture_error = _strict_status()
     if posture_error:
@@ -231,12 +273,19 @@ def check_egress(
             ),
         )
 
-    # 4. Allowlist match, scoped to the surface (LG-NE-01/03).
+    # 4. Allowlist match, scoped to the surface (LG-NE-01/03). Approval is
+    #    time-boxed: a matching entry past its expires date no longer allows.
+    today = _today()
+    lapsed: List[str] = []
     for entry in policy.get("approved_destinations") or []:
         if not isinstance(entry, dict):
             continue
         rule = str(entry.get("host") or "").strip()
         if not rule or not _host_matches(host, rule):
+            continue
+        defect = _expiry_defect(entry, today=today)
+        if defect:
+            lapsed.append(f"'{rule}' ({defect})")
             continue
         # Resolve allowlisted names too. Hostname approval must never override
         # the private-address/SSRF floor after DNS resolution.
@@ -284,19 +333,19 @@ def check_egress(
         )
 
     # 5. Not allowlisted → deny-by-default, or route a new domain to HITL.
+    status = f"host '{host}' not on the egress allowlist"
+    if lapsed:
+        status = (
+            f"egress allowlist entry {', '.join(lapsed)} for host '{host}' "
+            "is no longer approved"
+        )
     disp = str(cfg.get("new_domain_disposition") or "deny").strip().lower()
     if disp == "hitl_approve":
         return EgressDecision(
             disposition="hitl_approve", host=host,
-            reason=(
-                f"host '{host}' not on the egress allowlist — new-domain add "
-                "routed to an approver (LG-NE-01)"
-            ),
+            reason=f"{status} — new-domain add routed to an approver (LG-NE-01)",
         )
     return EgressDecision(
         disposition="deny", host=host,
-        reason=(
-            f"host '{host}' not on the egress allowlist — deny-by-default, "
-            "fail-closed (LG-NE-01)"
-        ),
+        reason=f"{status} — deny-by-default, fail-closed (LG-NE-01)",
     )

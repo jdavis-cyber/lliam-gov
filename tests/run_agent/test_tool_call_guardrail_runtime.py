@@ -5,6 +5,7 @@ import uuid
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from lliam_constants import get_lliam_home
 from run_agent import AIAgent
 
 
@@ -42,6 +43,8 @@ def _make_agent(*tool_names: str, max_iterations: int = 10, config: dict | None 
         patch("run_agent.check_toolset_requirements", return_value={}),
         patch("lliam_cli.config.load_config", return_value=config or {}),
         patch("run_agent.OpenAI"),
+        # The module was imported before the per-test home fixture ran.
+        patch("run_agent._lliam_home", get_lliam_home()),
     ):
         agent = AIAgent(
             api_key="test-key-1234567890",

@@ -387,8 +387,8 @@ function SessionRow({
   resumeInChatEnabled,
 }: SessionRowProps) {
   const [messages, setMessages] = useState<SessionMessage[] | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loading = isExpanded && messages === null && error === null;
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(session.title ?? "");
   const [renameSaving, setRenameSaving] = useState(false);
@@ -396,15 +396,17 @@ function SessionRow({
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (isExpanded && messages === null && !loading) {
-      setLoading(true);
-      api
-        .getSessionMessages(session.id)
-        .then((resp) => setMessages(resp.messages))
-        .catch((err) => setError(String(err)))
-        .finally(() => setLoading(false));
-    }
-  }, [isExpanded, session.id, messages, loading]);
+    if (!isExpanded || messages !== null) return;
+    let cancelled = false;
+    api.getSessionMessages(session.id)
+      .then((resp) => {
+        if (cancelled) return;
+        setMessages(resp.messages);
+        setError(null);
+      })
+      .catch((err) => { if (!cancelled) setError(String(err)); });
+    return () => { cancelled = true; };
+  }, [isExpanded, session.id, messages]);
 
   const sourceInfo = (session.source
     ? SOURCE_CONFIG[session.source]
@@ -717,14 +719,15 @@ export default function SessionsPage() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadedPage, setLoadedPage] = useState<number | null>(null);
+  const loading = refreshing || loadedPage !== page;
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<
     SessionSearchResult[] | null
   >(null);
   const [searching, setSearching] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const logScrollRef = useRef<HTMLPreElement | null>(null);
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [overviewSessions, setOverviewSessions] = useState<SessionInfo[]>([]);
@@ -806,23 +809,31 @@ export default function SessionsPage() {
     };
   }, [setEnd]);
 
-  const loadSessions = useCallback((p: number, silent = false) => {
-    // ``silent`` skips the loading spinner so background refreshes
-    // (triggered when the overview poll detects a new session from
-    // another process) don't flicker the whole page or drop the user's
-    // scroll position.
-    if (!silent) setLoading(true);
+  const requestSequence = useRef(0);
+
+  const fetchSessions = useCallback((p: number) => {
+    const request = ++requestSequence.current;
+    // Fetching alone does not arm a spinner: background polls retain
+    // the current list and scroll position; loadSessions handles manual refreshes.
     api
       .getSessions(PAGE_SIZE, p * PAGE_SIZE)
       .then((resp) => {
+        if (request !== requestSequence.current) return;
         setSessions(resp.sessions);
         setTotal(resp.total);
       })
       .catch(() => {})
       .finally(() => {
-        if (!silent) setLoading(false);
+        if (request !== requestSequence.current) return;
+        setLoadedPage(p);
+        setRefreshing(false);
       });
   }, []);
+
+  const loadSessions = useCallback((p: number, silent = false) => {
+    if (!silent) setRefreshing(true);
+    fetchSessions(p);
+  }, [fetchSessions]);
 
   const loadStats = useCallback(() => {
     api
@@ -842,12 +853,12 @@ export default function SessionsPage() {
   // baseline without triggering a redundant reload (mount already loads).
   const newestSeenRef = useRef<string | null>(null);
   const pageRef = useRef(page);
-  pageRef.current = page;
+  useEffect(() => { pageRef.current = page; }, [page]);
 
   useEffect(() => {
-    loadSessions(page);
+    fetchSessions(page);
     refreshEmptyCount();
-  }, [loadSessions, page, refreshEmptyCount]);
+  }, [fetchSessions, page, refreshEmptyCount]);
 
   useEffect(() => {
     const loadOverview = () => {
@@ -868,7 +879,7 @@ export default function SessionsPage() {
           // up in real time without a visible loading flicker.
           const newest = r.sessions[0]?.id ?? null;
           if (shouldRefreshSessions(newestSeenRef.current, newest)) {
-            loadSessions(pageRef.current, true);
+            fetchSessions(pageRef.current);
           }
           newestSeenRef.current = newest;
         })
@@ -877,7 +888,7 @@ export default function SessionsPage() {
     loadOverview();
     const id = setInterval(loadOverview, 5000);
     return () => clearInterval(id);
-  }, [loadSessions]);
+  }, [fetchSessions]);
 
   useEffect(() => {
     const el = logScrollRef.current;
@@ -902,6 +913,9 @@ export default function SessionsPage() {
   const updateSearch = useCallback(
     (value: string) => {
       setSearch(value);
+      setSearching(Boolean(value.trim()));
+      if (!value.trim()) setSearchResults(null);
+      else setView("list");
       clearSelection();
     },
     [clearSelection],
@@ -914,28 +928,17 @@ export default function SessionsPage() {
     [clearSelection],
   );
 
-  // Debounced FTS search
+  // Debounced FTS search. Ignore late responses after the query changes.
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    if (!search.trim()) {
-      setSearchResults(null);
-      setSearching(false);
-      return;
-    }
-
-    setSearching(true);
-    debounceRef.current = setTimeout(() => {
-      api
-        .searchSessions(search.trim())
-        .then((resp) => setSearchResults(resp.results))
-        .catch(() => setSearchResults(null))
-        .finally(() => setSearching(false));
+    if (!search.trim()) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      api.searchSessions(search.trim())
+        .then((resp) => { if (!cancelled) setSearchResults(resp.results); })
+        .catch(() => { if (!cancelled) setSearchResults(null); })
+        .finally(() => { if (!cancelled) setSearching(false); });
     }, 300);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [search]);
 
   const sessionDelete = useConfirmDelete({
@@ -1210,10 +1213,6 @@ export default function SessionsPage() {
   const showList = view === "list" || isSearching || !showOverviewTab;
   const showPagination = showList && !searchResults && total > PAGE_SIZE;
 
-  useEffect(() => {
-    if (isSearching) setView("list");
-  }, [isSearching]);
-
   const alerts: { message: string; detail?: string }[] = [];
   if (status) {
     if (status.gateway_state === "startup_failed") {
@@ -1421,7 +1420,7 @@ export default function SessionsPage() {
               <span className="text-xs font-mondwest tracking-[0.12em] truncate">
                 {activeAction === "restart"
                   ? t.status.restartGateway
-                  : t.status.updateLliam}
+                  : t.status.updateHermes}
               </span>
 
               <Badge

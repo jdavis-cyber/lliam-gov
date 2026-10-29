@@ -43,6 +43,8 @@ description: A test skill for unit testing.
 Step 1: Do the thing.
 """
 
+
+
 VALID_SKILL_CONTENT_2 = """\
 ---
 name: test-skill
@@ -544,7 +546,7 @@ class TestSkillManageDispatcher:
         result = json.loads(raw)
         assert result["success"] is False
 
-    def test_full_create_via_dispatcher(self, tmp_path):
+    def test_full_create_via_dispatcher(self, tmp_path, submit_and_approve_skill):
         """Foreground create does NOT mark the skill as agent-created.
 
         Skills created by user-directed foreground turns belong to the user;
@@ -554,6 +556,8 @@ class TestSkillManageDispatcher:
         """
         with _skill_dir(tmp_path):
             raw = skill_manage(action="create", name="test-skill", content=VALID_SKILL_CONTENT)
+            assert not (tmp_path / "test-skill" / "SKILL.md").exists()
+            raw = submit_and_approve_skill(raw)
             from tools.skill_usage import load_usage
             usage = load_usage()
         result = json.loads(raw)
@@ -563,7 +567,7 @@ class TestSkillManageDispatcher:
         rec = usage.get("test-skill") or {}
         assert rec.get("created_by") in {None, "", False}
 
-    def test_create_from_background_review_marks_agent_created(self, tmp_path):
+    def test_create_from_background_review_marks_agent_created(self, tmp_path, submit_and_approve_skill):
         """Background-review fork creates ARE marked as agent-created."""
         from tools.skill_provenance import set_current_write_origin, BACKGROUND_REVIEW
         token = set_current_write_origin(BACKGROUND_REVIEW)
@@ -572,6 +576,8 @@ class TestSkillManageDispatcher:
                 raw = skill_manage(
                     action="create", name="review-sediment", content=VALID_SKILL_CONTENT
                 )
+                assert not (tmp_path / "review-sediment" / "SKILL.md").exists()
+                raw = submit_and_approve_skill(raw)
                 from tools.skill_usage import load_usage
                 usage = load_usage()
         finally:
@@ -581,26 +587,29 @@ class TestSkillManageDispatcher:
         assert result["success"] is True
         assert usage["review-sediment"]["created_by"] == "agent"
 
-    def test_delete_via_dispatcher_threads_absorbed_into(self, tmp_path):
+    def test_delete_via_dispatcher_threads_absorbed_into(self, tmp_path, submit_and_approve_skill):
         # Dispatcher must plumb absorbed_into through to _delete_skill so the
         # validation + message suffix paths are exercised end-to-end.
         with _skill_dir(tmp_path):
-            skill_manage(action="create", name="umbrella", content=VALID_SKILL_CONTENT)
-            skill_manage(action="create", name="narrow", content=VALID_SKILL_CONTENT)
+            submit_and_approve_skill(skill_manage(action="create", name="umbrella", content=VALID_SKILL_CONTENT))
+            submit_and_approve_skill(skill_manage(action="create", name="narrow", content=VALID_SKILL_CONTENT))
             raw = skill_manage(action="delete", name="narrow", absorbed_into="umbrella")
+            assert (tmp_path / "narrow" / "SKILL.md").exists()
+            raw = submit_and_approve_skill(raw)
         result = json.loads(raw)
         assert result["success"] is True
         assert "absorbed into 'umbrella'" in result["message"]
 
-    def test_delete_via_dispatcher_rejects_missing_absorbed_target(self, tmp_path):
+    def test_delete_via_dispatcher_rejects_missing_absorbed_target(self, tmp_path, submit_and_approve_skill):
         with _skill_dir(tmp_path):
-            skill_manage(action="create", name="narrow", content=VALID_SKILL_CONTENT)
+            submit_and_approve_skill(skill_manage(action="create", name="narrow", content=VALID_SKILL_CONTENT))
             raw = skill_manage(action="delete", name="narrow", absorbed_into="ghost")
+            raw = submit_and_approve_skill(raw)
         result = json.loads(raw)
         assert result["success"] is False
         assert "does not exist" in result["error"]
 
-    def test_background_review_delete_refuses_bundled_even_with_absorbed_into(self, tmp_path):
+    def test_background_review_delete_refuses_bundled_even_with_absorbed_into(self, tmp_path, submit_and_approve_skill):
         from tools.skill_provenance import (
             BACKGROUND_REVIEW,
             reset_current_write_origin,
@@ -614,8 +623,8 @@ class TestSkillManageDispatcher:
                  patch("tools.skill_usage.is_hub_installed", return_value=False), \
                  patch("tools.skill_usage.is_bundled",
                        side_effect=lambda skill_name: skill_name == "bundled"):
-                skill_manage(action="create", name="umbrella", content=VALID_SKILL_CONTENT)
-                skill_manage(action="create", name="bundled", content=VALID_SKILL_CONTENT)
+                submit_and_approve_skill(skill_manage(action="create", name="umbrella", content=VALID_SKILL_CONTENT))
+                submit_and_approve_skill(skill_manage(action="create", name="bundled", content=VALID_SKILL_CONTENT))
                 raw = skill_manage(
                     action="delete",
                     name="bundled",
@@ -972,6 +981,8 @@ class TestExternalSkillMutations:
 
         result = json.loads(raw)
         assert result["success"] is True
+        assert result["staged"] is True
+        assert "Do the thing." in (tmp_path / "my-skill" / "SKILL.md").read_text(encoding="utf-8")
 
 
 
@@ -1266,7 +1277,7 @@ class TestCuratorConsolidationDeleteGuard:
         assert result.get("_archived") is None
         assert not (tmp_path / "user-skill").exists()
 
-    def test_dispatcher_preserves_usage_record_on_curator_archive(self, tmp_path, monkeypatch):
+    def test_dispatcher_preserves_usage_record_on_curator_archive(self, tmp_path, monkeypatch, submit_and_approve_skill):
         # skill_manage(delete) post-action telemetry must NOT forget a
         # recoverable curator archive — the record persists as archived so
         # `lliam-gov curator restore` can bring it back.
@@ -1276,6 +1287,8 @@ class TestCuratorConsolidationDeleteGuard:
             _create_skill("narrow", _skill_content("narrow"))
             skill_usage.mark_agent_created("narrow")
             raw = skill_manage("delete", "narrow", absorbed_into="umbrella")
+            assert skill_usage.get_record("narrow").get("state") == skill_usage.STATE_ACTIVE
+            raw = submit_and_approve_skill(raw)
             result = json.loads(raw)
             assert result["success"] is True, result
             rec = skill_usage.get_record("narrow")

@@ -224,7 +224,9 @@ def load_lliam_dotenv(
     """
     loaded: list[Path] = []
 
-    home_path = Path(lliam_home or os.getenv("HERMES_HOME", Path.home() / ".hermes"))
+    from lliam_constants import get_lliam_home
+
+    home_path = Path(lliam_home) if lliam_home else get_lliam_home()
     user_env = home_path / ".env"
     project_env_path = Path(project_env) if project_env else None
 

@@ -87,23 +87,40 @@ def test_containment_disables_named_tool_classes():
 
 # ---------------------------------------------------------------------------
 # LG-IR-08 — recovery requires verify_chain PASS before re-enable
+# (JER-190: recovery runs the verification itself — no caller-supplied flag)
 # ---------------------------------------------------------------------------
 
-def test_recovery_blocked_when_chain_broken():
+def _tamper(ledger) -> None:
+    lines = ledger.path.read_text(encoding="utf-8").splitlines()
+    lines[0] = lines[0].replace('"session.start"', '"session.stop"')
+    ledger.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_recovery_blocked_when_chain_broken(live_ledger, baseline_repo):
     ks.engage(reason="incident", actor="isso@agency.mil")
+    _tamper(live_ledger)
     ok = ks.recover_and_reenable(
-        baseline_tag="gov-P4-good", actor="isso@agency.mil",
-        verify_ok=False, verify_reason="record_hash mismatch at seq=7")
+        actor="isso@agency.mil", reason="post-incident",
+        repo_root=baseline_repo.root)
     assert ok is False
     # still halted — fail-closed
     assert ks.is_engaged() is True
     assert ks.guard_tool_dispatch("file_read") is not None
 
 
-def test_recovery_reenables_on_chain_pass():
+def test_recovery_no_longer_accepts_a_verify_flag():
+    ks.engage(reason="incident", actor="isso@agency.mil")
+    with pytest.raises(TypeError):
+        ks.recover_and_reenable(baseline_tag="gov-P4-good",
+                                actor="isso@agency.mil", verify_ok=True)
+    assert ks.is_engaged() is True
+
+
+def test_recovery_reenables_on_chain_pass(live_ledger, baseline_repo):
     ks.engage(reason="incident", actor="isso@agency.mil")
     ok = ks.recover_and_reenable(
-        baseline_tag="gov-P4-good", actor="isso@agency.mil", verify_ok=True)
+        actor="isso@agency.mil", reason="post-incident",
+        repo_root=baseline_repo.root)
     assert ok is True
     # FULL capability restored — no lingering halt (FINAL-gate requirement)
     assert ks.is_engaged() is False
@@ -116,13 +133,13 @@ def test_recovery_reenables_on_chain_pass():
 # Halt→restore cycle leaves no residue (no false auto-suspension)
 # ---------------------------------------------------------------------------
 
-def test_clean_cycle_restores_steady_state():
+def test_clean_cycle_restores_steady_state(live_ledger, baseline_repo):
     for _ in range(3):
         ks.engage(reason="scheduled kill-switch test", actor="isso@agency.mil")
         assert ks.is_engaged() is True
         assert ks.recover_and_reenable(
-            baseline_tag="gov-P4-good", actor="isso@agency.mil",
-            verify_ok=True) is True
+            actor="isso@agency.mil", reason="scheduled drill",
+            repo_root=baseline_repo.root) is True
         assert ks.is_engaged() is False
         assert ks.guard_tool_dispatch("file_read") is None
 

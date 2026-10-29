@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from lliam_cli.env_compat import getenv_compat
+from lliam_cli.provisioning import is_unprovisioned
 
 logger = logging.getLogger("hermes.governance.attestation")
 
@@ -54,13 +55,14 @@ def reset_attestation_cache() -> None:
 
 
 def _is_strict() -> bool:
-    try:
-        from lliam_cli import config as _cfg
-        from lliam_cli import posture_resolver as _pr
-        return _pr.is_strict(_cfg.load_config())
-    except Exception:
-        logger.warning("attestation posture resolution failed; enforcing", exc_info=True)
-        return True
+    """Strict-posture predicate; a configuration fault enforces (fails closed)."""
+    from lliam_cli import posture_resolver as _pr
+    return _pr.enforce_strict_controls("attestation")
+
+
+def _pr_flag(key: str) -> bool:
+    from lliam_cli import posture_resolver as _pr
+    return _pr.security_flag(key, "attestation")
 
 
 def _security_cfg() -> Dict[str, Any]:
@@ -136,7 +138,7 @@ def _load_cards() -> Dict[str, Any]:
 
 
 def require_model_card() -> bool:
-    return _is_strict() and bool(_security_cfg().get("require_model_card"))
+    return _is_strict() and _pr_flag("require_model_card")
 
 
 def model_card_present(model_id: str) -> bool:
@@ -176,7 +178,7 @@ def check_serialization(artifact: str, *, weights_only: bool = False) -> Seriali
     ``weights_only=True`` (the torch.load safeguard) permits a legacy .pt.
     Low-side or safe_serialization_only off → allow (no-op).
     """
-    if not (_is_strict() and _security_cfg().get("safe_serialization_only")):
+    if not (_is_strict() and _pr_flag("safe_serialization_only")):
         return SerializationDecision(allowed=True, artifact=artifact, reason="not enforced (low-side / flag off)")
     name = (artifact or "").strip().lower()
     suffix = Path(name).suffix
@@ -225,6 +227,16 @@ def _provisioned_signing_key(value: Any) -> bool:
     )
 
 
+def _unprovisioned_skill_hashes(manifest: Dict[str, Any]) -> list:
+    """Names whose ``skill_hashes`` entry is a template; a non-mapping fails all."""
+    hashes = manifest.get("skill_hashes")
+    if hashes is None:
+        return []
+    if not isinstance(hashes, dict):
+        return ["skill_hashes (not a mapping)"]
+    return sorted(str(name) for name, value in hashes.items() if is_unprovisioned(value))
+
+
 def verify_manifest(manifest: Dict[str, Any]) -> ManifestVerdict:
     """LG-MP-06: verify a signed manifest against the trusted-signer register.
 
@@ -237,6 +249,15 @@ def verify_manifest(manifest: Dict[str, Any]) -> ManifestVerdict:
     signature = str(manifest.get("signature") or "").strip()
     if not signer or not signature:
         return ManifestVerdict(valid=False, signer=signer, reason="missing signer/signature")
+    if is_unprovisioned(signature):
+        return ManifestVerdict(valid=False, signer=signer, reason=(
+            "manifest signature not provisioned — the shipped template value was never "
+            "re-signed with the provisioned key (LG-MP-06)"))
+    unprovisioned_hashes = _unprovisioned_skill_hashes(manifest)
+    if unprovisioned_hashes:
+        return ManifestVerdict(valid=False, signer=signer, reason=(
+            "manifest skill hashes not provisioned for "
+            f"{', '.join(unprovisioned_hashes)} — a template hash never verifies (LG-MP-06)"))
     key = _trusted_signers().get(signer)
     if not _provisioned_signing_key(key):
         return ManifestVerdict(valid=False, signer=signer, reason=f"signer '{signer}' not trusted (LG-MP-06)")

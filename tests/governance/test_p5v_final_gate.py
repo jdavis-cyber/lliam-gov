@@ -78,7 +78,8 @@ def test_soa_reconciles_all_188():
 # The scheduled kill-switch test: HALT → CLEAN RESTORE (the FINAL requirement)
 # ---------------------------------------------------------------------------
 
-def test_scheduled_killswitch_halts_then_cleanly_restores(_iso_ks):
+def test_scheduled_killswitch_halts_then_cleanly_restores(_iso_ks, live_ledger,
+                                                         baseline_repo):
     # steady state: fully capable
     assert ks.is_engaged() is False
     assert ks.guard_tool_dispatch("shell.destructive") is None
@@ -91,15 +92,19 @@ def test_scheduled_killswitch_halts_then_cleanly_restores(_iso_ks):
         ks.assert_inference_live()                              # inference halted
 
     # broken chain → recovery REFUSED (fail-closed), still halted
-    assert ks.recover_and_reenable(baseline_tag="gov-P5-good",
-                                   actor="isso@agency.mil",
-                                   verify_ok=False) is False
+    good = live_ledger.path.read_bytes()
+    live_ledger.path.write_bytes(good.replace(b'"session.start"',
+                                              b'"session.stop"', 1))
+    assert ks.recover_and_reenable(actor="isso@agency.mil",
+                                   reason="scheduled drill",
+                                   repo_root=baseline_repo.root) is False
     assert ks.is_engaged() is True
 
     # verified chain → CLEAN RESTORE of full capability, no residue
-    assert ks.recover_and_reenable(baseline_tag="gov-P5-good",
-                                   actor="isso@agency.mil",
-                                   verify_ok=True) is True
+    live_ledger.path.write_bytes(good)
+    assert ks.recover_and_reenable(actor="isso@agency.mil",
+                                   reason="scheduled drill",
+                                   repo_root=baseline_repo.root) is True
     assert ks.is_engaged() is False
     assert ks.guard_tool_dispatch("shell.destructive") is None
     ks.assert_inference_live()
