@@ -249,7 +249,7 @@ def _check_real_home_snapshot(session):
     write = reporter.write_line if reporter is not None else (
         lambda line: print(line, file=sys.stderr))
     if reporter is not None:
-        reporter.ensure_newline()
+        reporter.write_line("")
         reporter.write_sep("=", "Tests wrote to the real Lliam home or repository config")
     for label, paths in (("Created", created), ("Changed", changed), ("Removed", removed)):
         for path in paths[:50]:
