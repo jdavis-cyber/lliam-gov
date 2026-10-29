@@ -563,12 +563,13 @@ def _is_protected_env_basename(path: str) -> bool:
     return name in {".env", ".envrc"} or name.startswith(".env.")
 
 
-def _shell_tokens(command: str) -> Optional[list]:
+def _shell_tokens(command: str, comments: bool = False) -> Optional[list]:
     """Split *command* into ``(text, is_operator)`` pairs, or None on error.
 
     Quotes and backslash escapes are removed from words, as the shell does,
     and only unquoted, unescaped punctuation forms an operator: ``grep '>'``
-    passes ``>`` as an argument, it does not redirect.
+    passes ``>`` as an argument, it does not redirect. With *comments*, an
+    unquoted ``#`` that starts a word comments out the rest of the line.
     """
     tokens: list = []
     word: list = []
@@ -601,6 +602,10 @@ def _shell_tokens(command: str) -> Optional[list]:
             i += 1
             continue
         end_operator()
+        if comments and ch == "#" and not in_word:
+            newline = command.find("\n", i)
+            i = n if newline < 0 else newline
+            continue
         in_word = True
         if ch == "\\":
             if i + 1 >= n:
@@ -1042,11 +1047,10 @@ DANGEROUS_PATTERNS = [
     (rf'{_DELETE_COMMAND_START}tar\b[^;|&\n]*?\s+--remove-files\b',
      "file/directory delete via tar"),
     # AI-1181: compressors replace (delete) the original file unless told to
-    # keep it (-k/--keep) or write to stdout (-c/--stdout). Listing (-l) and
-    # testing (-t) leave files alone. Short flags are matched case-folded, so
-    # combined flags count only for k/c; -t/-l must stand alone (xz -T0 is a
-    # thread count). Needs a file operand before any redirect: `... | gzip >
-    # out.gz` reads stdin and deletes nothing.
+    # keep it. detect_all_dangerous_commands decides this from the tool's own
+    # arguments with _compressor_replaces_input (case-sensitive, per tool,
+    # zstd/lz4 only with --rm); this case-folded pattern is only the fallback
+    # for a command that can't be tokenized.
     (rf'{_DELETE_COMMAND_START}(?:gzip|gunzip|xz|unxz|bzip2|bunzip2|lzma|unlzma)(?=\s)'
      r'(?![^;|&\n]*?\s(?:-[a-z0-9]*[kc][a-z0-9]*|-[tl]'
      r'|--(?:keep|stdout|to-stdout|test|list))(?=[\s;|&]|$))'
@@ -1082,6 +1086,122 @@ DANGEROUS_PATTERNS_COMPILED = [
     (re.compile(pattern, _RE_FLAGS), description)
     for pattern, description in DANGEROUS_PATTERNS
 ]
+
+# AI-1181: whether a compressor replaces (deletes) its input files, read from
+# its real argument list: words before a redirect target, comment or command
+# separator. Flags are case-sensitive and per tool (xz -C takes a check name,
+# -c writes to stdout). gzip, bzip2 and xz delete the input unless a flag in
+# "keeps" is given; zstd and lz4 keep it unless --rm is given.
+_COMPRESSOR_DELETE = "file/directory delete via compressor replacing original"
+_GZIP = ("replace", "S", {"--suffix"}, "cklthLV",
+         {"--keep", "--stdout", "--to-stdout", "--list", "--test", "--help", "--license", "--version"})
+_BZIP2 = ("replace", "", set(), "ckthLV",
+          {"--keep", "--stdout", "--test", "--help", "--license", "--version"})
+_XZ = ("replace", "CFMST",
+       {"--block-list", "--block-size", "--check", "--files", "--files0", "--filters", "--flush-timeout",
+        "--format", "--memlimit", "--memlimit-compress", "--memlimit-decompress", "--memlimit-mt",
+        "--suffix", "--threads"},
+       "ckltHhV",
+       {"--keep", "--stdout", "--to-stdout", "--list", "--test", "--help", "--long-help", "--version",
+        "--info-memory"})
+_ZSTD = ("rm", "Do", {"--filelist", "--output-dir-flat", "--output-dir-mirror", "--trace"}, "chltV",
+         {"--stdout", "--list", "--test", "--help", "--version"})
+_LZ4 = ("rm", "", set(), "chtV", {"--stdout", "--to-stdout", "--list", "--test", "--help", "--version"})
+# tool: (deletes unless kept / only with --rm, short flags taking a value,
+#        long options taking a value, short flags that keep the input,
+#        long options that keep the input)
+_COMPRESSORS = {
+    "gzip": _GZIP, "gunzip": _GZIP,
+    "bzip2": _BZIP2, "bunzip2": _BZIP2,
+    "xz": _XZ, "unxz": _XZ, "lzma": _XZ, "unlzma": _XZ,
+    "zstd": _ZSTD, "unzstd": _ZSTD, "zstdmt": _ZSTD,
+    "lz4": _LZ4, "unlz4": _LZ4,
+}
+_FIND_EXEC_ACTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+
+
+def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> bool:
+    """True when compressor *name* run with *args* replaces its input files."""
+    family, short_values, long_values, keep_short, keep_long = _COMPRESSORS[name]
+    has_operand = operands_supplied
+    keeps = removes = False
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        i += 1
+        if arg == "--":
+            has_operand = has_operand or any(a for a in args[i:])
+            break
+        if arg == "-" or not arg.startswith("-"):
+            has_operand = has_operand or arg != "-"
+            continue
+        if arg.startswith("--"):
+            key, has_value, _ = arg.partition("=")
+            if key in long_values and not has_value:
+                i += 1
+            elif key in keep_long:
+                keeps = True
+            elif key == "--rm":
+                removes = True
+            continue
+        cluster = arg[1:]
+        for k, flag in enumerate(cluster):
+            if flag in short_values:
+                if k == len(cluster) - 1:
+                    i += 1  # the value is the next word
+                break
+            if flag in keep_short:
+                keeps = True
+    if not has_operand or keeps:
+        return False
+    return removes if family == "rm" else True
+
+
+def _compressor_replaces_input(command: str, depth: int = 0) -> Optional[bool]:
+    """True when *command* runs a compressor that deletes its input files;
+    None when the command can't be tokenized."""
+    command = re.sub(r"\$\{IFS\}|\$IFS\b", " ", command, flags=re.IGNORECASE)
+    tokens = _shell_tokens(command, comments=True)
+    if tokens is None:
+        return None
+    segments: list = [[]]
+    skip_target = False
+    for text, is_operator in tokens:
+        if skip_target and not is_operator:
+            skip_target = False  # a redirect's target is not an argument
+            continue
+        skip_target = False
+        if not is_operator:
+            segments[-1].append(text)
+        elif text.endswith("(") or (">" not in text and "<" not in text):
+            segments.append([])  # separator, pipe, subshell
+        else:
+            skip_target = True
+    for words in segments:
+        scripts: list = []
+        for start in _command_word_indices(words, scripts):
+            if start >= len(words):
+                continue
+            base = words[start].rsplit("/", 1)[-1]
+            if base in _COMPRESSORS and _compressor_call_deletes(base, words[start + 1:], False):
+                return True
+            if base == "xargs":
+                # xargs supplies the operands; any compressor it runs counts.
+                for j in range(start + 1, len(words)):
+                    name = words[j].rsplit("/", 1)[-1]
+                    if name in _COMPRESSORS and _compressor_call_deletes(name, words[j + 1:], True):
+                        return True
+            if base == "find":
+                for j in range(start + 1, len(words) - 1):
+                    name = words[j + 1].rsplit("/", 1)[-1]
+                    if words[j] in _FIND_EXEC_ACTIONS and name in _COMPRESSORS:
+                        end = next((k for k in range(j + 2, len(words)) if words[k] in {";", "+"}), len(words))
+                        if _compressor_call_deletes(name, words[j + 2:end], True):
+                            return True
+        if depth < _MAX_NESTED_SCRIPT_DEPTH and any(
+                _compressor_replaces_input(script, depth + 1) for script in scripts):
+            return True
+    return False
 
 
 def _legacy_pattern_key(pattern: str) -> str:
@@ -1319,8 +1439,17 @@ def detect_all_dangerous_commands(command: str) -> list[tuple[str, str]]:
         for language, (interpreter, flag) in script_specs.items()
     }
     delete_contexts = [_normalize_delete_words(context) for context in contexts]
+    # Compressor flags are case-sensitive, so read them from the unfolded command.
+    unfolded = _normalize_command_for_detection(command, preserve_shell_quotes=True)
+    unfolded_contexts = [unfolded, *_script_bodies(unfolded, r"(?:bash|sh|zsh|ksh)", r"-[^\s]*c")]
     matches = []
     for pattern_re, description in DANGEROUS_PATTERNS_COMPILED:
+        if description == _COMPRESSOR_DELETE:
+            readings = [_compressor_replaces_input(context) for context in unfolded_contexts]
+            # The pattern is only the fallback for a command that can't be tokenized.
+            if any(readings) or (None in readings and any(pattern_re.search(c) for c in delete_contexts)):
+                matches.append((description, description))
+            continue
         candidates = delete_contexts if description.startswith("file/directory delete") else contexts
         for language, bodies in script_bodies.items():
             if description.startswith(f"file/directory delete via {language}"):
