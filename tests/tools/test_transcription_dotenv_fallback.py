@@ -197,6 +197,7 @@ class TestTranscribeCallSitesReadDotenv:
         fake_client_module.Mistral = FakeMistralClient
 
         with patch.object(tt, "get_env_value", return_value="mistral-dotenv-key"), \
+             patch("tools.lazy_deps.ensure"), \
              patch.dict("sys.modules", {"mistralai.client": fake_client_module}), \
              patch("builtins.open", MagicMock()):
             result = tt._transcribe_mistral("/tmp/fake.mp3", "voxtral-mini-latest")
