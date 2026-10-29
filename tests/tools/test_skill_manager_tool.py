@@ -520,6 +520,89 @@ class TestRemoveFile:
         assert outside_file.exists()
 
 
+class TestEnvFileGuard:
+    """AI-1182: skill supporting files reuse the file-tool .env predicate."""
+
+    BLOCKED = (
+        "references/.env",
+        "templates/.env.local",
+        "scripts/.env.production",
+        "assets/.envrc",
+        "references/nested/.ENV",
+        "references/.env.",
+    )
+    ALLOWED = ("references/.env.example", "templates/.env.sample")
+
+    @pytest.mark.parametrize("file_path", BLOCKED)
+    def test_validate_rejects_env_files(self, file_path):
+        err = _validate_file_path(file_path)
+        assert err is not None
+        assert "protected environment file" in err
+
+    @pytest.mark.parametrize("file_path", ALLOWED)
+    def test_validate_allows_example_shapes(self, file_path):
+        assert _validate_file_path(file_path) is None
+
+    @pytest.mark.parametrize("file_path", BLOCKED)
+    def test_write_file_refuses_env_files(self, tmp_path, file_path):
+        with _skill_dir(tmp_path):
+            _create_skill("my-skill", VALID_SKILL_CONTENT)
+            result = json.loads(skill_manage(
+                action="write_file", name="my-skill",
+                file_path=file_path, file_content="API_KEY=secret\n",
+            ))
+        assert result["success"] is False
+        assert "protected environment file" in result["error"]
+        assert not (tmp_path / "my-skill" / file_path).exists()
+
+    @pytest.mark.parametrize("file_path", ALLOWED)
+    def test_write_file_allows_example_shapes(self, tmp_path, file_path):
+        with _skill_dir(tmp_path):
+            _create_skill("my-skill", VALID_SKILL_CONTENT)
+            result = _write_file("my-skill", file_path, "API_KEY=\n")
+        assert result["success"] is True
+        assert (tmp_path / "my-skill" / file_path).read_text() == "API_KEY=\n"
+
+    def test_patch_refuses_existing_env_file(self, tmp_path):
+        with _skill_dir(tmp_path):
+            _create_skill("my-skill", VALID_SKILL_CONTENT)
+            env_file = tmp_path / "my-skill" / "references" / ".env"
+            env_file.parent.mkdir(parents=True, exist_ok=True)
+            env_file.write_text("API_KEY=old\n")
+            result = _patch_skill("my-skill", "old", "new", file_path="references/.env")
+        assert result["success"] is False
+        assert "protected environment file" in result["error"]
+        assert env_file.read_text() == "API_KEY=old\n"
+
+    def test_write_through_symlink_to_env_refused(self, tmp_path):
+        with _skill_dir(tmp_path):
+            _create_skill("my-skill", VALID_SKILL_CONTENT)
+            refs = tmp_path / "my-skill" / "references"
+            refs.mkdir(parents=True, exist_ok=True)
+            env_file = refs / ".env"
+            env_file.write_text("API_KEY=old\n")
+            link = refs / "notes.md"
+            try:
+                link.symlink_to(env_file)
+            except OSError:
+                pytest.skip("Symlinks not supported")
+            result = _write_file("my-skill", "references/notes.md", "API_KEY=new\n")
+        assert result["success"] is False
+        assert "protected environment file" in result["error"]
+        assert env_file.read_text() == "API_KEY=old\n"
+
+    def test_remove_file_refuses_env_file(self, tmp_path):
+        with _skill_dir(tmp_path):
+            _create_skill("my-skill", VALID_SKILL_CONTENT)
+            env_file = tmp_path / "my-skill" / "references" / ".env"
+            env_file.parent.mkdir(parents=True, exist_ok=True)
+            env_file.write_text("API_KEY=old\n")
+            result = _remove_file("my-skill", "references/.env")
+        assert result["success"] is False
+        assert "protected environment file" in result["error"]
+        assert env_file.exists()
+
+
 # ---------------------------------------------------------------------------
 # skill_manage dispatcher
 # ---------------------------------------------------------------------------
