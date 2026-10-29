@@ -60,9 +60,6 @@ EXCLUDES = [
 #     name the old home/env to migrate FROM it.
 #   - tests/rename + scripts/rename ARE the rename infrastructure; they say
 #     "hermes" to describe what they scan for.
-#   - docker/** encodes the container's OS install identity (the `hermes` OS
-#     user/group, /opt/hermes tree, s6 supervision) — an inherited runtime
-#     contract, not the product display name.
 #   - the upstream hermes-agent skills + the generated website skill-catalog +
 #     the upstream marketing post are D4 upstream-authored / registry-keyed.
 # ---------------------------------------------------------------------------
@@ -78,18 +75,6 @@ WHOLE_TREE_KEEPS = [
     "hermes_cli/env_compat.py",
     "tests/rename",
     "scripts/rename",
-    # Docker integration tests validate the CONTAINER, whose OS user, command,
-    # and install prefix are deliberately `hermes`/`/opt/hermes` (docker/** is a
-    # whole-tree keep). These tests assert that kept identity (id -u hermes,
-    # `docker exec <c> hermes`, `owned by hermes`), so they keep the name too.
-    "tests/docker",
-    # Container / OS install identity — whole docker/ tree + the root Dockerfile
-    # that builds it. Inside the container the command, OS user, and install
-    # prefix are all deliberately `hermes` / `/opt/hermes` (see
-    # docker/lliam-exec-shim.sh) — a self-consistent inherited runtime contract,
-    # not the product display name. Renaming any of it desyncs the image.
-    "docker",
-    "Dockerfile",
     # Upstream (D4) skills — `name:` is a registry key; renaming orphans them.
     "skills/autonomous-ai-agents/hermes-agent",
     "skills/software-development/hermes-agent-skill-authoring",

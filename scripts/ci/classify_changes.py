@@ -9,15 +9,11 @@ booleans (one per lane) to ``$GITHUB_OUTPUT`` and stdout. The
 Lanes:
 
 * ``python``      — pytest / ruff / ty / footguns.
-* ``docker_meta`` — Dockerfiles etc.
 * ``frontend``    — TS typecheck matrix + desktop build.
 * ``site``        — Docusaurus + generated skill docs.
 * ``scan``        — supply-chain scan (Python files, .pth, setup hooks).
 * ``deps``        — pyproject.toml dependency bounds check.
 * ``mcp_catalog`` — bundled MCP catalog / installer review.
-
-Docker is not a lane — it builds on push-to-main and release only,
-never per-PR.
 
 Contract — *fail open, never closed*. We may run a lane we didn't need, but
 must never skip one a change could break:
@@ -36,7 +32,6 @@ import sys
 
 _FRONTEND = ("ui-tui/", "web/", "apps/")  # TS typecheck-matrix packages
 _ROOT_NPM = {"package.json", "package-lock.json"}  # shifts every package's tree
-_DOCKER_META = ("docker/", ".hadolint.yml", "Dockerfile") # docker setup
 _SITE = ("website/", "skills/", "optional-skills/")  # docs site + skill pages
 # Prose/frontend trees that can't touch Python. skills/ is excluded on purpose.
 _PY_SKIP = ("docs/", "website/") + _FRONTEND
@@ -56,7 +51,7 @@ def _is_docs(p: str) -> bool:
 
 
 def _py_irrelevant(p: str) -> bool:
-    return _is_docs(p) or p in _ROOT_NPM or p.startswith(_PY_SKIP) or p.startswith(_DOCKER_META)
+    return _is_docs(p) or p in _ROOT_NPM or p.startswith(_PY_SKIP)
 
 
 def _is_scan(p: str) -> bool:
@@ -72,7 +67,6 @@ def classify(files: list[str]) -> dict[str, bool]:
     files = [f.strip() for f in files if f.strip()]
     ret = {
         "python": any(not _py_irrelevant(f) for f in files),
-        "docker_meta":  any(f.startswith(_DOCKER_META) for f in files),
         "frontend": any(f.startswith(_FRONTEND) or f in _ROOT_NPM for f in files),
         "site": any(f.startswith(_SITE) for f in files),
         "scan": any(_is_scan(f) for f in files),
@@ -81,7 +75,6 @@ def classify(files: list[str]) -> dict[str, bool]:
     }
     if not files or any(f.startswith(".github/") for f in files):
         ret["python"] = True
-        ret["docker_meta"] = True
         ret["frontend"] = True
         ret["site"] = True
         ret["scan"] = True
