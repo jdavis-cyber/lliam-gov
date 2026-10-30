@@ -43,7 +43,7 @@ jobs:
         run: |
           python "${GOV_CI_DIR}/baseline_drift_gate.py" \
             --overlay "${HERMES_CONFIG}" \
-            --baseline docs/governance/baseline-critical-keys.yaml \
+            --baseline policy/governed/baseline-critical-keys.yaml \
             --phase P0
 
   # GATE 2 — dependency pin + hash check (LG-SS-01)

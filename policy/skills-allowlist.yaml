@@ -135,9 +135,9 @@ sdl_gate:
   require_osv_scan: true
   osv_fail_on: high
   require_codeowners: true
-  # SDL review records are rows of the supplier vetting register (its §5
-  # procedure), not files in a separate directory.
-  sdl_record_register: "docs/governance/supplier-vetting-register.md"
+  # SDL review records are rows of the supplier vetting register, kept in the
+  # operator's records outside this repository.
+  sdl_record_register: "supplier vetting register (operator records, outside this repository)"
 
 
 # =============================================================================
@@ -148,7 +148,7 @@ sdl_gate:
 # obliteratus are NEVER eligible for any CUI profile.
 # =============================================================================
 exceptions:
-  register: "docs/governance/deviation-register.yaml"
+  register: "deviation register (operator records, outside this repository)"
   never_eligible:
     - godmode
     - obliteratus

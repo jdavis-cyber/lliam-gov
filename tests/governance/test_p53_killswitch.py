@@ -166,15 +166,3 @@ def test_killswitch_wired_at_tool_dispatch_and_inference():
     assert "killswitch" in hooks and "guard_tool_dispatch" in hooks
     rp = (repo / "lliam_cli" / "runtime_provider.py").read_text()
     assert "killswitch" in rp and "assert_inference_live" in rp
-
-
-# ---------------------------------------------------------------------------
-# IR docs present (LG-IR-05/06)
-# ---------------------------------------------------------------------------
-
-def test_ir_runbook_present():
-    gov = Path(__file__).resolve().parents[2] / "docs" / "governance"
-    text = (gov / "incident-response-plan.md").read_text(encoding="utf-8")
-    assert len(text) > 3000
-    for needle in ("kill-switch", "72", "DIBNet", "severity", "chain of custody"):
-        assert needle.lower() in text.lower(), f"IR plan missing {needle}"

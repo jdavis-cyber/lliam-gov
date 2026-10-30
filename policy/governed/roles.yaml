@@ -3,7 +3,7 @@
 # Purpose: the machine-readable governance-accountability layer. Names each
 # accountable role and its single owner, and declares the SoD constraints the
 # CI/startup SoD check enforces against the `governance.role_bindings` in
-# cli-config.gov.yaml. Human-readable RACI: docs/governance/roles-raci.md.
+# cli-config.gov.yaml.
 #
 # Review-by: 2026-10-11 (or at any org-change to role ownership).
 

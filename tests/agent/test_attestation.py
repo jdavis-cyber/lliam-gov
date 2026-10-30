@@ -1,7 +1,7 @@
 """P3.2 — Model integrity: cards, attestation, safe-serialization (LG-MP-05/06/07/08).
 
 NEW agent/attestation.py governs model provenance and load-time integrity:
-  * LG-MP-05 — a model must have a card (docs/governance/model-cards/model-cards.yaml)
+  * LG-MP-05 — a model must have a card (policy/governed/model-cards.yaml)
     before it is CUI-eligible (security.require_model_card).
   * LG-MP-06 — a signed manifest (HMAC over the canonical body by a trusted
     signer) is verified at startup and before high-impact actions; mismatch

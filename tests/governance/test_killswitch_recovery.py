@@ -186,6 +186,68 @@ def test_recovery_restores_drifted_baseline(ks_home, live_ledger, baseline_repo)
     assert st["release_reason"] == "incident closed"
 
 
+def test_recovery_never_restores_the_authorization_record(ks_home, live_ledger,
+                                                         tmp_path):
+    # The tagged commit carries the PREVIOUS pin; the post-tag re-pin must
+    # survive recovery, or the next recovery would resolve the old baseline.
+    from tests.governance.conftest import make_baseline_repo
+    repo = make_baseline_repo(tmp_path / "deploy", prior_pin="gov-OLD-good")
+    record = repo.root / ir.AUTH_RECORD
+    repinned = record.read_bytes()
+    repo.overlay.write_text("security:\n  posture: permissive\n")
+    ks_home.engage(reason="drift", actor="isso")
+    res = ks_home.recover(actor="ao", reason="closed", repo_root=repo.root)
+    assert res.ok, res.reason
+    assert res.restored == ["cli-config.gov.yaml"]
+    assert record.read_bytes() == repinned
+    assert ir.AUTH_RECORD not in ir.resolve_baseline(repo_root=repo.root).files
+
+
+def test_recovery_refused_when_baseline_names_records_it_cannot_restore(
+        ks_home, live_ledger, tmp_path):
+    # A baseline tagged before the records moved (gov-P7-good and earlier)
+    # names docs/governance/ paths this checkout no longer has. Releasing onto
+    # it would leave strict startup unable to find its records.
+    from tests.governance.conftest import OVERLAY, make_baseline_repo
+    legacy = OVERLAY + ("governance:\n  registers:\n"
+                        "    authorization: docs/governance/authorization-record.yaml\n")
+    repo = make_baseline_repo(tmp_path / "deploy", overlay=legacy)
+    local_edit = "security:\n  posture: permissive\n"
+    repo.overlay.write_text(local_edit)
+    ks_home.engage(reason="drift", actor="isso")
+    res = ks_home.recover(actor="ao", reason="closed", repo_root=repo.root)
+    assert res.ok is False
+    assert "docs/governance/authorization-record.yaml" in res.reason
+    assert ks_home.is_engaged() is True
+    assert repo.overlay.read_text() == local_edit
+
+
+def test_recovery_accepts_records_restored_or_present(ks_home, live_ledger,
+                                                      tmp_path):
+    from tests.governance.conftest import OVERLAY, make_baseline_repo
+    named = OVERLAY + ("governance:\n  registers:\n"
+                       f"    authorization: {ir.AUTH_RECORD}\n"
+                       "    waiver: policy/provider-allowlist.yaml\n")
+    repo = make_baseline_repo(tmp_path / "deploy", overlay=named)
+    repo.overlay.write_text("security:\n  posture: permissive\n")
+    ks_home.engage(reason="drift", actor="isso")
+    res = ks_home.recover(actor="ao", reason="closed", repo_root=repo.root)
+    assert res.ok, res.reason
+    assert res.restored == ["cli-config.gov.yaml"]
+
+
+def test_recovery_refused_when_baseline_has_no_critical_keys(ks_home, live_ledger,
+                                                             tmp_path):
+    from tests.governance.conftest import make_baseline_repo
+    repo = make_baseline_repo(tmp_path / "deploy",
+                              critical_keys_rel="elsewhere/keys.yaml")
+    ks_home.engage(reason="x", actor="isso")
+    res = ks_home.recover(actor="ao", reason="closed", repo_root=repo.root)
+    assert res.ok is False
+    assert ir.CRITICAL_KEYS in res.reason
+    assert ks_home.is_engaged() is True
+
+
 def test_recovery_preserves_forensics_with_custody_manifest(ks_home, live_ledger,
                                                             baseline_repo):
     ks = ks_home

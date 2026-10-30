@@ -3,15 +3,14 @@
 (LG-TP-07, P5.4).
 
 Generates a PORTABLE, self-describing attestation another authority can use for
-reciprocity/inheritance: control-coverage summary (from the 188-control
-catalog), provenance (the signed baseline tag/commit + overlay), and the
-audit-chain tip hash. The export is content-signed — the signature is a
+reciprocity/inheritance: provenance (the signed baseline tag/commit +
+overlay) and the audit-chain tip hash. The export is content-signed — the signature is a
 SHA-256 over the canonical content, NOT a secret shipped in the repo (there is
 no self-verifying committed key: ``verify_attestation`` recomputes the hash
 over the content and compares, so any tamper is detected).
 
 Exit: 0 = export written, 2 = error. Prints the signed attestation JSON.
-PATH-FREEZE: NEW additive script; read-only over the catalog + authorization.
+PATH-FREEZE: NEW additive script; read-only over the authorization record.
 """
 from __future__ import annotations
 
@@ -35,19 +34,8 @@ def _load(path: Path):
         return yaml.safe_load(fh) or {}
 
 
-def _control_coverage(repo_root: Path) -> dict:
-    cat = _load(repo_root / "docs" / "governance" / "control-catalog.yaml")
-    controls = cat.get("controls") or []
-    counts = {"total": len(controls), "implemented": 0, "partial": 0,
-              "planned": 0, "inherited": 0}
-    for c in controls:
-        counts[c.get("status", "planned")] = \
-            counts.get(c.get("status", "planned"), 0) + 1
-    return counts
-
-
 def _provenance(repo_root: Path) -> dict:
-    auth = _load(repo_root / "docs" / "governance" / "authorization-record.yaml")
+    auth = _load(repo_root / "policy" / "governed" / "authorization-record.yaml")
     baseline = auth.get("baseline") or {}
     return {
         "baseline_tag": baseline.get("git_tag"),
@@ -89,7 +77,6 @@ def build_attestation(*, repo_root: Path = _REPO_ROOT, stamp: str,
         "system": "Lliam-GOV",
         "generated": stamp,
         "attested_by": attested_by,
-        "control_coverage": _control_coverage(repo_root),
         "provenance": _provenance(repo_root),
         "audit_chain": _audit_chain_tip(repo_root),
         "cui_floor": "NIST SP 800-171 r3 / CMMC L2",

@@ -17,10 +17,6 @@ raising, so identity derivation never breaks a run (LG-IA-02 is
 Detective/Directive — it labels, it does not gate). The result is cached per
 (provider, model) for the process.
 
-Config record: ``docs/governance/agent_identity.yaml`` documents the binding
-inputs, the algorithm, and the review-by date (the assessor evidence for
-LG-IA-02).
-
 Freshness: only the process-stable governance ``code_hash`` is memoized at
 this layer. Config is re-canonicalized for every call, and tool definitions
 are re-hashed from model_tools' current resolved result (or rebuilt directly
@@ -54,8 +50,8 @@ IDENTITY_SCHEMA = "lg-ia/1"
 # modified governance-core module is a DIFFERENT instance. This is a CHANGE
 # SIGNAL over the governance core — NOT whole-tree code integrity: the agent
 # cannot reach these files to tamper them (agent/file_safety.py write-deny +
-# the CI path-freeze/governance gates are the actual tamper-EVIDENCE controls;
-# see docs/governance/agent_identity.yaml). Deliberately excludes churny non-
+# the CI path-freeze/governance gates are the actual tamper-EVIDENCE controls).
+# Deliberately excludes churny non-
 # governance files (model_tools.py, config.py) so ordinary product edits don't
 # reset every agent's identity, which would make the signal useless.
 _CODE_SURFACE = (

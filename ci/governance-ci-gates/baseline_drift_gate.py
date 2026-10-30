@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """baseline_drift_gate.py — Lliam-GOV baseline-drift gate (LG-CH-03 / LG-CH-09).
 
-Compares the EFFECTIVE gov config against docs/governance/baseline-critical-keys.yaml
+Compares the EFFECTIVE gov config against policy/governed/baseline-critical-keys.yaml
 and FAILS CLOSED (exit 1) on any *critical*-severity drift. warn-severity drift is
 logged, not blocking. No-op (exit 0) when the effective profile is not strict, so
 non-gov branches are unaffected (capability-preserving).
@@ -17,7 +17,7 @@ PATH-FREEZE: a NEW additive script; reads the overlay + the baseline file only.
 
 Usage:
     baseline_drift_gate.py --overlay <cli-config.gov.yaml> \
-        --baseline docs/governance/baseline-critical-keys.yaml [--phase P0]
+        --baseline policy/governed/baseline-critical-keys.yaml [--phase P0]
 """
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ def main() -> int:
         "--overlay",
         default=(os.environ.get("LLIAM_CONFIG") or os.environ.get("HERMES_CONFIG") or "cli-config.gov.yaml"),
     )
-    ap.add_argument("--baseline", default="docs/governance/baseline-critical-keys.yaml")
+    ap.add_argument("--baseline", default="policy/governed/baseline-critical-keys.yaml")
     ap.add_argument("--phase", default="P0",
                     help="only enforce keys whose activated_in starts with this (default P0)")
     a = ap.parse_args()
@@ -131,7 +131,7 @@ def main() -> int:
             want = entry.get("expect", entry.get("expect_contains"))
             print(f"  - {key}: expected {want!r}, got {got}  [{entry.get('control','')}]")
         print("Remediation: restore the key in cli-config.gov.yaml, or record an "
-              "approved deviation (docs/governance/deviation-register.md, LG-CH-08).")
+              "approved deviation (deviation register, LG-CH-08).")
         return 1
 
     print(f"[baseline-drift] PASS — {checked} '{a.phase}*' critical/active keys match "

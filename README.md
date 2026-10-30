@@ -28,7 +28,7 @@ For each workflow, the team would define access, review points and the evidence 
 
 The code includes a tool-policy decision layer, network-egress checks, staged-write review handlers and a structured audit ledger. Runtime monitors can consume recorded events to flag patterns such as repeated tool calls, policy violations or changes in observed provider/tool metadata.
 
-The repository's hardening reports describe the project's control work and scoped capability checks. They provide an engineering record to examine, rather than a blanket guarantee that every tool, interface and deployment path behaves identically.
+The repository's tests describe the project's control work and scoped capability checks. They provide an engineering record to examine, rather than a blanket guarantee that every tool, interface and deployment path behaves identically.
 
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) supplies the agent platform, interfaces, provider support and much of the tool ecosystem. Lliam-GOV's contribution is the security and governance overlay, its configuration and the associated evaluation record.
 
@@ -37,11 +37,10 @@ The repository's hardening reports describe the project's control work and scope
 - **Start without installing:** compare the [tool policy](policy/tool-risk-policy.yaml), [decision layer](tools/tool_policy.py) and [regression tests](tests/tools/test_tool_policy_pdp.py).
 - **Inspect the mechanisms:** [tool-risk policy](policy/tool-risk-policy.yaml), [staged-write review](lliam_cli/write_approval_commands.py), [audit ledger](agent/governance_audit.py) and [runtime monitors](agent/runtime_monitors.py).
 - **Plan a bounded trial:** review the [strict profile](cli-config.gov.yaml), [network-isolation guidance](docs/security/network-egress-isolation.md) and [installation guide](website/docs/getting-started/installation.md). Windows users can use the [PowerShell installer](scripts/install.ps1). Use synthetic data and test the review and event-capture paths needed for your workflow.
-- **Assess the evidence:** consult the [hardening reports](docs/governance/verification/) and [consolidated engineering record](docs/governance/verification/FINAL-hardening-completion-report.md) before drawing deployment conclusions.
 
 ## Evaluation boundaries
 
-Repository CI checks security mechanisms and reference-profile behavior; it does not require renewal of example operator approvals. See the [repository maintenance scope](docs/governance/repository-maintenance.md) for the distinction from real-date deployment checks.
+Repository CI checks security mechanisms and reference-profile behavior; it does not require renewal of example operator approvals.
 
 Lliam-GOV is a reference implementation and engineering evaluation project. Each deployment requires validation of its selected tools, policies and integrations.
 

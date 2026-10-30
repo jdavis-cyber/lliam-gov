@@ -3,8 +3,7 @@
 ADDITIVE OVERLAY MODULE (PATH-FREEZE). Governs model provenance and load-time
 integrity. Realizes:
 
-  * LG-MP-05 — a model must have a card (docs/governance/model-cards/
-    model-cards.yaml) before it is CUI-eligible (security.require_model_card).
+  * LG-MP-05 — a model must have a card (policy/governed/model-cards.yaml) before it is CUI-eligible (security.require_model_card).
   * LG-MP-06 — a signed manifest (HMAC-SHA256 over the canonical body by a
     trusted signer) is verified; a runtime/manifest mismatch blocks a
     high-impact action (security.trusted_signers).
@@ -104,7 +103,7 @@ def _cards_path() -> Optional[Path]:
     if home:
         candidates.append(Path(home).expanduser() / _CARDS_FILENAME)
     candidates.append(Path(__file__).resolve().parent.parent
-                      / "docs" / "governance" / "model-cards" / _CARDS_FILENAME)
+                      / "policy" / "governed" / _CARDS_FILENAME)
     for p in candidates:
         try:
             if p.is_file():

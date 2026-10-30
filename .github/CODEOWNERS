@@ -5,15 +5,14 @@
 # allowlists, the CI gates, or the agent's prompt/skill surface requires
 # review by the code owner before merge. Pair with branch protection on
 # `main` (require review from Code Owners, require the local gate battery to
-# have passed) — see docs/governance/branch-protection.md. Owner is the ISSO
-# of record (governance.role_bindings.isso); independent challenge on
-# high-impact governance changes is the auditor role per docs/governance/roles-raci.md.
+# have passed). Owner is the ISSO of record (governance.role_bindings.isso);
+# independent challenge on high-impact governance changes is the auditor role
+# in policy/governed/roles.yaml.
 #
 # @jdavis-cyber owns the account; the accountable ROLE is the ISSO.
 
 # --- Governance baseline + registers (highest sensitivity) -----------------
 cli-config.gov.yaml                         @jdavis-cyber
-/docs/governance/                           @jdavis-cyber
 /policy/                                     @jdavis-cyber
 
 # --- Enforcement code (the startup gates + PDP + audit ledger) -------------

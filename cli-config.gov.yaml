@@ -185,7 +185,7 @@ security:
   # CUI-eligible (LG-MP-05); a signed manifest is verified before high-impact
   # actions (LG-MP-06); only safe serialization formats load (LG-MP-07).
   require_model_card: true               # [additive] LG-MP-05: uncarded model refused for CUI
-  model_cards_path: docs/governance/model-cards/model-cards.yaml   # [additive] card index of record
+  model_cards_path: policy/governed/model-cards.yaml   # [additive] card index of record
   safe_serialization_only: true          # [additive] LG-MP-07: allow safetensors/gguf; deny code-executing formats
   model_hash_verify: true                # [additive] LG-MP-07: verify artifact hash at load
   model_manifest_path: model_manifest.yaml   # [additive] LG-MP-06 signed manifest of record
@@ -200,7 +200,6 @@ security:
   mcp_allowlist_enforce: true            # [additive] LG-SC-07 deny-by-default MCP vetting ON
   mcp_allowlist_path: policy/mcp-allowlist.yaml   # [additive] approved-server policy of record
   mcp_require_tls: true                  # [additive] LG-SC-08 TLS/mTLS on HTTP MCP transports
-  supplier_vetting_register: docs/governance/supplier-vetting-register.md   # [additive] LG-TP-03
   tool_allowlist: []               # [additive] LG-AZ-02 (empty = no positive tool allowlist yet)
   tool_denylist:                   # [additive] LG-AZ-11/AZ-02: refuse these capabilities for CUI
     - computer_use
@@ -237,15 +236,13 @@ security:
   # The dependency supply chain is pinned at build time: pyproject.toml exact
   # pins (==) / bounded ranges (<next_major) + uv.lock with 1798 sha256 hashes
   # (both committed). allow_lazy_installs:false (pinned in P0.1 above) makes
-  # tools/lazy_deps.ensure() refuse any RUNTIME install. See evidence pack
-  # docs/governance/dependency-pinning.md and the pin-bump change-record.
+  # tools/lazy_deps.ensure() refuse any RUNTIME install.
   require_hashed_install: true     # [additive] LG-SS-01: install path must be hash-verified (uv sync --locked / pip --require-hashes)
   # allow_lazy_installs: false     #  LG-SS-07 — already pinned in the P0.1 block above (no runtime PyPI installs)
   supply_chain:                    # [additive] supply-chain evidence + enforcement pointers
     pinned_lockfile: uv.lock
     lockfile_hash_algo: sha256
     require_upper_bounds: true     #   enforced by .github/workflows/supply-chain-audit.yml (existing)
-    change_record: docs/governance/change-record.md   #   LG-SS-01: any pin bump requires an entry
     osv_fail_on: high             #   [declared] LG-SS-02 scheduled/blocking OSV scan threshold (wired Phase 3)
 
 
@@ -481,7 +478,6 @@ incident_response:
     enabled: true                    # [additive @ P5.3] LG-IR-01 kill-switch authority active
     default_scope: global            # [additive] SEV-1 emergency posture; session scope per incident
     require_verified_chain_to_recover: true   # [additive @ P5.3] LG-IR-08 fail-closed re-enable
-  runbook: docs/governance/incident-response-plan.md          # [additive @ P5.3] LG-IR-05
   reporting:
     dfars_dibnet_hours: 72           # [additive @ P5.3] LG-IR-06 DFARS 252.204-7012 clock
   circuit_breaker:
@@ -501,8 +497,7 @@ incident_response:
 #              (autonomy L0-L5 + kill-switch cadence), LG-TP-06 (third-party
 #              contingency), LG-TP-07 (portable attestation export).
 #    Consumed by: agent/cato_loop.py (evaluate/run_cato_cycle → killswitch on a
-#    real posture-break; steady-state no-op) + ci/governance-ci-gates/
-#    attestation_export.py.
+#    real posture-break; steady-state no-op).
 # =============================================================================
 cato:
   enabled: true                      # [additive @ P5.4] LG-GV-07 continuous authorization ON
@@ -510,9 +505,6 @@ cato:
   auto_suspend_on_break: true        # [additive @ P5.4] LG-GV-07 posture-break -> kill-switch
   reauthorization_required_after_suspend: true   # [additive] LG-GV-06/08 re-auth gate
   management_review_cadence_days: 90 # [additive @ P5.4] LG-GV-08 review cadence
-  autonomy_classification: docs/governance/autonomy-classification.md   # LG-TP-05
-  contingency: docs/governance/third-party-contingency.md               # LG-TP-06
-  management_review: docs/governance/management-review.md               # LG-GV-08
 
 
 # =============================================================================
@@ -521,8 +513,7 @@ cato:
 # LG-IA-02 agent NPE identity is computed by the NEW additive module
 # agent/agent_identity.py (instance_id = sha256(code+config+toolset+model)) and
 # stamped into every audit record's `actor` (agent/governance_audit_hooks.py).
-# The binding inputs + algorithm + review-by are recorded in
-# docs/governance/agent_identity.yaml. LG-IA-03 per-profile credential isolation
+# LG-IA-03 per-profile credential isolation
 # is the EXISTING agent/secret_scope.py (its multi-profile gateway activation
 # switch, gateway.multiplex_profiles, was removed with the messaging gateway
 # in JER-198). LG-IA-01/04/05 land as the managed-account
@@ -533,7 +524,6 @@ cato:
 # =============================================================================
 identity:
   bind_instance: true                # [additive @ P1.4] LG-IA-02: derive + stamp the NPE instance_id into audit actor
-  record: docs/governance/agent_identity.yaml   # [additive @ P1.4] the identity binding record (evidence)
 
 secrets:
   bitwarden:
@@ -547,7 +537,7 @@ delegation:
 # =============================================================================
 # [ACTIVE @ P1.6]  ROLES / RACI / SEPARATION-OF-DUTIES  (LG-GV-04/05)
 # -----------------------------------------------------------------------------
-# governance.role_bindings maps the named roles in docs/governance/roles.yaml to
+# governance.role_bindings maps the named roles in policy/governed/roles.yaml to
 # authenticated dashboard_auth principals. The SoD gate (ci/governance-ci-gates/
 # sod_check.py) enforces the separation_of_duties rules in roles.yaml against
 # these bindings and fails closed on any conflict. The acting ENGINEER is the
@@ -571,46 +561,21 @@ governance:
   #             LG-GV-06 (go/no-go authorization), LG-GV-10 (CAIO waivers)
   #   Consumed by: lliam_cli/security_audit_startup.py
   #                enforce_governance_artifacts_at_startup (fail-closed under
-  #                strict; complete no-op low-side) and
-  #                ci/governance-ci-gates/regulatory_reconciliation_gate.py.
+  #                strict; complete no-op low-side).
   # Register paths resolve relative to this overlay's directory (the repo root).
   # ---------------------------------------------------------------------------
   policy_id: LG-POL-001                    # [additive @ P4.1] LG-GV-01 policy of record
-  policy_version: "1.0"                    # [additive @ P4.1] must match ai-policy.md §11
+  policy_version: "1.0"                    # [additive @ P4.1] version of the AI policy of record
   policy_approved_by: jdavis@agency.mil    # [additive @ P4.1] CAIO (role_bindings.caio)
   policy_review_date: 2027-07-16           # [additive @ P4.1] past-due -> fail-closed (strict)
-  policy_path: docs/governance/ai-policy.md
+  # policy_path / registers.regulatory are optional: the AI policy and the
+  # regulatory register are held in the operator's own management-system
+  # library, not in this repository. Set either path to have strict
+  # startup also check that file.
   authorization_id: LG-ATO-2026-001        # [additive @ P4.1] LG-GV-06 go/no-go of record
   registers:                               # [additive @ P4.1] register bindings of record
-    regulatory: docs/governance/regulatory-register.yaml     # LG-GV-03
-    authorization: docs/governance/authorization-record.yaml # LG-GV-06
-    waiver: docs/governance/waiver-register.yaml             # LG-GV-10
-    deviation: docs/governance/deviation-register.yaml       # LG-CH-08 (P0.7)
-    # [additive @ P4.2] risk & applicability layer (LG-RM-01..07,09)
-    control_catalog: docs/governance/control-catalog.yaml    # LG-RM-04 machine canon
-    soa: docs/governance/SoA.md                              # LG-RM-04
-    poam: docs/governance/poam.yaml                          # LG-RM-07
-    threat_risk: docs/governance/threat-risk-register.yaml   # LG-RM-02
-    determinations: docs/governance/high-impact-determinations.yaml  # LG-RM-06
-    impact_assessment: docs/governance/ai-impact-assessment.md       # LG-RM-05
-    risk_process: docs/governance/risk-assessment-process.md         # LG-RM-01
-    halt_runbook: docs/governance/halt-rollback-runbook.md           # LG-RM-09
-    # [additive @ P4.3] boundary/inventory + SSP layer (LG-IN-01/04..07)
-    ssp: docs/governance/SSP.md                                      # LG-IN-07
-    boundary_scope: docs/governance/boundary-scope.md                # LG-IN-01/04/05/06
-    traceability: docs/governance/traceability-171r3.yaml            # LG-IN-07
-    # [additive @ P4.4] QMS + privacy/fairness layer (LG-QT-*, LG-PF-01..07)
-    qms: docs/governance/qms-process-maps.md                         # LG-QT-01/02/04/08/09
-    privacy_policy: docs/governance/privacy-policy.md                # LG-PF-01/02/03/05
-    ai_disclosure: docs/governance/ai-disclosure-notice.md           # LG-PF-04
-    bias_risk: docs/governance/bias-risk-register.yaml               # LG-PF-06
-    # [additive @ P4.5] secure-dev + personnel/supplier layer (LG-SD-*, LG-TP-*)
-    secure_development: docs/governance/secure-development.md        # LG-SD-02..08
-    requirements_traceability: docs/governance/requirements-traceability.yaml  # LG-SD-02
-    shared_responsibility: docs/governance/shared-responsibility-matrix.yaml   # LG-TP-04
-    training_register: docs/governance/training-register.yaml        # LG-TP-01
-    rules_of_behavior: docs/governance/rules-of-behavior.md          # LG-TP-02
-    evidence_register: docs/governance/evidence-register.yaml        # LG-TP-08
+    authorization: policy/governed/authorization-record.yaml # LG-GV-06
+    waiver: policy/governed/waiver-register.yaml             # LG-GV-10
 # NOTE: LG-IA-01 managed-account inventory (security.accounts) and the
 # LG-IA-05 no-default-credential switch (security.no_default_credentials) live
 # in the EXISTING `security:` block at the top of this file — a SECOND top-level

@@ -174,7 +174,7 @@ def build_ai_bom(repo: Path) -> Dict[str, Any]:
     """Machine-readable AI inventory reconciled from the P3 policy artifacts."""
     repo = Path(repo)
     providers_doc = _load_yaml(repo / "policy" / "provider-allowlist.yaml")
-    cards_doc = _load_yaml(repo / "docs" / "governance" / "model-cards" / "model-cards.yaml")
+    cards_doc = _load_yaml(repo / "policy" / "governed" / "model-cards.yaml")
     mcp_doc = _load_yaml(repo / "policy" / "mcp-allowlist.yaml")
     skills_doc = _load_yaml(repo / "policy" / "skills-allowlist.yaml")
     manifest = _load_yaml(repo / "model_manifest.yaml")
@@ -186,8 +186,7 @@ def build_ai_bom(repo: Path) -> Dict[str, Any]:
     ]
     models = [
         {"id": m.get("id"), "provider": m.get("provider"),
-         "serialization": m.get("serialization"), "cui_eligible": m.get("cui_eligible"),
-         "card": m.get("card")}
+         "serialization": m.get("serialization"), "cui_eligible": m.get("cui_eligible")}
         for m in (cards_doc.get("models") or []) if isinstance(m, dict)
     ]
     mcp_servers = [
@@ -225,10 +224,9 @@ def build_ai_bom(repo: Path) -> Dict[str, Any]:
         ],
         "policies": {
             "provider_allowlist": "policy/provider-allowlist.yaml",
-            "model_cards": "docs/governance/model-cards/model-cards.yaml",
+            "model_cards": "policy/governed/model-cards.yaml",
             "mcp_allowlist": "policy/mcp-allowlist.yaml",
             "skills_allowlist": "policy/skills-allowlist.yaml",
-            "vetting_register": "docs/governance/supplier-vetting-register.md",
         },
     }
 

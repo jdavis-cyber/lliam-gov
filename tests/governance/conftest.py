@@ -44,20 +44,29 @@ def _git(root: Path, *args: str) -> str:
 
 
 def make_baseline_repo(root: Path, *, overlay: str = OVERLAY,
-                       tag: str = "gov-T-good") -> SimpleNamespace:
-    (root / "docs" / "governance").mkdir(parents=True)
-    (root / "policy").mkdir()
+                       tag: str = "gov-T-good",
+                       critical_keys_rel: str = "policy/governed/baseline-critical-keys.yaml",
+                       prior_pin: str | None = None) -> SimpleNamespace:
+    """``critical_keys_rel`` places the critical-keys policy (anywhere but
+    its expected path makes the baseline unverifiable); ``prior_pin`` commits an
+    authorization record pinning an earlier baseline INTO the tagged commit,
+    as a real release does before its post-tag re-pin."""
+    (root / "policy" / "governed").mkdir(parents=True)
     (root / "cli-config.gov.yaml").write_text(overlay, encoding="utf-8")
-    (root / "docs" / "governance" / "baseline-critical-keys.yaml").write_text(
-        CRITICAL_KEYS, encoding="utf-8")
+    keys = root / critical_keys_rel
+    keys.parent.mkdir(parents=True, exist_ok=True)
+    keys.write_text(CRITICAL_KEYS, encoding="utf-8")
     (root / "policy" / "provider-allowlist.yaml").write_text(POLICY, encoding="utf-8")
+    if prior_pin is not None:
+        (root / "policy" / "governed" / "authorization-record.yaml").write_text(
+            f"baseline:\n  git_tag: {prior_pin}\n", encoding="utf-8")
     (root / "app.py").write_text("print('hi')\n", encoding="utf-8")
     _git(root, "init", "-q", "-b", "main")
     _git(root, "add", "-A")
     _git(root, "commit", "-q", "-m", "baseline")
     commit = _git(root, "rev-parse", "HEAD")
     _git(root, "tag", tag)
-    (root / "docs" / "governance" / "authorization-record.yaml").write_text(
+    (root / "policy" / "governed" / "authorization-record.yaml").write_text(
         f"baseline:\n  git_tag: {tag}\n  git_commit: {commit}\n"
         "  overlay: cli-config.gov.yaml\n", encoding="utf-8")
     _git(root, "add", "-A")

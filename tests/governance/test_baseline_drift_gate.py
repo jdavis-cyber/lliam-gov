@@ -17,7 +17,7 @@ import pytest
 _REPO = Path(__file__).resolve().parents[2]
 _GATE = _REPO / "ci" / "governance-ci-gates" / "baseline_drift_gate.py"
 _OVERLAY = _REPO / "cli-config.gov.yaml"
-_BASELINE = _REPO / "docs" / "governance" / "baseline-critical-keys.yaml"
+_BASELINE = _REPO / "policy" / "governed" / "baseline-critical-keys.yaml"
 
 
 def _run_gate(overlay: Path, home: Path) -> subprocess.CompletedProcess:
