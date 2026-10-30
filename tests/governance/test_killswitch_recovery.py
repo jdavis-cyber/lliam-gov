@@ -203,17 +203,37 @@ def test_recovery_never_restores_the_authorization_record(ks_home, live_ledger,
     assert ir.AUTH_RECORD not in ir.resolve_baseline(repo_root=repo.root).files
 
 
-def test_recovery_verifies_a_pre_ai1070_baseline(ks_home, live_ledger, tmp_path):
-    # gov-P7-good and earlier keep the critical keys under docs/governance/.
-    from tests.governance.conftest import make_baseline_repo
-    legacy = ir.LEGACY_CRITICAL_KEYS
-    repo = make_baseline_repo(tmp_path / "deploy", critical_keys_rel=legacy)
+def test_recovery_refused_when_baseline_names_records_it_cannot_restore(
+        ks_home, live_ledger, tmp_path):
+    # A baseline tagged before the records moved (gov-P7-good and earlier)
+    # names docs/governance/ paths this checkout no longer has. Releasing onto
+    # it would leave strict startup unable to find its records.
+    from tests.governance.conftest import OVERLAY, make_baseline_repo
+    legacy = OVERLAY + ("governance:\n  registers:\n"
+                        "    authorization: docs/governance/authorization-record.yaml\n")
+    repo = make_baseline_repo(tmp_path / "deploy", overlay=legacy)
+    local_edit = "security:\n  posture: permissive\n"
+    repo.overlay.write_text(local_edit)
+    ks_home.engage(reason="drift", actor="isso")
+    res = ks_home.recover(actor="ao", reason="closed", repo_root=repo.root)
+    assert res.ok is False
+    assert "docs/governance/authorization-record.yaml" in res.reason
+    assert ks_home.is_engaged() is True
+    assert repo.overlay.read_text() == local_edit
+
+
+def test_recovery_accepts_records_restored_or_present(ks_home, live_ledger,
+                                                      tmp_path):
+    from tests.governance.conftest import OVERLAY, make_baseline_repo
+    named = OVERLAY + ("governance:\n  registers:\n"
+                       f"    authorization: {ir.AUTH_RECORD}\n"
+                       "    waiver: policy/provider-allowlist.yaml\n")
+    repo = make_baseline_repo(tmp_path / "deploy", overlay=named)
     repo.overlay.write_text("security:\n  posture: permissive\n")
     ks_home.engage(reason="drift", actor="isso")
     res = ks_home.recover(actor="ao", reason="closed", repo_root=repo.root)
     assert res.ok, res.reason
     assert res.restored == ["cli-config.gov.yaml"]
-    assert b"posture: strict" in repo.overlay.read_bytes()
 
 
 def test_recovery_refused_when_baseline_has_no_critical_keys(ks_home, live_ledger,

@@ -48,8 +48,6 @@ _log = logging.getLogger("hermes.incident_recovery")
 
 AUTH_RECORD = "policy/governed/authorization-record.yaml"
 CRITICAL_KEYS = "policy/governed/baseline-critical-keys.yaml"
-# Where baselines tagged before AI-1070 (gov-P7-good and earlier) keep it.
-LEGACY_CRITICAL_KEYS = "docs/governance/baseline-critical-keys.yaml"
 DEFAULT_OVERLAY = "cli-config.gov.yaml"
 # Baseline-controlled paths besides the overlay (files or directory prefixes).
 # The authorization record under policy/ is NOT baseline content: it is the
@@ -351,27 +349,52 @@ def _effective_config(overlay_bytes: bytes) -> dict:
     return data
 
 
+def _unrestorable_records(b: Baseline, overlay_doc: dict) -> list[str]:
+    """Governance records the baseline overlay names that recovery would leave
+    missing: not restored from the baseline and not present in the checkout.
+    The strict startup gate refuses to serve without them, so releasing the
+    kill-switch onto such a baseline would leave the agent unable to start
+    (e.g. a baseline tagged before the records moved to policy/governed/)."""
+    gov = overlay_doc.get("governance") if isinstance(overlay_doc, dict) else None
+    if not isinstance(gov, dict):
+        return []
+    named = [("governance.policy_path", gov.get("policy_path"))]
+    registers = gov.get("registers")
+    if isinstance(registers, dict):
+        named += [(f"governance.registers.{k}", v) for k, v in registers.items()]
+    problems = []
+    for key, rel in named:
+        if not isinstance(rel, str) or not rel.strip():
+            continue
+        rel = rel.strip()
+        if rel in b.files or (b.root / rel).is_file():
+            continue
+        problems.append(f"baseline {b.commit[:12]} overlay names {rel} ({key}), "
+                        "which recovery would not restore and this checkout "
+                        "lacks; pin a baseline whose records match this layout")
+    return problems
+
+
 def check_baseline_content(b: Baseline) -> list[str]:
     """Run the baseline-drift gate's critical-key check over the BASELINE
     commit's own overlay + critical-keys policy, before anything is written.
     Empty list = the baseline is fit to restore."""
-    keys_rel = CRITICAL_KEYS
-    if keys_rel not in b.files:
-        try:
-            b.blob(LEGACY_CRITICAL_KEYS)
-            keys_rel = LEGACY_CRITICAL_KEYS
-        except BaselineError:
-            return [f"baseline {b.commit[:12]} has no {CRITICAL_KEYS} to verify against"]
+    if CRITICAL_KEYS not in b.files:
+        return [f"baseline {b.commit[:12]} has no {CRITICAL_KEYS} to verify against"]
     try:
         gate = _load_drift_gate()
     except Exception as e:
         return [f"baseline drift verifier unavailable ({e})"]
     try:
         import yaml
-        keys = yaml.safe_load(b.blob(keys_rel).decode("utf-8")) or {}
+        keys = yaml.safe_load(b.blob(CRITICAL_KEYS).decode("utf-8")) or {}
+        overlay_doc = yaml.safe_load(b.blob(b.overlay).decode("utf-8")) or {}
         cfg = _effective_config(b.blob(b.overlay))
     except Exception as e:
         return [f"baseline content unreadable ({e})"]
+    missing = _unrestorable_records(b, overlay_doc)
+    if missing:
+        return missing
     required = keys.get("posture_required", "strict")
     posture = gate._get(cfg, "security.posture")
     if posture != required:

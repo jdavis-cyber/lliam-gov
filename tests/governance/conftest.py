@@ -47,8 +47,8 @@ def make_baseline_repo(root: Path, *, overlay: str = OVERLAY,
                        tag: str = "gov-T-good",
                        critical_keys_rel: str = "policy/governed/baseline-critical-keys.yaml",
                        prior_pin: str | None = None) -> SimpleNamespace:
-    """``critical_keys_rel`` places the critical-keys policy (a pre-AI-1070
-    baseline keeps it under docs/governance/); ``prior_pin`` commits an
+    """``critical_keys_rel`` places the critical-keys policy (anywhere but
+    its expected path makes the baseline unverifiable); ``prior_pin`` commits an
     authorization record pinning an earlier baseline INTO the tagged commit,
     as a real release does before its post-tag re-pin."""
     (root / "policy" / "governed").mkdir(parents=True)
