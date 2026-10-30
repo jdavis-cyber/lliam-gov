@@ -5,7 +5,6 @@
 # model NOT listed here (with cui_eligible: true) is refused for CUI when
 # security.require_model_card is set. Consumed by agent/attestation.py
 # (model_cui_eligible) and cross-checked against policy/provider-allowlist.yaml.
-# Each entry links to a long-form card under docs/governance/model-cards/.
 # Indexed in the AI-BOM (P3.4). Renames nothing.
 # =============================================================================
 
@@ -28,7 +27,6 @@ models:
     acceptable_contexts: ["coding", "analysis", "cui"]
     limits: "Local enclave inference; no external egress. Not for autonomous high-impact actions without HITL."
     cui_eligible: true
-    card: "docs/governance/model-cards/lmstudio-llama-3.1-8b-instruct.md"
   - id: "bedrock/anthropic.claude-3-5-sonnet"
     provider: bedrock
     architecture: "claude-3.5-sonnet"
@@ -37,4 +35,3 @@ models:
     acceptable_contexts: ["coding", "analysis", "cui"]
     limits: "AWS GovCloud endpoint only; no-train contractual terms required (see provider-allowlist)."
     cui_eligible: true
-    card: "docs/governance/model-cards/bedrock-claude-3-5-sonnet.md"

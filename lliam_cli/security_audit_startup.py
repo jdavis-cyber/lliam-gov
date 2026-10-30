@@ -1101,10 +1101,11 @@ def enforce_governance_artifacts_at_startup(
     governance layer is real and current:
 
     * LG-GV-01 — ``governance.policy_id`` / ``policy_version`` /
-      ``policy_approved_by`` present and non-placeholder; the AI policy file
-      exists; ``policy_review_date`` is not past due.
-    * LG-GV-03 — the regulatory register exists and carries obligations
-      (register→control reconciliation runs in the CI gate).
+      ``policy_approved_by`` present and non-placeholder;
+      ``policy_review_date`` is not past due; the AI policy file exists when
+      ``governance.policy_path`` names one.
+    * LG-GV-03 — when ``governance.registers.regulatory`` names a register,
+      it exists and carries obligations.
     * LG-GV-06 — the signed authorization record exists, matches
       ``governance.authorization_id``, is decision=authorized and unexpired.
     * LG-GV-10 — any baseline-denied high-risk skill that has been re-enabled
@@ -1160,20 +1161,21 @@ def enforce_governance_artifacts_at_startup(
         elif review < today:
             blocking.append(f"AI policy review is past due ({review}) "
                             f"(LG-GV-01)")
-        policy_rel = str(gov.get("policy_path")
-                         or "docs/governance/ai-policy.md")
-        if not (root / policy_rel).is_file():
+        # The policy document itself lives in the operator's management-system
+        # library; check a local copy only when one is configured.
+        policy_rel = str(gov.get("policy_path") or "")
+        if policy_rel and not (root / policy_rel).is_file():
             blocking.append(f"ai-policy file '{policy_rel}' is missing "
                             f"(LG-GV-01)")
 
-        # LG-GV-03 — regulatory register present and populated.
-        reg_rel = str(registers.get("regulatory")
-                      or "docs/governance/regulatory-register.yaml")
+        # LG-GV-03 — regulatory register present and populated, when one is
+        # configured (it is otherwise held outside the repository).
+        reg_rel = str(registers.get("regulatory") or "")
         reg_file = root / reg_rel
-        if not reg_file.is_file():
+        if reg_rel and not reg_file.is_file():
             blocking.append(f"regulatory register '{reg_rel}' is missing "
                             f"(LG-GV-03)")
-        else:
+        elif reg_rel:
             try:
                 reg_data = _yaml.safe_load(
                     reg_file.read_text(encoding="utf-8")) or {}
@@ -1186,7 +1188,7 @@ def enforce_governance_artifacts_at_startup(
 
         # LG-GV-06 — signed go/no-go authorization record.
         auth_rel = str(registers.get("authorization")
-                       or "docs/governance/authorization-record.yaml")
+                       or "policy/governed/authorization-record.yaml")
         auth_file = root / auth_rel
         if not auth_file.is_file():
             blocking.append(f"authorization record '{auth_rel}' is missing "
@@ -1230,7 +1232,7 @@ def enforce_governance_artifacts_at_startup(
 
         # LG-GV-10 — CAIO waiver register gates high-risk enablement.
         wav_rel = str(registers.get("waiver")
-                      or "docs/governance/waiver-register.yaml")
+                      or "policy/governed/waiver-register.yaml")
         wav_file = root / wav_rel
         if not wav_file.is_file():
             blocking.append(f"waiver register '{wav_rel}' is missing "

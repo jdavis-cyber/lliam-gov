@@ -186,6 +186,48 @@ def test_recovery_restores_drifted_baseline(ks_home, live_ledger, baseline_repo)
     assert st["release_reason"] == "incident closed"
 
 
+def test_recovery_never_restores_the_authorization_record(ks_home, live_ledger,
+                                                         tmp_path):
+    # The tagged commit carries the PREVIOUS pin; the post-tag re-pin must
+    # survive recovery, or the next recovery would resolve the old baseline.
+    from tests.governance.conftest import make_baseline_repo
+    repo = make_baseline_repo(tmp_path / "deploy", prior_pin="gov-OLD-good")
+    record = repo.root / ir.AUTH_RECORD
+    repinned = record.read_bytes()
+    repo.overlay.write_text("security:\n  posture: permissive\n")
+    ks_home.engage(reason="drift", actor="isso")
+    res = ks_home.recover(actor="ao", reason="closed", repo_root=repo.root)
+    assert res.ok, res.reason
+    assert res.restored == ["cli-config.gov.yaml"]
+    assert record.read_bytes() == repinned
+    assert ir.AUTH_RECORD not in ir.resolve_baseline(repo_root=repo.root).files
+
+
+def test_recovery_verifies_a_pre_ai1070_baseline(ks_home, live_ledger, tmp_path):
+    # gov-P7-good and earlier keep the critical keys under docs/governance/.
+    from tests.governance.conftest import make_baseline_repo
+    legacy = ir.LEGACY_CRITICAL_KEYS
+    repo = make_baseline_repo(tmp_path / "deploy", critical_keys_rel=legacy)
+    repo.overlay.write_text("security:\n  posture: permissive\n")
+    ks_home.engage(reason="drift", actor="isso")
+    res = ks_home.recover(actor="ao", reason="closed", repo_root=repo.root)
+    assert res.ok, res.reason
+    assert res.restored == ["cli-config.gov.yaml"]
+    assert b"posture: strict" in repo.overlay.read_bytes()
+
+
+def test_recovery_refused_when_baseline_has_no_critical_keys(ks_home, live_ledger,
+                                                             tmp_path):
+    from tests.governance.conftest import make_baseline_repo
+    repo = make_baseline_repo(tmp_path / "deploy",
+                              critical_keys_rel="elsewhere/keys.yaml")
+    ks_home.engage(reason="x", actor="isso")
+    res = ks_home.recover(actor="ao", reason="closed", repo_root=repo.root)
+    assert res.ok is False
+    assert ir.CRITICAL_KEYS in res.reason
+    assert ks_home.is_engaged() is True
+
+
 def test_recovery_preserves_forensics_with_custody_manifest(ks_home, live_ledger,
                                                             baseline_repo):
     ks = ks_home

@@ -34,8 +34,7 @@ risk_acceptance:
   basis: >-
     Residual risk accepted for a single-operator demo/eval deployment with
     no CUI in scope (fail-closed CUI floor SP 800-171 r3 / CMMC L2).
-    Tracked deviations: docs/governance/roles.yaml sod_deviations;
-    docs/governance/deviation-register.yaml.
+    Tracked deviations: policy/governed/roles.yaml sod_deviations.
 
 baseline:
   git_tag: gov-P7-good
@@ -47,7 +46,7 @@ expires: 2027-01-16                    # 6-month eval authorization window
 
 scope: >-
   Single-operator demo/eval on a personally-owned workstation; authorized
-  mission scope per docs/governance/intended-use.md. NOT an authorization
+  mission scope per the operator's intended-use statement. NOT an authorization
   for production CUI processing.
 
 conditions:
@@ -59,7 +58,7 @@ conditions:
   - re-authorization required on posture-break or baseline drift (LG-GV-07)
 
 go_no_go_checklist:
-  - {item: signed AI policy of record present, ref: docs/governance/ai-policy.md, result: go}
+  - {item: signed AI policy of record present, ref: governance.policy_id (cli-config.gov.yaml), result: go}
   - {item: baseline pinned to signed tag, ref: gov-P7-good, result: go}
   - {item: prohibited skills disabled, ref: cli-config.gov.yaml skills.disabled, result: go}
   - {item: provider allowlist enforced, ref: policy/provider-allowlist.yaml, result: go}

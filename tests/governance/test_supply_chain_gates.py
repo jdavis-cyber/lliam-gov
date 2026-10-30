@@ -256,12 +256,11 @@ def test_committed_ai_bom_carries_no_placeholder_hashes():
 def _mini_repo(tmp_path, *, skill_hash, signature):
     import yaml
 
-    (tmp_path / "policy").mkdir()
-    (tmp_path / "docs" / "governance" / "model-cards").mkdir(parents=True)
+    (tmp_path / "policy" / "governed").mkdir(parents=True)
     (tmp_path / "policy" / "provider-allowlist.yaml").write_text(yaml.safe_dump({
         "providers": [{"id": "lmstudio", "provider_class": "local",
                        "data_residency": "local", "cui_eligible": True}]}), encoding="utf-8")
-    (tmp_path / "docs" / "governance" / "model-cards" / "model-cards.yaml").write_text(
+    (tmp_path / "policy" / "governed" / "model-cards.yaml").write_text(
         yaml.safe_dump({"models": [{"id": "lmstudio/m", "provider": "lmstudio"}]}), encoding="utf-8")
     (tmp_path / "policy" / "mcp-allowlist.yaml").write_text("approved_servers: []\n", encoding="utf-8")
     (tmp_path / "policy" / "skills-allowlist.yaml").write_text(yaml.safe_dump({

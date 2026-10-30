@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """sod_check.py — Separation-of-Duties gate (LG-GV-04/05, P1.6).
 
-Reads docs/governance/roles.yaml (the RACI + SoD rules) and the
+Reads policy/governed/roles.yaml (the RACI + SoD rules) and the
 governance.role_bindings from cli-config.gov.yaml, then FAILS CLOSED (exit 1)
 on any Separation-of-Duties conflict:
   * a principal bound to a role appears in that role's `not_also` set
@@ -197,7 +197,7 @@ def _load_bindings(overlay_path: Path) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Separation-of-Duties gate (LG-GV-05)")
-    parser.add_argument("--roles", default=str(_REPO_ROOT / "docs/governance/roles.yaml"))
+    parser.add_argument("--roles", default=str(_REPO_ROOT / "policy/governed/roles.yaml"))
     parser.add_argument("--overlay", default=str(_REPO_ROOT / "cli-config.gov.yaml"))
     args = parser.parse_args(argv)
 

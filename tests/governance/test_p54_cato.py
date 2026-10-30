@@ -1,15 +1,11 @@
-"""P5.4 cATO loop + autonomy classification + reciprocity export tests
-(LG-GV-07/08, LG-TP-05/06/07, AI-502).
+"""P5.4 cATO loop + reciprocity export tests (LG-GV-07/08, LG-TP-07, AI-502).
 
 The AI-502 VERIFY criteria, machine-checked:
   * a posture-break (injected drift) triggers auto-suspend via the kill-switch
     (LG-GV-07) — and steady state does NOT (no false auto-suspension, the
     FINAL-gate requirement);
-  * the portable posture/attestation export is produced with control coverage,
-    provenance, and the audit-chain hash, and carries a content signature
-    (LG-TP-07);
-  * the autonomy (L0–L5) + intervention-tier classification and third-party
-    contingency docs are present (LG-TP-05/06).
+  * the portable posture/attestation export is produced with provenance and
+    the audit-chain hash, and carries a content signature (LG-TP-07).
 """
 
 from __future__ import annotations
@@ -92,8 +88,6 @@ def test_run_cato_cycle_steady_state_leaves_capability():
 def test_attestation_export_produced_and_signed():
     att = ax.build_attestation(repo_root=_REPO, stamp="2026-07-16T00:00:00Z",
                                attested_by="jdavis@agency.mil")
-    assert att["control_coverage"]["total"] == 188
-    assert att["control_coverage"]["implemented"] >= 180
     assert att["provenance"]["baseline_tag"]
     assert "audit_chain" in att
     assert att["attested_by"] == "jdavis@agency.mil"
@@ -107,30 +101,8 @@ def test_attestation_tamper_detected():
     att = ax.build_attestation(repo_root=_REPO, stamp="2026-07-16T00:00:00Z",
                                attested_by="jdavis@agency.mil")
     signed = ax.sign_attestation(att)
-    signed["control_coverage"]["implemented"] = 999  # tamper
+    signed["provenance"]["baseline_commit"] = "0" * 40  # tamper
     assert ax.verify_attestation(signed) is False
-
-
-# ---------------------------------------------------------------------------
-# LG-TP-05 / LG-TP-06 — autonomy classification + contingency docs
-# ---------------------------------------------------------------------------
-
-def test_autonomy_classification_doc_present():
-    text = (_REPO / "docs" / "governance"
-            / "autonomy-classification.md").read_text(encoding="utf-8")
-    for level in ("L0", "L1", "L2", "L3", "L4", "L5"):
-        assert level in text, f"autonomy doc missing {level}"
-    for tier in ("T1", "T5"):
-        assert tier in text
-    assert "kill-switch" in text.lower()
-
-
-def test_contingency_doc_present():
-    text = (_REPO / "docs" / "governance"
-            / "third-party-contingency.md").read_text(encoding="utf-8")
-    assert len(text) > 1500
-    assert "on-prem" in text.lower() or "on-premise" in text.lower()
-    assert "fallback" in text.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -142,19 +114,3 @@ def test_cato_reads_effectiveness_checker():
     failures = cato.current_effectiveness_failures(repo_root=_REPO)
     assert failures == []  # repo posture is effective
 
-
-def _load(rel):
-    import yaml
-    return yaml.safe_load((_REPO / "docs" / "governance" / rel).read_text())
-
-
-def test_gv_tp_controls_now_implemented():
-    cat = {c["id"]: c for c in _load("control-catalog.yaml")["controls"]}
-    for cid in ("LG-GV-07", "LG-GV-08", "LG-TP-05", "LG-TP-06", "LG-TP-07"):
-        assert cat[cid]["status"] == "implemented", \
-            f"{cid}: {cat[cid]['status']}"
-
-
-def test_poam_p5_cato_closed():
-    poam = {i["id"]: i for i in _load("poam.yaml")["items"]}
-    assert poam["POAM-P5-CATO"]["status"] == "closed"

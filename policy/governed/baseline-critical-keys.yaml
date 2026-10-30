@@ -18,7 +18,7 @@
 # the governance-overlay merge AND posture_resolver coercion) against the
 # expected values below. Under `security.posture: strict`:
 #   * severity: critical  -> FAIL CLOSED (block CUI-profile start) unless an
-#                            unexpired entry in docs/governance/deviation-register.yaml
+#                            unexpired deviation-register entry (operator records)
 #                            (LG-CH-08) authorizes the exact key.
 #   * severity: warn      -> advisory log line; start proceeds.
 # Low-side (no overlay / posture != strict) is unaffected — the gate is keyed off

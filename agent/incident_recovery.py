@@ -8,7 +8,7 @@ verifiers:
   the live ledger (fail-closed: an enabled ledger that is missing, empty,
   unreadable, or broken FAILS).
 * :func:`resolve_baseline` — the signed baseline of record
-  (``docs/governance/authorization-record.yaml`` ``baseline.git_tag`` /
+  (``policy/governed/authorization-record.yaml`` ``baseline.git_tag`` /
   ``git_commit``) or an operator-named tag, resolved in the LOCAL git
   checkout (no fetch, no network). A tag that no longer points at the pinned
   commit is refused.
@@ -46,11 +46,16 @@ from typing import Any, Optional
 
 _log = logging.getLogger("hermes.incident_recovery")
 
-AUTH_RECORD = "docs/governance/authorization-record.yaml"
-CRITICAL_KEYS = "docs/governance/baseline-critical-keys.yaml"
+AUTH_RECORD = "policy/governed/authorization-record.yaml"
+CRITICAL_KEYS = "policy/governed/baseline-critical-keys.yaml"
+# Where baselines tagged before AI-1070 (gov-P7-good and earlier) keep it.
+LEGACY_CRITICAL_KEYS = "docs/governance/baseline-critical-keys.yaml"
 DEFAULT_OVERLAY = "cli-config.gov.yaml"
 # Baseline-controlled paths besides the overlay (files or directory prefixes).
-BASELINE_EXTRA_PATHS = ("policy", CRITICAL_KEYS)
+# The authorization record under policy/ is NOT baseline content: it is the
+# pointer to the baseline and is re-pinned after each tag, so it is never
+# restored from the tagged commit.
+BASELINE_EXTRA_PATHS = ("policy",)
 
 _CODE_ROOT = Path(__file__).resolve().parents[1]
 _DRIFT_GATE = _CODE_ROOT / "ci" / "governance-ci-gates" / "baseline_drift_gate.py"
@@ -239,6 +244,7 @@ def resolve_baseline(*, repo_root: Optional[Path] = None,
         if otype != "blob" or mode == "120000":  # skip submodules / symlinks
             continue
         files[rel.decode("utf-8")] = mode
+    files.pop(AUTH_RECORD, None)
     if overlay not in files:
         raise BaselineError(f"baseline {commit[:12]} has no {overlay}")
 
@@ -349,15 +355,20 @@ def check_baseline_content(b: Baseline) -> list[str]:
     """Run the baseline-drift gate's critical-key check over the BASELINE
     commit's own overlay + critical-keys policy, before anything is written.
     Empty list = the baseline is fit to restore."""
-    if CRITICAL_KEYS not in b.files:
-        return [f"baseline {b.commit[:12]} has no {CRITICAL_KEYS} to verify against"]
+    keys_rel = CRITICAL_KEYS
+    if keys_rel not in b.files:
+        try:
+            b.blob(LEGACY_CRITICAL_KEYS)
+            keys_rel = LEGACY_CRITICAL_KEYS
+        except BaselineError:
+            return [f"baseline {b.commit[:12]} has no {CRITICAL_KEYS} to verify against"]
     try:
         gate = _load_drift_gate()
     except Exception as e:
         return [f"baseline drift verifier unavailable ({e})"]
     try:
         import yaml
-        keys = yaml.safe_load(b.blob(CRITICAL_KEYS).decode("utf-8")) or {}
+        keys = yaml.safe_load(b.blob(keys_rel).decode("utf-8")) or {}
         cfg = _effective_config(b.blob(b.overlay))
     except Exception as e:
         return [f"baseline content unreadable ({e})"]

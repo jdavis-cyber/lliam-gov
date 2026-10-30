@@ -15,9 +15,7 @@ contains "hermes" (case-insensitive), the line PASSES iff either
 Any line that matches neither is an un-allowlisted "hermes" and FAILS the guard.
 
 Every KEEP_PATTERNS entry carries a one-line rationale (why this hermes
-survives) and is cross-referenced in
-docs/governance/verification/R8e-keep-register.md — the assessor-facing
-justification that "guard green == every survivor is a documented, justified
+survives), so "guard green == every survivor is a documented, justified
 keep."
 
 Discipline for future edits: before adding a pattern ask "is this the product's
@@ -128,8 +126,7 @@ def _is_whole_tree_keep(path: str) -> bool:
 # ---------------------------------------------------------------------------
 # KEEP_PATTERNS — line-level allowlist. Each (regex, rationale). A "hermes"
 # line PASSES if ANY pattern matches. Patterns are applied to the raw line text
-# (path stripped) case-insensitively unless noted. Rationale mirrored in
-# docs/governance/verification/R8e-keep-register.md.
+# (path stripped) case-insensitively unless noted.
 # ---------------------------------------------------------------------------
 KEEP_PATTERNS: list[tuple[str, str]] = [
     # --- Legacy home / paths (migrate-FROM literals) ---
@@ -619,8 +616,7 @@ KEEP_PATTERNS += [
 # Every entry here is opaque test-fixture DATA a test asserts/uses, prose that
 # describes a KEPT runtime identity (container command, .hermes mirror marker,
 # log namespace), an external/registered value, or an upstream reference — NOT
-# the product display name. Cross-referenced in
-# docs/governance/verification/R8e-keep-register.md.
+# the product display name.
 # ---------------------------------------------------------------------------
 KEEP_PATTERNS += [
     # SKILL.md/blueprint frontmatter `hermes:` metadata-key fixture (schema key)
@@ -681,7 +677,7 @@ KEEP_PATTERNS += [
 # masking. The stale renamed-module refs (hermes_cli/constants/logging/state/time/
 # bootstrap) were RENAMED to lliam_*; everything below is a documented keep, scoped
 # to specific token families (NOT a hermes_\w+ catch-all — that was the original
-# masking bug). See docs/governance/verification/R8e-keep-register.md §G.
+# masking bug).
 # ---------------------------------------------------------------------------
 KEEP_PATTERNS += [
     # Platform approval-button action_id / callback wire contracts (Slack/Feishu/Teams

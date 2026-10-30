@@ -23,12 +23,10 @@ models:
   provider: lmstudio
   serialization: safetensors
   cui_eligible: true
-  card: docs/governance/model-cards/lmstudio-llama-3.1-8b-instruct.md
 - id: bedrock/anthropic.claude-3-5-sonnet
   provider: bedrock
   serialization: n/a (managed provider endpoint)
   cui_eligible: true
-  card: docs/governance/model-cards/bedrock-claude-3-5-sonnet.md
 mcp_servers:
 - name: gov-filesystem
   transport: stdio
@@ -73,7 +71,6 @@ relationships:
   provider: bedrock
 policies:
   provider_allowlist: policy/provider-allowlist.yaml
-  model_cards: docs/governance/model-cards/model-cards.yaml
+  model_cards: policy/governed/model-cards.yaml
   mcp_allowlist: policy/mcp-allowlist.yaml
   skills_allowlist: policy/skills-allowlist.yaml
-  vetting_register: docs/governance/supplier-vetting-register.md

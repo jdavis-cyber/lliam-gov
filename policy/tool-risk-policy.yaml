@@ -74,7 +74,7 @@ toolset_profile:
   disabled:                          # OFF in the CUI baseline (LG-AZ-11 / LG-AZ-03)
     - computer_use                   #   desktop/OS automation — disabled; JIT+approval to re-enable
     - browser                        #   interactive web automation — disabled in CUI baseline
-  reenable_via: "docs/governance/deviation-register.yaml (LG-CH-08) + JIT grant + approval"
+  reenable_via: "deviation register entry (LG-CH-08) + JIT grant + approval"
   lg: [LG-AZ-03, LG-AZ-11]
 
 
@@ -205,7 +205,7 @@ budgets:
 # -----------------------------------------------------------------------------
 tuning:
   deny_is_terminal: true             # deny entries are never tunable downward
-  deviation_register: "docs/governance/deviation-register.yaml"
+  deviation_register: "deviation register (operator records, outside this repository)"
   preserve: ["≥1 in-boundary provider on allow", "generous HERMES_WRITE_SAFE_ROOT", "shell available (sandboxed)"]
   lg: [LG-RM-08, LG-CH-08]
 

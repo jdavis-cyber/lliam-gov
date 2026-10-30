@@ -141,7 +141,7 @@ def test_shipped_roles_declare_the_security_critical_rules():
     """Regression guard: the real roles.yaml must CONTAIN the non-waivable
     Approver≠Engineer and Auditor-independence rules — weakening the rule set
     must fail a test, not pass silently."""
-    roles = yaml.safe_load((_REPO / "docs/governance/roles.yaml").read_text())
+    roles = yaml.safe_load((_REPO / "policy/governed/roles.yaml").read_text())
     rules = roles["separation_of_duties"]
     approver_eng = next(r for r in rules
                         if r["role"] == "approver" and "engineer" in r["not_also"])
@@ -160,7 +160,7 @@ def test_shipped_deviations_are_complete_and_owned():
     and expiry with a controlled clock; example dates need not be renewed to
     keep ordinary repository development working.
     """
-    roles = yaml.safe_load((_REPO / "docs/governance/roles.yaml").read_text())
+    roles = yaml.safe_load((_REPO / "policy/governed/roles.yaml").read_text())
     devs = roles.get("sod_deviations") or []
     assert devs, "expected tracked single-operator deviations in roles.yaml"
     for d in devs:
@@ -175,7 +175,7 @@ def test_shipped_deviations_are_complete_and_owned():
 def test_shipped_example_expiry_boundaries(monkeypatch, days_after_review):
     """Real example files pass on review day and block after expiry, including
     the CLI exit status. No live approval is inferred from either fixture."""
-    roles = yaml.safe_load((_REPO / "docs/governance/roles.yaml").read_text())
+    roles = yaml.safe_load((_REPO / "policy/governed/roles.yaml").read_text())
     overlay = yaml.safe_load((_REPO / "cli-config.gov.yaml").read_text())
     bindings = (overlay.get("governance") or {}).get("role_bindings") or {}
     review_dates = [sod_check._parse_review_by(d["review_by"])
@@ -189,7 +189,7 @@ def test_shipped_example_expiry_boundaries(monkeypatch, days_after_review):
         assert all("expired review_by" in conflict for conflict in blocking)
         assert len(accepted) == len(review_dates) - expired
         assert sod_check.main([
-            "--roles", str(_REPO / "docs/governance/roles.yaml"),
+            "--roles", str(_REPO / "policy/governed/roles.yaml"),
             "--overlay", str(_REPO / "cli-config.gov.yaml"),
         ]) == (1 if expired else 0)
 

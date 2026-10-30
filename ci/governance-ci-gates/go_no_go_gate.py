@@ -2,17 +2,16 @@
 """go_no_go_gate.py — Release go/no-go checklist gate (LG-SD-06, P4.5).
 
 The deployment/release gate. FAILS CLOSED (exit 1) unless every release
-precondition holds in the gov overlay + governance artifacts:
+precondition holds in the gov overlay + authorization record:
   * security.posture == strict;
   * skills.disabled includes godmode AND obliteratus (never-waivable);
   * security.provider_allowlist_enforce is true;
   * audit.ledger_enabled is true;
   * at-rest encryption asserted (security.data_protection.at_rest_encryption);
   * a signed, unexpired, decision=authorized authorization record whose id
-    matches governance.authorization_id;
-  * the SoA reconciles (soa_gate) — the applicability statement is signed.
+    matches governance.authorization_id.
 
-This is the human-readable checklist assessors expect; it composes the
+This is the release checklist in one place; it composes the
 machine gates rather than duplicating them.
 
 Exit: 0 = GO, 1 = NO-GO, 2 = error.
@@ -103,7 +102,7 @@ def check_go_no_go(*, repo_root: Path = _REPO_ROOT,
 
     # 6. signed, unexpired, matching authorization
     auth_rel = (_get(cfg, "governance.registers.authorization")
-                or "docs/governance/authorization-record.yaml")
+                or "policy/governed/authorization-record.yaml")
     auth_file = repo_root / str(auth_rel)
     cfg_auth_id = _get(cfg, "governance.authorization_id")
     if not auth_file.exists():
@@ -129,16 +128,6 @@ def check_go_no_go(*, repo_root: Path = _REPO_ROOT,
         if _placeholder(signer):
             failures.append("[NO-GO] authorization has no signing official")
 
-    # 7. SoA reconciles (signed applicability statement)
-    try:
-        import soa_gate
-        soa_failures = soa_gate.check_soa(repo_root=repo_root)
-        if soa_failures:
-            failures.append(f"[NO-GO] SoA does not reconcile "
-                            f"({len(soa_failures)} finding(s))")
-    except Exception as e:
-        failures.append(f"[NO-GO] SoA gate could not run ({e})")
-
     return failures
 
 
@@ -158,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     _emit("[LG-SD-06] GO — all release preconditions met (strict posture, "
           "godmode/obliteratus disabled, allowlist + audit + encryption on, "
-          "authorization signed & unexpired, SoA reconciled).")
+          "authorization signed & unexpired).")
     return 0
 
 

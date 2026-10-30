@@ -158,24 +158,3 @@ def test_pii_output_not_blocked_to_internal_sink():
     v = om.scan_output("SSN 123-45-6789", sink="workspace")
     assert v.pii_or_cui is True
     assert v.block is False
-
-
-# ---------------------------------------------------------------------------
-# Rollup
-# ---------------------------------------------------------------------------
-
-def _load(rel):
-    return yaml.safe_load((_REPO / "docs" / "governance" / rel).read_text())
-
-
-def test_mo_pf_controls_now_implemented():
-    cat = {c["id"]: c for c in _load("control-catalog.yaml")["controls"]}
-    for cid in ("LG-MO-07", "LG-MO-08", "LG-MO-09", "LG-MO-10",
-                "LG-PF-08", "LG-PF-09"):
-        assert cat[cid]["status"] == "implemented", \
-            f"{cid}: {cat[cid]['status']}"
-
-
-def test_poam_p5_eval_closed():
-    poam = {i["id"]: i for i in _load("poam.yaml")["items"]}
-    assert poam["POAM-P5-EVAL"]["status"] == "closed"

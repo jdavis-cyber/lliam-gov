@@ -2,16 +2,14 @@
 
 Exercises enforce_governance_artifacts_at_startup — the top-management
 mandatory-artifacts check: AI policy identity, go/no-go authorization record,
-CAIO waiver register, and regulatory register, fail-closed under strict
-posture and a complete no-op on the low-side posture. Also reconciles the
-REAL repo regulatory register: every obligation's control bindings must
-resolve to real enforced config points (the AI-493 acceptance criterion).
+CAIO waiver register, and (when configured) local copies of the AI policy and
+regulatory register, fail-closed under strict posture and a complete no-op on
+the low-side posture.
 """
 
 from __future__ import annotations
 
 import datetime
-import sys
 from pathlib import Path
 
 import pytest
@@ -20,9 +18,6 @@ import yaml
 import lliam_cli.security_audit_startup as sas
 
 _REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_REPO / "ci" / "governance-ci-gates"))
-
-import regulatory_reconciliation_gate as rrg  # noqa: E402
 
 
 def _future() -> str:
@@ -41,9 +36,12 @@ def _write_artifacts(root: Path, *, auth_overrides: dict | None = None,
                      waivers: list | None = None,
                      never_waivable: list | None = None,
                      baseline_denied: list | None = None) -> None:
-    gov = root / "docs" / "governance"
+    gov = root / "policy" / "governed"
     gov.mkdir(parents=True, exist_ok=True)
-    (gov / "ai-policy.md").write_text("# AI Policy (test)\n")
+    # Operator-supplied local copies of management-system records (optional).
+    records = root / "records"
+    records.mkdir(parents=True, exist_ok=True)
+    (records / "ai-policy.md").write_text("# AI Policy (test)\n")
 
     auth = {
         "schema": "lg-gv/1",
@@ -65,7 +63,7 @@ def _write_artifacts(root: Path, *, auth_overrides: dict | None = None,
          "obligation": "test", "controls": ["LG-CH-01"], "status": "implemented",
          "config_points": [{"kind": "config_key", "key": "security.posture"}]},
     ]}
-    (gov / "regulatory-register.yaml").write_text(yaml.safe_dump(reg))
+    (records / "regulatory-register.yaml").write_text(yaml.safe_dump(reg))
 
     wav = {
         "schema": "lg-gv/1",
@@ -85,12 +83,12 @@ def _cfg(**gov_overrides) -> dict:
         "policy_version": "1.0",
         "policy_approved_by": "jdavis@agency.mil",
         "policy_review_date": _future(),
-        "policy_path": "docs/governance/ai-policy.md",
+        "policy_path": "records/ai-policy.md",
         "authorization_id": "LG-ATO-2026-001",
         "registers": {
-            "regulatory": "docs/governance/regulatory-register.yaml",
-            "authorization": "docs/governance/authorization-record.yaml",
-            "waiver": "docs/governance/waiver-register.yaml",
+            "regulatory": "records/regulatory-register.yaml",
+            "authorization": "policy/governed/authorization-record.yaml",
+            "waiver": "policy/governed/waiver-register.yaml",
         },
     }
     governance.update(gov_overrides)
@@ -169,12 +167,42 @@ def test_past_due_policy_review_date_blocks(tmp_path):
             config=_cfg(policy_review_date=_past()), repo_root=tmp_path)
 
 
-def test_missing_policy_file_blocks(tmp_path):
+def test_missing_configured_policy_file_blocks(tmp_path):
     _write_artifacts(tmp_path)
-    (tmp_path / "docs/governance/ai-policy.md").unlink()
+    (tmp_path / "records/ai-policy.md").unlink()
     with pytest.raises(sas.GovernanceArtifactError, match="ai-policy"):
         sas.enforce_governance_artifacts_at_startup(
             config=_cfg(), repo_root=tmp_path)
+
+
+def test_missing_configured_regulatory_register_blocks(tmp_path):
+    _write_artifacts(tmp_path)
+    (tmp_path / "records/regulatory-register.yaml").unlink()
+    with pytest.raises(sas.GovernanceArtifactError, match="regulatory"):
+        sas.enforce_governance_artifacts_at_startup(
+            config=_cfg(), repo_root=tmp_path)
+
+
+def test_empty_configured_regulatory_register_blocks(tmp_path):
+    _write_artifacts(tmp_path)
+    (tmp_path / "records/regulatory-register.yaml").write_text(
+        yaml.safe_dump({"schema": "lg-gv/1", "obligations": []}))
+    with pytest.raises(sas.GovernanceArtifactError, match="obligations"):
+        sas.enforce_governance_artifacts_at_startup(
+            config=_cfg(), repo_root=tmp_path)
+
+
+def test_policy_and_regulatory_copies_optional_when_unconfigured(tmp_path):
+    # The AI policy and regulatory register live in the operator's
+    # management-system library; with no local path configured, strict
+    # startup does not look for them.
+    _write_artifacts(tmp_path)
+    (tmp_path / "records/ai-policy.md").unlink()
+    (tmp_path / "records/regulatory-register.yaml").unlink()
+    cfg = _cfg()
+    del cfg["governance"]["policy_path"]
+    del cfg["governance"]["registers"]["regulatory"]
+    sas.enforce_governance_artifacts_at_startup(config=cfg, repo_root=tmp_path)
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +211,7 @@ def test_missing_policy_file_blocks(tmp_path):
 
 def test_missing_authorization_record_blocks(tmp_path):
     _write_artifacts(tmp_path)
-    (tmp_path / "docs/governance/authorization-record.yaml").unlink()
+    (tmp_path / "policy/governed/authorization-record.yaml").unlink()
     with pytest.raises(sas.GovernanceArtifactError, match="authorization"):
         sas.enforce_governance_artifacts_at_startup(
             config=_cfg(), repo_root=tmp_path)
@@ -222,7 +250,7 @@ def _enable(cfg: dict, skill: str) -> dict:
 
 def test_missing_waiver_register_blocks(tmp_path):
     _write_artifacts(tmp_path)
-    (tmp_path / "docs/governance/waiver-register.yaml").unlink()
+    (tmp_path / "policy/governed/waiver-register.yaml").unlink()
     with pytest.raises(sas.GovernanceArtifactError, match="waiver"):
         sas.enforce_governance_artifacts_at_startup(
             config=_cfg(), repo_root=tmp_path)
@@ -280,58 +308,12 @@ def test_godmode_is_never_waivable(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# LG-GV-03 — the REAL repo regulatory register reconciles to enforcement
+# The shipped overlay binds real in-repo artifacts
 # ---------------------------------------------------------------------------
 
-def test_repo_regulatory_register_fully_resolves():
-    failures = rrg.check_register(repo_root=_REPO)
-    assert failures == [], "\n".join(failures)
-
-
-def test_repo_governance_block_binds_real_artifacts():
-    failures = rrg.check_governance_bindings(repo_root=_REPO)
-    assert failures == [], "\n".join(failures)
-
-
-def test_reconciliation_gate_flags_unbound_obligation(tmp_path):
-    gov = tmp_path / "docs" / "governance"
-    gov.mkdir(parents=True)
-    (gov / "regulatory-register.yaml").write_text(yaml.safe_dump(
-        {"schema": "lg-gv/1", "obligations": [
-            {"id": "REG-X", "source": "s", "obligation": "o",
-             "controls": [], "status": "implemented",
-             "config_points": []}]}))
-    (tmp_path / "cli-config.gov.yaml").write_text("security:\n  posture: strict\n")
-    failures = rrg.check_register(repo_root=tmp_path)
-    assert any("REG-X" in f for f in failures)
-
-
-def test_reconciliation_gate_flags_dangling_config_key(tmp_path):
-    gov = tmp_path / "docs" / "governance"
-    gov.mkdir(parents=True)
-    (gov / "regulatory-register.yaml").write_text(yaml.safe_dump(
-        {"schema": "lg-gv/1", "obligations": [
-            {"id": "REG-Y", "source": "s", "obligation": "o",
-             "controls": ["LG-CH-01"], "status": "implemented",
-             "config_points": [{"kind": "config_key",
-                                "key": "security.nonexistent_key"}]}]}))
-    (tmp_path / "cli-config.gov.yaml").write_text("security:\n  posture: strict\n")
-    failures = rrg.check_register(repo_root=tmp_path)
-    assert any("REG-Y" in f and "nonexistent_key" in f for f in failures)
-
-
-def test_partial_obligation_requires_poam_ref(tmp_path):
-    gov = tmp_path / "docs" / "governance"
-    gov.mkdir(parents=True)
-    (gov / "regulatory-register.yaml").write_text(yaml.safe_dump(
-        {"schema": "lg-gv/1", "obligations": [
-            {"id": "REG-Z", "source": "s", "obligation": "o",
-             "controls": ["LG-IR-01"], "status": "partial",
-             "config_points": [{"kind": "config_key",
-                                "key": "security.posture"}]}]}))
-    (tmp_path / "cli-config.gov.yaml").write_text("security:\n  posture: strict\n")
-    failures = rrg.check_register(repo_root=tmp_path)
-    assert any("REG-Z" in f and "poam" in f.lower() for f in failures)
+def test_shipped_overlay_passes_artifacts_gate():
+    cfg = yaml.safe_load((_REPO / "cli-config.gov.yaml").read_text())
+    sas.enforce_governance_artifacts_at_startup(config=cfg, repo_root=_REPO)
 
 
 # ---------------------------------------------------------------------------

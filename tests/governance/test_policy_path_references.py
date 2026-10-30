@@ -1,8 +1,8 @@
 """JER-189 — every repo-relative path a policy file names must exist.
 
 The governed config names its records by path: registers in policy/*.yaml,
-``security.*_path`` / ``governance.registers.*`` in cli-config.gov.yaml, card
-and policy pointers in the model cards index and the AI-BOM. A pointer to a
+``security.*_path`` / ``governance.registers.*`` in cli-config.gov.yaml, policy
+pointers in the governed-profile records and the AI-BOM. A pointer to a
 file that was never created reads as evidence that does not exist, so a
 dangling pointer fails CI here.
 
@@ -23,11 +23,10 @@ import yaml
 _REPO = Path(__file__).resolve().parents[2]
 
 _SCANNED = (
-    *sorted(p.relative_to(_REPO).as_posix() for p in (_REPO / "policy").glob("*.yaml")),
+    *sorted(p.relative_to(_REPO).as_posix() for p in (_REPO / "policy").glob("**/*.yaml")),
     "cli-config.gov.yaml",
     "model_manifest.yaml",
     "evidence/bom/ai-bom.yaml",
-    "docs/governance/model-cards/model-cards.yaml",
 )
 
 _TOKEN = re.compile(r"[^\s\"'`(),;\[\]{}<>]+")
@@ -95,9 +94,9 @@ def test_scan_finds_the_known_pointers():
     refs = {(rel, path) for rel, _where, path in _all_references()}
     assert ("cli-config.gov.yaml", "policy/provider-allowlist.yaml") in refs
     assert ("cli-config.gov.yaml", "model_manifest.yaml") in refs
-    assert ("evidence/bom/ai-bom.yaml", "docs/governance/supplier-vetting-register.md") in refs
+    assert ("evidence/bom/ai-bom.yaml", "policy/governed/model-cards.yaml") in refs
     assert ("policy/tool-risk-policy.yaml", "agent/tool_executor.py") in refs
-    assert len(refs) >= 40
+    assert len(refs) >= 20
 
 
 def test_extractor_flags_a_dangling_pointer(tmp_path):
