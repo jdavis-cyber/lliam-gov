@@ -58,10 +58,12 @@
     "browserslist": "4.28.7",
     "fast-uri@^3": "3.1.8",
     "http-cache-semantics": "4.3.0",
-    "joi": "18.2.9",
+    "joi": "18.3.1",
     "js-yaml@^4": "4.3.2",
     "postcss-selector-parser@^6": "6.1.5",
-    "katex": "0.18.2"
+    "katex": "0.18.2",
+    "minimatch@^9": "11.0.1",
+    "minimatch@^10": "11.0.1"
   },
   "engines": {
     "node": ">=22.12.0"
