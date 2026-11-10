@@ -1,0 +1,6 @@
+# OSV-Scanner configuration for the root lockfile (package-lock.json).
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-01-31T00:00:00Z
+reason = "minimatch 9.0.9/10.2.5 is a dev-only build dependency; the only patched release (11.0.1) is a major-version jump, so this is a time-limited exception approved by the AI System Owner on 2026-11-08 pending upstream updates."
