@@ -3257,10 +3257,12 @@ def check_dangerous_command(command: str, env_type: str,
     # record the operator's verdict to the governance ledger. Never blocking.
     try:
         from tools.hitl_oversight import note_approval_prompt as _ho_note
-        from tools.hitl_oversight import record_decision as _ho_record
+        from tools.hitl_oversight import record_decision
         _ho_note(session_key)
     except Exception:
         _ho_record = None
+    else:
+        _ho_record = record_decision
 
     choice = prompt_dangerous_approval(command, description,
                                        allow_permanent=not has_delete,

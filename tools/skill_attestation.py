@@ -7,12 +7,22 @@ import hashlib
 import logging
 import os
 import stat
+import sys
 import tempfile
 import threading
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath
+from typing import overload
 
 from agent.attestation import verify_manifest
 from lliam_cli.provisioning import is_unprovisioned
+
+if sys.version_info >= (3, 13):
+    from ntpath import isreserved as _is_windows_reserved
+else:
+    from pathlib import PureWindowsPath
+
+    def _is_windows_reserved(part: str) -> bool:
+        return PureWindowsPath(part).is_reserved()
 
 _log = logging.getLogger(__name__)
 _lock = threading.Lock()
@@ -101,7 +111,7 @@ def _verified_files(kind: str, name: str, path: Path | None, policy: dict):
         rel = PurePosixPath(label)
         if (not rel.parts or rel.is_absolute() or ".." in rel.parts or rel.as_posix() != label
                 or "\\" in label or ":" in label or "__pycache__" in rel.parts
-                or any(PureWindowsPath(part).is_reserved() for part in rel.parts)
+                or any(_is_windows_reserved(part) for part in rel.parts)
                 or rel.suffix.lower() in {".pyc", ".pyo"}):
             raise PermissionError("Invalid signed artifact path")
         candidate = root.joinpath(*rel.parts)
@@ -115,7 +125,7 @@ def _verified_files(kind: str, name: str, path: Path | None, policy: dict):
             if ast_scan_source(data.decode("utf-8"), label, strict=True):
                 raise PermissionError(f"Python audit requires review: {label}")
         files[label] = data
-    return row["signature"], files, set(executables)
+    return row["signature"], files, set(executables), root
 
 
 def record_refusal(kind: str, name: str, reason: str) -> None:
@@ -130,13 +140,21 @@ def record_refusal(kind: str, name: str, reason: str) -> None:
         _log.exception("Unable to record %s load refusal", kind)
 
 
+@overload
+def verified_directory(kind: str, name: str, path: Path, *, check_only: bool = False) -> Path: ...
+
+
+@overload
+def verified_directory(kind: str, name: str, path: None, *, check_only: bool = False) -> None: ...
+
+
 def verified_directory(kind: str, name: str, path: Path | None, *, check_only: bool = False) -> Path | None:
     """Supply only the verified bytes to consumers, including lazy Python imports."""
     try:
         policy = active_policy()
         if policy is None:
             return path
-        signature, files, executables = _verified_files(kind, name, path, policy)
+        signature, files, executables, root = _verified_files(kind, name, path, policy)
         if check_only:
             return path
         with _lock:
@@ -145,7 +163,7 @@ def verified_directory(kind: str, name: str, path: Path | None, *, check_only: b
                 _check_snapshot(snapshot, files, executables)
                 return snapshot
             temporary = tempfile.TemporaryDirectory(prefix="lliam-attested-")
-            snapshot = Path(temporary.name) / (path.resolve().name or "bundle")
+            snapshot = Path(temporary.name) / (root.name or "bundle")
             snapshot.mkdir()
             for label, data in files.items():
                 target = snapshot / label

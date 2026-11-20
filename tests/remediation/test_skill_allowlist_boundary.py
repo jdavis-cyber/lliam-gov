@@ -203,12 +203,14 @@ def test_signed_plugin_reloads_relative_import_from_approved_version(governed_sk
     manager = PluginManager()
     policy["policy"]["unlisted_disposition"] = "log"
     manager._load_plugin(manifest)
-    assert manager._plugins["versioned"].module.VERSION == 1
+    loaded = manager._plugins["versioned"].module
+    assert loaded is not None and loaded.VERSION == 1
     data.write_text("VERSION = 2\n")
     policy["security"]["plugin_allowlist"] = [_signed_entry("versioned", root, kind="plugin")]
     policy["policy"]["unlisted_disposition"] = "hold"
     manager._load_plugin(manifest)
-    assert manager._plugins["versioned"].module.VERSION == 2
+    reloaded = manager._plugins["versioned"].module
+    assert reloaded is not None and reloaded.VERSION == 2
 
 
 def test_changed_cached_snapshot_is_refused(governed_skills):

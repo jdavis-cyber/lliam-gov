@@ -1446,6 +1446,8 @@ class PluginManager:
             from tools.skill_attestation import verified_directory
             key = manifest.key or manifest.name
             if manifest.source in {"user", "project", "bundled"}:
+                if not manifest.path:
+                    raise ValueError(f"Directory missing for plugin {key!r}")
                 directory = verified_directory("plugin", key, Path(manifest.path))
                 manifest = replace(manifest, path=str(directory))
                 module = self._load_directory_module(manifest)

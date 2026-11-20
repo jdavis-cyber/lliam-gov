@@ -1200,7 +1200,7 @@ def skill_view(
         try:
             from tools.skill_attestation import verified_directory
             directory = verified_directory("skill", str(resolved_name), skill_dir)
-            if directory != skill_dir:
+            if directory is not None and directory != skill_dir:
                 skill_dir = directory
                 skill_md = skill_dir / skill_md.name
                 if content != skill_md.read_text(encoding="utf-8"):

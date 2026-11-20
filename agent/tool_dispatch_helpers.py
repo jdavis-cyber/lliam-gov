@@ -29,7 +29,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypeGuard
 
 from agent.tool_result_classification import (
     FILE_MUTATING_TOOL_NAMES as _FILE_MUTATING_TOOLS,
@@ -172,7 +172,7 @@ def _paths_overlap(left: Path, right: Path) -> bool:
     return left_parts[:common_len] == right_parts[:common_len]
 
 
-def _is_multimodal_tool_result(value: Any) -> bool:
+def _is_multimodal_tool_result(value: Any) -> TypeGuard[dict[str, Any]]:
     """True if the value is a multimodal tool result envelope.
 
     Multimodal handlers (e.g. tools/computer_use) return a dict with

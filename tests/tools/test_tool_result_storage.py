@@ -565,7 +565,9 @@ def test_governed_spill_is_private_masked_and_expires(tmp_path, monkeypatch):
     result = maybe_persist_tool_result(
         "private test fact\nSSN 123-45-6789", "demo", "example", threshold=1, task_id="alice",
     )
-    reference = re.search(r"Full output saved to: (.+)", result).group(1)
+    saved_path = re.search(r"Full output saved to: (.+)", result)
+    assert saved_path is not None, result
+    reference = saved_path.group(1)
     assert "123-45-6789" not in result
     assert all(b"private test fact" not in p.read_bytes() for p in tmp_path.rglob("*") if p.is_file())
     assert "error" in json.loads(read_file_tool(reference, task_id="bob"))

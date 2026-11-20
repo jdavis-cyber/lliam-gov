@@ -582,7 +582,9 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
 
     # ── Concurrent execution ─────────────────────────────────────────
     # Each slot holds (function_name, function_args, function_result, duration, error_flag, blocked_flag, middleware_trace)
-    results = [None] * num_tools
+    results: list[tuple[str, dict, Any, float, bool, bool, list[dict[str, Any]]] | None] = [
+        None for _ in range(num_tools)
+    ]
     for i, (tc, name, args, middleware_trace, block_result, blocked_by_guardrail) in enumerate(parsed_calls):
         if block_result is not None:
             results[i] = (name, args, block_result, 0.0, True, True, middleware_trace)
