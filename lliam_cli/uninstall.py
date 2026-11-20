@@ -7,11 +7,13 @@ Provides options for:
 """
 
 import os
+import plistlib
 import shlex
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from xml.parsers.expat import ExpatError
 
 from lliam_constants import get_lliam_home
 
@@ -197,13 +199,6 @@ _LEGACY_LAUNCHD_LABELS: tuple[str, ...] = (
     "com.secondorderstrategy.lliam-gov.gateway",
     "ai.hermes.gateway",  # pre-rename label
 )
-_LEGACY_LAUNCHD_MARKERS: tuple[str, ...] = (
-    "hermes_cli.main",
-    "lliam_cli.main",
-    "scripts/hermes-gateway",
-    "scripts/lliam-gov-gateway",
-    "gateway/run.py",
-)
 _LEGACY_SYSTEMD_UNIT_BASE = "hermes-gateway"
 _LEGACY_SYSTEMD_UNIT_NAMES: tuple[str, ...] = ("hermes.service",)  # pre-rename
 
@@ -218,20 +213,24 @@ def _real_user_home() -> Path:
         return Path.home()
 
 
-def _file_names_marker(path: Path, markers: tuple[str, ...]) -> bool:
-    try:
-        text = path.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return False
-    return any(marker in text for marker in markers)
-
-
 def _legacy_launchd_plists(agents: Path) -> list[Path]:
     found: list[Path] = []
     for label in _LEGACY_LAUNCHD_LABELS:
         for path in sorted(agents.glob(f"{label}.plist")) + sorted(agents.glob(f"{label}-*.plist")):
-            if path.is_file() and _file_names_marker(path, _LEGACY_LAUNCHD_MARKERS):
-                found.append(path)
+            if not path.is_file():
+                continue
+            try:
+                with path.open("rb") as stream:
+                    plist = plistlib.load(stream)
+                argv = plist.get("ProgramArguments")
+                if not isinstance(argv, list) or not all(isinstance(arg, str) for arg in argv):
+                    continue
+                if plist.get("Program"):
+                    argv = [plist["Program"], *argv[1:]]
+                if _legacy_gateway_runtime(shlex.join(argv)):
+                    found.append(path)
+            except (OSError, ValueError, TypeError, AttributeError, ExpatError, plistlib.InvalidFileException):
+                continue
     return found
 
 
@@ -251,7 +250,8 @@ def _legacy_gateway_runtime(command: str) -> bool:
     if not argv:
         return False
     entry = Path(argv.pop(0))
-    if entry.parts[-2:] == ("gateway", "run.py"):
+    gateway_script = get_project_root() / "gateway" / "run.py"
+    if entry == gateway_script:
         return True
     executable = entry.name
     if executable.startswith("python") and argv:
@@ -259,7 +259,7 @@ def _legacy_gateway_runtime(command: str) -> bool:
             executable, argv = "lliam-gov", argv[2:]
         else:
             script = Path(argv.pop(0))
-            if script.parts[-2:] == ("gateway", "run.py"):
+            if script == gateway_script:
                 return True
             if script.parts[-2:] in (("lliam_cli", "main.py"), ("hermes_cli", "main.py")):
                 executable = "lliam-gov"

@@ -259,3 +259,25 @@ def test_doctor_fix_reports_remaining_manual_actions(monkeypatch, tmp_path):
     out, removed = _run_doctor(monkeypatch, tmp_path, fix=True, leftover=[], manual=[message])
     assert message in out
     assert removed == []
+
+
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_unrelated_gateway_script_is_left_alone(env, monkeypatch, platform):
+    monkeypatch.setattr(sys, "platform", platform)
+    script = "/opt/other-product/gateway/run.py"
+    pid_file = env["lliam_home"] / "gateway.pid"
+    pid_file.write_text("424242")
+    monkeypatch.setattr(uninstall, "_process_command_line", lambda pid: f"/usr/bin/python3 {script}")
+    if platform == "darwin":
+        service = env["home"] / "Library/LaunchAgents/ai.hermes.gateway.plist"
+        import plistlib
+        content = plistlib.dumps({"ProgramArguments": ["/usr/bin/python3", script]})
+    else:
+        service = env["home"] / ".config/systemd/user/hermes-gateway.service"
+        content = f"[Service]\nExecStart=/usr/bin/python3 {script}\n".encode()
+    service.parent.mkdir(parents=True)
+    service.write_bytes(content)
+    assert uninstall.remove_legacy_gateway_services()
+    assert service.exists()
+    assert env["kills"] == []
+    assert env["calls"] == []
