@@ -121,7 +121,6 @@ def register(ctx):
 | 用户 | `~/.lliam/plugins/` | 个人插件 |
 | 项目 | `.lliam/plugins/` | 项目专属插件（需要 `HERMES_ENABLE_PROJECT_PLUGINS=true`） |
 | pip | `hermes_agent.plugins` entry_points | 分发包 |
-| Nix | `services.hermes-agent.extraPlugins` / `extraPythonPackages` | NixOS 声明式安装 — 参见 [Nix Setup](/getting-started/nix-setup#plugins) |
 
 名称冲突时，后面的来源会覆盖前面的，因此与内置插件同名的用户插件会替换它。
 
@@ -242,23 +241,6 @@ Memory provider 和 context engine 是 **provider 插件** — 每种类型同�
 :::note
 并非所有扩展都是 Python 插件。某些扩展接口有意使用**配置驱动的 shell 命令**（TTS、STT、shell hook），这样你已有的任意 CLI 无需编写 Python 即可成为插件。其他的是 agent 连接并自动注册工具的**外部服务器**（MCP）。还有一些是拥有自己 manifest 格式的**即插即用目录**（gateway hook）。根据你的集成风格选择合适的接口；上表中的编写指南各自涵盖了占位符、发现机制和示例。
 :::
-
-## NixOS 声明式插件
-
-在 NixOS 上，插件可通过模块选项声明式安装 — 无需 `lliam-gov plugins install`。完整详情请参见 **[Nix Setup 指南](/getting-started/nix-setup#plugins)**。
-
-```nix
-services.hermes-agent = {
-  # 目录插件（包含 plugin.yaml 的源码树）
-  extraPlugins = [ (pkgs.fetchFromGitHub { ... }) ];
-  # 入口点插件（pip 包）
-  extraPythonPackages = [ (pkgs.python312Packages.buildPythonPackage { ... }) ];
-  # 在 config 中启用
-  settings.plugins.enabled = [ "my-plugin" ];
-};
-```
-
-声明式插件以 `nix-managed-` 前缀符号链接 — 与手动安装的插件共存，从 Nix 配置中移除后自动清理。
 
 ## 管理插件
 

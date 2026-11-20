@@ -202,7 +202,7 @@ export default function McpPage() {
         ),
       );
       setRestartNote(
-        "Enable/disable takes effect on the next gateway restart.",
+        "Enable/disable takes effect on the next session.",
       );
     } catch (e) {
       showToast(`Error: ${e}`, "error");

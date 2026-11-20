@@ -1198,47 +1198,6 @@ pip install lliam-gov-plugin-calculator
 # Plugin auto-discovered on next lliam-gov startup
 ```
 
-## Distribute for NixOS
-
-:::warning Nix is no longer explicitly supported
-Nix/NixOS is no longer an explicitly supported install path (best-effort only) — see [Nix Setup](/getting-started/nix-setup). This section is kept for users already deploying on NixOS.
-:::
-
-NixOS users can install your plugin declaratively if you provide a `pyproject.toml` with entry points:
-
-**Entry-point plugins** (recommended for distribution):
-```nix
-# User's configuration.nix
-services.hermes-agent.extraPythonPackages = [
-  (pkgs.python312Packages.buildPythonPackage {
-    pname = "my-plugin";
-    version = "1.0.0";
-    src = pkgs.fetchFromGitHub {
-      owner = "you";
-      repo = "lliam-gov-my-plugin";
-      rev = "v1.0.0";
-      hash = "sha256-...";  # nix-prefetch-url --unpack
-    };
-    format = "pyproject";
-    build-system = [ pkgs.python312Packages.setuptools ];
-  })
-];
-```
-
-**Directory plugins** (no `pyproject.toml` needed):
-```nix
-services.hermes-agent.extraPlugins = [
-  (pkgs.fetchFromGitHub {
-    owner = "you";
-    repo = "lliam-gov-my-plugin";
-    rev = "v1.0.0";
-    hash = "sha256-...";
-  })
-];
-```
-
-See the [Nix Setup guide](/getting-started/nix-setup#plugins) for complete documentation including overlay usage and collision checking.
-
 ## Common mistakes
 
 **Handler doesn't return JSON string:**

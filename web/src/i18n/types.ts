@@ -59,11 +59,6 @@ export interface Translations {
     collapse: string;
     expand: string;
     general: string;
-    messaging: string;
-    // Optional: non-English locales fall back to the English literal in the
-    // component until translated, matching the enriched-profiles keys.
-    gateway?: string;
-    gatewayHint?: string;
     pluginLoadFailed: string;
     pluginNotRegistered: string;
   };
@@ -78,14 +73,6 @@ export interface Translations {
       org: string;
     };
     activeSessionsLabel: string;
-    gatewayStatusLabel: string;
-    gatewayStrip: {
-      failed: string;
-      off: string;
-      running: string;
-      starting: string;
-      stopped: string;
-    };
     nav: {
       analytics: string;
       chat: string;
@@ -123,23 +110,16 @@ export interface Translations {
     actions: string;
     agent: string;
     connected: string;
-    connectedPlatforms: string;
     disabled?: string;
     disconnected: string;
     error: string;
     failed: string;
-    gateway: string;
-    gatewayFailedToStart: string;
     lastUpdate: string;
     noneRunning: string;
     notRunning: string;
     pid: string;
-    platformDisconnected: string;
-    platformError: string;
     activeSessions: string;
     recentSessions: string;
-    restartGateway: string;
-    restartingGateway: string;
     running: string;
     runningRemote: string;
     startFailed: string;
@@ -289,7 +269,6 @@ export interface Translations {
       monthlyAt: string;
       onceAt: string;
     };
-    deliverTo: string;
     scheduledJobs: string;
     noJobs: string;
     last: string;
@@ -297,15 +276,6 @@ export interface Translations {
     pause: string;
     resume: string;
     triggerNow: string;
-    delivery: {
-      local: string;
-      telegram: string;
-      discord: string;
-      slack: string;
-      email: string;
-      needsHomeChannel?: string;
-      noneConfigured?: string;
-    };
   };
 
   // ── Plugins page ──
@@ -336,7 +306,6 @@ export interface Translations {
     removeHint: string;
     rescanHeading: string;
     rescanHint: string;
-    runtimeHeading: string;
     saveProviders: string;
     savedProviders: string;
     sourceBadge: string;
@@ -385,9 +354,6 @@ export interface Translations {
     activeBadge?: string;
     setActive?: string;
     activeSet?: string;
-    gatewayRunning?: string;
-    gatewayStopped?: string;
-    gatewayRunningWarning?: string;
     aliasBadge?: string;
     description?: string;
     descriptionPlaceholder?: string;
@@ -476,7 +442,6 @@ export interface Translations {
       tts: string;
       stt: string;
       logging: string;
-      discord: string;
       auxiliary: string;
     };
   };

@@ -596,8 +596,7 @@ def format_managed_message(action: str = "modify this Lliam-GOV installation") -
         return (
             f"Cannot {action}: this Lliam-GOV installation is managed by NixOS "
             f"(HERMES_MANAGED={env_hint}).\n"
-            "Edit services.hermes-agent.settings in your configuration.nix and run:\n"
-            "  sudo nixos-rebuild switch"
+            "Update the Lliam-GOV package in your Nix configuration and rebuild it."
         )
 
     if managed_system == "Homebrew":

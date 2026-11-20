@@ -56,7 +56,9 @@ echo "::endgroup::"
 
 echo "::group::LG-SS-01 — hash-verified lock consistency (uv sync --locked)"
 if command -v uv >/dev/null 2>&1; then
-  if uv sync --locked --no-install-project >/dev/null 2>&1; then
+  gate_tmp=$(mktemp -d "${TMPDIR:-/tmp}/lliam-deps-hash.XXXXXXXX")
+  trap 'rm -rf -- "$gate_tmp"' EXIT
+  if UV_PROJECT_ENVIRONMENT="$gate_tmp/venv" uv sync --locked --no-install-project >/dev/null 2>&1; then
     echo "  [OK] uv.lock is consistent with pyproject (hash-verified install path)."
   else
     echo "::error::'uv sync --locked' failed — uv.lock is stale/inconsistent (LG-SS-01)."

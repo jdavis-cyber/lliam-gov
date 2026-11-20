@@ -1066,43 +1066,6 @@ pip install lliam-gov-plugin-calculator
 # 下次 lliam-gov 启动时自动发现插件
 ```
 
-## 为 NixOS 分发
-
-如果你提供了带有 entry points 的 `pyproject.toml`，NixOS 用户可以声明式安装你的插件：
-
-**Entry-point 插件**（推荐用于分发）：
-```nix
-# User's configuration.nix
-services.hermes-agent.extraPythonPackages = [
-  (pkgs.python312Packages.buildPythonPackage {
-    pname = "my-plugin";
-    version = "1.0.0";
-    src = pkgs.fetchFromGitHub {
-      owner = "you";
-      repo = "lliam-gov-my-plugin";
-      rev = "v1.0.0";
-      hash = "sha256-...";  # nix-prefetch-url --unpack
-    };
-    format = "pyproject";
-    build-system = [ pkgs.python312Packages.setuptools ];
-  })
-];
-```
-
-**目录插件**（无需 `pyproject.toml`）：
-```nix
-services.hermes-agent.extraPlugins = [
-  (pkgs.fetchFromGitHub {
-    owner = "you";
-    repo = "lliam-gov-my-plugin";
-    rev = "v1.0.0";
-    hash = "sha256-...";
-  })
-];
-```
-
-完整文档（包括 overlay 用法和冲突检查）见 [Nix 设置指南](/getting-started/nix-setup#plugins)。
-
 ## 常见错误
 
 **处理器未返回 JSON 字符串：**

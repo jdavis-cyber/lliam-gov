@@ -18,9 +18,9 @@ import { useI18n } from "@/i18n";
 import { usePageHeader } from "@/contexts/usePageHeader";
 import { PluginSlot } from "@/plugins";
 
-const FILES = ["agent", "errors", "gateway"] as const;
+const FILES = ["agent", "errors"] as const;
 const LEVELS = ["ALL", "DEBUG", "INFO", "WARNING", "ERROR"] as const;
-const COMPONENTS = ["all", "gateway", "agent", "tools", "cli", "cron"] as const;
+const COMPONENTS = ["all", "agent", "tools", "cli", "cron"] as const;
 const LINE_COUNTS = [50, 100, 200, 500] as const;
 
 function classifyLine(line: string): "error" | "warning" | "info" | "debug" {

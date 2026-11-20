@@ -571,6 +571,18 @@ _ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # nested command, so ``bash -c "echo k > .env"`` is refused too.
 _NESTED_SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "busybox"})
 _MAX_NESTED_SCRIPT_DEPTH = 3
+_SHELL_NESTING_LIMIT = "shell nesting exceeds the inspection limit"
+
+
+class _ShellInspectionLimit(Exception):
+    """A nested executable body would exceed the bounded policy scan."""
+
+
+def _child_scan_depth(depth: int) -> int:
+    if depth >= _MAX_NESTED_SCRIPT_DEPTH:
+        raise _ShellInspectionLimit
+    return depth + 1
+
 # Shell invocation options: long options taking a value, and long options
 # known to take none. Short -o/+o and -O/+O take a value word.
 _SHELL_LONG_VALUES = frozenset({"--rcfile", "--init-file"})
@@ -629,7 +641,7 @@ def _shell_c_scripts(name: str, args: list) -> list:
 # Fallback when the command cannot be tokenized (unbalanced quotes, e.g. a
 # heredoc body containing an apostrophe): look for a redirect operator or a
 # tee word followed by a token whose basename looks like an env file.
-_ENV_TOKEN = r"""["']?(?P<target>[^\s;|&<>()"'`]*\.env[^\s;|&<>()"'`]*)["']?"""
+_ENV_TOKEN = r"""["']?(?P<target>[^\s;|&<>()"'`]*(?:\.env|`|\$[A-Za-z_0-9@*#?$!{(-])[^\s;|&<>()"'`]*)["']?"""
 _ENV_REDIRECT_FALLBACK_RE = re.compile(r"(?:>>?\|?|&>>?|>&)\s*" + _ENV_TOKEN)
 _ENV_TEE_FALLBACK_RE = re.compile(r"(?<![\w.-])tee\b[^;&|\n]*?\s" + _ENV_TOKEN)
 
@@ -959,7 +971,7 @@ def _brace_expand(pieces: list, pieces_bare: list) -> list:
         chars.extend(piece)
         bare.extend([is_bare] * len(piece))
     if "{" not in [c for c, b in zip(chars, bare) if b]:
-        return ["".join(chars)]
+        return [("".join(chars), bare)]
     results: list = []
 
     def expand(chars: list, bare: list) -> bool:
@@ -974,20 +986,58 @@ def _brace_expand(pieces: list, pieces_bare: list) -> list:
             return True
         if len(results) >= _BRACE_LIMIT:
             return False
-        results.append("".join(chars))
+        results.append(("".join(chars), bare))
         return True
 
     if expand(chars, bare):
-        words = [word for word in results if word]
-        return words or [""]
+        words = [word for word in results if word[0]]
+        return words or [("", [])]
     approx: list = []
+    approx_bare: list = []
     last = 0
     for start, end in _brace_groups(chars, bare):
         approx.extend(chars[last:start])
+        approx_bare.extend(bare[last:start])
         approx.append(_BRACE_ANY)
+        approx_bare.append(False)
         last = end + 1
     approx.extend(chars[last:])
-    return ["".join(approx)]
+    approx_bare.extend(bare[last:])
+    return [("".join(approx), approx_bare)]
+
+
+class _ShellWord(str):
+    """A shell word with the quoting facts needed by the write-target policy."""
+
+    quoted_glob: bool
+    dynamic_parameter: bool
+
+
+# Only active shell expansions make a path unknowable. A dollar sign in a
+# single-quoted or escaped word is an ordinary filename character.
+_PARAMETER_START = re.compile(r"\$(?:[A-Za-z_0-9@*#?$!{(-])")
+
+
+def _only_env_template_matches(target: str) -> bool:
+    if not isinstance(target, _ShellWord) or target.quoted_glob:
+        return False
+    name = target.rsplit("/", 1)[-1]
+    if "[" not in name:
+        return False
+    # Both template names have distinct lengths. Every element must resolve
+    # to one character (ignoring case), with no wildcard or negated class.
+    folded = []
+    for element in _glob_elements(name):
+        if element[0] == "lit":
+            folded.append(element[1].casefold())
+        elif element[0] == "class" and not element[1]:
+            letters = {letter.casefold() for letter in element[2]}
+            if len(letters) != 1:
+                return False
+            folded.append(letters.pop())
+        else:
+            return False
+    return "".join(folded) in _ENV_TEMPLATE_BASENAMES
 
 
 def _shell_tokens(command: str, comments: bool = False,
@@ -1009,11 +1059,10 @@ def _shell_tokens(command: str, comments: bool = False,
     ``_heredoc_scripts`` decides whether it runs. Without *heredocs* the body
     is tokenized like other lines.
 
-    With *substitutions*, the script of each command substitution the lexer
-    keeps inside a word (``"$(...)"`` or a backquoted one) or finds in an
-    unquoted heredoc body is appended to it, so the caller can scan it. An
-    unquoted ``$(`` already splits into tokens. A substitution whose end is
-    unsure (see ``_substitution_end``) makes the command untokenizable.
+    With *substitutions*, each command substitution or unquoted heredoc
+    script is returned for recursive inspection. A word containing a command
+    substitution is dynamic; its output is never evaluated here. Uncertain
+    boundaries make the command untokenizable.
 
     Unquoted brace alternatives are expanded as Bash does (``.env{,.local}``
     is two words, see ``_brace_expand``); quoted braces stay literal.
@@ -1022,6 +1071,7 @@ def _shell_tokens(command: str, comments: bool = False,
     word: list = []  # pieces of the current word
     word_bare: list = []  # per piece: unquoted and unescaped (brace syntax)
     in_word = False
+    dynamic_parameter = False
     word_quoted = False  # the current word has a quote or backslash
     operator: list = []
     pending: list = []  # heredocs opened on this line: (delimiter, quoted, strip_tabs)
@@ -1033,7 +1083,7 @@ def _shell_tokens(command: str, comments: bool = False,
         word_bare.append(bare)
 
     def end_word() -> None:
-        nonlocal in_word, word_quoted, want
+        nonlocal in_word, word_quoted, want, dynamic_parameter
         if in_word:
             text = "".join(word)
             if want is not None:  # a heredoc delimiter is not brace-expanded
@@ -1041,7 +1091,16 @@ def _shell_tokens(command: str, comments: bool = False,
                 pending.append((text, word_quoted, want))
                 want = None
             else:
-                alternatives = _brace_expand(word, word_bare)
+                alternatives = []
+                for spelling, bare in _brace_expand(word, word_bare):
+                    token = _ShellWord(spelling)
+                    basename = spelling.rfind("/") + 1
+                    token.quoted_glob = any(
+                        not unquoted and ch in "[]*?!^-"
+                        for ch, unquoted in zip(spelling[basename:], bare[basename:])
+                    )
+                    token.dynamic_parameter = dynamic_parameter
+                    alternatives.append(token)
                 redirect = tokens[-1][0] if tokens and tokens[-1][1] else ""
                 if len(alternatives) > 1 and ("<" in redirect or ">" in redirect) \
                         and "(" not in redirect and not _is_heredoc_operator(redirect):
@@ -1056,6 +1115,7 @@ def _shell_tokens(command: str, comments: bool = False,
             word_bare.clear()
             in_word = False
         word_quoted = False
+        dynamic_parameter = False
 
     def end_operator() -> None:
         nonlocal want
@@ -1168,22 +1228,29 @@ def _shell_tokens(command: str, comments: bool = False,
                         return None
                     skip = 1 if command[j] == "`" else 2
                     substitutions.append(command[j + skip:end - 1])
+                    dynamic_parameter = True
                     add(command[j:end])
                     j = end
                     continue
+                if command[j] == "$" and _PARAMETER_START.match(command, j):
+                    dynamic_parameter = True
                 add(command[j])
                 j += 1
             if j >= n:
                 return None
             i = j + 1
-        elif ch == "`" and substitutions is not None:
+        elif substitutions is not None and (ch == "`" or command.startswith("$(", i)):
             end = _substitution_end(command, i)
             if end is None:
                 return None
-            substitutions.append(command[i + 1:end - 1])
+            skip = 1 if ch == "`" else 2
+            substitutions.append(command[i + skip:end - 1])
+            dynamic_parameter = True
             add(command[i:end])
             i = end
         else:
+            if ch == "$" and _PARAMETER_START.match(command, i):
+                dynamic_parameter = True
             add(ch, True)
             i += 1
     end_operator()
@@ -1411,30 +1478,28 @@ def _command_invocations(words: list, scripts: list, depth: int = 0, via: bool =
     command xargs or find -exec/-execdir/-ok/-okdir runs, recursively. *via*
     is True for those last ones, whose operands xargs/find add."""
     found: list = []
-    if depth < _MAX_NESTED_SCRIPT_DEPTH:
-        # env -S's words join the rest of its invocation; any ``env`` word
-        # is tried (an argument named env only widens detection).
-        for k, word in enumerate(words):
-            if word.rsplit("/", 1)[-1] == "env":
-                split = _env_split_words(words, k)
-                if split is not None:
-                    found.extend(_command_invocations(split, scripts, depth + 1, via))
+    # env -S joins split words to the rest of its invocation.
+    for k, word in enumerate(words):
+        if word.rsplit("/", 1)[-1] == "env":
+            split = _env_split_words(words, k)
+            if split is not None:
+                found.extend(_command_invocations(split, scripts, _child_scan_depth(depth), via))
     for start in sorted(_command_word_indices(words, scripts)):
         if start >= len(words):
             continue
         found.append((words[start:], via))
-        if depth >= _MAX_NESTED_SCRIPT_DEPTH:
-            continue
         base = words[start].rsplit("/", 1)[-1]
         args = words[start + 1:]
         if base == "xargs":
             for j in sorted(_xargs_command_starts(args)):
-                found.extend(_command_invocations(args[j:], scripts, depth + 1, True))
+                if args[j:]:
+                    found.extend(_command_invocations(args[j:], scripts, _child_scan_depth(depth), True))
         elif base == "find":
             for j, action in enumerate(args):
                 if action in _FIND_EXEC_ACTIONS:
                     end = next((k for k in range(j + 1, len(args)) if args[k] in {";", "+"}), len(args))
-                    found.extend(_command_invocations(args[j + 1:end], scripts, depth + 1, True))
+                    if j + 1 < end:
+                        found.extend(_command_invocations(args[j + 1:end], scripts, _child_scan_depth(depth), True))
     return found
 
 
@@ -1618,9 +1683,9 @@ def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
             continue
         pending_redirect = token
     _flush_segment()
-    if depth < _MAX_NESTED_SCRIPT_DEPTH:
-        for script in nested:
-            targets.extend(_env_write_targets_or_fallback(script, depth + 1))
+    for script in nested:
+        if script.strip():
+            targets.extend(_env_write_targets_or_fallback(script, _child_scan_depth(depth)))
     return targets
 
 
@@ -1634,7 +1699,19 @@ def detect_env_file_write(command: str) -> tuple:
     normalized = _normalize_command_for_detection(command, preserve_shell_quotes=True)
     # dotglob (or a GLOBIGNORE, which sets it) lets * and ? match a leading dot.
     dotglob = re.search(r"dotglob|globignore", command, re.IGNORECASE) is not None
-    for target in _env_write_targets_or_fallback(normalized):
+    try:
+        targets = _env_write_targets_or_fallback(normalized)
+    except _ShellInspectionLimit:
+        return (True, _SHELL_NESTING_LIMIT)
+    for target in targets:
+        # Shell state and assignments can change between scanning and execution.
+        # Require literal output paths, including when the variable has a default.
+        dynamic = (target.dynamic_parameter if isinstance(target, _ShellWord)
+                   else ("`" in target or bool(_PARAMETER_START.search(target))))
+        if dynamic:
+            return (True, "shell output path could name a protected .env file; use a literal path")
+        if _only_env_template_matches(target):
+            continue
         if _is_protected_env_basename(target):
             return (True, f"shell write into protected environment file {target}")
         if _glob_may_name_env(target, dotglob):
@@ -1644,7 +1721,10 @@ def detect_env_file_write(command: str) -> tuple:
 
 
 def _env_write_block_result(description: str) -> dict:
-    """Build the block result for a shell write into a protected env file."""
+    """Explain an uninspectable command or a protected output destination."""
+    if description == _SHELL_NESTING_LIMIT:
+        return {"approved": False, "hardline": True, "description": description,
+                "message": f"BLOCKED: {description}. Split the operation into simpler commands."}
     return {
         "approved": False,
         "hardline": True,
@@ -1942,12 +2022,12 @@ _GZIP = ("replace", "S", {"--suffix"}, "cklthLV",
          {"--keep", "--stdout", "--to-stdout", "--list", "--test", "--help", "--license", "--version"})
 _BZIP2 = ("replace", "", set(), "ckthLV",
           {"--keep", "--stdout", "--test", "--help", "--license", "--version"})
-_XZ = ("replace", "CFMST",
+_XZ = ("xz", "CFMST",
        {"--block-list", "--block-size", "--check", "--filters", "--flush-timeout",
         "--format", "--memlimit", "--memlimit-compress", "--memlimit-decompress", "--memlimit-mt",
         "--suffix", "--threads"},
-       "ckltHhV",
-       {"--keep", "--stdout", "--to-stdout", "--list", "--test", "--help", "--long-help", "--version",
+       "ckHhV",
+       {"--keep", "--stdout", "--to-stdout", "--help", "--long-help", "--version",
         "--info-memory"})
 _ZSTD = ("rm", "Do", {"--filelist", "--output-dir-flat", "--output-dir-mirror", "--trace"}, "chltV",
          {"--stdout", "--list", "--test", "--help", "--version"})
@@ -1974,6 +2054,7 @@ def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> 
     family, short_values, long_values, keep_short, keep_long = _COMPRESSORS[name]
     has_operand = operands_supplied
     keeps = removes = False
+    inspect_mode = False  # xz uses the last mode flag, including within a cluster
     i = 0
     while i < len(args):
         arg = args[i]
@@ -1986,10 +2067,20 @@ def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> 
             continue
         if arg.startswith("--"):
             key, has_value, _ = arg.partition("=")
+            # xz accepts abbreviated long options. A prefix that could
+            # select a replacing mode must supersede an earlier list/test
+            # mode. An abbreviated file-list option can supply operands.
+            if family == "xz" and key not in long_values and key not in keep_long:
+                if any(mode.startswith(key) for mode in ("--compress", "--decompress", "--uncompress")):
+                    inspect_mode = False
+                if any(option.startswith(key) for option in ("--files", "--files0")):
+                    has_operand = True
             if key in _COMPRESSOR_FILE_LISTS:
                 has_operand = True  # input names come from a list file or stdin
             if key in long_values and not has_value:
                 i += 1
+            elif family == "xz" and key in {"--compress", "--decompress", "--uncompress", "--list", "--test"}:
+                inspect_mode = key in {"--list", "--test"}
             elif key in keep_long:
                 keeps = True
             elif key == "--rm":
@@ -2003,11 +2094,13 @@ def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> 
                 if k == len(cluster) - 1:
                     i += 1  # the value is the next word
                 break
-            if flag in keep_short:
+            if family == "xz" and flag in "zdlt":
+                inspect_mode = flag in "lt"
+            elif flag in keep_short:
                 keeps = True
             elif flag == "k" and family == "rm":
                 removes = False
-    if not has_operand or keeps:
+    if not has_operand or keeps or inspect_mode:
         return False
     return removes if family == "rm" else True
 
@@ -2160,9 +2253,9 @@ def _command_delete_kinds(command: str, depth: int = 0) -> Optional[set]:
     for words in segments:
         kinds |= _simple_command_delete_kinds(words, scripts)
     unknown = False
-    if depth < _MAX_NESTED_SCRIPT_DEPTH:
-        for script in scripts + nested:
-            reading = _command_delete_kinds(script, depth + 1)
+    for script in scripts + nested:
+        if script.strip():
+            reading = _command_delete_kinds(script, _child_scan_depth(depth))
             if reading is None:
                 unknown = True
             else:
@@ -2413,7 +2506,11 @@ def detect_all_dangerous_commands(command: str) -> list[tuple[str, str]]:
     for pattern_re, description in DANGEROUS_PATTERNS_COMPILED:
         if description in _TOKENIZED_DELETE_KINDS:
             if delete_kinds is None:
-                delete_kinds = [_command_delete_kinds(context) for context in unfolded_contexts]
+                try:
+                    delete_kinds = [_command_delete_kinds(context) for context in unfolded_contexts]
+                except _ShellInspectionLimit:
+                    matches.append((_SHELL_NESTING_LIMIT, _SHELL_NESTING_LIMIT))
+                    delete_kinds = [None]
             found = any(kinds and description in kinds for kinds in delete_kinds)
             # The compressor pattern is only the fallback for a command that
             # can't be tokenized; the others still match on their own.

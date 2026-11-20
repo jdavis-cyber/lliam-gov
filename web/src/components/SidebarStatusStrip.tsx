@@ -1,10 +1,9 @@
-import { gatewayLine } from "@/lib/gateway-status";
 import { Link } from "react-router-dom";
 import type { StatusResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 
-/** Gateway + session summary for the System sidebar block (no separate strip chrome). */
+/** Link to the session overview with its current active count. */
 export function SidebarStatusStrip({ status }: SidebarStatusStripProps) {
   const { t } = useI18n();
 
@@ -16,8 +15,7 @@ export function SidebarStatusStrip({ status }: SidebarStatusStripProps) {
     );
   }
 
-  const gw = gatewayLine(status, t);
-  const { activeSessionsLabel, gatewayStatusLabel } = t.app;
+  const { activeSessionsLabel } = t.app;
 
   return (
     <Link
@@ -33,11 +31,6 @@ export function SidebarStatusStrip({ status }: SidebarStatusStripProps) {
       )}
     >
       <div className="flex flex-col gap-1 font-mondwest text-xs leading-snug tracking-[0.08em]">
-        <p className="break-words">
-          <span className="text-text-tertiary">{gatewayStatusLabel}</span>{" "}
-          <span className={cn("font-medium", gw.tone)}>{gw.label}</span>
-        </p>
-
         <p className="break-words">
           <span className="text-text-tertiary">{activeSessionsLabel}</span>{" "}
           <span className="tabular-nums text-text-secondary">

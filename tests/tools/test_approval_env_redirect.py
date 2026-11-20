@@ -465,3 +465,45 @@ def test_over_limit_brace_description_is_printable():
     assert blocked is True
     assert "\ue000" not in description
     assert ".env*" in description
+
+
+@pytest.mark.parametrize("pattern", [".env.exampl[e]", "conf/.[e]nv.sampl[eE]", '"output-dir"/.env.exampl[e]'])
+def test_template_only_glob_is_allowed(pattern):
+    assert detect_env_file_write("tee " + pattern) == (False, None)
+
+
+@pytest.mark.parametrize("pattern", ["'.env.exampl[e]'", ".env.exampl[ef]", ".env.sample?"])
+def test_literal_or_ambiguous_template_name_remains_protected(pattern):
+    assert detect_env_file_write("tee " + pattern)[0]
+
+
+@pytest.mark.parametrize("word", ["$OUTPUT", '"${OUTPUT:-report.txt}"', "$1", "$(label)", '"$(label)"', "`label`"])
+def test_unresolved_output_names_require_a_literal_path(word):
+    for prefix in ["tee ", ": > "]:
+        refused, reason = detect_env_file_write(prefix + word)
+        assert refused
+        assert "literal" in reason
+
+
+def test_variable_in_data_or_quoted_literal_filename_is_allowed():
+    assert detect_env_file_write('echo "$DATA" > report.txt') == (False, None)
+    assert detect_env_file_write("tee '$OUTPUT'") == (False, None)
+    assert detect_env_file_write('echo "$(label)" > report.txt') == (False, None)
+
+
+@pytest.mark.parametrize(("shallow", "deep"), [
+    ("echo $(printf fixture)", "echo $(echo $(printf fixture))"),
+    ("xargs printf fixture", "xargs xargs printf fixture"),
+])
+def test_shell_inspection_limit_rejects_only_uninspected_commands(monkeypatch, shallow, deep):
+    monkeypatch.setattr(approval_module, "_MAX_NESTED_SCRIPT_DEPTH", 1)
+    data = "cat <<'DATA'\n" + deep + "\nDATA"
+    for inspectable in (shallow, data):
+        assert detect_env_file_write(inspectable) == (False, None)
+        assert not approval_module.detect_dangerous_command(inspectable)[0]
+    assert detect_env_file_write(deep)[0]
+    assert approval_module.detect_dangerous_command(deep)[0]
+    for guard in (check_dangerous_command, check_all_command_guards):
+        result = guard(deep, "local")
+        assert result["approved"] is False and result["hardline"] is True
+        assert "nesting" in result["message"]
