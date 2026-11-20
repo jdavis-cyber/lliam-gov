@@ -85,7 +85,7 @@ Or edit `$HERMES_HOME/mem0.json` directly:
   "oss": {
     "llm": {"provider": "openai", "config": {"model": "gpt-5-mini"}},
     "embedder": {"provider": "openai", "config": {"model": "text-embedding-3-small"}},
-    "vector_store": {"provider": "qdrant", "config": {"path": "~/.hermes/mem0_qdrant"}}
+    "vector_store": {"provider": "qdrant", "config": {"path": "~/.lliam/mem0_qdrant"}}
   }
 }
 ```
@@ -125,7 +125,7 @@ Circuit breaker tripped after 5 consecutive failures. Resets after 2 minutes.
 
 ```bash
 # If using local Qdrant, check the storage path is writable:
-ls -la ~/.hermes/mem0_qdrant
+ls -la "${LLIAM_HOME:-$HOME/.lliam}/mem0_qdrant"
 
 # If using Qdrant server, check it's reachable:
 curl http://localhost:6333/healthz

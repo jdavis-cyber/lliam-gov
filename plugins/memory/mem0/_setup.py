@@ -123,7 +123,7 @@ def parse_flags(argv: list[str] | None = None) -> dict[str, str]:
     return flags
 
 
-def build_oss_config(flags: dict[str, str]) -> tuple[dict, dict[str, str]]:
+def build_oss_config(flags: dict[str, str], lliam_home: str | None = None) -> tuple[dict, dict[str, str]]:
     """Build OSS config dict + env_writes from parsed flags.
 
     Returns (oss_config, env_writes) where oss_config goes into mem0.json
@@ -150,11 +150,12 @@ def build_oss_config(flags: dict[str, str]) -> tuple[dict, dict[str, str]]:
     vector_def = VECTOR_PROVIDERS[vector_id]
     vector_config = dict(vector_def["default_config"])
     if vector_id == "qdrant":
-        if flags.get("oss_vector_path"):
-            vector_config["path"] = flags["oss_vector_path"]
         if flags.get("oss_vector_url"):
-            vector_config.pop("path", None)
             vector_config["url"] = flags["oss_vector_url"]
+        else:
+            vector_config["path"] = flags.get("oss_vector_path") or str(
+                Path(lliam_home or get_lliam_home()) / "mem0_qdrant"
+            )
     elif vector_id == "pgvector":
         if flags.get("oss_vector_host"):
             vector_config["host"] = flags["oss_vector_host"]
@@ -323,7 +324,7 @@ def _setup_oss(lliam_home: str, config: dict, flags: dict[str, str]) -> None:
         _setup_oss_interactive(lliam_home, config)
         return
 
-    oss_config, env_writes = build_oss_config(flags)
+    oss_config, env_writes = build_oss_config(flags, lliam_home)
     errors = validate_oss_config(oss_config)
     if errors:
         for e in errors:
@@ -695,7 +696,7 @@ def _setup_oss_interactive(lliam_home: str, config: dict) -> None:
             flags["oss_vector_password"] = pgvector_config["password"]
         flags["oss_vector_dbname"] = pgvector_config["dbname"]
 
-    oss_config, _ = build_oss_config(flags)
+    oss_config, _ = build_oss_config(flags, lliam_home)
 
     if env_writes:
         _write_env(Path(lliam_home) / ".env", env_writes)

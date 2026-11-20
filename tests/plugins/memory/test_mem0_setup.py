@@ -186,15 +186,13 @@ class TestPostSetup:
         monkeypatch.setattr("plugins.memory.mem0._setup.get_lliam_home", lambda: tmp_path)
         _inject_fake_lliam_cli(monkeypatch)
         monkeypatch.setattr("plugins.memory.mem0._setup._install_provider_deps", lambda l, e, v: None)
-        # The default qdrant path sits under the real legacy home; its
-        # writability check would create that directory.
-        monkeypatch.setattr("plugins.memory.mem0._setup._check_qdrant_path", lambda path: (True, "stub"))
         config = {"memory": {}}
         post_setup(str(tmp_path), config)
         assert config["memory"]["provider"] == "mem0"
         mem0_json = json.loads((tmp_path / "mem0.json").read_text())
         assert mem0_json["mode"] == "oss"
         assert mem0_json["oss"]["llm"]["provider"] == "openai"
+        assert mem0_json["oss"]["vector_store"]["config"]["path"] == str(tmp_path / "mem0_qdrant")
 
 
 class TestDryRun:
@@ -224,9 +222,6 @@ class TestDryRun:
         monkeypatch.setattr("plugins.memory.mem0._setup.get_lliam_home", lambda: tmp_path)
         _inject_fake_lliam_cli(monkeypatch)
         monkeypatch.setattr("plugins.memory.mem0._setup._install_provider_deps", lambda l, e, v: None)
-        # The default qdrant path sits under the real legacy home; its
-        # writability check would create that directory.
-        monkeypatch.setattr("plugins.memory.mem0._setup._check_qdrant_path", lambda path: (True, "stub"))
         config = {"memory": {}}
         post_setup(str(tmp_path), config)
         assert not (tmp_path / ".env").exists()
