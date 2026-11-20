@@ -148,8 +148,10 @@ def _changes(config, base):
         yield key, sorted(set(before)), sorted(set(after))
 
 
+# Startup enables reload checks for every profile served by this process.
+# Successful governance activation is sticky only for the same resolved home.
 _runtime_started = False
-_governed = False
+_governed_homes: set[Path] = set()
 _recording = ContextVar("deviation_receipt_config", default=None)
 _recorded = set()
 
@@ -220,10 +222,11 @@ def _governed_config(config):
 
 
 def activate(config):
-    global _runtime_started, _governed
-    if _governed or _governed_config(config):
+    global _runtime_started
+    home = get_lliam_home().resolve()
+    if home in _governed_homes or _governed_config(config):
         _check(config)
-        _governed = True
+        _governed_homes.add(home)
     _runtime_started = True
 
 
@@ -234,12 +237,17 @@ def check_reload(config):
 
 
 def check_provider(config, slug, host):
-    if _governed or _governed_config(config):
+    if get_lliam_home().resolve() in _governed_homes or _governed_config(config):
         _check(config, provider=(slug, host))
 
 
 def governed_disabled_toolsets():
-    if not _governed:
+    if not _runtime_started:
         return ()
     from lliam_cli.config import load_config_readonly
-    return load_config_readonly()["agent"]["disabled_toolsets"]
+
+    # A tool request can be the first config read for this dashboard profile.
+    config = load_config_readonly()
+    if get_lliam_home().resolve() in _governed_homes:
+        return config["agent"]["disabled_toolsets"]
+    return ()

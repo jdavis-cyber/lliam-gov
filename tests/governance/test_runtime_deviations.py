@@ -22,7 +22,6 @@ def deployment(tmp_path, monkeypatch):
     monkeypatch.setenv("LLIAM_MANAGED_DIR", str(managed))
     monkeypatch.setattr(deviations, "_check_managed_ownership", lambda path: None)
     monkeypatch.setattr(deviations, "_runtime_started", False)
-    monkeypatch.setattr(deviations, "_governed", False)
     monkeypatch.setattr(deviations, "_recorded", set())
     monkeypatch.setattr(startup_posture, "_STARTUP_POSTURE_ENFORCED", False)
     for name in ("emit_agent_identity_at_startup", "enforce_control_plane_auth_at_startup",
@@ -180,3 +179,45 @@ def test_new_provider_requires_both_provider_and_host_approvals(deployment, monk
     register.write_text(yaml.safe_dump({"deviations": [provider_grant, host_grant]}))
     assert provider_allowlist.validate_provider("fixture-model", "https://local.invalid").disposition == "allow"
     assert provider_allowlist.validate_provider("fixture-model", "https://other.invalid").disposition == "deny"
+
+
+def test_dashboard_profiles_keep_independent_governed_activation(deployment, tmp_path, monkeypatch):
+    import asyncio
+
+    from lliam_cli import web_server
+
+    overlay, _ = deployment
+    home = tmp_path / "profile"
+    governed = home / "profiles" / "governed"
+    low = home / "profiles" / "ordinary"
+    governed.mkdir(parents=True)
+    low.mkdir()
+    (governed / "config.yaml").write_bytes(overlay.read_bytes())
+    (low / "config.yaml").write_text("security: {posture: permissive}\n")
+    monkeypatch.delenv("LLIAM_CONFIG", raising=False)
+    monkeypatch.delenv("HERMES_CONFIG", raising=False)
+
+    # Dashboard starts under its own low-side home, then serves both profiles.
+    startup_posture.enforce_startup_posture()
+    with web_server._config_profile_scope("governed"):
+        assert "browser" in deviations.governed_disabled_toolsets()
+        assert config.load_config_readonly()["security"]["posture"] == "strict"
+    with web_server._profile_scope("ordinary"):
+        assert config.load_config()["security"]["posture"] == "permissive"
+        assert not deviations.governed_disabled_toolsets()
+        assert provider_allowlist.validate_provider("fixture", "https://local.invalid").disposition == "allow"
+
+    toggle = web_server.ToolsetToggle(profile="ordinary", enabled=False)
+    assert asyncio.run(web_server.toggle_toolset("browser", toggle))["ok"]
+    assert "browser" not in yaml.safe_load((low / "config.yaml").read_bytes())["platform_toolsets"]["cli"]
+
+    # An alias of the original home retains the sticky floor after removing governance.
+    (governed / "config.yaml").write_bytes((low / "config.yaml").read_bytes())
+    with monkeypatch.context() as scoped:
+        scoped.setenv("LLIAM_HOME", str(low / ".." / "governed"))
+        for load in (config.load_config, config.load_config_readonly, deviations.governed_disabled_toolsets):
+            with pytest.raises(deviations.DeviationError):
+                load()
+        assert provider_allowlist.validate_provider("fixture", "https://local.invalid").disposition == "deny"
+    with web_server._config_profile_scope("ordinary"):
+        assert config.load_config_readonly()["security"]["posture"] == "permissive"
