@@ -1942,12 +1942,12 @@ _GZIP = ("replace", "S", {"--suffix"}, "cklthLV",
          {"--keep", "--stdout", "--to-stdout", "--list", "--test", "--help", "--license", "--version"})
 _BZIP2 = ("replace", "", set(), "ckthLV",
           {"--keep", "--stdout", "--test", "--help", "--license", "--version"})
-_XZ = ("replace", "CFMST",
+_XZ = ("xz", "CFMST",
        {"--block-list", "--block-size", "--check", "--filters", "--flush-timeout",
         "--format", "--memlimit", "--memlimit-compress", "--memlimit-decompress", "--memlimit-mt",
         "--suffix", "--threads"},
-       "ckltHhV",
-       {"--keep", "--stdout", "--to-stdout", "--list", "--test", "--help", "--long-help", "--version",
+       "ckHhV",
+       {"--keep", "--stdout", "--to-stdout", "--help", "--long-help", "--version",
         "--info-memory"})
 _ZSTD = ("rm", "Do", {"--filelist", "--output-dir-flat", "--output-dir-mirror", "--trace"}, "chltV",
          {"--stdout", "--list", "--test", "--help", "--version"})
@@ -1974,6 +1974,7 @@ def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> 
     family, short_values, long_values, keep_short, keep_long = _COMPRESSORS[name]
     has_operand = operands_supplied
     keeps = removes = False
+    inspect_mode = False  # xz uses the last mode flag, including within a cluster
     i = 0
     while i < len(args):
         arg = args[i]
@@ -1990,6 +1991,8 @@ def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> 
                 has_operand = True  # input names come from a list file or stdin
             if key in long_values and not has_value:
                 i += 1
+            elif family == "xz" and key in {"--compress", "--decompress", "--uncompress", "--list", "--test"}:
+                inspect_mode = key in {"--list", "--test"}
             elif key in keep_long:
                 keeps = True
             elif key == "--rm":
@@ -2003,11 +2006,13 @@ def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> 
                 if k == len(cluster) - 1:
                     i += 1  # the value is the next word
                 break
-            if flag in keep_short:
+            if family == "xz" and flag in "zdlt":
+                inspect_mode = flag in "lt"
+            elif flag in keep_short:
                 keeps = True
             elif flag == "k" and family == "rm":
                 removes = False
-    if not has_operand or keeps:
+    if not has_operand or keeps or inspect_mode:
         return False
     return removes if family == "rm" else True
 
