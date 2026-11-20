@@ -464,19 +464,45 @@ class TestCmdUpdateProfileSkillSync:
 
     @patch("shutil.which", return_value=None)
     @patch("subprocess.run")
-    def test_active_profile_included_in_skill_sync(
-        self, mock_run, _mock_which, mock_args, capsys
+    def test_update_keeps_skill_sync_inside_selected_homes(
+        self, mock_run, _mock_which, mock_args, monkeypatch, tmp_path
     ):
-        from pathlib import Path
+        from lliam_constants import get_lliam_home, reset_lliam_home_override, set_lliam_home_override
+        from tools import skills_sync
 
+        # Simulate a desktop process that imported the sync module before a
+        # different profile was selected for this update.
+        old_home = tmp_path / "previous-profile"
+        selected = tmp_path / "selected-profile"
+        selected.mkdir()
+        monkeypatch.setattr(skills_sync, "HERMES_HOME", old_home)
+        monkeypatch.setattr(skills_sync, "SKILLS_DIR", old_home / "skills")
+        monkeypatch.setattr(skills_sync, "MANIFEST_FILE", old_home / "skills" / ".bundled_manifest")
+        mock_run.side_effect = _make_run_side_effect(commit_count="1")
+        token = set_lliam_home_override(selected)
+        try:
+            cmd_update(mock_args)
+            assert not old_home.exists()
+            assert get_lliam_home() == selected
+        finally:
+            reset_lliam_home_override(token)
+
+    @patch("shutil.which", return_value=None)
+    @patch("subprocess.run")
+    def test_active_profile_included_in_skill_sync(
+        self, mock_run, _mock_which, mock_args, capsys, tmp_path, monkeypatch
+    ):
         mock_run.side_effect = _make_run_side_effect(
             branch="main", verify_ok=True, commit_count="1"
         )
 
-        default_p = SimpleNamespace(name="default", path=Path("/fake/.hermes"))
-        active_p = SimpleNamespace(name="bit", path=Path("/fake/.hermes/profiles/bit"))
-        other_p = SimpleNamespace(name="work", path=Path("/fake/.hermes/profiles/work"))
+        default_p = SimpleNamespace(name="default", path=tmp_path)
+        active_p = SimpleNamespace(name="bit", path=tmp_path / "profiles" / "bit")
+        other_p = SimpleNamespace(name="work", path=tmp_path / "profiles" / "work")
         all_profiles = [default_p, active_p, other_p]
+
+        active_p.path.mkdir(parents=True)
+        monkeypatch.setenv("LLIAM_HOME", str(active_p.path))
 
         synced_paths = []
 
@@ -484,12 +510,10 @@ class TestCmdUpdateProfileSkillSync:
             synced_paths.append(path)
             return {"copied": [], "updated": [], "user_modified": []}
 
-        empty_sync = {"copied": [], "updated": [], "user_modified": [], "cleaned": []}
 
         with (
             patch("lliam_cli.profiles.list_profiles", return_value=all_profiles),
             patch("lliam_cli.profiles.seed_profile_skills", side_effect=fake_seed),
-            patch("tools.skills_sync.sync_skills", return_value=empty_sync),
         ):
             cmd_update(mock_args)
 
@@ -518,12 +542,10 @@ class TestCmdUpdateProfileSkillSync:
             synced_paths.append(path)
             return {"copied": [], "updated": [], "user_modified": []}
 
-        empty_sync = {"copied": [], "updated": [], "user_modified": [], "cleaned": []}
 
         with (
             patch("lliam_cli.profiles.list_profiles", return_value=[default_p]),
             patch("lliam_cli.profiles.seed_profile_skills", side_effect=fake_seed),
-            patch("tools.skills_sync.sync_skills", return_value=empty_sync),
         ):
             cmd_update(mock_args)
 

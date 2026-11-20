@@ -8903,69 +8903,41 @@ def _cmd_update_impl(args):
         except Exception:
             pass  # non-fatal — worst case a lazy import fails gracefully
 
-        # Sync bundled skills (copies new, updates changed, respects user deletions)
+        # Seed once per profile in a subprocess with the exact target home.
+        # An in-process sync can still hold paths from a previously active home.
         try:
-            from tools.skills_sync import sync_skills
-
-            print()
-            print("→ Syncing bundled skills...")
-            result = sync_skills(quiet=True)
-            if result["copied"]:
-                print(f"  + {len(result['copied'])} new: {', '.join(result['copied'])}")
-            if result.get("updated"):
-                print(
-                    f"  ↑ {len(result['updated'])} updated: {', '.join(result['updated'])}"
-                )
-            if result.get("user_modified"):
-                print(f"  ~ {len(result['user_modified'])} user-modified (kept)")
-                print(
-                    "    → see them: lliam-gov skills list-modified  "
-                    "(diff/reset to resume updates)"
-                )
-            if result.get("cleaned"):
-                print(f"  − {len(result['cleaned'])} removed from manifest")
-            if not result["copied"] and not result.get("updated"):
-                print("  ✓ Skills are up to date")
-        except Exception as e:
-            logger.debug("Skills sync during update failed: %s", e)
-
-        # Sync bundled skills to all profiles (including the active one).
-        # seed_profile_skills() uses subprocess with an explicit HERMES_HOME so
-        # it is not affected by sync_skills()'s module-level HERMES_HOME cache,
-        # which means the active profile is reliably synced regardless of whether
-        # the caller's HERMES_HOME env var points at the default or a named profile.
-        try:
+            from lliam_constants import get_lliam_home
             from lliam_cli.profiles import (
                 list_profiles,
                 seed_profile_skills,
             )
 
-            all_profiles = list_profiles()
-            if all_profiles:
-                print()
-                print("→ Syncing bundled skills to all profiles...")
-                for p in all_profiles:
-                    try:
-                        r = seed_profile_skills(p.path, quiet=True)
-                        if r and r.get("skipped_opt_out"):
-                            status = "opted out (--no-skills)"
-                        elif r:
-                            copied = len(r.get("copied", []))
-                            updated = len(r.get("updated", []))
-                            modified = len(r.get("user_modified", []))
-                            parts = []
-                            if copied:
-                                parts.append(f"+{copied} new")
-                            if updated:
-                                parts.append(f"↑{updated} updated")
-                            if modified:
-                                parts.append(f"~{modified} user-modified")
-                            status = ", ".join(parts) if parts else "up to date"
-                        else:
-                            status = "sync failed"
-                        print(f"  {p.name}: {status}")
-                    except Exception as pe:
-                        print(f"  {p.name}: error ({pe})")
+            targets = {p.path: p.name for p in list_profiles()}
+            targets.setdefault(get_lliam_home(), "active")
+            print()
+            print("→ Syncing bundled skills to all profiles...")
+            for path, name in targets.items():
+                try:
+                    r = seed_profile_skills(path, quiet=True)
+                    if r and r.get("skipped_opt_out"):
+                        status = "opted out (--no-skills)"
+                    elif r:
+                        copied = len(r.get("copied", []))
+                        updated = len(r.get("updated", []))
+                        modified = len(r.get("user_modified", []))
+                        parts = []
+                        if copied:
+                            parts.append(f"+{copied} new")
+                        if updated:
+                            parts.append(f"↑{updated} updated")
+                        if modified:
+                            parts.append(f"~{modified} user-modified")
+                        status = ", ".join(parts) if parts else "up to date"
+                    else:
+                        status = "sync failed"
+                    print(f"  {name}: {status}")
+                except Exception as pe:
+                    print(f"  {name}: error ({pe})")
         except Exception:
             pass  # profiles module not available or no profiles
 
