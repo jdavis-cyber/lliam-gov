@@ -142,7 +142,7 @@ export async function fetchJSON<T>(
       return new Promise<T>(() => {});
     }
     // Loopback mode: ``_SESSION_TOKEN`` rotates on every server restart
-    // (``lliam-gov update``, ``lliam-gov gateway restart``, etc.). A tab kept
+    // (for example, after an update). A tab kept
     // open across the restart holds the OLD token in
     // ``window.__HERMES_SESSION_TOKEN__`` from the previous HTML render,
     // so every fetch returns 401. The HTML is served ``Cache-Control:
@@ -1393,13 +1393,6 @@ export interface ActionStatusResponse {
   running: boolean;
 }
 
-export interface PlatformStatus {
-  error_code?: string;
-  error_message?: string;
-  state: string;
-  updated_at: string;
-}
-
 export interface StatusResponse {
   active_sessions: number;
   /** Phase 7: ``true`` when the dashboard's OAuth gate is engaged
@@ -1416,13 +1409,6 @@ export interface StatusResponse {
   config_path: string;
   config_version: number;
   env_path: string;
-  gateway_exit_reason: string | null;
-  gateway_health_url: string | null;
-  gateway_pid: number | null;
-  gateway_platforms: Record<string, PlatformStatus>;
-  gateway_running: boolean;
-  gateway_state: string | null;
-  gateway_updated_at: string | null;
   hermes_home: string;
   latest_config_version: number;
   release_date: string;
@@ -1607,7 +1593,6 @@ export interface ProfileInfo {
   provider: string | null;
   has_env: boolean;
   skill_count: number;
-  gateway_running: boolean;
   description: string;
   description_auto: boolean;
   distribution_name: string | null;

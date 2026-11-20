@@ -13,14 +13,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
-  MessageSquare,
   Search,
   Trash2,
   Clock,
   Terminal,
   Globe,
-  MessageCircle,
-  Hash,
   X,
   Play,
   Eraser,
@@ -36,11 +33,9 @@ import type {
   SessionMessage,
   SessionSearchResult,
   SessionStoreStats,
-  StatusResponse,
 } from "@/lib/api";
 import { timeAgo } from "@/lib/utils";
 import { Markdown } from "@/components/Markdown";
-import { PlatformsCard } from "@/components/PlatformsCard";
 import { Toast } from "@nous-research/ui/ui/components/toast";
 import { Button } from "@nous-research/ui/ui/components/button";
 import { Checkbox } from "@nous-research/ui/ui/components/checkbox";
@@ -70,10 +65,6 @@ import { isDashboardEmbeddedChatEnabled } from "@/lib/dashboard-flags";
 const SOURCE_CONFIG: Record<string, { icon: typeof Terminal; color: string }> =
   {
     cli: { icon: Terminal, color: "text-primary" },
-    telegram: { icon: MessageCircle, color: "text-[oklch(0.65_0.15_250)]" },
-    discord: { icon: Hash, color: "text-[oklch(0.65_0.15_280)]" },
-    slack: { icon: MessageSquare, color: "text-[oklch(0.7_0.15_155)]" },
-    whatsapp: { icon: Globe, color: "text-success" },
     cron: { icon: Clock, color: "text-warning" },
   };
 
@@ -729,7 +720,6 @@ export default function SessionsPage() {
   >(null);
   const [searching, setSearching] = useState(false);
   const logScrollRef = useRef<HTMLPreElement | null>(null);
-  const [status, setStatus] = useState<StatusResponse | null>(null);
   const [overviewSessions, setOverviewSessions] = useState<SessionInfo[]>([]);
   const [view, setView] = useState<SessionsView>("overview");
   // Count of empty (no-message, ended, non-archived) sessions across the
@@ -862,10 +852,6 @@ export default function SessionsPage() {
 
   useEffect(() => {
     const loadOverview = () => {
-      api
-        .getStatus()
-        .then(setStatus)
-        .catch(() => {});
       api
         .getSessions(50)
         .then((r) => {
@@ -1200,41 +1186,14 @@ export default function SessionsPage() {
     ? sessions.filter((s) => snippetMap.has(s.id))
     : sessions;
 
-  const platformEntries = status
-    ? Object.entries(status.gateway_platforms ?? {})
-    : [];
   const recentSessions = overviewSessions
     .filter((s) => !s.is_active)
     .slice(0, 5);
 
   const isSearching = Boolean(search.trim());
-  const showOverviewTab =
-    platformEntries.length > 0 || recentSessions.length > 0;
+  const showOverviewTab = recentSessions.length > 0;
   const showList = view === "list" || isSearching || !showOverviewTab;
   const showPagination = showList && !searchResults && total > PAGE_SIZE;
-
-  const alerts: { message: string; detail?: string }[] = [];
-  if (status) {
-    if (status.gateway_state === "startup_failed") {
-      alerts.push({
-        message: t.status.gatewayFailedToStart,
-        detail: status.gateway_exit_reason ?? undefined,
-      });
-    }
-    const failedPlatformEntries = platformEntries.filter(
-      ([, info]) => info.state === "fatal" || info.state === "disconnected",
-    );
-    for (const [name, info] of failedPlatformEntries) {
-      const stateLabel =
-        info.state === "fatal"
-          ? t.status.platformError
-          : t.status.platformDisconnected;
-      alerts.push({
-        message: `${name.charAt(0).toUpperCase() + name.slice(1)} ${stateLabel}`,
-        detail: info.error_message ?? undefined,
-      });
-    }
-  }
 
   if (loading) {
     return (
@@ -1378,28 +1337,6 @@ export default function SessionsPage() {
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {alerts.length > 0 && (
-        <div className="border border-destructive/30 bg-destructive/[0.06] p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-            <div className="flex flex-col gap-2 min-w-0">
-              {alerts.map((alert, i) => (
-                <div key={i}>
-                  <p className="text-sm font-medium text-destructive">
-                    {alert.message}
-                  </p>
-                  {alert.detail && (
-                    <p className="text-xs text-destructive/70 mt-0.5">
-                      {alert.detail}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 
@@ -1652,10 +1589,6 @@ export default function SessionsPage() {
         )
       ) : (
         <div className="flex min-w-0 flex-col gap-4">
-          {platformEntries.length > 0 && status && (
-            <PlatformsCard platforms={platformEntries} />
-          )}
-
           {recentSessions.length > 0 && (
             <Card className="min-w-0 max-w-full overflow-hidden">
               <CardHeader className="min-w-0">

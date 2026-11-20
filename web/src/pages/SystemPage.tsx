@@ -505,8 +505,8 @@ export default function SystemPage() {
         title="Update Lliam-GOV?"
         description={
           updateInfo && updateInfo.behind && updateInfo.behind > 0
-            ? `This will run 'lliam-gov update' (${updateInfo.update_command}) and pull ${updateInfo.behind} new commit${updateInfo.behind === 1 ? "" : "s"}. The gateway restarts when the update finishes; the current session keeps its prompt cache until then.`
-            : `This will run 'lliam-gov update' (${updateInfo?.update_command ?? "lliam-gov update"}) and restart the gateway when it finishes.`
+            ? `This will run 'lliam-gov update' (${updateInfo.update_command}) and pull ${updateInfo.behind} new commit${updateInfo.behind === 1 ? "" : "s"}.`
+            : `This will run 'lliam-gov update' (${updateInfo?.update_command ?? "lliam-gov update"}).`
         }
         confirmLabel="Update now"
       />
@@ -624,7 +624,7 @@ export default function SystemPage() {
               </label>
               <p className="text-xs text-warning">
                 Shell hooks run arbitrary commands on this host. Only add scripts
-                you trust. Takes effect on the next gateway/session restart.
+                you trust. Takes effect on the next session.
               </p>
               <div className="flex justify-end">
                 <Button

@@ -28,7 +28,7 @@ import { ProfileContext } from "@/contexts/profile-context";
  * after each navigation, so the scope survives nav and stays deep-linkable.
  *
  * This exists because "Set as active" on the Profiles page historically only
- * flipped the sticky active_profile file (future CLI/gateway runs). The
+ * flipped the sticky active_profile file (future CLI runs). The
  * switcher is the dashboard's write-target selector for Chat and management
  * pages. We now sync the switcher when the sticky active profile differs from
  * the dashboard process on load, and ProfilesPage updates the switcher when

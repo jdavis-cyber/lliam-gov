@@ -272,11 +272,6 @@ export default function ProfilesPage() {
       activeBadge: p.activeBadge ?? "active",
       setActive: p.setActive ?? "Set as active",
       activeSet: p.activeSet ?? "Active profile set",
-      gatewayRunning: p.gatewayRunning ?? "Gateway running",
-      gatewayStopped: p.gatewayStopped ?? "Gateway stopped",
-      gatewayRunningWarning:
-        p.gatewayRunningWarning ??
-        "This profile's gateway is running — it will be stopped.",
       aliasBadge: p.aliasBadge ?? "alias",
       description: p.description ?? "Description",
       descriptionPlaceholder:
@@ -307,7 +302,7 @@ export default function ProfilesPage() {
       manageSkills: p.manageSkills ?? "Manage skills & tools",
       activeSetHint:
         p.activeSetHint ??
-        "Dashboard switched to manage {name}. New CLI/gateway runs will use this profile too.",
+        "Dashboard switched to manage {name}. New CLI runs will use this profile too.",
     };
   }, [t.profiles]);
 
@@ -734,16 +729,9 @@ export default function ProfilesPage() {
   });
 
   const pendingName = profileDelete.pendingId;
-  const pendingProfile = pendingName
-    ? profiles.find((p) => p.name === pendingName)
-    : undefined;
-  const deleteMessage = (() => {
-    if (!pendingName) return t.profiles.confirmDeleteMessage;
-    const base = t.profiles.confirmDeleteMessage.replace("{name}", pendingName);
-    return pendingProfile?.gateway_running
-      ? `${base}\n\n${L.gatewayRunningWarning}`
-      : base;
-  })();
+  const deleteMessage = pendingName
+    ? t.profiles.confirmDeleteMessage.replace("{name}", pendingName)
+    : t.profiles.confirmDeleteMessage;
 
   // Put "Build" (full builder) + "Create" (quick modal) buttons in header
   useLayoutEffect(() => {
@@ -1160,29 +1148,6 @@ export default function ProfilesPage() {
                           }}
                           onSetActive={() => handleSetActive(p.name)}
                         />
-                      </div>
-
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span
-                          className={cn(
-                            "h-1.5 w-1.5 rounded-full",
-                            p.gateway_running
-                              ? "bg-success"
-                              : "bg-muted-foreground/40",
-                          )}
-                        />
-
-                        <span
-                          className={cn(
-                            p.gateway_running
-                              ? "text-success"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          {p.gateway_running
-                            ? L.gatewayRunning
-                            : L.gatewayStopped}
-                        </span>
                       </div>
 
                       <div className="flex items-start gap-2 text-xs">

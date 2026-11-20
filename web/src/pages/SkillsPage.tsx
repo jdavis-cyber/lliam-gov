@@ -218,7 +218,7 @@ export default function SkillsPage() {
   // /learn command and handed to the chat. /learn resolves to a normal agent
   // turn (command.dispatch → send), so the live agent gathers the sources
   // with its own tools and authors the skill via skill_manage. No backend
-  // distill endpoint — one code path with the CLI/TUI/gateway /learn.
+  // distill endpoint — one code path with the CLI/TUI /learn.
   const navigate = useNavigate();
   const [learnOpen, setLearnOpen] = useState(false);
   const [learnDir, setLearnDir] = useState("");
