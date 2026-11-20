@@ -8912,11 +8912,7 @@ def _cmd_update_impl(args):
                 seed_profile_skills,
             )
 
-            targets = {p.path: p.name for p in list_profiles()}
-            targets.setdefault(get_lliam_home(), "active")
-            print()
-            print("→ Syncing bundled skills to all profiles...")
-            for path, name in targets.items():
+            def sync_profile(path, name):
                 try:
                     r = seed_profile_skills(path, quiet=True)
                     if r and r.get("skipped_opt_out"):
@@ -8938,8 +8934,18 @@ def _cmd_update_impl(args):
                     print(f"  {name}: {status}")
                 except Exception as pe:
                     print(f"  {name}: error ({pe})")
-        except Exception:
-            pass  # profiles module not available or no profiles
+
+            print()
+            print("→ Syncing bundled skills to all profiles...")
+            active_home = get_lliam_home()
+            sync_profile(active_home, "active")
+            synced = {active_home}
+            for profile in list_profiles():
+                if profile.path not in synced:
+                    sync_profile(profile.path, profile.name)
+                    synced.add(profile.path)
+        except Exception as exc:
+            print(f"  Could not finish syncing profile skills: {exc}")
 
         # Backfill per-profile .env files for profiles created before the
         # .env-seeding fix (#44792). Copies the default install's .env so
