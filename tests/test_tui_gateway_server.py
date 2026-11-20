@@ -6503,8 +6503,8 @@ def test_browser_manage_connect_default_local_reports_launch_hint(monkeypatch):
                 "lliam_cli.browser_connect.try_launch_chrome_debug", return_value=False
             ),
             patch(
-                "lliam_cli.browser_connect.get_chrome_debug_candidates",
-                return_value=[],
+                "lliam_cli.browser_connect.manual_chrome_debug_command",
+                return_value=None,
             ),
         ):
             resp = server.handle_request(
