@@ -685,9 +685,9 @@ class GovernanceOverlayError(ValueError):
     """An explicitly selected governance configuration could not be loaded."""
 
 
-def _gov_overlay_path() -> Optional[Path]:
+def _gov_overlay_path(path: Optional[Path] = None) -> Optional[Path]:
     """Resolve the optional selector. An explicitly selected file is required."""
-    raw = getenv_compat("CONFIG")
+    raw = str(path) if path is not None else getenv_compat("CONFIG")
     if not raw or not raw.strip():
         return None
     try:
@@ -5336,8 +5336,11 @@ def read_raw_config() -> Dict[str, Any]:
         return data
 
 
-def load_config() -> Dict[str, Any]:
+def load_config(*, overlay_path: Optional[Path] = None) -> Dict[str, Any]:
     """Load configuration from ~/.hermes/config.yaml.
+
+    A supplied overlay path uses the same merge and validation as the
+    environment selector, without changing process-wide environment variables.
 
     Cached on the config file's (mtime_ns, size). Returns a deepcopy of
     the cached value when unchanged, since most call sites mutate the
@@ -5352,7 +5355,7 @@ def load_config() -> Dict[str, Any]:
     """
     from lliam_cli.deviations import check_reload
 
-    return check_reload(_load_config_impl(want_deepcopy=True))
+    return check_reload(_load_config_impl(want_deepcopy=True, overlay_path=overlay_path))
 
 
 def load_config_readonly() -> Dict[str, Any]:
@@ -5469,7 +5472,7 @@ def apply_terminal_config_to_env(
     return target
 
 
-def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
+def _load_config_impl(*, want_deepcopy: bool, overlay_path: Optional[Path] = None) -> Dict[str, Any]:
     with _CONFIG_LOCK:
         ensure_lliam_home()
         config_path = get_config_path()
@@ -5494,7 +5497,7 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
         except OSError:
             managed_sig = (0, 0)
 
-        overlay_path = _gov_overlay_path()
+        overlay_path = _gov_overlay_path(overlay_path)
         try:
             ost = overlay_path.stat() if overlay_path else None
             overlay_sig = (ost.st_mtime_ns, ost.st_size) if ost else (0, 0)

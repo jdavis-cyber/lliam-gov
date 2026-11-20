@@ -44,9 +44,10 @@ def _home() -> Path:
         return (Path.home() / ".lliam").resolve()
 
 
-def _overlay(home: Path, repo_root: Path) -> Path:
+def resolve_overlay(home: Path, repo_root: Path) -> Path:
+    """Resolve an explicit selector, or prefer the installed home overlay over the repository default."""
     raw = os.environ.get("LLIAM_CONFIG") or os.environ.get("HERMES_CONFIG")
-    if raw:
+    if raw and raw.strip():
         p = Path(raw).expanduser()
         if not p.is_absolute():
             p = (Path.cwd() / p) if (Path.cwd() / p).is_file() else repo_root / p
@@ -138,7 +139,7 @@ def install(*, platform: Optional[str] = None, dest_dir: Optional[Path] = None,
             runner: Runner = _run) -> list[Path]:
     platform = platform or _platform()
     home = Path(home) if home else _home()
-    overlay = Path(overlay) if overlay else _overlay(home, repo_root)
+    overlay = Path(overlay) if overlay else resolve_overlay(home, repo_root)
     python = python or sys.executable
     dest = Path(dest_dir) if dest_dir else default_dest(platform)
     dest.mkdir(parents=True, exist_ok=True)
@@ -258,7 +259,7 @@ def _cmd_uninstall(args) -> int:
 def _max_age_hours() -> float:
     try:
         import yaml
-        cfg = yaml.safe_load(_overlay(_home(), _REPO_ROOT).read_text("utf-8"))
+        cfg = yaml.safe_load(resolve_overlay(_home(), _REPO_ROOT).read_text("utf-8"))
         return float(((cfg.get("monitoring") or {}).get("assurance") or {})
                      .get("max_age_hours") or 26.0)
     except Exception:
@@ -277,7 +278,7 @@ def _cmd_run(args) -> int:
     env = dict(os.environ)
     home = _home()
     env.setdefault("HERMES_HOME", str(home))
-    env.setdefault("HERMES_CONFIG", str(_overlay(home, _REPO_ROOT)))
+    env.setdefault("HERMES_CONFIG", str(resolve_overlay(home, _REPO_ROOT)))
     env.setdefault("LLIAM_PYTHON", sys.executable)
     return subprocess.call(["/bin/bash", str(script)], env=env)
 

@@ -208,9 +208,9 @@ def _approval_channel_probe(cfg: dict, repo_root: Path) -> dict:
 
 def effectiveness_report(*, repo_root: Path = _REPO_ROOT,
                          overlay_path: Path | None = None,
+                         config: dict | None = None,
                          check_assurance_freshness: bool = True) -> dict:
-    overlay_path = overlay_path or (repo_root / "cli-config.gov.yaml")
-    cfg = _load(overlay_path)
+    cfg = config if config is not None else _load(overlay_path or repo_root / "cli-config.gov.yaml")
     disabled = set(_get(cfg, "skills.disabled") or [])
     return {
         "posture_strict": str(_get(cfg, "security.posture")) == "strict",
@@ -236,9 +236,10 @@ def effectiveness_report(*, repo_root: Path = _REPO_ROOT,
 
 def check_effectiveness(*, repo_root: Path = _REPO_ROOT,
                         overlay_path: Path | None = None,
+                        config: dict | None = None,
                         check_assurance_freshness: bool = True) -> list[str]:
     r = effectiveness_report(
-        repo_root=repo_root, overlay_path=overlay_path,
+        repo_root=repo_root, overlay_path=overlay_path, config=config,
         check_assurance_freshness=check_assurance_freshness)
     checks = {
         "posture_strict": "security.posture is not strict",

@@ -59,31 +59,6 @@ def _home(home: Optional[Path]) -> Path:
     return _nt.lliam_home()
 
 
-def _overlay_path(repo_root: Path) -> Path:
-    raw = os.environ.get("LLIAM_CONFIG") or os.environ.get("HERMES_CONFIG")
-    if raw:
-        p = Path(raw).expanduser()
-        for cand in (p, repo_root / p):
-            if cand.is_file():
-                return cand
-    return repo_root / "cli-config.gov.yaml"
-
-
-def _load_config(overlay: Path) -> dict:
-    try:
-        from lliam_cli import config as _cfg
-        cfg = _cfg.load_config()
-        if isinstance(cfg, dict) and cfg.get("monitoring") is not None:
-            return cfg
-    except Exception:
-        pass
-    try:
-        import yaml
-        return yaml.safe_load(overlay.read_text("utf-8")) or {}
-    except Exception:
-        return {}
-
-
 def read_heartbeat(home: Path) -> Optional[dict]:
     try:
         data = json.loads((home / _HEARTBEAT).read_text("utf-8"))
@@ -151,23 +126,35 @@ def run_assurance(*, repo_root: Path = _REPO_ROOT,
     import governance_metrics as gm
     from agent import cato_loop as cato
     from agent import notify_transport as _nt
+    from lliam_cli import config as runtime_config
+    from lliam_cli.assurance_schedule import resolve_overlay
+    from lliam_cli.env_compat import getenv_compat
 
     started = now or _utcnow()
     home = _home(home)
-    overlay = overlay_path or _overlay_path(repo_root)
-    config = config if config is not None else _load_config(overlay)
+    overlay = overlay_path or resolve_overlay(home, repo_root)
+    if config is None:
+        # A direct, unattended run may already have monitoring configured in
+        # its effective home profile. Otherwise use the scheduler's default
+        # overlay. An explicit selection always goes through the runtime merge.
+        if overlay_path is None and not (getenv_compat("CONFIG") or "").strip():
+            effective = runtime_config.load_config()
+            if effective.get("monitoring") is not None:
+                config = effective
+                overlay = None
+        if config is None:
+            config = runtime_config.load_config(overlay_path=overlay)
     stamp = stamp or started.strftime("%Y%m%dT%H%M%SZ")
     report_dir = home / "logs" / "assurance"
     previous = read_heartbeat(home)
     beat: dict = {"schema": "lg-mo/assurance-heartbeat/1",
                   "host": socket.gethostname(),
                   "started_at": started.isoformat(timespec="seconds"),
-                  "overlay": str(overlay), "errors": []}
+                  "overlay": str(overlay) if overlay is not None else None, "errors": []}
 
     # 1. control effectiveness (own freshness excluded — see module doc)
     try:
-        failures = ce.check_effectiveness(repo_root=repo_root,
-                                          overlay_path=overlay,
+        failures = ce.check_effectiveness(repo_root=repo_root, config=config,
                                           check_assurance_freshness=False)
     except Exception as e:
         failures = []
