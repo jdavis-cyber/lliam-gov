@@ -21,6 +21,21 @@ assert not [name for name in sys.modules
     })
 
 
+def test_low_side_wildcard_imports_include_lazy_public_providers(monkeypatch):
+    from tools import browser_tool, skill_attestation, web_tools
+
+    monkeypatch.setattr(skill_attestation, "active_policy", lambda: None)
+    for module, statement, expected in (
+        (web_tools, "from tools.web_tools import *", ("Firecrawl",)),
+        (browser_tool, "from tools.browser_tool import *",
+         ("BrowserbaseProvider", "BrowserUseProvider", "FirecrawlProvider")),
+    ):
+        exported = {}
+        exec(statement, exported)
+        for name in expected:
+            assert exported[name] is getattr(module, name)
+
+
 def test_approved_compatibility_exports_work_without_unselected_providers(monkeypatch):
     from agent.attestation import compute_signature
     from tools import browser_tool, skill_attestation, web_tools

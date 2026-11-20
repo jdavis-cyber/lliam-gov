@@ -4241,3 +4241,7 @@ registry.register(
     check_fn=check_browser_requirements,
     emoji="🖥️",
 )
+
+
+# Preserve wildcard exports without resolving optional providers during import.
+__all__ = sorted(name for name in globals().keys() | _BROWSER_EXPORTS.keys() if not name.startswith("_"))

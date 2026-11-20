@@ -1400,3 +1400,7 @@ registry.register(
     emoji="📄",
     max_result_size_chars=100_000,
 )
+
+
+# Preserve wildcard exports without resolving optional providers during import.
+__all__ = sorted(name for name in globals().keys() | _WEB_EXPORTS.keys() if not name.startswith("_"))
