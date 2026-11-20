@@ -268,6 +268,14 @@ def mask_tool_result(value: Any) -> Any:
         return "[REDACTED: tool result unavailable]"
 
 
+def log_tool_exception(log: logging.Logger, message: str) -> None:
+    """Keep chained exception messages out of governed tool error logs."""
+    if _is_strict():
+        log.error("%s", mask_tool_result(message))
+    else:
+        log.exception("%s", message)
+
+
 def requires_protected_results() -> bool:
     policy = _security_cfg().get("data_protection") or {}
     return (

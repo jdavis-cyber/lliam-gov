@@ -30,7 +30,7 @@ import threading
 import time
 from typing import Dict, Any, List, Optional, Tuple
 
-from agent.data_protection import mask_tool_result
+from agent.data_protection import log_tool_exception, mask_tool_result
 from tools.registry import discover_builtin_tools, registry
 from toolsets import resolve_toolset, validate_toolset
 
@@ -1436,11 +1436,7 @@ def handle_function_call(
 
     except Exception as e:
         error_msg = f"Error executing {function_name}: {str(e)}"
-        masked_error = mask_tool_result(error_msg)
-        if masked_error == error_msg:
-            logger.exception(error_msg)
-        else:
-            logger.error("%s", masked_error)
+        log_tool_exception(logger, error_msg)
         _sanitized = _sanitize_tool_error(error_msg)
         result = json.dumps({"error": _sanitized}, ensure_ascii=False)
         # A registry/dispatch exception is still a terminal outcome — it must
