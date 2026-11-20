@@ -200,6 +200,24 @@ def test_sequence_latches_after_success_only(monkeypatch):
     assert [c[0] for c in calls].count("identity") == 2
 
 
+def test_forced_recheck_reaches_every_gate_and_clears_failed_success(monkeypatch):
+    attempts = []
+    blocked = False
+    _record_gates(monkeypatch, [])
+    monkeypatch.setattr(sp, "_merged_config", lambda _: {})
+    def gate(*, config, force=False):
+        attempts.append(force)
+        if blocked:
+            raise sas.ModelIntegrityError("refused on recheck")
+    monkeypatch.setattr(sas, "enforce_model_integrity_at_startup", gate)
+    sp.enforce_startup_posture(raw_config={})
+    blocked = True
+    for force in (True, False):
+        with pytest.raises(sas.ModelIntegrityError):
+            sp.enforce_startup_posture(raw_config={}, force=force)
+    assert attempts[1] is True
+
+
 def test_real_gates_low_side_is_noop(monkeypatch):
     _low_side(monkeypatch)
     assert sp.enforce_startup_posture() is None

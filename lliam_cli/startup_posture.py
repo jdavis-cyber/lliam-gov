@@ -95,13 +95,13 @@ def enforce_startup_posture(
     last-resort fallback when the merged config cannot be loaded; it is read
     here when not supplied. Raises one of :data:`STARTUP_GATE_ERRORS` under a
     strict posture when a gate blocks. Returns None otherwise. Idempotent per
-    process once a run completes (``force`` re-runs the sequence; the
-    individual gates keep their own per-process latches).
+    process once a run completes. Each new attempt rechecks all gates.
     """
     global _STARTUP_POSTURE_ENFORCED
     if _STARTUP_POSTURE_ENFORCED and not force:
         return None
 
+    _STARTUP_POSTURE_ENFORCED = False  # A failed recheck invalidates any earlier success.
     if raw_config is None:
         raw_config = _read_raw_config()
 
@@ -120,7 +120,7 @@ def enforce_startup_posture(
     # with TLS verification disabled, under strict posture.
     try:
         _sas.enforce_control_plane_auth_at_startup(
-            config=merged
+            config=merged, force=True
         )
     except _sas.ControlPlaneAuthError:
         raise
@@ -133,7 +133,7 @@ def enforce_startup_posture(
     # under strict posture + security.provider_allowlist_enforce.
     try:
         _sas.enforce_provider_allowlist_at_startup(
-            config=merged
+            config=merged, force=True
         )
     except _sas.ProviderAllowlistError:
         raise
@@ -145,7 +145,7 @@ def enforce_startup_posture(
     # configured primary model lacks a required model card, under strict posture.
     try:
         _sas.enforce_model_integrity_at_startup(
-            config=merged
+            config=merged, force=True
         )
     except _sas.ModelIntegrityError:
         raise
@@ -157,7 +157,7 @@ def enforce_startup_posture(
     # is absent or stale. Complete no-op on the low-side posture.
     try:
         _sas.enforce_governance_artifacts_at_startup(
-            config=merged
+            config=merged, force=True
         )
     except _sas.GovernanceArtifactError:
         raise
@@ -170,7 +170,7 @@ def enforce_startup_posture(
     # (fail-closed — refuse to rely on a tampered ledger). The MERGED config is
     # passed so the overlay's strict-posture / audit block is visible.
     try:
-        _sas.verify_audit_chain_at_startup(config=merged)
+        _sas.verify_audit_chain_at_startup(config=merged, force=True)
     except _sas.AuditChainVerificationError:
         raise
     except Exception as _verify_exc:

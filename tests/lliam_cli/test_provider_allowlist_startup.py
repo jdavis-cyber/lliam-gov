@@ -70,8 +70,9 @@ def test_non_allowlisted_primary_blocks(tmp_path, monkeypatch):
     cfg = _cfg(tmp_path, {"model": {"provider": "openrouter",
                                      "base_url": "https://openrouter.ai/api/v1"}})
     monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
-    with pytest.raises(sas.ProviderAllowlistError, match="primary|openrouter"):
-        sas.enforce_provider_allowlist_at_startup(config=cfg)
+    for _ in range(2):
+        with pytest.raises(sas.ProviderAllowlistError, match="primary|openrouter"):
+            sas.enforce_provider_allowlist_at_startup(config=cfg)
 
 
 def test_non_allowlisted_fallback_blocks(tmp_path, monkeypatch):

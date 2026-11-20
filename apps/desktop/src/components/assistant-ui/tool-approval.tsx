@@ -116,7 +116,7 @@ const ApprovalBar: FC<{ request: ApprovalRequest; surface: 'floating' | 'inline'
     async (choice: ApprovalChoice) => {
       // Another bar (or the keyboard path) may have already resolved this
       // approval; the atom is the single source of truth, so bail if it's gone.
-      if (busy || !$approvalRequest.get()) {
+      if (busy || $approvalRequest.get() !== request) {
         return
       }
 
@@ -134,14 +134,16 @@ const ApprovalBar: FC<{ request: ApprovalRequest; surface: 'floating' | 'inline'
           ...(request.requestId && { request_id: request.requestId }),
           session_id: request.sessionId ?? undefined
         })
-        if (request.requestId && !response?.resolved) {
-          setSubmitting(null)
-          return
-        }
-        triggerHaptic(choice === 'deny' ? 'cancel' : 'submit')
-        if ($approvalRequest.get() === request) {
+        if (request.requestId) {
+          // A zero count means this numbered request already expired or was handled elsewhere.
+          clearApprovalRequest(request.sessionId, request.requestId)
+        } else if ($approvalRequest.get() === request) {
           clearApprovalRequest(request.sessionId)
         }
+        if (!request.requestId || response?.resolved) {
+          triggerHaptic(choice === 'deny' ? 'cancel' : 'submit')
+        }
+        setSubmitting(null)
       } catch (error) {
         notifyError(error, copy.sendFailed)
         setSubmitting(null)
