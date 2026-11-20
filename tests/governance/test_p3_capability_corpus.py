@@ -47,6 +47,7 @@ def p3_overlay(tmp_path, monkeypatch):
     """), encoding="utf-8")
     cfg = {"security": {
         "posture": "strict",
+        "allowed_providers": ["lmstudio", "bedrock"],
         "provider_allowlist_enforce": True, "provider_allowlist_path": str(prov),
         "mcp_allowlist_enforce": True, "mcp_allowlist_path": str(mcp),
         "require_signed_skills": True,
