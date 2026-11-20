@@ -117,6 +117,14 @@ def _cards_path() -> Optional[Path]:
     return None
 
 
+def _read_cards(path: Path) -> Dict[str, Any]:
+    import yaml
+
+    with path.open(encoding="utf-8") as stream:
+        data = yaml.safe_load(stream)
+    return data if isinstance(data, dict) else {}
+
+
 def _load_cards() -> Dict[str, Any]:
     path = _cards_path()
     if path is None:
@@ -128,11 +136,7 @@ def _load_cards() -> Dict[str, Any]:
         sig = (st.st_mtime_ns, st.st_size)
         if cached is not None and cached[0] == sig:
             return cached[1]
-        import yaml
-        with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-        if not isinstance(data, dict):
-            data = {}
+        data = _read_cards(path)
         _CARDS_CACHE[key] = (sig, data)
         return data
     except Exception:
@@ -266,6 +270,28 @@ class WhisperInventory:
         return files
 
 
+def _whisper_cards() -> Dict[str, Any]:
+    security = _security_cfg()
+    if "model_cards_path" not in security:
+        return _load_cards()
+
+    import yaml
+
+    configured = security["model_cards_path"]
+    if not isinstance(configured, str) or not configured.strip():
+        raise ValueError("Invalid configured Whisper model-card index path")
+    try:
+        path = Path(configured.strip()).expanduser()
+        # Relative policy paths resolve from the working directory, then the installation.
+        if not path.is_absolute() and not os.path.lexists(path):
+            path = Path(__file__).resolve().parents[1] / path
+        if path.is_file():
+            return _read_cards(path)
+    except (OSError, RuntimeError, ValueError, yaml.YAMLError) as exc:
+        raise ValueError("Cannot read the configured Whisper model-card index") from exc
+    raise ValueError("Missing or invalid configured Whisper model-card index")
+
+
 def provisioned_whisper(artifact: str) -> WhisperInventory | None:
     """Select the unique signed faster-whisper card for a canonical local directory."""
     if not safe_local_model_required():
@@ -273,7 +299,7 @@ def provisioned_whisper(artifact: str) -> WhisperInventory | None:
     directory = Path(artifact).expanduser()
     if not directory.is_absolute() or not directory.is_dir() or directory.resolve() != directory:
         raise ValueError("Governed faster-whisper requires a provisioned model directory (LG-MP-07)")
-    models = _load_cards().get("models")
+    models = _whisper_cards().get("models")
     if not isinstance(models, list):
         raise ValueError("Whisper directory needs a signed model card")
     matches = [row for row in models

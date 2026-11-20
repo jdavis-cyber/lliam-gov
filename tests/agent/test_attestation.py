@@ -390,6 +390,40 @@ def test_governed_whisper_checks_digest_and_native_binary_format(whisper_bundle)
     assert "Whisper model header" in transcribe()["error"]
 
 
+@pytest.mark.parametrize("state", ["missing", "directory", "malformed", "blank", "null"])
+def test_whisper_an_explicit_index_cannot_fall_back(whisper_bundle, strict_att, monkeypatch, state):
+    directory, card, _, _, transcribe = whisper_bundle
+    # The legacy home lookup contains a valid signed card for this exact directory.
+    monkeypatch.setenv("LLIAM_HOME", str(directory.parent))
+    selected = directory.parent / "selected.yaml"
+    if state == "directory":
+        selected.mkdir()
+    elif state == "malformed":
+        selected.write_text("models: [", encoding="utf-8")
+    configured = {"blank": " ", "null": None}.get(state, str(selected))
+    monkeypatch.setitem(strict_att._security_cfg(), "model_cards_path", configured)
+    result = transcribe()
+    assert not result["success"]
+    assert "configured Whisper model-card index" in result["error"]
+    if state in {"missing", "directory", "blank", "null"}:
+        assert strict_att.model_card_present(card["id"])
+
+
+@pytest.mark.parametrize("location", ["working_directory", "installation"])
+def test_whisper_resolves_the_configured_relative_index(whisper_bundle, strict_att, monkeypatch, location):
+    directory, _, _, _, _ = whisper_bundle
+    install, cwd = directory.parent / "installation", directory.parent / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    monkeypatch.setattr(strict_att, "__file__", str(install / "agent" / "attestation.py"))
+    relative = Path("policy/governed/model-cards.yaml")
+    selected = (cwd if location == "working_directory" else install) / relative
+    selected.parent.mkdir(parents=True)
+    selected.write_bytes((directory.parent / "model-cards.yaml").read_bytes())
+    monkeypatch.setitem(strict_att._security_cfg(), "model_cards_path", str(relative))
+    assert strict_att.provisioned_whisper(str(directory)).directory == directory
+
+
 def test_governed_whisper_requires_signed_approval(whisper_bundle, strict_att):
     import yaml
 
