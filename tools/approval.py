@@ -629,7 +629,7 @@ def _shell_c_scripts(name: str, args: list) -> list:
 # Fallback when the command cannot be tokenized (unbalanced quotes, e.g. a
 # heredoc body containing an apostrophe): look for a redirect operator or a
 # tee word followed by a token whose basename looks like an env file.
-_ENV_TOKEN = r"""["']?(?P<target>[^\s;|&<>()"'`]*(?:\.env|\$[A-Za-z_0-9@*#?$!{-])[^\s;|&<>()"'`]*)["']?"""
+_ENV_TOKEN = r"""["']?(?P<target>[^\s;|&<>()"'`]*(?:\.env|`|\$[A-Za-z_0-9@*#?$!{(-])[^\s;|&<>()"'`]*)["']?"""
 _ENV_REDIRECT_FALLBACK_RE = re.compile(r"(?:>>?\|?|&>>?|>&)\s*" + _ENV_TOKEN)
 _ENV_TEE_FALLBACK_RE = re.compile(r"(?<![\w.-])tee\b[^;&|\n]*?\s" + _ENV_TOKEN)
 
@@ -959,7 +959,7 @@ def _brace_expand(pieces: list, pieces_bare: list) -> list:
         chars.extend(piece)
         bare.extend([is_bare] * len(piece))
     if "{" not in [c for c, b in zip(chars, bare) if b]:
-        return ["".join(chars)]
+        return [("".join(chars), bare)]
     results: list = []
 
     def expand(chars: list, bare: list) -> bool:
@@ -974,20 +974,24 @@ def _brace_expand(pieces: list, pieces_bare: list) -> list:
             return True
         if len(results) >= _BRACE_LIMIT:
             return False
-        results.append("".join(chars))
+        results.append(("".join(chars), bare))
         return True
 
     if expand(chars, bare):
-        words = [word for word in results if word]
-        return words or [""]
+        words = [word for word in results if word[0]]
+        return words or [("", [])]
     approx: list = []
+    approx_bare: list = []
     last = 0
     for start, end in _brace_groups(chars, bare):
         approx.extend(chars[last:start])
+        approx_bare.extend(bare[last:start])
         approx.append(_BRACE_ANY)
+        approx_bare.append(False)
         last = end + 1
     approx.extend(chars[last:])
-    return ["".join(approx)]
+    approx_bare.extend(bare[last:])
+    return [("".join(approx), approx_bare)]
 
 
 class _ShellWord(str):
@@ -999,7 +1003,7 @@ class _ShellWord(str):
 
 # Only active shell expansions make a path unknowable. A dollar sign in a
 # single-quoted or escaped word is an ordinary filename character.
-_PARAMETER_START = re.compile(r"\$(?:[A-Za-z_0-9@*#?$!{-])")
+_PARAMETER_START = re.compile(r"\$(?:[A-Za-z_0-9@*#?$!{(-])")
 
 
 def _only_env_template_matches(target: str) -> bool:
@@ -1043,11 +1047,10 @@ def _shell_tokens(command: str, comments: bool = False,
     ``_heredoc_scripts`` decides whether it runs. Without *heredocs* the body
     is tokenized like other lines.
 
-    With *substitutions*, the script of each command substitution the lexer
-    keeps inside a word (``"$(...)"`` or a backquoted one) or finds in an
-    unquoted heredoc body is appended to it, so the caller can scan it. An
-    unquoted ``$(`` already splits into tokens. A substitution whose end is
-    unsure (see ``_substitution_end``) makes the command untokenizable.
+    With *substitutions*, each command substitution or unquoted heredoc
+    script is returned for recursive inspection. A word containing a command
+    substitution is dynamic; its output is never evaluated here. Uncertain
+    boundaries make the command untokenizable.
 
     Unquoted brace alternatives are expanded as Bash does (``.env{,.local}``
     is two words, see ``_brace_expand``); quoted braces stay literal.
@@ -1076,14 +1079,14 @@ def _shell_tokens(command: str, comments: bool = False,
                 pending.append((text, word_quoted, want))
                 want = None
             else:
-                quoted_glob = any(
-                    not bare and any(ch in piece for ch in "[]*?!^-")
-                    for piece, bare in zip(word, word_bare)
-                )
                 alternatives = []
-                for spelling in _brace_expand(word, word_bare):
+                for spelling, bare in _brace_expand(word, word_bare):
                     token = _ShellWord(spelling)
-                    token.quoted_glob = quoted_glob
+                    basename = spelling.rfind("/") + 1
+                    token.quoted_glob = any(
+                        not unquoted and ch in "[]*?!^-"
+                        for ch, unquoted in zip(spelling[basename:], bare[basename:])
+                    )
                     token.dynamic_parameter = dynamic_parameter
                     alternatives.append(token)
                 redirect = tokens[-1][0] if tokens and tokens[-1][1] else ""
@@ -1213,6 +1216,7 @@ def _shell_tokens(command: str, comments: bool = False,
                         return None
                     skip = 1 if command[j] == "`" else 2
                     substitutions.append(command[j + skip:end - 1])
+                    dynamic_parameter = True
                     add(command[j:end])
                     j = end
                     continue
@@ -1223,11 +1227,13 @@ def _shell_tokens(command: str, comments: bool = False,
             if j >= n:
                 return None
             i = j + 1
-        elif ch == "`" and substitutions is not None:
+        elif substitutions is not None and (ch == "`" or command.startswith("$(", i)):
             end = _substitution_end(command, i)
             if end is None:
                 return None
-            substitutions.append(command[i + 1:end - 1])
+            skip = 1 if ch == "`" else 2
+            substitutions.append(command[i + skip:end - 1])
+            dynamic_parameter = True
             add(command[i:end])
             i = end
         else:
@@ -1687,7 +1693,7 @@ def detect_env_file_write(command: str) -> tuple:
         # Shell state and assignments can change between scanning and execution.
         # Require literal output paths, including when the variable has a default.
         dynamic = (target.dynamic_parameter if isinstance(target, _ShellWord)
-                   else bool(_PARAMETER_START.search(target)))
+                   else ("`" in target or bool(_PARAMETER_START.search(target))))
         if dynamic:
             return (True, "shell output path could name a protected .env file; use a literal path")
         if _only_env_template_matches(target):
@@ -2044,6 +2050,14 @@ def _compressor_call_deletes(name: str, args: list, operands_supplied: bool) -> 
             continue
         if arg.startswith("--"):
             key, has_value, _ = arg.partition("=")
+            # xz accepts abbreviated long options. A prefix that could
+            # select a replacing mode must supersede an earlier list/test
+            # mode. An abbreviated file-list option can supply operands.
+            if family == "xz" and key not in long_values and key not in keep_long:
+                if any(mode.startswith(key) for mode in ("--compress", "--decompress", "--uncompress")):
+                    inspect_mode = False
+                if any(option.startswith(key) for option in ("--files", "--files0")):
+                    has_operand = True
             if key in _COMPRESSOR_FILE_LISTS:
                 has_operand = True  # input names come from a list file or stdin
             if key in long_values and not has_value:

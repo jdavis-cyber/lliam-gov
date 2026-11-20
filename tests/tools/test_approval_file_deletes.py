@@ -744,6 +744,9 @@ def test_residual_deleters_offer_only_once(desktop_terminal, command):
     (["-zt"], False),
     (["--keep", "-tz"], False),
     (["--stdout", "-ld"], False),
+    (["--test", "--compr"], True),
+    (["--list", "--decomp"], True),
+    (["--keep", "--list", "--uncomp"], False),
 ])
 def test_xz_final_mode_is_independent_of_keep_and_stdout(flags, replaces):
     assert approval._compressor_call_deletes("xz", [*flags, "fixture"], False) is replaces
