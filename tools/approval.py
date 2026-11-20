@@ -629,7 +629,7 @@ def _shell_c_scripts(name: str, args: list) -> list:
 # Fallback when the command cannot be tokenized (unbalanced quotes, e.g. a
 # heredoc body containing an apostrophe): look for a redirect operator or a
 # tee word followed by a token whose basename looks like an env file.
-_ENV_TOKEN = r"""["']?(?P<target>[^\s;|&<>()"'`]*\.env[^\s;|&<>()"'`]*)["']?"""
+_ENV_TOKEN = r"""["']?(?P<target>[^\s;|&<>()"'`]*(?:\.env|\$[A-Za-z_0-9@*#?$!{-])[^\s;|&<>()"'`]*)["']?"""
 _ENV_REDIRECT_FALLBACK_RE = re.compile(r"(?:>>?\|?|&>>?|>&)\s*" + _ENV_TOKEN)
 _ENV_TEE_FALLBACK_RE = re.compile(r"(?<![\w.-])tee\b[^;&|\n]*?\s" + _ENV_TOKEN)
 
@@ -994,6 +994,12 @@ class _ShellWord(str):
     """A shell word with the quoting facts needed by the write-target policy."""
 
     quoted_glob: bool
+    dynamic_parameter: bool
+
+
+# Only active shell expansions make a path unknowable. A dollar sign in a
+# single-quoted or escaped word is an ordinary filename character.
+_PARAMETER_START = re.compile(r"\$(?:[A-Za-z_0-9@*#?$!{-])")
 
 
 def _only_env_template_matches(target: str) -> bool:
@@ -1050,6 +1056,7 @@ def _shell_tokens(command: str, comments: bool = False,
     word: list = []  # pieces of the current word
     word_bare: list = []  # per piece: unquoted and unescaped (brace syntax)
     in_word = False
+    dynamic_parameter = False
     word_quoted = False  # the current word has a quote or backslash
     operator: list = []
     pending: list = []  # heredocs opened on this line: (delimiter, quoted, strip_tabs)
@@ -1061,7 +1068,7 @@ def _shell_tokens(command: str, comments: bool = False,
         word_bare.append(bare)
 
     def end_word() -> None:
-        nonlocal in_word, word_quoted, want
+        nonlocal in_word, word_quoted, want, dynamic_parameter
         if in_word:
             text = "".join(word)
             if want is not None:  # a heredoc delimiter is not brace-expanded
@@ -1077,6 +1084,7 @@ def _shell_tokens(command: str, comments: bool = False,
                 for spelling in _brace_expand(word, word_bare):
                     token = _ShellWord(spelling)
                     token.quoted_glob = quoted_glob
+                    token.dynamic_parameter = dynamic_parameter
                     alternatives.append(token)
                 redirect = tokens[-1][0] if tokens and tokens[-1][1] else ""
                 if len(alternatives) > 1 and ("<" in redirect or ">" in redirect) \
@@ -1092,6 +1100,7 @@ def _shell_tokens(command: str, comments: bool = False,
             word_bare.clear()
             in_word = False
         word_quoted = False
+        dynamic_parameter = False
 
     def end_operator() -> None:
         nonlocal want
@@ -1207,6 +1216,8 @@ def _shell_tokens(command: str, comments: bool = False,
                     add(command[j:end])
                     j = end
                     continue
+                if command[j] == "$" and _PARAMETER_START.match(command, j):
+                    dynamic_parameter = True
                 add(command[j])
                 j += 1
             if j >= n:
@@ -1220,6 +1231,8 @@ def _shell_tokens(command: str, comments: bool = False,
             add(command[i:end])
             i = end
         else:
+            if ch == "$" and _PARAMETER_START.match(command, i):
+                dynamic_parameter = True
             add(ch, True)
             i += 1
     end_operator()
@@ -1671,6 +1684,12 @@ def detect_env_file_write(command: str) -> tuple:
     # dotglob (or a GLOBIGNORE, which sets it) lets * and ? match a leading dot.
     dotglob = re.search(r"dotglob|globignore", command, re.IGNORECASE) is not None
     for target in _env_write_targets_or_fallback(normalized):
+        # Shell state and assignments can change between scanning and execution.
+        # Require literal output paths, including when the variable has a default.
+        dynamic = (target.dynamic_parameter if isinstance(target, _ShellWord)
+                   else bool(_PARAMETER_START.search(target)))
+        if dynamic:
+            return (True, "shell output path could name a protected .env file; use a literal path")
         if _only_env_template_matches(target):
             continue
         if _is_protected_env_basename(target):

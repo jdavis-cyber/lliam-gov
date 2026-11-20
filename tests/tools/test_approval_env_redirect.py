@@ -475,3 +475,16 @@ def test_template_only_glob_is_allowed(pattern):
 @pytest.mark.parametrize("pattern", ["'.env.exampl[e]'", ".env.exampl[ef]", ".env.sample?"])
 def test_literal_or_ambiguous_template_name_remains_protected(pattern):
     assert detect_env_file_write("tee " + pattern)[0]
+
+
+@pytest.mark.parametrize("word", ["$OUTPUT", '"${OUTPUT:-report.txt}"', "$1"])
+def test_unresolved_output_names_require_a_literal_path(word):
+    for prefix in ["tee ", ": > "]:
+        refused, reason = detect_env_file_write(prefix + word)
+        assert refused
+        assert "literal" in reason
+
+
+def test_variable_in_data_or_quoted_literal_filename_is_allowed():
+    assert detect_env_file_write('echo "$DATA" > report.txt') == (False, None)
+    assert detect_env_file_write("tee '$OUTPUT'") == (False, None)
