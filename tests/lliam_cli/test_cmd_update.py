@@ -464,19 +464,45 @@ class TestCmdUpdateProfileSkillSync:
 
     @patch("shutil.which", return_value=None)
     @patch("subprocess.run")
-    def test_active_profile_included_in_skill_sync(
-        self, mock_run, _mock_which, mock_args, capsys
+    def test_update_keeps_skill_sync_inside_selected_homes(
+        self, mock_run, _mock_which, mock_args, monkeypatch, tmp_path
     ):
-        from pathlib import Path
+        from lliam_constants import get_lliam_home, reset_lliam_home_override, set_lliam_home_override
+        from tools import skills_sync
 
+        # Simulate a desktop process that imported the sync module before a
+        # different profile was selected for this update.
+        old_home = tmp_path / "previous-profile"
+        selected = tmp_path / "selected-profile"
+        selected.mkdir()
+        monkeypatch.setattr(skills_sync, "HERMES_HOME", old_home)
+        monkeypatch.setattr(skills_sync, "SKILLS_DIR", old_home / "skills")
+        monkeypatch.setattr(skills_sync, "MANIFEST_FILE", old_home / "skills" / ".bundled_manifest")
+        mock_run.side_effect = _make_run_side_effect(commit_count="1")
+        token = set_lliam_home_override(selected)
+        try:
+            cmd_update(mock_args)
+            assert not old_home.exists()
+            assert get_lliam_home() == selected
+        finally:
+            reset_lliam_home_override(token)
+
+    @patch("shutil.which", return_value=None)
+    @patch("subprocess.run")
+    def test_active_profile_included_in_skill_sync(
+        self, mock_run, _mock_which, mock_args, capsys, tmp_path, monkeypatch
+    ):
         mock_run.side_effect = _make_run_side_effect(
             branch="main", verify_ok=True, commit_count="1"
         )
 
-        default_p = SimpleNamespace(name="default", path=Path("/fake/.hermes"))
-        active_p = SimpleNamespace(name="bit", path=Path("/fake/.hermes/profiles/bit"))
-        other_p = SimpleNamespace(name="work", path=Path("/fake/.hermes/profiles/work"))
+        default_p = SimpleNamespace(name="default", path=tmp_path)
+        active_p = SimpleNamespace(name="bit", path=tmp_path / "profiles" / "bit")
+        other_p = SimpleNamespace(name="work", path=tmp_path / "profiles" / "work")
         all_profiles = [default_p, active_p, other_p]
+
+        active_p.path.mkdir(parents=True)
+        monkeypatch.setenv("LLIAM_HOME", str(active_p.path))
 
         synced_paths = []
 
@@ -484,21 +510,47 @@ class TestCmdUpdateProfileSkillSync:
             synced_paths.append(path)
             return {"copied": [], "updated": [], "user_modified": []}
 
-        empty_sync = {"copied": [], "updated": [], "user_modified": [], "cleaned": []}
 
         with (
             patch("lliam_cli.profiles.list_profiles", return_value=all_profiles),
             patch("lliam_cli.profiles.seed_profile_skills", side_effect=fake_seed),
-            patch("tools.skills_sync.sync_skills", return_value=empty_sync),
         ):
             cmd_update(mock_args)
 
-        assert active_p.path in synced_paths, (
-            f"Active profile 'bit' must be included in skill sync; got: {synced_paths}"
-        )
+        assert synced_paths[0] == active_p.path
+        assert synced_paths.count(active_p.path) == 1
         assert set(synced_paths) == {p.path for p in all_profiles}, (
             f"All profiles must be synced; got: {synced_paths}"
         )
+
+    @patch("shutil.which", return_value=None)
+    @patch("subprocess.run")
+    def test_active_sync_survives_sibling_enumeration_failure(
+        self, mock_run, _mock_which, mock_args, capsys, tmp_path, monkeypatch
+    ):
+        selected = tmp_path / "selected"
+        selected.mkdir()
+        monkeypatch.setenv("LLIAM_HOME", str(selected))
+        mock_run.side_effect = _make_run_side_effect(commit_count="1")
+        events = []
+
+        def seed(path, quiet=False):
+            events.append(("seed", path))
+            return {"copied": [], "updated": [], "user_modified": []}
+
+        def list_unavailable():
+            events.append(("list", None))
+            raise OSError("unavailable profile directory")
+
+        with (
+            patch("lliam_cli.profiles.seed_profile_skills", side_effect=seed),
+            patch("lliam_cli.profiles.list_profiles", side_effect=list_unavailable),
+        ):
+            cmd_update(mock_args)
+
+        assert events[:2] == [("seed", selected), ("list", None)]
+        assert events.count(("seed", selected)) == 1
+        assert "unavailable profile directory" in capsys.readouterr().out
 
     @patch("shutil.which", return_value=None)
     @patch("subprocess.run")
@@ -518,12 +570,10 @@ class TestCmdUpdateProfileSkillSync:
             synced_paths.append(path)
             return {"copied": [], "updated": [], "user_modified": []}
 
-        empty_sync = {"copied": [], "updated": [], "user_modified": [], "cleaned": []}
 
         with (
             patch("lliam_cli.profiles.list_profiles", return_value=[default_p]),
             patch("lliam_cli.profiles.seed_profile_skills", side_effect=fake_seed),
-            patch("tools.skills_sync.sync_skills", return_value=empty_sync),
         ):
             cmd_update(mock_args)
 

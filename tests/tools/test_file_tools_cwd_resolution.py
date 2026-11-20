@@ -281,12 +281,13 @@ def test_live_cwd_still_wins_over_absolute_terminal_cwd(_isolated_cwd, monkeypat
 # ── Fix A: write_file / patch report the resolved ABSOLUTE path ──────────────
 
 
-def test_write_file_reports_resolved_absolute_path(_isolated_cwd, monkeypatch):
+def test_write_file_reports_resolved_absolute_path(_isolated_cwd, monkeypatch, request):
     """write_file_tool must put the absolute on-disk path in files_modified."""
     workspace, decoy = _isolated_cwd
     monkeypatch.setattr(ft, "_get_live_tracking_cwd", lambda task_id="default": str(workspace))
 
     import json
+    request.addfinalizer(lambda: terminal_tool.cleanup_vm("t1"))
     out = json.loads(ft.write_file_tool("newfile.txt", "hello\n", task_id="t1"))
 
     expected = str((workspace / "newfile.txt").resolve())
@@ -295,12 +296,13 @@ def test_write_file_reports_resolved_absolute_path(_isolated_cwd, monkeypatch):
     assert (workspace / "newfile.txt").read_text() == "hello\n"
 
 
-def test_patch_reports_resolved_absolute_path(_isolated_cwd, monkeypatch):
+def test_patch_reports_resolved_absolute_path(_isolated_cwd, monkeypatch, request):
     """patch_tool (replace mode) must put the absolute on-disk path in files_modified."""
     workspace, decoy = _isolated_cwd
     monkeypatch.setattr(ft, "_get_live_tracking_cwd", lambda task_id="default": str(workspace))
 
     import json
+    request.addfinalizer(lambda: terminal_tool.cleanup_vm("t1"))
     out = json.loads(ft.patch_tool(
         mode="replace", path="target.py",
         old_string="WORKSPACE_ORIGINAL", new_string="WORKSPACE_PATCHED",

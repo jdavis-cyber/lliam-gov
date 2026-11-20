@@ -15,10 +15,13 @@ from pathlib import Path
 
 
 _profile_fallback_warned: bool = False
-_UNSET = object()
-_LLIAM_HOME_OVERRIDE: ContextVar[str | object] = ContextVar(
-    "_LLIAM_HOME_OVERRIDE", default=_UNSET
-)
+# An in-process CLI update reloads this module after pulling new code. Keep
+# existing profile bindings and their reset tokens valid across that reload.
+if "_LLIAM_HOME_OVERRIDE" not in globals():
+    _UNSET = object()
+    _LLIAM_HOME_OVERRIDE: ContextVar[str | object] = ContextVar(
+        "_LLIAM_HOME_OVERRIDE", default=_UNSET
+    )
 
 
 def set_lliam_home_override(path: str | Path | None) -> Token:

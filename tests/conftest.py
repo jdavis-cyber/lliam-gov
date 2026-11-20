@@ -909,6 +909,12 @@ def _reset_session_and_interrupt_state(_hermetic_environment):
 
 
 def _clear_process_state(*, reset_killswitch):
+    file_tools = sys.modules.get("tools.file_tools")
+    if file_tools is not None:
+        # Live terminal reads remember a cwd even after the environment is
+        # gone. A new test's session must not resolve under that old workspace.
+        with file_tools._file_ops_lock:
+            file_tools._last_known_cwd.clear()
     interrupt = sys.modules.get("tools.interrupt")
     if interrupt is not None:
         with interrupt._lock:

@@ -728,7 +728,7 @@ class TestSilentFileMisplacementE2E:
     in _authoritative_workspace_root makes the resolved path correct.
     """
 
-    def test_relative_write_after_env_cleanup_lands_in_user_cwd(self, tmp_path, monkeypatch):
+    def test_relative_write_after_env_cleanup_lands_in_user_cwd(self, tmp_path, monkeypatch, request):
         import tools.terminal_tool as tt
         import tools.file_tools as ft
 
@@ -745,6 +745,7 @@ class TestSilentFileMisplacementE2E:
         )
 
         task_id = "default"
+        request.addfinalizer(lambda: tt.cleanup_vm(task_id))
         ft._last_known_cwd.pop(task_id, None)
 
         # 1) Env alive; agent has cd'd into the project. A relative write
