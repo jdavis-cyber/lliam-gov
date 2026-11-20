@@ -5,6 +5,23 @@ from __future__ import annotations
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _isolate_checkout_update_marker(tmp_path, monkeypatch):
+    """Keep simulated updates and startup recovery within the same test."""
+    from lliam_cli import main
+
+    checkout = main.PROJECT_ROOT
+    marker_path = main._update_marker_path
+
+    def isolated_marker_path():
+        # Recovery tests can select a temporary install root themselves.
+        if main.PROJECT_ROOT != checkout:
+            return marker_path()
+        return tmp_path / ".update-incomplete"
+
+    monkeypatch.setattr(main, "_update_marker_path", isolated_marker_path)
+
+
 @pytest.fixture
 def all_assignees_spawnable(monkeypatch):
     """Pretend every assignee maps to a real Lliam-GOV profile.
