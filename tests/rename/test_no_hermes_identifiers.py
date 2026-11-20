@@ -760,14 +760,20 @@ KEEP_PATTERNS += [
 _COMPILED = [(re.compile(rx, re.IGNORECASE), why) for rx, why in KEEP_PATTERNS]
 
 
-_EXACT_CREDITS = {
+_EXACT_LINES = {
+    # Doctor must identify the pre-rename CLI and its Python entry point
+    # to report or clean up an existing gateway installation.
+    "lliam_cli/uninstall.py": {
+        'if script.parts[-2:] in (("lliam_cli", "main.py"), ("hermes_cli", "main.py")):',
+        'if executable not in {"lliam-gov", "hermes"}:',
+    },
     "README.md": {"Lliam-GOV is a governance-hardened fork of the MIT-licensed Hermes Agent. It"},
 }
 
 
 def _line_is_allowed(text: str, path: str = "") -> bool:
-    # Preserve this exact upstream credit without allowing appended stale markers.
-    if text in _EXACT_CREDITS.get(path.removeprefix("./"), set()):
+    # Preserve exact, file-specific references without allowing appended stale markers.
+    if text.strip() in _EXACT_LINES.get(path.removeprefix("./"), set()):
         return True
     return any(rx.search(text) for rx, _ in _COMPILED)
 
