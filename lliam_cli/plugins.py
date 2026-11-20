@@ -65,6 +65,26 @@ def get_bundled_plugins_dir() -> Path:
         return Path(env_override)
     return Path(__file__).resolve().parent.parent / "plugins"
 
+
+def _public_bundled_package(directory: Path) -> str | None:
+    """Find the public package only when it imports this precise bundled directory."""
+    directory = directory.resolve()
+    root = get_bundled_plugins_dir().resolve()
+    if not directory.is_relative_to(root):
+        return None
+    parts = directory.relative_to(root).parts
+    if not parts or not all(part.isidentifier() for part in parts):
+        return None
+    name = ".".join(("plugins", *parts))
+    try:
+        spec = importlib.util.find_spec(name)
+    except (ImportError, ValueError):
+        return None
+    if spec and spec.origin and Path(spec.origin).resolve() == directory / "__init__.py":
+        return name
+    return None
+
+
 try:
     import yaml
 except ImportError:  # pragma: no cover – yaml is optional at import time
@@ -1521,7 +1541,7 @@ class PluginManager:
         self._plugins[manifest.key or manifest.name] = loaded
 
     def _load_directory_module(self, manifest: PluginManifest) -> types.ModuleType:
-        """Import a directory-based plugin as ``hermes_plugins.<slug>``.
+        """Load a directory-based plugin and register its ``hermes_plugins.<slug>`` name.
 
         The module slug is derived from ``manifest.key`` so category-namespaced
         plugins (``image_gen/openai``) import as
@@ -1543,7 +1563,16 @@ class PluginManager:
         key = manifest.key or manifest.name
         slug = key.replace("/", "__").replace("-", "_")
         from tools.skill_attestation import verified_module_name
-        module_name = verified_module_name(f"{_NS_PARENT}.{slug}", plugin_dir)
+        scoped_name = f"{_NS_PARENT}.{slug}"
+        module_name = verified_module_name(scoped_name, plugin_dir)
+        if manifest.source == "bundled" and module_name == scoped_name:
+            public = _public_bundled_package(plugin_dir)
+            if public:
+                # The registry and public callers must share provider classes,
+                # cached clients, and patches applied through the public package.
+                module = importlib.import_module(public)
+                sys.modules[scoped_name] = module
+                return module
         spec = importlib.util.spec_from_file_location(
             module_name,
             init_file,

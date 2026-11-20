@@ -285,6 +285,22 @@ def test_honcho_cli_and_its_client_load_from_the_same_verified_bundle(governed_s
     assert client.__file__ == str(snapshot / "client.py")
 
 
+def test_registered_signed_provider_remains_in_its_verified_namespace(governed_skills):
+    from lliam_cli.plugins import PluginManager, PluginManifest, get_bundled_plugins_dir
+    from tools.skill_attestation import verified_directory
+
+    _, policy = governed_skills
+    key = "web/firecrawl"
+    bundle = get_bundled_plugins_dir() / key
+    policy["security"]["plugin_allowlist"] = [_signed_entry(key, bundle, kind="plugin")]
+    snapshot = verified_directory("plugin", key, bundle)
+    manifest = PluginManifest(name="firecrawl", key=key, path=str(snapshot), source="bundled")
+    registered = PluginManager()._load_directory_module(manifest)
+    assert registered.__file__ == str(snapshot / "__init__.py")
+    assert registered.FirecrawlWebSearchProvider.__module__ == registered.__name__ + ".provider"
+    assert registered.__name__ != "plugins.web.firecrawl"
+
+
 def test_unapproved_meet_refuses_detached_child_before_side_effects(governed_skills, monkeypatch):
     from plugins.google_meet import process_manager
 
