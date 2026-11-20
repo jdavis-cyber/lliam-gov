@@ -34,6 +34,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from typing import Optional, Dict, Any
 from urllib.parse import urljoin
@@ -111,7 +112,8 @@ GROQ_MODELS = {"whisper-large-v3", "whisper-large-v3-turbo", "distil-whisper-lar
 
 # Singleton for the local model — loaded once, reused across calls
 _local_model: Optional[object] = None
-_local_model_name: Optional[str] = None
+_local_model_name: str | tuple | None = None
+_local_model_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Config helpers
@@ -1089,7 +1091,7 @@ def _looks_like_cuda_lib_error(exc: BaseException) -> bool:
     return any(marker in msg for marker in _CUDA_LIB_ERROR_MARKERS)
 
 
-def _load_local_whisper_model(model_name: str):
+def _load_local_whisper_model(model_name: str, files=None, *, cpu_only=False):
     """Load faster-whisper with graceful CUDA → CPU fallback.
 
     faster-whisper's ``device="auto"`` picks CUDA when the ctranslate2 wheel
@@ -1103,8 +1105,16 @@ def _load_local_whisper_model(model_name: str):
     library load failure fall back to CPU + int8.
     """
     from faster_whisper import WhisperModel
+
+    def load(device, compute_type):
+        # faster-whisper pops tokenizer and preprocessor entries from files.
+        offline = {"local_files_only": True, "files": files.copy()} if files is not None else {}
+        return WhisperModel(model_name, device=device, compute_type=compute_type, **offline)
+
+    if cpu_only:
+        return load("cpu", "int8")
     try:
-        return WhisperModel(model_name, device="auto", compute_type="auto")
+        return load("auto", "auto")
     except Exception as exc:
         if not _looks_like_cuda_lib_error(exc):
             raise
@@ -1113,29 +1123,38 @@ def _load_local_whisper_model(model_name: str):
             "Install the NVIDIA CUDA runtime (libcublas/libcudnn) to use GPU.",
             exc,
         )
-        return WhisperModel(model_name, device="cpu", compute_type="int8")
+        return load("cpu", "int8")
+
+
+def _get_local_whisper_model(model_name, inventory, *, failed_model=None):
+    global _local_model, _local_model_name
+
+    key = inventory.cache_key if inventory is not None else model_name
+    with _local_model_lock:
+        if _local_model is not None and _local_model_name == key and _local_model is not failed_model:
+            return _local_model
+        if failed_model is not None and _local_model is failed_model:
+            _local_model, _local_model_name = None, None
+        files = inventory.read_files() if inventory is not None else None
+        model = _load_local_whisper_model(model_name, files, cpu_only=failed_model is not None)
+        _local_model, _local_model_name = model, key
+        return model
 
 
 def _transcribe_local(file_path: str, model_name: str) -> Dict[str, Any]:
     """Transcribe using faster-whisper (local, free)."""
-    global _local_model, _local_model_name
-
-    from agent.attestation import require_safe_local_model
+    from agent.attestation import provisioned_whisper
     try:
-        require_safe_local_model(model_name)
-    except (OSError, ValueError) as exc:
+        inventory = provisioned_whisper(model_name)
+    except (OSError, TypeError, ValueError) as exc:
         return {"success": False, "transcript": "", "error": str(exc)}
 
     if not _HAS_FASTER_WHISPER:
-        if not _try_lazy_install_stt():
+        if inventory is not None or not _try_lazy_install_stt():
             return {"success": False, "transcript": "", "error": "faster-whisper not installed"}
 
     try:
-        # Lazy-load the model (downloads on first use, ~150 MB for 'base')
-        if _local_model is None or _local_model_name != model_name:
-            logger.info("Loading faster-whisper model '%s' (first load downloads the model)...", model_name)
-            _local_model = _load_local_whisper_model(model_name)
-            _local_model_name = model_name
+        model = _get_local_whisper_model(model_name, inventory)
 
         # Language: config.yaml (stt.local.language) > env var > auto-detect.
         _forced_lang = (
@@ -1148,7 +1167,7 @@ def _transcribe_local(file_path: str, model_name: str) -> Dict[str, Any]:
             transcribe_kwargs["language"] = _forced_lang
 
         try:
-            segments, info = _local_model.transcribe(file_path, **transcribe_kwargs)
+            segments, info = model.transcribe(file_path, **transcribe_kwargs)
             transcript = " ".join(segment.text.strip() for segment in segments)
         except Exception as exc:
             # CUDA runtime libs sometimes only fail at dlopen-on-first-use,
@@ -1163,12 +1182,8 @@ def _transcribe_local(file_path: str, model_name: str) -> Dict[str, Any]:
                 "evicting cached model and retrying on CPU (int8).",
                 exc,
             )
-            _local_model = None
-            _local_model_name = None
-            from faster_whisper import WhisperModel
-            _local_model = WhisperModel(model_name, device="cpu", compute_type="int8")
-            _local_model_name = model_name
-            segments, info = _local_model.transcribe(file_path, **transcribe_kwargs)
+            model = _get_local_whisper_model(model_name, inventory, failed_model=model)
+            segments, info = model.transcribe(file_path, **transcribe_kwargs)
             transcript = " ".join(segment.text.strip() for segment in segments)
 
         logger.info(
