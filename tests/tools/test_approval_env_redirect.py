@@ -465,3 +465,13 @@ def test_over_limit_brace_description_is_printable():
     assert blocked is True
     assert "\ue000" not in description
     assert ".env*" in description
+
+
+@pytest.mark.parametrize("pattern", [".env.exampl[e]", "conf/.[e]nv.sampl[eE]"])
+def test_template_only_glob_is_allowed(pattern):
+    assert detect_env_file_write("tee " + pattern) == (False, None)
+
+
+@pytest.mark.parametrize("pattern", ["'.env.exampl[e]'", ".env.exampl[ef]", ".env.sample?"])
+def test_literal_or_ambiguous_template_name_remains_protected(pattern):
+    assert detect_env_file_write("tee " + pattern)[0]

@@ -990,6 +990,34 @@ def _brace_expand(pieces: list, pieces_bare: list) -> list:
     return ["".join(approx)]
 
 
+class _ShellWord(str):
+    """A shell word with the quoting facts needed by the write-target policy."""
+
+    quoted_glob: bool
+
+
+def _only_env_template_matches(target: str) -> bool:
+    if not isinstance(target, _ShellWord) or target.quoted_glob:
+        return False
+    name = target.rsplit("/", 1)[-1]
+    if "[" not in name:
+        return False
+    # Both template names have distinct lengths. Every element must resolve
+    # to one character (ignoring case), with no wildcard or negated class.
+    folded = []
+    for element in _glob_elements(name):
+        if element[0] == "lit":
+            folded.append(element[1].casefold())
+        elif element[0] == "class" and not element[1]:
+            letters = {letter.casefold() for letter in element[2]}
+            if len(letters) != 1:
+                return False
+            folded.append(letters.pop())
+        else:
+            return False
+    return "".join(folded) in _ENV_TEMPLATE_BASENAMES
+
+
 def _shell_tokens(command: str, comments: bool = False,
                   heredocs: Optional[list] = None,
                   substitutions: Optional[list] = None) -> Optional[list]:
@@ -1041,7 +1069,15 @@ def _shell_tokens(command: str, comments: bool = False,
                 pending.append((text, word_quoted, want))
                 want = None
             else:
-                alternatives = _brace_expand(word, word_bare)
+                quoted_glob = any(
+                    not bare and any(ch in piece for ch in "[]*?!^-")
+                    for piece, bare in zip(word, word_bare)
+                )
+                alternatives = []
+                for spelling in _brace_expand(word, word_bare):
+                    token = _ShellWord(spelling)
+                    token.quoted_glob = quoted_glob
+                    alternatives.append(token)
                 redirect = tokens[-1][0] if tokens and tokens[-1][1] else ""
                 if len(alternatives) > 1 and ("<" in redirect or ">" in redirect) \
                         and "(" not in redirect and not _is_heredoc_operator(redirect):
@@ -1635,6 +1671,8 @@ def detect_env_file_write(command: str) -> tuple:
     # dotglob (or a GLOBIGNORE, which sets it) lets * and ? match a leading dot.
     dotglob = re.search(r"dotglob|globignore", command, re.IGNORECASE) is not None
     for target in _env_write_targets_or_fallback(normalized):
+        if _only_env_template_matches(target):
+            continue
         if _is_protected_env_basename(target):
             return (True, f"shell write into protected environment file {target}")
         if _glob_may_name_env(target, dotglob):
