@@ -571,6 +571,18 @@ _ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # nested command, so ``bash -c "echo k > .env"`` is refused too.
 _NESTED_SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "busybox"})
 _MAX_NESTED_SCRIPT_DEPTH = 3
+_SHELL_NESTING_LIMIT = "shell nesting exceeds the inspection limit"
+
+
+class _ShellInspectionLimit(Exception):
+    """A nested executable body would exceed the bounded policy scan."""
+
+
+def _child_scan_depth(depth: int) -> int:
+    if depth >= _MAX_NESTED_SCRIPT_DEPTH:
+        raise _ShellInspectionLimit
+    return depth + 1
+
 # Shell invocation options: long options taking a value, and long options
 # known to take none. Short -o/+o and -O/+O take a value word.
 _SHELL_LONG_VALUES = frozenset({"--rcfile", "--init-file"})
@@ -1466,30 +1478,28 @@ def _command_invocations(words: list, scripts: list, depth: int = 0, via: bool =
     command xargs or find -exec/-execdir/-ok/-okdir runs, recursively. *via*
     is True for those last ones, whose operands xargs/find add."""
     found: list = []
-    if depth < _MAX_NESTED_SCRIPT_DEPTH:
-        # env -S's words join the rest of its invocation; any ``env`` word
-        # is tried (an argument named env only widens detection).
-        for k, word in enumerate(words):
-            if word.rsplit("/", 1)[-1] == "env":
-                split = _env_split_words(words, k)
-                if split is not None:
-                    found.extend(_command_invocations(split, scripts, depth + 1, via))
+    # env -S joins split words to the rest of its invocation.
+    for k, word in enumerate(words):
+        if word.rsplit("/", 1)[-1] == "env":
+            split = _env_split_words(words, k)
+            if split is not None:
+                found.extend(_command_invocations(split, scripts, _child_scan_depth(depth), via))
     for start in sorted(_command_word_indices(words, scripts)):
         if start >= len(words):
             continue
         found.append((words[start:], via))
-        if depth >= _MAX_NESTED_SCRIPT_DEPTH:
-            continue
         base = words[start].rsplit("/", 1)[-1]
         args = words[start + 1:]
         if base == "xargs":
             for j in sorted(_xargs_command_starts(args)):
-                found.extend(_command_invocations(args[j:], scripts, depth + 1, True))
+                if args[j:]:
+                    found.extend(_command_invocations(args[j:], scripts, _child_scan_depth(depth), True))
         elif base == "find":
             for j, action in enumerate(args):
                 if action in _FIND_EXEC_ACTIONS:
                     end = next((k for k in range(j + 1, len(args)) if args[k] in {";", "+"}), len(args))
-                    found.extend(_command_invocations(args[j + 1:end], scripts, depth + 1, True))
+                    if j + 1 < end:
+                        found.extend(_command_invocations(args[j + 1:end], scripts, _child_scan_depth(depth), True))
     return found
 
 
@@ -1673,9 +1683,9 @@ def _env_write_targets(command: str, depth: int = 0) -> Optional[list]:
             continue
         pending_redirect = token
     _flush_segment()
-    if depth < _MAX_NESTED_SCRIPT_DEPTH:
-        for script in nested:
-            targets.extend(_env_write_targets_or_fallback(script, depth + 1))
+    for script in nested:
+        if script.strip():
+            targets.extend(_env_write_targets_or_fallback(script, _child_scan_depth(depth)))
     return targets
 
 
@@ -1689,7 +1699,11 @@ def detect_env_file_write(command: str) -> tuple:
     normalized = _normalize_command_for_detection(command, preserve_shell_quotes=True)
     # dotglob (or a GLOBIGNORE, which sets it) lets * and ? match a leading dot.
     dotglob = re.search(r"dotglob|globignore", command, re.IGNORECASE) is not None
-    for target in _env_write_targets_or_fallback(normalized):
+    try:
+        targets = _env_write_targets_or_fallback(normalized)
+    except _ShellInspectionLimit:
+        return (True, _SHELL_NESTING_LIMIT)
+    for target in targets:
         # Shell state and assignments can change between scanning and execution.
         # Require literal output paths, including when the variable has a default.
         dynamic = (target.dynamic_parameter if isinstance(target, _ShellWord)
@@ -1707,7 +1721,10 @@ def detect_env_file_write(command: str) -> tuple:
 
 
 def _env_write_block_result(description: str) -> dict:
-    """Build the block result for a shell write into a protected env file."""
+    """Explain an uninspectable command or a protected output destination."""
+    if description == _SHELL_NESTING_LIMIT:
+        return {"approved": False, "hardline": True, "description": description,
+                "message": f"BLOCKED: {description}. Split the operation into simpler commands."}
     return {
         "approved": False,
         "hardline": True,
@@ -2236,9 +2253,9 @@ def _command_delete_kinds(command: str, depth: int = 0) -> Optional[set]:
     for words in segments:
         kinds |= _simple_command_delete_kinds(words, scripts)
     unknown = False
-    if depth < _MAX_NESTED_SCRIPT_DEPTH:
-        for script in scripts + nested:
-            reading = _command_delete_kinds(script, depth + 1)
+    for script in scripts + nested:
+        if script.strip():
+            reading = _command_delete_kinds(script, _child_scan_depth(depth))
             if reading is None:
                 unknown = True
             else:
@@ -2489,7 +2506,11 @@ def detect_all_dangerous_commands(command: str) -> list[tuple[str, str]]:
     for pattern_re, description in DANGEROUS_PATTERNS_COMPILED:
         if description in _TOKENIZED_DELETE_KINDS:
             if delete_kinds is None:
-                delete_kinds = [_command_delete_kinds(context) for context in unfolded_contexts]
+                try:
+                    delete_kinds = [_command_delete_kinds(context) for context in unfolded_contexts]
+                except _ShellInspectionLimit:
+                    matches.append((_SHELL_NESTING_LIMIT, _SHELL_NESTING_LIMIT))
+                    delete_kinds = [None]
             found = any(kinds and description in kinds for kinds in delete_kinds)
             # The compressor pattern is only the fallback for a command that
             # can't be tokenized; the others still match on their own.

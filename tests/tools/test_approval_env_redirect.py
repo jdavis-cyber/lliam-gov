@@ -489,3 +489,21 @@ def test_variable_in_data_or_quoted_literal_filename_is_allowed():
     assert detect_env_file_write('echo "$DATA" > report.txt') == (False, None)
     assert detect_env_file_write("tee '$OUTPUT'") == (False, None)
     assert detect_env_file_write('echo "$(label)" > report.txt') == (False, None)
+
+
+@pytest.mark.parametrize(("shallow", "deep"), [
+    ("echo $(printf fixture)", "echo $(echo $(printf fixture))"),
+    ("xargs printf fixture", "xargs xargs printf fixture"),
+])
+def test_shell_inspection_limit_rejects_only_uninspected_commands(monkeypatch, shallow, deep):
+    monkeypatch.setattr(approval_module, "_MAX_NESTED_SCRIPT_DEPTH", 1)
+    data = "cat <<'DATA'\n" + deep + "\nDATA"
+    for inspectable in (shallow, data):
+        assert detect_env_file_write(inspectable) == (False, None)
+        assert not approval_module.detect_dangerous_command(inspectable)[0]
+    assert detect_env_file_write(deep)[0]
+    assert approval_module.detect_dangerous_command(deep)[0]
+    for guard in (check_dangerous_command, check_all_command_guards):
+        result = guard(deep, "local")
+        assert result["approved"] is False and result["hardline"] is True
+        assert "nesting" in result["message"]
