@@ -70,6 +70,37 @@ def test_managed_list_wins_wholesale(homes):
     assert cfg_get(load_config(), "toolsets", "enabled") == ["x"]
 
 
+@pytest.mark.parametrize("posture", ["permissive", "strict"])
+@pytest.mark.parametrize("same_as_home", [False, True])
+def test_selected_profile_keeps_managed_pins_and_profile_siblings(homes, monkeypatch, posture, same_as_home):
+    from lliam_cli import config
+
+    home, managed = homes
+    selected = home / ("config.yaml" if same_as_home else "selected.yaml")
+    _write(selected, f"""
+        security:
+          posture: {posture}
+          allowed_providers: [local, other]
+        model:
+          default: profile/model
+          fallback: profile/fallback
+    """)
+    _write(managed / "config.yaml", """
+        security:
+          allowed_providers: [local]
+          require_tls: true
+        model: managed/model
+    """)
+    monkeypatch.setenv("LLIAM_CONFIG", str(selected))
+    for read in (config.load_config_readonly, config.load_config):
+        effective = read()
+        assert effective["security"]["posture"] == posture
+        assert effective["security"]["allowed_providers"] == ["local"]
+        assert effective["security"]["require_tls"] is True
+        assert effective["model"]["default"] == "managed/model"
+        assert effective["model"]["fallback"] == "profile/fallback"
+
+
 def test_editing_managed_file_invalidates_cache(homes):
     from lliam_cli.config import load_config, cfg_get
 

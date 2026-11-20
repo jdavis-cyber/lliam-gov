@@ -23,7 +23,7 @@ are unchanged. This move is purely structural.
 
 from __future__ import annotations
 
-from plugins.spotify.tools import (
+from .tools import (
     SPOTIFY_ALBUMS_SCHEMA,
     SPOTIFY_DEVICES_SCHEMA,
     SPOTIFY_LIBRARY_SCHEMA,

@@ -25,9 +25,9 @@ Public surface
 
 from __future__ import annotations
 
-from plugins.google_meet.node import protocol
-from plugins.google_meet.node.client import NodeClient
-from plugins.google_meet.node.protocol import (
+from . import protocol
+from .client import NodeClient
+from .protocol import (
     VALID_REQUEST_TYPES,
     decode,
     encode,
@@ -36,8 +36,8 @@ from plugins.google_meet.node.protocol import (
     make_response,
     validate_request,
 )
-from plugins.google_meet.node.registry import NodeRegistry
-from plugins.google_meet.node.server import NodeServer
+from .registry import NodeRegistry
+from .server import NodeServer
 
 __all__ = [
     "NodeClient",

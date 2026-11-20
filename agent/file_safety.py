@@ -126,6 +126,9 @@ def get_write_block_error(path: str, *, cwd: str) -> Optional[str]:
     home = os.path.realpath(os.path.expanduser("~"))
     denied = f"Write denied: '{path}' is a protected system/credential file."
 
+    from agent.data_protection import at_rest_keyfile_path
+    if resolved.casefold() == os.path.realpath(at_rest_keyfile_path()).casefold():
+        return denied
     if resolved in build_write_denied_paths(home):
         return denied
     for prefix in build_write_denied_prefixes(home):
@@ -180,10 +183,11 @@ def get_write_block_error(path: str, *, cwd: str) -> Optional[str]:
             # write tools — the key that protects CUI at rest cannot be
             # rewritten by the subject it protects. Additive deny; case-folded
             # for the same APFS reason as the logs entry above.
-            keys_real = os.path.realpath(os.path.join(base_real, "keys")).casefold()
-            resolved_cf = resolved.casefold()
-            if resolved_cf == keys_real or resolved_cf.startswith(keys_real + os.sep):
-                return denied
+            for protected in ("keys", "tool-results"):
+                protected_dir = os.path.realpath(os.path.join(base_real, protected)).casefold()
+                resolved_cf = resolved.casefold()
+                if resolved_cf == protected_dir or resolved_cf.startswith(protected_dir + os.sep):
+                    return denied
         except Exception:
             pass
 
@@ -382,6 +386,10 @@ def get_read_block_error(path: str) -> Optional[str]:
                 "and cannot be read directly to prevent prompt injection. "
                 "Use the skills_list or skill_view tools instead."
             )
+
+    from agent.data_protection import at_rest_keyfile_path
+    if str(resolved).casefold() == str(at_rest_keyfile_path().resolve()).casefold():
+        return f"Access denied: {path} is the at-rest encryption key."
 
     # Credential / secret stores. Exact-file matches under either
     # HERMES_HOME or <root>.

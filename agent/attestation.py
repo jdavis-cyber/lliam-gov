@@ -24,6 +24,10 @@ import hashlib
 import hmac
 import json
 import logging
+import os
+import re
+import stat
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -113,6 +117,14 @@ def _cards_path() -> Optional[Path]:
     return None
 
 
+def _read_cards(path: Path) -> Dict[str, Any]:
+    import yaml
+
+    with path.open(encoding="utf-8") as stream:
+        data = yaml.safe_load(stream)
+    return data if isinstance(data, dict) else {}
+
+
 def _load_cards() -> Dict[str, Any]:
     path = _cards_path()
     if path is None:
@@ -124,11 +136,7 @@ def _load_cards() -> Dict[str, Any]:
         sig = (st.st_mtime_ns, st.st_size)
         if cached is not None and cached[0] == sig:
             return cached[1]
-        import yaml
-        with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-        if not isinstance(data, dict):
-            data = {}
+        data = _read_cards(path)
         _CARDS_CACHE[key] = (sig, data)
         return data
     except Exception:
@@ -163,7 +171,20 @@ def model_cui_eligible(model_id: str) -> bool:
     mid = (model_id or "").strip()
     for entry in cards.get("models") or []:
         if isinstance(entry, dict) and str(entry.get("id") or "").strip() == mid:
-            return bool(entry.get("cui_eligible", False))
+            if not entry.get("cui_eligible", False):
+                return False
+            # Local inference servers load the carded artifact on the operator's
+            # machine. Govern its declared format before resolving the route.
+            if not _pr_flag("safe_serialization_only"):
+                return True
+            from lliam_cli.provider_allowlist import provider_class
+            deployment = provider_class(mid.partition("/")[0])
+            if not deployment:
+                return False
+            if deployment == "local":
+                declared = str(entry.get("serialization") or "").strip().lower()
+                return ("." + declared) in _SAFE_FORMATS
+            return True
     return False
 
 
@@ -171,13 +192,154 @@ def model_cui_eligible(model_id: str) -> bool:
 # LG-MP-07 — safe-serialization guard
 # --------------------------------------------------------------------------- #
 
+def safe_local_model_required() -> bool:
+    """Whether local deserialization must use provisioned safe formats."""
+    return _is_strict() and _pr_flag("safe_serialization_only")
+
+
+def require_safe_local_model(artifact: str) -> None:
+    """Check a local loader's resolved input before it can fetch or deserialize it.
+
+    Repository aliases and directories can hide a different serialization
+    format. Only a concrete local file can satisfy the strict loader policy.
+    """
+    if not safe_local_model_required():
+        return
+    path = Path(artifact).expanduser()
+    if not path.is_file():
+        raise ValueError("Governed local model loading requires a provisioned model file (LG-MP-07)")
+    decision = check_serialization(str(path.resolve(strict=True)))
+    if not decision.allowed:
+        raise ValueError(decision.reason)
+
+
+def _whisper_file_stamp(entry: os.stat_result) -> tuple[int, ...]:
+    return entry.st_dev, entry.st_ino, entry.st_size, entry.st_mtime_ns, entry.st_ctime_ns
+
+
+@dataclass(frozen=True)
+class WhisperInventory:
+    """A signed faster-whisper card and the installed files it identifies."""
+
+    directory: Path
+    digests: dict[str, str]
+    signature: str
+    stamps: tuple[tuple[str, tuple[int, ...]], ...]
+
+    @property
+    def cache_key(self) -> tuple:
+        return self.signature, self.stamps
+
+    def read_files(self) -> dict[str, bytes]:
+        """Pass only authenticated bytes to the native and tokenizer loaders."""
+        files = {}
+        flags = (os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+                 | getattr(os, "O_BINARY", 0))
+        for name, stamp in self.stamps:
+            with os.fdopen(os.open(self.directory / name, flags), "rb") as stream:
+                opened = os.fstat(stream.fileno())
+                if not stat.S_ISREG(opened.st_mode) or _whisper_file_stamp(opened) != stamp:
+                    raise ValueError(f"Whisper inventory entry changed before reading: {name}")
+                data = stream.read()
+            if "sha256:" + hashlib.sha256(data).hexdigest() != self.digests[name]:
+                raise ValueError(f"Whisper artifact differs from its signed digest: {name}")
+            if name.endswith(".json"):
+                expected = list if name == "vocabulary.json" else dict
+                if not isinstance(json.loads(data.decode("utf-8")), expected):
+                    raise ValueError(f"Invalid Whisper JSON artifact: {name}")
+            elif name == "vocabulary.txt":
+                if not data.decode("utf-8").strip():
+                    raise ValueError("Empty Whisper vocabulary")
+            files[name] = data
+
+        # CTranslate2 4.7.1 serializes a version, a length-prefixed NUL-ended
+        # model spec name, its revision, then the number of tensor variables.
+        # Only its native Whisper reader consumes this signed model.bin.
+        weights = files["model.bin"]
+        spec_name = b"WhisperSpec\0"
+        end = 6 + len(spec_name)
+        if len(weights) < end + 8:
+            raise ValueError("Invalid CTranslate2 Whisper model header")
+        version, length = struct.unpack_from("<IH", weights)
+        revision, variables = struct.unpack_from("<II", weights, end)
+        if not (2 <= version <= 6 and length == len(spec_name) and weights[6:end] == spec_name
+                and 1 <= revision <= 3 and variables > 0):
+            raise ValueError("Invalid CTranslate2 Whisper model header")
+        # Upstream otherwise probes the filesystem for this optional sidecar.
+        files.setdefault("preprocessor_config.json", b"{}")
+        return files
+
+
+def _whisper_cards() -> Dict[str, Any]:
+    security = _security_cfg()
+    if "model_cards_path" not in security:
+        return _load_cards()
+
+    import yaml
+
+    configured = security["model_cards_path"]
+    if not isinstance(configured, str) or not configured.strip():
+        raise ValueError("Invalid configured Whisper model-card index path")
+    try:
+        path = Path(configured.strip()).expanduser()
+        # Relative policy paths resolve from the working directory, then the installation.
+        if not path.is_absolute() and not os.path.lexists(path):
+            path = Path(__file__).resolve().parents[1] / path
+        if path.is_file():
+            return _read_cards(path)
+    except (OSError, RuntimeError, ValueError, yaml.YAMLError) as exc:
+        raise ValueError("Cannot read the configured Whisper model-card index") from exc
+    raise ValueError("Missing or invalid configured Whisper model-card index")
+
+
+def provisioned_whisper(artifact: str) -> WhisperInventory | None:
+    """Select the unique signed faster-whisper card for a canonical local directory."""
+    if not safe_local_model_required():
+        return None
+    directory = Path(artifact).expanduser()
+    if not directory.is_absolute() or not directory.is_dir() or directory.resolve() != directory:
+        raise ValueError("Governed faster-whisper requires a provisioned model directory (LG-MP-07)")
+    models = _whisper_cards().get("models")
+    if not isinstance(models, list):
+        raise ValueError("Whisper directory needs a signed model card")
+    matches = [row for row in models
+               if isinstance(row, dict) and row.get("path") == str(directory)]
+    if len(matches) != 1:
+        raise ValueError("Whisper directory needs one signed model card")
+    card = matches[0]
+    if (card.get("provider") != "faster-whisper" or card.get("serialization") != "ctranslate2"
+            or not isinstance(card.get("id"), str) or is_unprovisioned(card["id"])
+            or card.get("cui_eligible") is not True):
+        raise ValueError("Model card does not approve this CTranslate2 Whisper artifact")
+    verdict = verify_manifest(card)
+    if not verdict.valid:
+        raise ValueError(verdict.reason)
+    digests = card.get("files")
+    required = {"model.bin", "config.json", "tokenizer.json"}
+    vocabularies = {"vocabulary.json", "vocabulary.txt"}
+    allowed = required | vocabularies | {"preprocessor_config.json"}
+    if (not isinstance(digests, dict) or not required <= digests.keys() <= allowed
+            or not (vocabularies & digests.keys())
+            or not all(isinstance(v, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", v) for v in digests.values())):
+        raise ValueError("Invalid signed CTranslate2 Whisper file inventory")
+    if {p.name for p in directory.iterdir()} != digests.keys():
+        raise ValueError("Whisper directory differs from its signed inventory")
+    stamps = []
+    for name in sorted(digests):
+        entry = (directory / name).lstat()
+        if not stat.S_ISREG(entry.st_mode):
+            raise ValueError(f"Whisper inventory contains a non-regular file: {name}")
+        stamps.append((name, _whisper_file_stamp(entry)))
+    return WhisperInventory(directory, dict(digests), card["signature"], tuple(stamps))
+
+
 def check_serialization(artifact: str, *, weights_only: bool = False) -> SerializationDecision:
     """LG-MP-07: allow safetensors/gguf; deny unsafe legacy formats.
 
     ``weights_only=True`` (the torch.load safeguard) permits a legacy .pt.
     Low-side or safe_serialization_only off → allow (no-op).
     """
-    if not (_is_strict() and _pr_flag("safe_serialization_only")):
+    if not safe_local_model_required():
         return SerializationDecision(allowed=True, artifact=artifact, reason="not enforced (low-side / flag off)")
     name = (artifact or "").strip().lower()
     suffix = Path(name).suffix

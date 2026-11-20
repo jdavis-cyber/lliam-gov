@@ -9,6 +9,15 @@ import pytest
 from lliam_cli.main import cmd_update, PROJECT_ROOT
 
 
+def test_simulated_update_uses_a_private_recovery_marker(tmp_path):
+    from lliam_cli import main
+
+    marker = main._update_marker_path()
+    assert marker.parent == tmp_path
+    main._write_update_incomplete_marker()
+    assert marker.is_file()
+
+
 def _make_run_side_effect(branch="main", verify_ok=True, commit_count="0"):
     """Build a side_effect function for subprocess.run that simulates git commands."""
 

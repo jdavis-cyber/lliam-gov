@@ -23,12 +23,14 @@ import { useVirtualHistory } from '../hooks/useVirtualHistory.js'
 import { composerPromptWidth } from '../lib/inputMetrics.js'
 import { appendTranscriptMessage } from '../lib/messages.js'
 import { DEFAULT_VOICE_RECORD_KEY, isMac, type ParsedVoiceRecordKey } from '../lib/platform.js'
+import { renv } from '../lib/rebrandEnv.js'
 import { asRpcResult, rpcErrorMessage } from '../lib/rpc.js'
 import { terminalParityHints } from '../lib/terminalParity.js'
 import { buildToolTrailLine, formatAbandonedClarify, sameToolTrailGroup, toolTrailLabel } from '../lib/text.js'
 import { estimatedMsgHeight, messageHeightKey } from '../lib/virtualHeights.js'
 import type { Msg, PanelSection, SlashCatalog } from '../types.js'
 
+import { createApprovalResponder } from './approvalResponse.js'
 import { createGatewayEventHandler } from './createGatewayEventHandler.js'
 import { createSlashHandler } from './createSlashHandler.js'
 import { planGatewayRecovery } from './gatewayRecovery.js'
@@ -45,7 +47,6 @@ import { useInputHandlers } from './useInputHandlers.js'
 import { useLongRunToolCharms } from './useLongRunToolCharms.js'
 import { useSessionLifecycle } from './useSessionLifecycle.js'
 import { useSubmission } from './useSubmission.js'
-import { renv } from '../lib/rebrandEnv.js'
 
 const GOOD_VIBES_RE = /\b(good bot|thanks|thank you|thx|ty|ily|love you)\b/i
 const BRACKET_PASTE_ON = '\x1b[?2004h'
@@ -710,8 +711,11 @@ export function useMainApp(gw: GatewayClient) {
     }
   }, [ui.sid, ui.busy, composerActions, composerRefs, sendQueued])
 
+  const answerApproval = useMemo(() => createApprovalResponder(rpc), [rpc])
+
   const { pagerPageSize } = useInputHandlers({
     actions: {
+      answerApproval,
       answerClarify,
       appendMessage,
       die,
@@ -888,16 +892,6 @@ export function useMainApp(gw: GatewayClient) {
   const respondWith = useCallback(
     (method: string, params: Record<string, unknown>, done: () => void) => rpc(method, params).then(r => r && done()),
     [rpc]
-  )
-
-  const answerApproval = useCallback(
-    (choice: string) =>
-      respondWith('approval.respond', { choice, session_id: ui.sid }, () => {
-        patchOverlayState({ approval: null })
-        patchTurnState({ outcome: choice === 'deny' ? 'denied' : `approved (${choice})` })
-        patchUiState({ status: 'running…' })
-      }),
-    [respondWith, ui.sid]
   )
 
   const answerSudo = useCallback(

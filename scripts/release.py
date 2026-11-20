@@ -44,6 +44,12 @@ ACP_REGISTRY_MANIFEST = REPO_ROOT / "acp_registry" / "agent.json"
 # ──────────────────────────────────────────────────────────────────────
 
 # Auto-extracted from noreply emails + manual overrides
+# Local automation identities have no verified GitHub account to mention.
+AUTOMATION_AUTHORS = {
+    "codex@localhost": "Codex",
+    "codex@users.noreply.github.com": "Codex",
+}
+
 AUTHOR_MAP = {
     "jdavis.cyber@gmail.com": "jdavis-cyber",  # Lliam-GOV maintainer (Jerome Davis) — governance-hardening fork
     "ha-agent@homelab.4410.us": "oreoluwa",  # PR #49845 salvage (skip preflight content-type probe for OAuth MCP servers so OAuth discovery runs; Akiflow/Hospitable)
@@ -1912,6 +1918,9 @@ def build_release_artifacts(semver: str) -> list[Path]:
 
 def resolve_author(name: str, email: str) -> str:
     """Resolve a git author to a GitHub @mention."""
+    if email in AUTOMATION_AUTHORS:
+        return AUTOMATION_AUTHORS[email]
+
     # Try email lookup first
     gh_user = AUTHOR_MAP.get(email)
     if gh_user:
@@ -1993,7 +2002,7 @@ def parse_coauthors(body: str) -> list:
     results = []
     for m in pattern.finditer(body):
         name, email = m.group(1).strip(), m.group(2).strip()
-        if email in _ignored_emails or _ignored_names.match(name):
+        if email in AUTOMATION_AUTHORS or email in _ignored_emails or _ignored_names.match(name):
             continue
         results.append({"name": name, "email": email})
     return results

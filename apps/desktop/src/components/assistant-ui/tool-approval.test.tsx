@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { LliamGateway } from '@/lliam'
@@ -81,6 +81,39 @@ describe('PendingToolApproval', () => {
     await waitFor(() => {
       expect(request).toHaveBeenCalledWith('approval.respond', { choice: 'once', session_id: 'sess-1' })
     })
+    expect($approvalRequest.get()).toBeNull()
+  })
+
+  it('sends the displayed request ID when approving a policy-gated call', async () => {
+    const request = mockGateway()
+    $activeSessionId.set('sess-1')
+    setApprovalRequest({
+      sessionId: 'sess-1', requestId: 'pending-report', command: 'write_file report.txt',
+      description: 'Review external write', allowSession: false, allowPermanent: false
+    })
+    render(<PendingApprovalFallback />)
+    fireEvent.click(screen.getByRole('button', { name: /Run/ }))
+    await waitFor(() => expect(request).toHaveBeenCalledWith('approval.respond', {
+      choice: 'once', session_id: 'sess-1', request_id: 'pending-report'
+    }))
+  })
+
+  it.each([0, 1])('clears only the submitted numbered request after a session change (resolved=%s)', async resolved => {
+    const request = mockGateway()
+    let finish!: (value: { resolved: number }) => void
+    request.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const prompt = { command: 'review report', description: 'Approve report', sessionId: 'sess-1', requestId: 'first' }
+    $activeSessionId.set('sess-1')
+    setApprovalRequest(prompt)
+    render(<PendingApprovalFallback />)
+    fireEvent.click(screen.getByRole('button', { name: /Run/ }))
+    act(() => {
+      $activeSessionId.set('sess-2')
+      setApprovalRequest({ ...prompt, sessionId: 'sess-2', requestId: 'second' })
+    })
+    await act(async () => finish({ resolved }))
+    expect($approvalRequest.get()?.requestId).toBe('second')
+    act(() => $activeSessionId.set('sess-1'))
     expect($approvalRequest.get()).toBeNull()
   })
 

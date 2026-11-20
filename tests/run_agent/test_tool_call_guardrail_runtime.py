@@ -43,6 +43,7 @@ def _make_agent(*tool_names: str, max_iterations: int = 10, config: dict | None 
         patch("run_agent.check_toolset_requirements", return_value={}),
         patch("lliam_cli.config.load_config", return_value=config or {}),
         patch("run_agent.OpenAI"),
+        patch("agent.model_metadata.fetch_model_metadata", return_value={}),
         # The module was imported before the per-test home fixture ran.
         patch("run_agent._lliam_home", get_lliam_home()),
     ):
@@ -356,3 +357,33 @@ def test_guardrail_halt_emits_final_response_through_stream_delta_callback():
     assert halt_text in text_deltas, (
         f"halt message was never streamed; callback only saw {deltas!r}"
     )
+
+
+def test_governed_tool_error_logs_use_the_masked_result(monkeypatch, caplog):
+    agent = _make_agent("web_search")
+    monkeypatch.setattr("agent.data_protection._is_strict", lambda: True)
+    sentinel = "123-45-6789"
+    msg = SimpleNamespace(content="", tool_calls=[_mock_tool_call()])
+    with patch("run_agent.handle_function_call", return_value=json.dumps({"error": sentinel})):
+        agent._execute_tool_calls_sequential(msg, [], "task-1")
+    assert "returned error" in caplog.text
+    assert "[REDACTED-SSN]" in caplog.text
+    assert sentinel not in caplog.text
+
+
+def test_governed_tool_exception_log_omits_sensitive_chained_traceback(monkeypatch, caplog):
+    agent = _make_agent("web_search")
+    monkeypatch.setattr("agent.data_protection._is_strict", lambda: True)
+    sentinel = "123-45-6789"
+
+    def fail(*args, **kwargs):
+        try:
+            raise ValueError(sentinel)
+        except ValueError as cause:
+            raise RuntimeError("lookup failed") from cause
+
+    msg = SimpleNamespace(content="", tool_calls=[_mock_tool_call()])
+    with patch("run_agent.handle_function_call", side_effect=fail):
+        agent._execute_tool_calls_sequential(msg, [], "task-1")
+    assert "lookup failed" in caplog.text
+    assert sentinel not in caplog.text

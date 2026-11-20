@@ -34,6 +34,7 @@ def strict_runtime(tmp_path, monkeypatch):
     policy.write_text(_POLICY, encoding="utf-8")
     cfg = {"security": {
         "posture": "strict",
+        "allowed_providers": ["lmstudio"],
         "provider_allowlist_enforce": True,
         "provider_allowlist_path": str(policy),
     }}

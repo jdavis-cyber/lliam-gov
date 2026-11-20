@@ -8,6 +8,7 @@ import type { ParsedVoiceRecordKey } from '../lib/platform.js'
 import type { RpcResult } from '../lib/rpc.js'
 import type { Theme } from '../theme.js'
 import type {
+  AnswerApproval,
   ApprovalReq,
   ClarifyReq,
   ConfirmReq,
@@ -251,6 +252,7 @@ export interface UseComposerStateResult {
 }
 
 export interface InputHandlerActions {
+  answerApproval: AnswerApproval
   answerClarify: (answer: string) => void
   appendMessage: (msg: Msg) => void
   die: () => void
@@ -375,7 +377,7 @@ export interface SlashHandlerContext {
 }
 
 export interface AppLayoutActions {
-  answerApproval: (choice: string) => void
+  answerApproval: AnswerApproval
   answerClarify: (answer: string) => void
   answerSecret: (value: string) => void
   answerSudo: (pw: string) => void
@@ -441,7 +443,7 @@ export interface AppOverlaysProps {
   cols: number
   compIdx: number
   completions: CompletionItem[]
-  onApprovalChoice: (choice: string) => void
+  onApprovalChoice: AnswerApproval
   onClarifyAnswer: (value: string) => void
   onActiveSessionSelect: (sessionId: string) => void
   onActiveSessionClose: (sessionId: string) => Promise<null | SessionCloseResponse>

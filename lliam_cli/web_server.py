@@ -11145,6 +11145,9 @@ def _discover_dashboard_plugins() -> list:
             if not manifest_file.exists():
                 continue
             try:
+                from tools.skill_attestation import verified_directory
+                child = verified_directory("plugin", f"dashboard/{child.name}", child)
+                manifest_file = child / "dashboard" / "manifest.json"
                 data = json.loads(manifest_file.read_text(encoding="utf-8"))
                 name = data.get("name", child.name)
                 if name in seen_names:
@@ -11215,6 +11218,12 @@ _dashboard_plugins_cache: Optional[list] = None
 
 def _get_dashboard_plugins(force_rescan: bool = False) -> list:
     global _dashboard_plugins_cache
+    from tools.skill_attestation import active_policy
+    try:
+        if active_policy() is not None:
+            return _discover_dashboard_plugins()
+    except Exception:
+        return []
     if _dashboard_plugins_cache is None or force_rescan:
         _dashboard_plugins_cache = _discover_dashboard_plugins()
     elif _dashboard_plugins_cache:
@@ -11630,7 +11639,8 @@ def _mount_plugin_api_routes():
             continue
         try:
             module_name = f"hermes_dashboard_plugin_{plugin['name']}"
-            spec = importlib.util.spec_from_file_location(module_name, api_path)
+            from tools.skill_attestation import artifact_module_spec
+            spec = artifact_module_spec(module_name, api_path)
             if spec is None or spec.loader is None:
                 continue
             mod = importlib.util.module_from_spec(spec)

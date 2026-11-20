@@ -22,6 +22,7 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 import yaml
@@ -31,6 +32,7 @@ sys.path.insert(0, str(_REPO / "ci" / "governance-ci-gates"))
 
 import control_effectiveness as ce  # noqa: E402
 import scheduled_assurance as sa  # noqa: E402
+from agent import governance_audit as audit
 from agent import cato_loop as cato  # noqa: E402
 from agent import iscm_sink  # noqa: E402
 from agent import killswitch as ks  # noqa: E402
@@ -253,8 +255,89 @@ def test_assurance_entry_runs_cato_and_suspends_on_break(tmp_path):
                for r in notes)
 
 
+def test_assurance_checks_configured_ledger_and_reports_invalid_chain(tmp_path):
+    overlay, cfg = _overlay(tmp_path)
+    cfg["audit"]["ledger_path"] = "$LLIAM_HOME/logs/custom.log"
+    home = tmp_path / "home"
+    ledger = home / "logs" / "custom.log"
+    ledger.parent.mkdir(parents=True)
+    ledger.write_text("{}\n", encoding="utf-8")
+    beat = sa.run_assurance(home=home, config=cfg, overlay_path=overlay, run_redteam=False)
+    assert not beat["ok"]
+    assert beat["audit_chain"]["ledger_path"] == str(ledger)
+    assert not beat["audit_chain"]["ok"]
+    assert any("audit chain" in error for error in beat["errors"])
+
+
+@pytest.mark.parametrize(("contents", "error"), [
+    (None, "Selected configuration unavailable"), ("monitoring: [", "Invalid selected configuration"),
+    ("security: {posture: strict}", "Managed security.posture"),
+])
+@pytest.mark.parametrize("selector", ["LLIAM_CONFIG", "HERMES_CONFIG"])
+def test_assurance_refuses_unavailable_selected_config_before_work(tmp_path, monkeypatch, capsys, selector, contents, error):
+    home = tmp_path / "home"
+    selected = tmp_path / "selected.yaml"
+    if contents is not None:
+        selected.write_text(contents)
+    managed = tmp_path / "managed"
+    managed.mkdir()
+    (managed / "config.yaml").write_text("security: {posture: permissive}")
+    monkeypatch.setenv("LLIAM_MANAGED_DIR", str(managed))
+    monkeypatch.setenv("LLIAM_HOME", str(home))
+    monkeypatch.delenv("LLIAM_CONFIG", raising=False)
+    monkeypatch.setenv(selector, str(selected))
+    monkeypatch.setattr(ce, "check_effectiveness", lambda **kw: pytest.fail("assurance work started"))
+
+    assert sa.main(["--skip-redteam"]) == 2
+    assert error in capsys.readouterr().out
+    assert not (home / sa._HEARTBEAT).exists()
+
+
+@pytest.mark.parametrize("source", ["selected", "selected_without_monitoring", "home_overlay", "repository_overlay", "home_config"])
+def test_assurance_checks_managed_ledger_through_normal_config_selection(tmp_path, monkeypatch, source):
+    home, repo, managed = (tmp_path / name for name in ("home", "repo", "managed"))
+    for path in (home, repo, managed):
+        path.mkdir()
+    monkeypatch.setenv("LLIAM_HOME", str(home))
+    monkeypatch.setenv("LLIAM_MANAGED_DIR", str(managed))
+    for var in ("HERMES_CONFIG", "LLIAM_CONFIG"):
+        monkeypatch.delenv(var, raising=False)
+    default, data = _overlay(repo)
+    data["cato"]["enabled"] = False
+    selected = {"home_overlay": home / default.name, "repository_overlay": default,
+                "home_config": home / "config.yaml"}.get(source, tmp_path / "selected.yaml")
+    if source == "selected_without_monitoring":
+        del data["monitoring"]
+    selected.write_text(yaml.safe_dump(data))
+    if source.startswith("selected"):
+        monkeypatch.setenv("LLIAM_CONFIG", str(selected))
+    dispatcher = Mock()
+    dispatcher.pending.return_value = []
+    monkeypatch.setattr(nt, "NotificationDispatcher", lambda cfg: dispatcher)
+    ledger = audit.GovernanceLedger(home / "logs" / "managed.jsonl")
+    ledger.emit("session.start", action="test.start", source_module=__name__)
+    pins: dict[str, dict[str, str | bool]] = {"audit": {"ledger_path": "$LLIAM_HOME/logs/managed.jsonl"}}
+    (managed / "config.yaml").write_text(yaml.safe_dump(pins))
+
+    args = ["--repo-root", str(repo), "--skip-redteam"]
+    assert sa.main(args) == (1 if source == "selected_without_monitoring" else 0)
+    beat = sa.read_heartbeat(home)
+    assert beat["audit_chain"]["ledger_path"] == str(ledger.path)
+    assert beat["audit_chain"]["checked"] == 1
+    assert beat["overlay"] == (None if source == "home_config" else str(selected))
+
+    # A managed effectiveness failure must appear even if the overlay is green.
+    pins["audit"]["verify_on_startup"] = False
+    (managed / "config.yaml").write_text(yaml.safe_dump(pins))
+    assert sa.main(args) == 1
+    assert any("audit verify-on-startup off" in reason
+               for reason in sa.read_heartbeat(home)["effectiveness_failures"])
+
+
 def test_assurance_entry_steady_state_does_not_suspend(tmp_path):
     overlay, cfg = _overlay(tmp_path)
+    ledger = audit.GovernanceLedger(tmp_path / "home/logs/agent-audit.log")
+    ledger.emit("session.start", action="test.start", source_module=__name__)
     beat = sa.run_assurance(home=tmp_path / "home", config=cfg,
                             overlay_path=overlay, run_redteam=False)
     assert beat["effectiveness_failures"] == []

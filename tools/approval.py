@@ -2510,7 +2510,7 @@ class ApprovalRefused(PermissionError):
 
 def resolve_gateway_approval(session_key: str, choice: str,
                              resolve_all: bool = False,
-                             *, raise_on_refusal: bool = False) -> int:
+                             *, raise_on_refusal: bool = False, request_id: Optional[str] = None) -> int:
     """Called by the gateway's /approve or /deny handler to unblock
     waiting agent thread(s).
 
@@ -2528,43 +2528,41 @@ def resolve_gateway_approval(session_key: str, choice: str,
 
     Returns the number of approvals resolved (0 means nothing was pending).
     """
-    approver: Optional[str] = None
-    approver_method: Optional[str] = None
-    try:
-        from tools.hitl_oversight import authorize_approval
-    except Exception:  # pragma: no cover - module ships with this one
-        authorize_approval = None
-    if authorize_approval is not None:
-        with _lock:
-            queue = _gateway_queues.get(session_key) or []
-            head = dict(queue[0].data) if queue else None
-        if head is None:
-            return 0
-        auth = authorize_approval(
-            choice, gate="gateway.approval",
-            target=str(head.get("command", "")),
-            description=str(head.get("description", "")),
-            origin="gateway",
-        )
-        if not auth.allowed:
-            if raise_on_refusal:
-                raise ApprovalRefused(auth.reason)
-            return 0
-        approver = auth.principal
-        approver_method = auth.method
+    from tools.hitl_oversight import authorize_approval, UNAUTHENTICATED_APPROVER_REASON
 
     with _lock:
-        queue = _gateway_queues.get(session_key)
-        if not queue:
-            return 0
-        if resolve_all:
-            targets = list(queue)
-            queue.clear()
+        queue = _gateway_queues.get(session_key, [])
+        if request_id:
+            targets = [e for e in queue if e.data.get("request_id") == request_id]
+        elif resolve_all and choice == "deny":
+            targets = list(queue)  # also used to cancel a disconnected session
         else:
-            targets = [queue.pop(0)]
+            # Legacy unnumbered responses can only resolve unnumbered prompts.
+            candidates = queue if resolve_all else queue[:1]
+            targets = [e for e in candidates if not e.data.get("request_id")]
+    if not targets:
+        return 0
+    head = targets[0].data
+    auth = authorize_approval(
+        choice, gate="gateway.approval", target=str(head.get("command", "")),
+        description=str(head.get("description", "")), origin="gateway",
+    )
+    if not auth.allowed or (request_id and choice != "deny" and
+                            (choice != "once" or not auth.principal)):
+        if raise_on_refusal:
+            raise ApprovalRefused(auth.reason or UNAUTHENTICATED_APPROVER_REASON)
+        return 0
+
+    # Another resolver or timeout may have removed entries during authorization.
+    with _lock:
+        queue = _gateway_queues.get(session_key, [])
+        targets = [entry for entry in targets if entry in queue]
+        for entry in targets:
+            queue.remove(entry)
         if not queue:
             _gateway_queues.pop(session_key, None)
 
+    approver, approver_method = auth.principal, auth.method
     for entry in targets:
         entry.approver = approver
         entry.approver_method = approver_method
@@ -3259,10 +3257,12 @@ def check_dangerous_command(command: str, env_type: str,
     # record the operator's verdict to the governance ledger. Never blocking.
     try:
         from tools.hitl_oversight import note_approval_prompt as _ho_note
-        from tools.hitl_oversight import record_decision as _ho_record
+        from tools.hitl_oversight import record_decision
         _ho_note(session_key)
     except Exception:
         _ho_record = None
+    else:
+        _ho_record = record_decision
 
     choice = prompt_dangerous_approval(command, description,
                                        allow_permanent=not has_delete,
@@ -3335,6 +3335,30 @@ def _format_tirith_description(tirith_result: dict) -> str:
     return "Security scan — " + "; ".join(parts)
 
 
+def request_policy_approval(tool_name: str, arguments: dict, action_class: str, reason: str) -> bool:
+    """Ask for one invocation on the active session's authenticated UI."""
+    import json
+    import uuid
+
+    _, _, gateway, ask = _approval_surfaces()
+    if not (gateway or ask):
+        return False
+    session_key = get_current_session_key()
+    with _lock:
+        notify = _gateway_notify_cbs.get(session_key)
+    if notify is None:
+        return False
+    result = _await_gateway_decision(
+        session_key, notify, {
+            "request_id": uuid.uuid4().hex,
+            "command": f"{tool_name} {json.dumps(arguments, ensure_ascii=False, sort_keys=True)}",
+            "description": reason, "pattern_key": action_class, "gate": action_class,
+            "allow_permanent": False, "allow_session": False,
+        }, surface="policy",
+    )
+    return result["resolved"] and result["choice"] == "once"
+
+
 def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict,
                             *, surface: str = "gateway") -> dict:
     """Enqueue *approval_data*, notify the user, and block the calling agent
@@ -3357,7 +3381,13 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict,
 
     entry = _ApprovalEntry(approval_data)
     with _lock:
-        _gateway_queues.setdefault(session_key, []).append(entry)
+        queue = _gateway_queues.setdefault(session_key, [])
+        # The UI presents one prompt per session. Never replace a numbered
+        # consent prompt or place it over an earlier outstanding request.
+        if queue and (approval_data.get("request_id") or
+                      any(item.data.get("request_id") for item in queue)):
+            return {"resolved": False, "choice": None, "notify_failed": True}
+        queue.append(entry)
 
     def _drop_entry() -> None:
         with _lock:
@@ -3440,6 +3470,7 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict,
         choice = "once"
     # LG-HO-10 / LG-GV-05: record the gateway verdict with the authenticated
     # approver (if any) that resolved it. Never blocking.
+    persisted = False
     try:
         from tools.hitl_oversight import is_approval_choice, record_decision
         if not resolved or not choice:
@@ -3448,8 +3479,8 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict,
             _verdict = "approve"
         else:
             _verdict = "deny"
-        record_decision(
-            decision=_verdict, gate="gateway.approval", target=command,
+        persisted = record_decision(
+            decision=_verdict, gate=str(approval_data.get("gate") or "gateway.approval"), target=command,
             description=description, approver=entry.approver,
             # entry.approver is only ever set from an authenticated principal
             # bound in the resolver's context (resolve_gateway_approval).
@@ -3460,6 +3491,8 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict,
         )
     except Exception:
         pass
+    if surface == "policy" and (not persisted or not entry.approver):
+        choice = "deny"
     # Normalize outcome for the post hook. Unresolved (timeout) and None both
     # mean the user never responded; report that explicitly so plugins can
     # distinguish timeout from explicit deny.

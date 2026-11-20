@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from lliam_constants import get_lliam_home
-from plugins.memory.honcho.client import _host_block, profile_host_key, resolve_active_host, resolve_config_path, HOST
+from .client import _host_block, profile_host_key, resolve_active_host, resolve_config_path, HOST
 from lliam_cli.config import cfg_get
 
 
@@ -84,7 +84,7 @@ def _ensure_peer_exists(host_key: str | None = None) -> bool:
     was created or already exists, False on failure.
     """
     try:
-        from plugins.memory.honcho.client import HonchoClientConfig, get_honcho_client
+        from .client import HonchoClientConfig, get_honcho_client
         hcfg = HonchoClientConfig.from_global_config(host=host_key)
         if not hcfg.enabled or not (hcfg.api_key or hcfg.base_url):
             return False
@@ -627,7 +627,7 @@ def cmd_setup(args) -> None:
 
         # Detect an existing OAuth grant so re-running setup reflects it instead
         # of looking like a fresh connect.
-        from plugins.memory.honcho.oauth import OAuthCredential
+        from .oauth import OAuthCredential
         existing_oauth = OAuthCredential.from_host_block(lliam_host)
 
         print("\n  Auth method:")
@@ -643,7 +643,7 @@ def cmd_setup(args) -> None:
             # don't bury it behind the identity prompts. The grant's tokens are
             # merged into the in-memory cfg so the wizard's final save preserves
             # them; settings stay wizard-owned (apply_config=False).
-            from plugins.memory.honcho.oauth_flow import authorize_via_loopback
+            from .oauth_flow import authorize_via_loopback
 
             def _open(url: str) -> None:
                 print(f"\n  Open this link to authorize (waiting up to 5 minutes):\n\n    {url}\n")
@@ -944,7 +944,7 @@ def cmd_setup(args) -> None:
     # --- Test connection ---
     print("  Testing connection... ", end="", flush=True)
     try:
-        from plugins.memory.honcho.client import HonchoClientConfig, get_honcho_client, reset_honcho_client
+        from .client import HonchoClientConfig, get_honcho_client, reset_honcho_client
         reset_honcho_client()
         hcfg = HonchoClientConfig.from_global_config(host=_host_key())
         get_honcho_client(hcfg)
@@ -1037,7 +1037,7 @@ def cmd_status(args) -> None:
     if not cfg:
         # Config file missing — try env var fallback before giving up.
         try:
-            from plugins.memory.honcho.client import HonchoClientConfig
+            from .client import HonchoClientConfig
             _env_cfg = HonchoClientConfig.from_global_config(host=_host_key())
             if _env_cfg.api_key or _env_cfg.base_url:
                 # Env var fallback worked — use that config instead.
@@ -1052,7 +1052,7 @@ def cmd_status(args) -> None:
             return
 
     try:
-        from plugins.memory.honcho.client import HonchoClientConfig, get_honcho_client
+        from .client import HonchoClientConfig, get_honcho_client
         hcfg = HonchoClientConfig.from_global_config(host=_host_key())
     except Exception as e:
         print(f"  Config error: {e}\n")
@@ -1063,7 +1063,7 @@ def cmd_status(args) -> None:
 
     # Auth line distinguishes an OAuth grant (refreshable) from a static API key
     # — the OAuth access token is also stored under apiKey, so masking alone hides it.
-    from plugins.memory.honcho.oauth import OAuthCredential
+    from .oauth import OAuthCredential
     host_block = (getattr(hcfg, "raw", None) or {}).get("hosts", {}).get(hcfg.host) or {}
     cred = OAuthCredential.from_host_block(host_block)
 
@@ -1130,7 +1130,7 @@ def _show_peer_cards(hcfg, client) -> None:
     just retrieved, not duplicated.
     """
     try:
-        from plugins.memory.honcho.session import HonchoSessionManager
+        from .session import HonchoSessionManager
         mgr = HonchoSessionManager(honcho=client, config=hcfg)
         session_key = hcfg.resolve_session_name()
         mgr.get_or_create(session_key)
@@ -1428,8 +1428,8 @@ def cmd_identity(args) -> None:
     show = getattr(args, "show", False)
 
     try:
-        from plugins.memory.honcho.client import HonchoClientConfig, get_honcho_client
-        from plugins.memory.honcho.session import HonchoSessionManager
+        from .client import HonchoClientConfig, get_honcho_client
+        from .session import HonchoSessionManager
         hcfg = HonchoClientConfig.from_global_config(host=_host_key())
         client = get_honcho_client(hcfg)
         mgr = HonchoSessionManager(honcho=client, config=hcfg)
@@ -1593,12 +1593,12 @@ def cmd_migrate(args) -> None:
             answer = _prompt("  Upload user memory files to Honcho now?", default="y")
             if answer.lower() in {"y", "yes"}:
                 try:
-                    from plugins.memory.honcho.client import (
+                    from .client import (
                         HonchoClientConfig,
                         get_honcho_client,
                         reset_honcho_client,
                     )
-                    from plugins.memory.honcho.session import HonchoSessionManager
+                    from .session import HonchoSessionManager
 
                     reset_honcho_client()
                     hcfg = HonchoClientConfig.from_global_config()
@@ -1643,12 +1643,12 @@ def cmd_migrate(args) -> None:
             answer = _prompt("  Seed AI identity from all detected files now?", default="y")
             if answer.lower() in {"y", "yes"}:
                 try:
-                    from plugins.memory.honcho.client import (
+                    from .client import (
                         HonchoClientConfig,
                         get_honcho_client,
                         reset_honcho_client,
                     )
-                    from plugins.memory.honcho.session import HonchoSessionManager
+                    from .session import HonchoSessionManager
 
                     reset_honcho_client()
                     hcfg = HonchoClientConfig.from_global_config()

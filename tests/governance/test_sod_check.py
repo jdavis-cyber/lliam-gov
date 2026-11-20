@@ -161,8 +161,8 @@ def test_shipped_deviations_are_complete_and_owned():
     keep ordinary repository development working.
     """
     roles = yaml.safe_load((_REPO / "policy/governed/roles.yaml").read_text())
-    devs = roles.get("sod_deviations") or []
-    assert devs, "expected tracked single-operator deviations in roles.yaml"
+    devs = roles["sod_deviations"]
+    assert isinstance(devs, list)
     for d in devs:
         assert len(d.get("conflict") or []) == 2, d
         assert str(d.get("principal") or "").strip(), d
@@ -172,26 +172,22 @@ def test_shipped_deviations_are_complete_and_owned():
 
 
 @pytest.mark.parametrize("days_after_review", [0, 1])
-def test_shipped_example_expiry_boundaries(monkeypatch, days_after_review):
-    """Real example files pass on review day and block after expiry, including
-    the CLI exit status. No live approval is inferred from either fixture."""
-    roles = yaml.safe_load((_REPO / "policy/governed/roles.yaml").read_text())
-    overlay = yaml.safe_load((_REPO / "cli-config.gov.yaml").read_text())
-    bindings = (overlay.get("governance") or {}).get("role_bindings") or {}
-    review_dates = [sod_check._parse_review_by(d["review_by"])
-                    for d in roles["sod_deviations"]]
-    for review_date in sorted(set(review_dates)):
-        today = review_date + datetime.timedelta(days=days_after_review)
-        monkeypatch.setattr(sod_check, "_today", lambda today=today: today)
-        blocking, accepted = sod_check.classify_sod(roles, bindings)
-        expired = sum(date < today for date in review_dates)
-        assert len(blocking) == expired
-        assert all("expired review_by" in conflict for conflict in blocking)
-        assert len(accepted) == len(review_dates) - expired
-        assert sod_check.main([
-            "--roles", str(_REPO / "policy/governed/roles.yaml"),
-            "--overlay", str(_REPO / "cli-config.gov.yaml"),
-        ]) == (1 if expired else 0)
+def test_cli_deviation_expiry_boundary(monkeypatch, tmp_path, days_after_review):
+    from agent import governance_audit as audit
+
+    ledger = audit.GovernanceLedger(tmp_path / "audit.jsonl")
+    monkeypatch.setattr(audit, "get_ledger", lambda: ledger)
+    roles_file = tmp_path / "roles.yaml"
+    roles_file.write_text(yaml.safe_dump(_roles_with_deviation()))
+    overlay = tmp_path / "config.yaml"
+    overlay.write_text(yaml.safe_dump({"governance": {"role_bindings": _CAIO_CONFLICT_BINDINGS}}))
+    review_date = datetime.date.fromisoformat(_future_iso())
+    monkeypatch.setattr(sod_check, "_today",
+                        lambda: review_date + datetime.timedelta(days=days_after_review))
+    assert sod_check.main(["--roles", str(roles_file), "--overlay", str(overlay)]) == days_after_review
+    if days_after_review == 0:
+        assert any(row["resource"]["type"] == "sod_deviation"
+                   for row in audit.iter_records(ledger.path))
 
 
 # ---- deviation validity: a waiver must be complete AND unexpired (LG-GV-05) --

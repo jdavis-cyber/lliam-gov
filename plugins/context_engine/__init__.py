@@ -106,6 +106,9 @@ def _load_engine_from_dir(engine_dir: Path) -> Optional["ContextEngine"]:
     """
     name = engine_dir.name
     module_name = f"plugins.context_engine.{name}"
+    from tools.skill_attestation import artifact_module_spec, verified_directory, verified_module_name
+    engine_dir = verified_directory("plugin", f"context_engine/{name}", engine_dir)
+    module_name = verified_module_name(module_name, engine_dir)
     init_file = engine_dir / "__init__.py"
 
     if not init_file.exists():
@@ -137,7 +140,7 @@ def _load_engine_from_dir(engine_dir: Path) -> Optional["ContextEngine"]:
                             pass
 
         # Now load the engine module
-        spec = importlib.util.spec_from_file_location(
+        spec = artifact_module_spec(
             module_name, str(init_file),
             submodule_search_locations=[str(engine_dir)]
         )
@@ -154,7 +157,7 @@ def _load_engine_from_dir(engine_dir: Path) -> Optional["ContextEngine"]:
             sub_name = sub_file.stem
             full_sub_name = f"{module_name}.{sub_name}"
             if full_sub_name not in sys.modules:
-                sub_spec = importlib.util.spec_from_file_location(
+                sub_spec = artifact_module_spec(
                     full_sub_name, str(sub_file)
                 )
                 if sub_spec:

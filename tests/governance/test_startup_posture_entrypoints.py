@@ -120,6 +120,8 @@ def _record_gates(monkeypatch, calls, *, raise_at=None, fault_at=None):
                         lambda *, config=None: calls.append(("identity", config)))
     for name in _GATES:
         monkeypatch.setattr(sas, name, _make(name))
+    # Dedicated deviation tests exercise this gate with complete governed profiles.
+    monkeypatch.setattr(sp.deviations, "activate", lambda config: None)
 
 
 def test_sequence_order_and_merged_config(monkeypatch):
@@ -196,6 +198,24 @@ def test_sequence_latches_after_success_only(monkeypatch):
     assert [c[0] for c in calls].count("identity") == 1
     sp.enforce_startup_posture(raw_config={}, force=True)
     assert [c[0] for c in calls].count("identity") == 2
+
+
+def test_forced_recheck_reaches_every_gate_and_clears_failed_success(monkeypatch):
+    attempts = []
+    blocked = False
+    _record_gates(monkeypatch, [])
+    monkeypatch.setattr(sp, "_merged_config", lambda _: {})
+    def gate(*, config, force=False):
+        attempts.append(force)
+        if blocked:
+            raise sas.ModelIntegrityError("refused on recheck")
+    monkeypatch.setattr(sas, "enforce_model_integrity_at_startup", gate)
+    sp.enforce_startup_posture(raw_config={})
+    blocked = True
+    for force in (True, False):
+        with pytest.raises(sas.ModelIntegrityError):
+            sp.enforce_startup_posture(raw_config={}, force=force)
+    assert attempts[1] is True
 
 
 def test_real_gates_low_side_is_noop(monkeypatch):

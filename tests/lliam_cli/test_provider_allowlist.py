@@ -54,6 +54,7 @@ def strict_pa(tmp_path, monkeypatch):
     policy = tmp_path / "provider-allowlist.yaml"
     policy.write_text(_POLICY, encoding="utf-8")
     cfg = {"security": {"posture": "strict",
+                        "allowed_providers": ["lmstudio", "bedrock"],
                         "provider_allowlist_enforce": True,
                         "provider_allowlist_path": str(policy)}}
     monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)

@@ -86,8 +86,9 @@ def test_missing_manifest_blocks(tmp_path, monkeypatch):
     manifest = tmp_path / "missing-model-manifest.yaml"
     cfg = _cfg(tmp_path, primary_model="lmstudio/llama-3.1-8b-instruct", manifest=manifest)
     monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: cfg)
-    with pytest.raises(sas.ModelIntegrityError, match="missing|manifest"):
-        sas.enforce_model_integrity_at_startup(config=cfg)
+    for _ in range(2):
+        with pytest.raises(sas.ModelIntegrityError, match="missing|manifest"):
+            sas.enforce_model_integrity_at_startup(config=cfg)
 
 
 def test_signed_manifest_must_match_configured_primary(tmp_path, monkeypatch):

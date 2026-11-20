@@ -8,7 +8,7 @@ over there).
 
 from __future__ import annotations
 
-from plugins.browser.firecrawl.provider import FirecrawlBrowserProvider
+from .provider import FirecrawlBrowserProvider
 
 
 def register(ctx) -> None:

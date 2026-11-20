@@ -92,9 +92,14 @@ export interface DelegationStatus {
 export interface ApprovalReq {
   // false when the backend won't honor a permanent allow (tirith warning) → hide "Always allow".
   allowPermanent?: boolean
+  allowSession?: boolean
   command: string
   description: string
+  requestId?: string
+  sessionId?: string
 }
+
+export type AnswerApproval = (choice: string, request: ApprovalReq) => void
 
 export interface ConfirmReq {
   cancelLabel?: string

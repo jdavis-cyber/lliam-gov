@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Optional
 
-from plugins.google_meet import process_manager as pm
+from . import process_manager as pm
 
 
 # ---------------------------------------------------------------------------
@@ -57,8 +57,8 @@ def _resolve_node_client(node: Optional[str]):
     """
     if node is None or node == "":
         return None, None
-    from plugins.google_meet.node.registry import NodeRegistry
-    from plugins.google_meet.node.client import NodeClient
+    from .node.registry import NodeRegistry
+    from .node.client import NodeClient
 
     reg = NodeRegistry()
     entry = reg.resolve(node if node != "auto" else None)

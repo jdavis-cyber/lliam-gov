@@ -43,7 +43,7 @@ from lliam_cli.env_compat import getenv_compat
 import sys
 import threading
 import types
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
@@ -64,6 +64,26 @@ def get_bundled_plugins_dir() -> Path:
     if env_override:
         return Path(env_override)
     return Path(__file__).resolve().parent.parent / "plugins"
+
+
+def _public_bundled_package(directory: Path) -> str | None:
+    """Find the public package only when it imports this precise bundled directory."""
+    directory = directory.resolve()
+    root = get_bundled_plugins_dir().resolve()
+    if not directory.is_relative_to(root):
+        return None
+    parts = directory.relative_to(root).parts
+    if not parts or not all(part.isidentifier() for part in parts):
+        return None
+    name = ".".join(("plugins", *parts))
+    try:
+        spec = importlib.util.find_spec(name)
+    except (ImportError, ValueError):
+        return None
+    if spec and spec.origin and Path(spec.origin).resolve() == directory / "__init__.py":
+        return name
+    return None
+
 
 try:
     import yaml
@@ -1315,10 +1335,19 @@ class PluginManager:
             if yaml is None:
                 logger.warning("PyYAML not installed – cannot load %s", manifest_file)
                 return None
-            data = yaml.safe_load(manifest_file.read_text(encoding="utf-8")) or {}
+            raw_manifest = manifest_file.read_bytes()
+            data = yaml.safe_load(raw_manifest.decode("utf-8")) or {}
 
             name = data.get("name", plugin_dir.name)
             key = f"{prefix}/{plugin_dir.name}" if prefix else name
+
+            from tools.skill_attestation import verified_directory, record_refusal
+            verified = verified_directory("plugin", key, plugin_dir)
+            if verified != plugin_dir:
+                descriptor = verified / manifest_file.name
+                if not descriptor.is_file() or descriptor.read_bytes() != raw_manifest:
+                    record_refusal("plugin", key, "Plugin descriptor differs from signed inventory")
+                    return None
 
             raw_kind = data.get("kind", "standalone")
             if not isinstance(raw_kind, str):
@@ -1338,7 +1367,7 @@ class PluginManager:
             # heuristic in plugins/memory/__init__.py:_is_memory_provider_dir.
             # Bundled memory providers are already skipped via skip_names.
             if kind == "standalone" and "kind" not in data:
-                init_file = plugin_dir / "__init__.py"
+                init_file = verified / "__init__.py"
                 if init_file.exists():
                     try:
                         source_text = init_file.read_text(errors="replace")[:8192]
@@ -1434,9 +1463,17 @@ class PluginManager:
         )
 
         try:
+            from tools.skill_attestation import verified_directory
+            key = manifest.key or manifest.name
             if manifest.source in {"user", "project", "bundled"}:
+                if not manifest.path:
+                    raise ValueError(f"Directory missing for plugin {key!r}")
+                directory = verified_directory("plugin", key, Path(manifest.path))
+                manifest = replace(manifest, path=str(directory))
                 module = self._load_directory_module(manifest)
             else:
+                # Entry points cannot supply a contained, authenticated bundle.
+                verified_directory("plugin", key, None)
                 module = self._load_entrypoint_module(manifest)
 
             loaded.module = module
@@ -1504,7 +1541,7 @@ class PluginManager:
         self._plugins[manifest.key or manifest.name] = loaded
 
     def _load_directory_module(self, manifest: PluginManifest) -> types.ModuleType:
-        """Import a directory-based plugin as ``hermes_plugins.<slug>``.
+        """Load a directory-based plugin and register its ``hermes_plugins.<slug>`` name.
 
         The module slug is derived from ``manifest.key`` so category-namespaced
         plugins (``image_gen/openai``) import as
@@ -1525,8 +1562,18 @@ class PluginManager:
 
         key = manifest.key or manifest.name
         slug = key.replace("/", "__").replace("-", "_")
-        module_name = f"{_NS_PARENT}.{slug}"
-        spec = importlib.util.spec_from_file_location(
+        from tools.skill_attestation import artifact_module_spec, verified_module_name
+        scoped_name = f"{_NS_PARENT}.{slug}"
+        module_name = verified_module_name(scoped_name, plugin_dir)
+        if manifest.source == "bundled" and module_name == scoped_name:
+            public = _public_bundled_package(plugin_dir)
+            if public:
+                # The registry and public callers must share provider classes,
+                # cached clients, and patches applied through the public package.
+                module = importlib.import_module(public)
+                sys.modules[scoped_name] = module
+                return module
+        spec = artifact_module_spec(
             module_name,
             init_file,
             submodule_search_locations=[str(plugin_dir)],

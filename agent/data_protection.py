@@ -26,6 +26,7 @@ import logging
 import json
 import os
 import re
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -231,27 +232,69 @@ def dlp_egress_decision(
 # Output masking + retention (LG-DP-11)
 # --------------------------------------------------------------------------- #
 
-def mask_tool_result(text: str) -> str:
-    """LG-DP-11/DP-03: mask secrets + CUI/PII in a tool result. No-op low-side."""
-    if not text or not _is_strict():
-        return text
+def mask_tool_result(value: Any) -> Any:
+    """Mask text in governed results while preserving JSON and multimodal structure."""
+    if not value or not _is_strict():
+        return value
     try:
-        from agent.redact import redact_sensitive_text
-        text = redact_sensitive_text(text, force=True)
+        from agent.redact import is_secret_json_field, redact_sensitive_text
+
+        def mask_text(text):
+            text = redact_sensitive_text(text, force=True)
+            for kind, rx in _CUI_PII_PATTERNS:
+                text = rx.sub(f"[REDACTED-{kind.upper()}]", text)
+            return text
+
+        def mask_fields(item):
+            if isinstance(item, dict):
+                return {
+                    k: "[REDACTED]" if v and is_secret_json_field(k) else mask_fields(v)
+                    for k, v in item.items()
+                }
+            if isinstance(item, list):
+                return [mask_fields(v) for v in item]
+            return mask_text(item) if isinstance(item, str) else item
+
+        if isinstance(value, str) and value.lstrip().startswith(("{", "[")):
+            try:
+                parsed = json.loads(value)
+            except ValueError:
+                return mask_text(value)
+            masked = mask_fields(parsed)
+            return value if masked == parsed else json.dumps(masked, ensure_ascii=False)
+        return mask_fields(value)
     except Exception:
-        logger.warning("mask_tool_result redaction unavailable", exc_info=True)
-    for kind, rx in _CUI_PII_PATTERNS:
-        text = rx.sub(f"[REDACTED-{kind.upper()}]", text)
-    return text
+        logger.warning("Tool result redaction unavailable", exc_info=True)
+        return "[REDACTED: tool result unavailable]"
+
+
+def log_tool_exception(log: logging.Logger, message: str) -> None:
+    """Keep chained exception messages out of governed tool error logs."""
+    if _is_strict():
+        log.error("%s", mask_tool_result(message))
+    else:
+        log.exception("%s", message)
+
+
+def requires_protected_results() -> bool:
+    policy = _security_cfg().get("data_protection") or {}
+    return (
+        _is_strict()
+        or bool(policy.get("at_rest_encryption"))
+        or policy.get("result_retention_ttl_seconds") is not None
+    )
 
 
 def result_retention_ttl_seconds() -> Optional[int]:
-    """LG-DP-11: configured retention TTL for stored tool results (or None)."""
-    try:
-        ttl = (_security_cfg().get("data_protection") or {}).get("result_retention_ttl_seconds")
-        return int(ttl) if ttl is not None else None
-    except Exception:
+    """Return the configured lifetime. Invalid settings prohibit persistence."""
+    ttl = (_security_cfg().get("data_protection") or {}).get("result_retention_ttl_seconds")
+    if ttl is None:
+        if _is_strict():
+            raise ValueError("Governed tool result storage requires a retention TTL")
         return None
+    if isinstance(ttl, bool) or int(ttl) < 0:
+        raise ValueError("Invalid tool result retention TTL")
+    return int(ttl)
 
 
 # --------------------------------------------------------------------------- #
@@ -259,9 +302,8 @@ def result_retention_ttl_seconds() -> Optional[int]:
 # --------------------------------------------------------------------------- #
 
 def _lliam_home() -> Path:
-    from lliam_cli.env_compat import getenv_compat
-    home = getenv_compat("HOME") or os.path.expanduser("~/.lliam")
-    return Path(home).expanduser()
+    from lliam_constants import get_lliam_home
+    return get_lliam_home()
 
 
 def at_rest_keyfile_path() -> Path:
@@ -284,14 +326,22 @@ def ensure_at_rest_key() -> bytes:
     path = at_rest_keyfile_path()
     if path.is_file():
         return path.read_bytes().strip()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    key = Fernet.generate_key()
-    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # Publish only a complete key. Concurrent first-use callers must agree on
+    # one key before they encrypt anything.
+    pending = tempfile.NamedTemporaryFile(dir=path.parent, delete=False)
     try:
-        os.write(fd, key)
+        with pending:
+            pending.write(Fernet.generate_key())
+            pending.flush()
+            os.fsync(pending.fileno())
+        try:
+            os.link(pending.name, path)
+        except FileExistsError:
+            pass
     finally:
-        os.close(fd)
-    return key
+        Path(pending.name).unlink(missing_ok=True)
+    return path.read_bytes().strip()
 
 
 def encrypt_at_rest(data: bytes) -> bytes:
@@ -304,4 +354,4 @@ def encrypt_at_rest(data: bytes) -> bytes:
 def decrypt_at_rest(token: bytes) -> bytes:
     from cryptography.fernet import Fernet
 
-    return Fernet(ensure_at_rest_key()).decrypt(token)
+    return Fernet(at_rest_keyfile_path().read_bytes().strip()).decrypt(token)

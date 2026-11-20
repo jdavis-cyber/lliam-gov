@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, List
 
 from lliam_cli.auth import get_auth_status
-from plugins.spotify.client import (
+from .client import (
     SpotifyAPIError,
     SpotifyAuthRequiredError,
     SpotifyClient,

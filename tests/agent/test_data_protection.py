@@ -220,3 +220,62 @@ def test_egress_escalated_to_hitl_after_cui_exposure(tmp_path, monkeypatch):
     assert tp.evaluate_call("read_file", {"path": "n"}).allows_execution
     dp.reset_dp_state()
     tp.reset_pdp_state()
+
+
+def test_concurrent_first_tool_results_share_one_durable_key(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from agent import data_protection as dp
+
+    keyfile = tmp_path / "keys" / "test.key"
+    monkeypatch.setenv("LLIAM_AT_REST_KEYFILE", str(keyfile))
+    first_write = Barrier(8)
+
+    def store(i):
+        first_write.wait(timeout=10)
+        return dp.encrypt_at_rest(str(i).encode())
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(store, range(8)))
+    assert [dp.decrypt_at_rest(blob) for blob in results] == [str(i).encode() for i in range(8)]
+    from agent.file_safety import get_read_block_error, is_write_denied
+    assert get_read_block_error(str(keyfile))
+    assert is_write_denied(str(keyfile))
+
+
+def test_governed_read_file_masks_before_display_and_preserves_taint(strict_dp, tmp_path):
+    import json
+    from model_tools import handle_function_call
+
+    document = tmp_path / "example.txt"
+    document.write_text("Synthetic identifier 123-45-6789")
+    raw = handle_function_call("read_file", {"path": str(document)}, session_id="test-view")
+    result = json.loads(raw)
+    assert "[REDACTED-SSN]" in result["content"]
+    assert "123-45-6789" not in raw
+    assert strict_dp.session_cui_tainted(session_id="test-view")
+
+
+def test_governed_dispatch_masks_errors_for_direct_callers(strict_dp, monkeypatch, caplog):
+    import json
+    from model_tools import handle_function_call, registry
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("Synthetic record 123-45-6789 unavailable")
+
+    monkeypatch.setattr(registry, "dispatch", unavailable)
+    result = json.loads(handle_function_call("read_file", {"path": "fixture"}))
+    assert "[REDACTED-SSN]" in result["error"]
+    assert "123-45-6789" not in result["error"]
+    assert "123-45-6789" not in caplog.text
+
+
+@pytest.mark.parametrize("serialized", [False, True])
+def test_masked_credentials_preserve_json_structure(strict_dp, serialized):
+    import json
+
+    original = [{"name": "first", "data": {"api_key": 'example"quoted secret'}}]
+    result = strict_dp.mask_tool_result(json.dumps(original) if serialized else original)
+    masked = json.loads(result) if serialized else result
+    assert masked[0]["name"] == "first"
+    assert "secret" not in masked[0]["data"]["api_key"]

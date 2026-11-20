@@ -127,15 +127,6 @@ from agent.browser_provider import BrowserProvider as CloudBrowserProvider  # no
 from agent.browser_registry import (  # noqa: F401  (test-patchable surface)
     get_provider as _registry_get_browser_provider,
 )
-from plugins.browser.browserbase.provider import (  # noqa: F401  (legacy import surface)
-    BrowserbaseBrowserProvider as BrowserbaseProvider,
-)
-from plugins.browser.browser_use.provider import (  # noqa: F401
-    BrowserUseBrowserProvider as BrowserUseProvider,
-)
-from plugins.browser.firecrawl.provider import (  # noqa: F401
-    FirecrawlBrowserProvider as FirecrawlProvider,
-)
 from tools.tool_backend_helpers import normalize_browser_cloud_provider
 # Camofox local anti-detection browser backend (optional).
 # When CAMOFOX_URL is set, all browser operations route through the
@@ -454,15 +445,33 @@ def _stop_cdp_supervisor(task_id: str) -> None:
 # wins. This keeps the test surface stable while letting third-party
 # plugins drop in under ``~/.hermes/plugins/browser/<vendor>/``.
 
-_PROVIDER_REGISTRY: Dict[str, type] = {
-    "browserbase": BrowserbaseProvider,
-    "browser-use": BrowserUseProvider,
-    "firecrawl": FirecrawlProvider,
+_BROWSER_EXPORTS = {
+    "BrowserbaseProvider": ("browserbase", "BrowserbaseBrowserProvider"),
+    "BrowserUseProvider": ("browser_use", "BrowserUseBrowserProvider"),
+    "FirecrawlProvider": ("firecrawl", "FirecrawlBrowserProvider"),
 }
-# Frozen copy of the import-time _PROVIDER_REGISTRY, used by
-# ``_is_legacy_provider_registry_overridden`` to detect test-time
-# monkeypatching. NEVER mutate this dict.
-_DEFAULT_PROVIDER_REGISTRY: Dict[str, type] = dict(_PROVIDER_REGISTRY)
+
+
+def __getattr__(name: str) -> Any:
+    if name not in _BROWSER_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from tools.skill_attestation import load_bundled_plugin_module
+    provider, class_name = _BROWSER_EXPORTS[name]
+    return getattr(load_bundled_plugin_module("browser", provider, "provider"), class_name)
+
+
+def _make_browser_provider(name: str) -> CloudBrowserProvider:
+    # Existing callers can override the public class before selection.
+    provider_class = globals().get(name) or __getattr__(name)
+    return provider_class()
+
+
+_PROVIDER_REGISTRY = {
+    "browserbase": functools.partial(_make_browser_provider, "BrowserbaseProvider"),
+    "browser-use": functools.partial(_make_browser_provider, "BrowserUseProvider"),
+    "firecrawl": functools.partial(_make_browser_provider, "FirecrawlProvider"),
+}
+_DEFAULT_PROVIDER_REGISTRY = dict(_PROVIDER_REGISTRY)
 
 _cached_cloud_provider: Optional[CloudBrowserProvider] = None
 _cloud_provider_resolved = False
@@ -478,22 +487,10 @@ _browser_engine_resolved = False
 
 
 def _is_legacy_provider_registry_overridden() -> bool:
-    """Return True when a test has patched ``_PROVIDER_REGISTRY`` to a custom value.
-
-    Detected by spotting any registered class that *isn't* the canonical
-    plugin-backed class for that name. Tests that
-    ``monkeypatch.setattr(browser_tool, "_PROVIDER_REGISTRY", ...)`` install
-    custom factories (`exploding_factory`, `lambda: fake_provider`, etc.);
-    those entries fail the canonical-class identity check below.
-
-    Note: a future maintainer adding a 4th built-in provider only needs to
-    extend ``_DEFAULT_PROVIDER_REGISTRY`` below — they do NOT need to update
-    a hardcoded set of keys here. The detection just compares each registered
-    value against the corresponding canonical class.
-    """
+    """Return True if a caller has replaced any of the legacy provider factories."""
     try:
-        for key, default_cls in _DEFAULT_PROVIDER_REGISTRY.items():
-            if _PROVIDER_REGISTRY.get(key) is not default_cls:
+        for key, default_factory in _DEFAULT_PROVIDER_REGISTRY.items():
+            if _PROVIDER_REGISTRY.get(key) is not default_factory:
                 return True
         # Extra keys not in the default registry → also an override.
         return len(_PROVIDER_REGISTRY) != len(_DEFAULT_PROVIDER_REGISTRY)
@@ -597,21 +594,21 @@ def _get_cloud_provider() -> Optional[CloudBrowserProvider]:
     if resolved is None:
         # Auto-detect path: Browser Use first (managed Nous gateway or
         # direct API key), then Browserbase (direct credentials). Uses
-        # the legacy class names imported at the top of this module so
-        # tests that ``monkeypatch.setattr(browser_tool, "BrowserUseProvider", ...)``
-        # keep driving this branch deterministically. Third-party browser
+        # the lazy legacy provider factories. Third-party browser
         # plugins are intentionally NOT reachable from auto-detect — they
         # participate only via explicit ``browser.cloud_provider: <name>``,
         # mirroring the firecrawl gate documented on
         # :data:`agent.browser_registry._LEGACY_PREFERENCE`.
         try:
-            fallback_provider = BrowserUseProvider()
-            if fallback_provider.is_configured():
-                resolved = fallback_provider
-            else:
-                fallback_provider = BrowserbaseProvider()
+            for key in ("browser-use", "browserbase"):
+                try:
+                    fallback_provider = _DEFAULT_PROVIDER_REGISTRY[key]()
+                except PermissionError:
+                    # An unapproved optional provider is ineligible for auto-selection.
+                    continue
                 if fallback_provider.is_configured():
                     resolved = fallback_provider
+                    break
         except Exception:  # pragma: no cover - defensive: never poison cache
             logger.debug("Cloud provider auto-detect failed", exc_info=True)
             return None
@@ -4244,3 +4241,7 @@ registry.register(
     check_fn=check_browser_requirements,
     emoji="🖥️",
 )
+
+
+# Preserve wildcard exports without resolving optional providers during import.
+__all__ = sorted(name for name in globals().keys() | _BROWSER_EXPORTS.keys() if not name.startswith("_"))

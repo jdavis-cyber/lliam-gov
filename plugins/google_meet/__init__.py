@@ -18,10 +18,10 @@ from __future__ import annotations
 import logging
 import platform
 
-from plugins.google_meet import process_manager as pm
-from plugins.google_meet.cli import register_cli as _register_meet_cli
-from plugins.google_meet.cli import meet_command as _meet_command
-from plugins.google_meet.tools import (
+from . import process_manager as pm
+from .cli import register_cli as _register_meet_cli
+from .cli import meet_command as _meet_command
+from .tools import (
     MEET_JOIN_SCHEMA,
     MEET_LEAVE_SCHEMA,
     MEET_SAY_SCHEMA,

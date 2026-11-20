@@ -1048,10 +1048,17 @@ def _page_extracted_document(extracted, file_ops, offset: int, limit: int, file_
     return result_dict
 
 
-def read_file_tool(path: str, offset: int = 1, limit: int = 500, task_id: str = "default") -> str:
+def read_file_tool(
+    path: str, offset: int = 1, limit: int = 500, task_id: str = "default",
+    *, session_id: str | None = None,
+) -> str:
     """Read a file with pagination and line numbers."""
     try:
         offset, limit = normalize_read_pagination(offset, limit)
+
+        from tools.protected_tool_results import REFERENCE_PREFIX, read_page
+        if path.startswith(REFERENCE_PREFIX):
+            return json.dumps(read_page(path, session_id or task_id or "default", offset, limit))
 
         # ── Device path guard ─────────────────────────────────────────
         # Block paths that would hang the process (infinite output,
@@ -1935,7 +1942,10 @@ SEARCH_FILES_SCHEMA = {
 
 def _handle_read_file(args, **kw):
     tid = kw.get("task_id") or "default"
-    return read_file_tool(path=args.get("path", ""), offset=args.get("offset", 1), limit=args.get("limit", 500), task_id=tid)
+    return read_file_tool(
+        path=args.get("path", ""), offset=args.get("offset", 1),
+        limit=args.get("limit", 500), task_id=tid, session_id=kw.get("session_id"),
+    )
 
 
 def _handle_write_file(args, **kw):

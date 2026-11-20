@@ -81,17 +81,9 @@ required_bindings: [approver, auditor, killswitch_owner, caio, isso]
 # and an expiry. A conflict on a waivable rule with a MATCHING unexpired entry is
 # reported as an ACCEPTED DEVIATION (not a blocking conflict); without one it
 # fails the gate. Non-waivable rules can never be listed here.
-sod_deviations:
-  - conflict: [caio, ai_risk_owner]
-    principal: jdavis@agency.mil
-    justification: "Single-operator demo/eval (personally-owned MacBook, no CUI in scope). CAIO and AI Risk Owner co-held; production assigns distinct principals."
-    owner: jdavis@agency.mil
-    review_by: 2026-10-11
-  - conflict: [approver, isso]
-    principal: jdavis@agency.mil
-    justification: "Single-operator demo/eval. ISSO control-implementation co-held with the human approver; the SECURITY-critical Approver≠Engineer pair is genuinely separated (engineer = NPE agent). Production assigns distinct principals."
-    owner: jdavis@agency.mil
-    review_by: 2026-10-11
+# The October demo exceptions expired on 2026-10-11. The owner declined
+# renewal on 2026-11-19. Co-held roles remain blocking until assigned.
+sod_deviations: []
 
 # ---------------------------------------------------------------------------
 # Eval-deployment note (single-operator boundary). In the demo/eval deployment

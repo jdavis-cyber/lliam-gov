@@ -8987,9 +8987,9 @@ def _cmd_update_impl(args):
 
         # Sync Honcho host blocks to all profiles
         try:
-            from plugins.memory.honcho.cli import sync_honcho_profiles_quiet
+            from tools.skill_attestation import load_bundled_plugin_module
 
-            synced = sync_honcho_profiles_quiet()
+            synced = load_bundled_plugin_module("memory", "honcho", "cli").sync_honcho_profiles_quiet()
             if synced:
                 print(f"\n-> Honcho: synced {synced} profile(s)")
         except Exception:
@@ -9400,9 +9400,9 @@ def cmd_profile(args):
             # Auto-clone Honcho config for the new profile (only with clone operations)
             if clone_config or clone_all:
                 try:
-                    from plugins.memory.honcho.cli import clone_honcho_for_profile
+                    from tools.skill_attestation import load_bundled_plugin_module
 
-                    if clone_honcho_for_profile(name):
+                    if load_bundled_plugin_module("memory", "honcho", "cli").clone_honcho_for_profile(name):
                         print(f"Honcho config cloned (peer: {name})")
                 except Exception:
                     pass  # Honcho plugin not installed or not configured

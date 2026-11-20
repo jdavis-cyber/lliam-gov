@@ -1,5 +1,6 @@
 """Tests for the Lliam-GOV plugin system (lliam_cli.plugins)."""
 
+import importlib
 import logging
 import sys
 import types
@@ -536,6 +537,28 @@ class TestPluginLoading:
         mgr.discover_and_load()
 
         assert "hermes_plugins.ns_plugin" in sys.modules
+
+    @pytest.mark.parametrize("key", ["web/firecrawl", "browser/firecrawl", "spotify"])
+    def test_standard_bundles_share_the_public_package(self, key):
+        from lliam_cli.plugins import get_bundled_plugins_dir
+
+        directory = get_bundled_plugins_dir() / key
+        manifest = PluginManifest(name=directory.name, key=key, path=str(directory), source="bundled")
+        public = importlib.import_module("plugins." + key.replace("/", "."))
+        loaded = PluginManager()._load_directory_module(manifest)
+        assert loaded is public
+        assert sys.modules["hermes_plugins." + key.replace("/", "__")] is public
+
+    def test_separately_installed_bundle_does_not_reuse_same_named_public_package(self, tmp_path, monkeypatch):
+        root = tmp_path / "bundled"
+        directory = root / "web" / "firecrawl"
+        directory.mkdir(parents=True)
+        (directory / "__init__.py").write_text('SOURCE = "local fixture"\n', encoding="utf-8")
+        monkeypatch.setenv("LLIAM_BUNDLED_PLUGINS", str(root))
+        manifest = PluginManifest(name="firecrawl", key="web/firecrawl", path=str(directory), source="bundled")
+        loaded = PluginManager()._load_directory_module(manifest)
+        assert loaded.SOURCE == "local fixture"
+        assert loaded is not importlib.import_module("plugins.web.firecrawl")
 
     def test_user_memory_plugin_auto_coerced_to_exclusive(self, tmp_path, monkeypatch):
         """User-installed memory plugins must NOT be loaded by the general

@@ -255,7 +255,7 @@ class HonchoMemoryProvider(MemoryProvider):
     def is_available(self) -> bool:
         """Check if Honcho is configured. No network calls."""
         try:
-            from plugins.memory.honcho.client import HonchoClientConfig
+            from .client import HonchoClientConfig
             cfg = HonchoClientConfig.from_global_config()
             # Port #2645: baseUrl-only verification — api_key OR base_url suffices
             return cfg.enabled and bool(cfg.api_key or cfg.base_url)
@@ -287,7 +287,7 @@ class HonchoMemoryProvider(MemoryProvider):
     def post_setup(self, lliam_home: str, config: dict) -> None:
         """Run the full Honcho setup wizard after provider selection."""
         import types
-        from plugins.memory.honcho.cli import cmd_setup
+        from .cli import cmd_setup
         cmd_setup(types.SimpleNamespace())
 
     def initialize(self, session_id: str, **kwargs) -> None:
@@ -307,8 +307,8 @@ class HonchoMemoryProvider(MemoryProvider):
                 self._cron_skipped = True
                 return
 
-            from plugins.memory.honcho.client import HonchoClientConfig, get_honcho_client
-            from plugins.memory.honcho.session import HonchoSessionManager
+            from .client import HonchoClientConfig, get_honcho_client
+            from .session import HonchoSessionManager
 
             cfg = HonchoClientConfig.from_global_config()
             if not cfg.enabled or not (cfg.api_key or cfg.base_url):
@@ -429,8 +429,8 @@ class HonchoMemoryProvider(MemoryProvider):
 
     def _do_session_init(self, cfg, session_id: str, **kwargs) -> None:
         """Shared session initialization logic for both eager and lazy paths."""
-        from plugins.memory.honcho.client import get_honcho_client
-        from plugins.memory.honcho.session import HonchoSessionManager
+        from .client import get_honcho_client
+        from .session import HonchoSessionManager
 
         client = get_honcho_client(cfg)
         self._manager = HonchoSessionManager(

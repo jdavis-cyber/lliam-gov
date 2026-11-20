@@ -371,6 +371,7 @@ def enforce_model_integrity_at_startup(
     global _MODEL_INTEGRITY_CHECKED
     if _MODEL_INTEGRITY_CHECKED and not force:
         return None
+    _MODEL_INTEGRITY_CHECKED = False
 
     if isinstance(config, dict) and config.get("security"):
         eff = config
@@ -450,12 +451,13 @@ def enforce_model_integrity_at_startup(
         if model_id and not att.model_cui_eligible(model_id):
             blocking.append(f"primary model '{model_id}' has no model card / is not CUI-eligible (LG-MP-05)")
 
-    _MODEL_INTEGRITY_CHECKED = True
     if not blocking:
+        _MODEL_INTEGRITY_CHECKED = True
         return None
 
     strict = _effective_is_strict(eff)
     if not strict:
+        _MODEL_INTEGRITY_CHECKED = True
         for f in blocking:
             logger.warning("[model-integrity] (advisory — not strict) %s", f)
         return blocking
@@ -556,6 +558,7 @@ def enforce_provider_allowlist_at_startup(
     global _PROVIDER_ALLOWLIST_CHECKED
     if _PROVIDER_ALLOWLIST_CHECKED and not force:
         return None
+    _PROVIDER_ALLOWLIST_CHECKED = False
 
     if isinstance(config, dict) and config.get("security"):
         eff = config
@@ -590,12 +593,13 @@ def enforce_provider_allowlist_at_startup(
         if decision.disposition == "deny":
             blocking.append(f"{path}: {decision.reason}")
 
-    _PROVIDER_ALLOWLIST_CHECKED = True
     if not blocking:
+        _PROVIDER_ALLOWLIST_CHECKED = True
         return None
 
     strict = _effective_is_strict(eff)
     if not strict:
+        _PROVIDER_ALLOWLIST_CHECKED = True
         for f in blocking:
             logger.warning("[provider-allowlist] (advisory — not strict) %s", f)
         return blocking
@@ -642,6 +646,7 @@ def enforce_control_plane_auth_at_startup(
     global _CONTROL_PLANE_CHECKED
     if _CONTROL_PLANE_CHECKED and not force:
         return None
+    _CONTROL_PLANE_CHECKED = False
 
     # Prefer a passed config that actually carries control-plane state
     # (security / platforms); otherwise resolve the merged config so the
@@ -676,7 +681,6 @@ def enforce_control_plane_auth_at_startup(
         _CONTROL_PLANE_CHECKED = True
         return None
 
-    _CONTROL_PLANE_CHECKED = True
     for f in advisory:
         logger.warning("[control-plane] %s", f)
     # Log blocking findings even when we won't raise (switch on but non-strict),
@@ -706,6 +710,7 @@ def enforce_control_plane_auth_at_startup(
             pass
         raise ControlPlaneAuthError("; ".join(blocking))
 
+    _CONTROL_PLANE_CHECKED = True
     return blocking + advisory
 
 
@@ -896,6 +901,7 @@ def verify_audit_chain_at_startup(
     global _CHAIN_VERIFIED
     if _CHAIN_VERIFIED and not force:
         return None
+    _CHAIN_VERIFIED = False
     try:
         from agent import governance_audit as ga
     except Exception as e:  # pragma: no cover - import guard
@@ -944,9 +950,8 @@ def verify_audit_chain_at_startup(
     except Exception as e:
         logger.warning("audit-chain verify errored (treated as unverified): %s", e)
         return None
-    _CHAIN_VERIFIED = True  # a verification actually completed
-
     if result.ok:
+        _CHAIN_VERIFIED = True
         logger.debug(
             "audit-chain verify PASS (%d records, %s)",
             result.checked, result.ledger_path,
@@ -986,6 +991,7 @@ def verify_audit_chain_at_startup(
             f"audit-chain verification failed at seq={result.break_seq}: "
             f"{result.reason}"
         )
+    _CHAIN_VERIFIED = True
     return result.as_dict()
 
 
@@ -1119,6 +1125,7 @@ def enforce_governance_artifacts_at_startup(
     global _GOVERNANCE_ARTIFACTS_CHECKED
     if _GOVERNANCE_ARTIFACTS_CHECKED and not force:
         return None
+    _GOVERNANCE_ARTIFACTS_CHECKED = False
 
     if isinstance(config, dict) and config.get("governance"):
         eff = config
@@ -1142,6 +1149,7 @@ def enforce_governance_artifacts_at_startup(
     root = _gov_repo_root(repo_root)
     gov = eff.get("governance") or {}
     blocking: list[str] = []
+    used_waivers = []
 
     if not gov:
         blocking.append("governance block missing from effective config "
@@ -1272,8 +1280,18 @@ def enforce_governance_artifacts_at_startup(
                             f"high-risk skill '{skill}' is enabled without a "
                             f"valid, signed, unexpired CAIO waiver (LG-GV-10)")
 
-    _GOVERNANCE_ARTIFACTS_CHECKED = True
+                    else:
+                        used_waivers.append((str(valid_waivers[skill]["waiver_id"]), str(skill)))
+
+    if not blocking and used_waivers:
+        from agent.governance_audit import record_policy_exception
+        try:
+            for waiver_id, skill in used_waivers:
+                record_policy_exception("waiver", waiver_id, skill, source=__name__)
+        except Exception as exc:
+            blocking.append(f"waiver use could not be recorded: {exc}")
     if not blocking:
+        _GOVERNANCE_ARTIFACTS_CHECKED = True
         return None
 
     for f in blocking:

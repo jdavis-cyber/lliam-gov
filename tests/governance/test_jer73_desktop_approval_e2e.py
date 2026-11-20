@@ -200,3 +200,40 @@ def test_same_request_without_gateway_secret_is_refused(desktop_backend):
     assert refusals and refusals[-1]["decision"] == "deny"
     final = _gateway_decisions(led)[-1]
     assert final["decision"] == "deny" and final["approver"] == {}
+
+def test_desktop_policy_response_binds_to_the_displayed_request(desktop_backend, monkeypatch):
+    from tools import approval as ap, tool_policy as tp
+    from agent.governance_audit import iter_records
+
+    client, token, ledger = desktop_backend
+    monkeypatch.setenv("LLIAM_EXEC_ASK", "1")
+    monkeypatch.setattr("agent.file_safety.get_safe_write_roots", lambda: ["/approved"])
+    queued = threading.Event()
+    pending = {}
+
+    def notify(data):
+        pending.update(data)
+        queued.set()
+
+    def agent():
+        ap.set_current_session_key("desktop-key")
+        pending["decision"] = tp.pdp_gate("write_file", {"path": "/external/report.txt", "content": "sample"})
+
+    ap.register_gateway_notify("desktop-key", notify)
+    worker = threading.Thread(target=agent, daemon=True)
+    worker.start()
+    try:
+        assert queued.wait(5)
+        with client.websocket_connect(_ws_path(token=token, gw_secret=_DESKTOP_SECRET)) as conn:
+            _ready(conn)
+            params = {"choice": "once", "session_id": "sid-desktop"}
+            assert _rpc(conn, "r1", "approval.respond", params)["result"]["resolved"] == 0
+            params["request_id"] = pending["request_id"]
+            assert _rpc(conn, "r2", "approval.respond", params)["result"]["resolved"] == 1
+        worker.join(5)
+        assert pending["decision"] is None
+        assert any(r["decision"] == "approve" and r["outcome"]["origin"] == "policy"
+                   for r in iter_records(ledger.path))
+    finally:
+        ap.unregister_gateway_notify("desktop-key")
+        worker.join(5)

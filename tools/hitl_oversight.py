@@ -102,10 +102,11 @@ def strict_fail_closed() -> bool:
         cfg = _cfg.load_config()
         if _pr.is_strict(cfg):
             return True
-        sec = (cfg or {}).get("security") if isinstance(cfg, dict) else None
-        return isinstance(sec, dict) and sec.get("deny_on_no_approver") is True
+        if not isinstance(cfg, dict) or not isinstance(cfg.get("security", {}), dict):
+            return True
+        return cfg.get("security", {}).get("deny_on_no_approver") is True
     except Exception:
-        return False
+        return True
 
 
 def require_authenticated_approver(config: Optional[Dict[str, Any]] = None) -> bool:
@@ -119,10 +120,11 @@ def require_authenticated_approver(config: Optional[Dict[str, Any]] = None) -> b
         if config is None:
             from lliam_cli import config as _cfg
             config = _cfg.load_config()
-        sec = (config or {}).get("security") if isinstance(config, dict) else None
-        return isinstance(sec, dict) and sec.get("require_authenticated_approver") is True
+        if not isinstance(config, dict) or not isinstance(config.get("security", {}), dict):
+            return True
+        return config.get("security", {}).get("require_authenticated_approver") is True
     except Exception:
-        return False
+        return True
 
 
 def _is_approver_auth(method: Any) -> bool:
@@ -255,8 +257,8 @@ def record_decision(
     approver_authenticated: Optional[bool] = None,
     approver_method: Optional[str] = None,
     session_id: Optional[str] = None,
-) -> None:
-    """Emit one ``approval.decision`` record (LG-HO-10). Never raises.
+) -> bool:
+    """Emit one ``approval.decision`` record (LG-HO-10). Returns whether the ledger persisted it.
 
     The approver defaults to the authenticated approver bound to this
     context (LG-GV-05); ``approver.authenticated`` says whether the recorded
@@ -279,7 +281,7 @@ def record_decision(
         from agent.governance_audit_hooks import _current_subject, _enabled_ledger
         ledger = _enabled_ledger()
         if ledger is None:
-            return
+            return False
         bound = bound_approver()
         bound_id, bound_method = bound if bound else (None, None)
         approver_id = approver or bound_id
@@ -296,7 +298,7 @@ def record_decision(
             }
             if approver_authenticated and approver_method:
                 approver_rec["method"] = approver_method
-        ledger.emit(
+        record = ledger.emit(
             "approval.decision",
             action=f"approval.{gate}",
             decision=decision,
@@ -312,8 +314,10 @@ def record_decision(
                 "control": "LG-HO-02" if origin == "non_interactive_fail_closed" else "LG-HO-10",
             },
         )
+        return record is not None
     except Exception:
-        logger.warning("approval.decision ledger emit failed (non-blocking)", exc_info=True)
+        logger.warning("approval.decision ledger emit failed", exc_info=True)
+        return False
 
 
 def _require_bound_approver(approver: str, *, gate: str, origin: str) -> None:

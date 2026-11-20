@@ -5380,15 +5380,17 @@ def test_session_create_no_race_keeps_worker_alive(monkeypatch):
     """Regression guard: when session.close does NOT race, the build
     thread must install the worker + notify normally and leave them
     alone (no over-eager cleanup)."""
-    closed_workers: list[str] = []
+    scheduled_builds: list[str] = []
+    registered_keys: list[str] = []
     unregistered_keys: list[str] = []
 
     class _FakeWorker:
         def __init__(self, key, model):
             self.key = key
+            self.closed = False
 
         def close(self):
-            closed_workers.append(self.key)
+            self.closed = True
 
     class _FakeAgent:
         def __init__(self):
@@ -5397,6 +5399,7 @@ def test_session_create_no_race_keeps_worker_alive(monkeypatch):
             self.base_url = ""
             self.api_key = ""
 
+    monkeypatch.setattr(server, "_schedule_agent_build", scheduled_builds.append)
     monkeypatch.setattr(server, "_make_agent", lambda sid, key, session_db=None: _FakeAgent())
     monkeypatch.setattr(server, "_SlashWorker", _FakeWorker)
     monkeypatch.setattr(
@@ -5411,7 +5414,7 @@ def test_session_create_no_race_keeps_worker_alive(monkeypatch):
 
     import tools.approval as _approval
 
-    monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
+    monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: registered_keys.append(key))
     monkeypatch.setattr(
         _approval,
         "unregister_gateway_notify",
@@ -5419,45 +5422,27 @@ def test_session_create_no_race_keeps_worker_alive(monkeypatch):
     )
     monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
-    # Isolate from sibling-test leakage: daemon build threads from prior
-    # session.create tests in the same shard process mutate the shared
-    # ``server._sessions`` dict under ``_sessions_lock`` and can replace/pop
-    # entries mid-run, which would flip this build thread's ``replaced`` check
-    # to True and trigger a spurious unregister. Snapshot, clear, and restore
-    # so this test sees only its own session regardless of shard composition.
-    _saved_sessions = dict(server._sessions)
-    server._sessions.clear()
-
+    resp = server.handle_request(
+        {"id": "1", "method": "session.create", "params": {"cols": 80}}
+    )
+    sid = resp["result"]["session_id"]
+    key = resp["result"]["stored_session_id"]
     try:
-        resp = server.handle_request(
-            {
-                "id": "1",
-                "method": "session.create",
-                "params": {"cols": 80},
-            }
-        )
-        sid = resp["result"]["session_id"]
-
-        # Wait for the build to finish (ready event inside session dict).
+        assert sid in scheduled_builds
         session = server._sessions[sid]
-        built = session["agent_ready"].wait(timeout=10.0)
-        assert built, "agent build did not complete within timeout"
-
-        # Build finished without a close race — nothing should have been
-        # cleaned up by the orphan check.
-        assert (
-            closed_workers == []
-        ), f"build thread closed its own worker despite no race: {closed_workers}"
-        assert (
-            unregistered_keys == []
-        ), f"build thread unregistered its own notify despite no race: {unregistered_keys}"
-
-        # Session should have the live worker installed.
-        assert session.get("slash_worker") is not None
+        server._start_agent_build(sid, session)
+        assert session["agent_ready"].wait(timeout=10.0), "agent build did not complete"
+        assert session["agent_error"] is None
+        worker = session["slash_worker"]
+        assert isinstance(worker, _FakeWorker)
+        assert worker.key == key
+        assert not worker.closed
+        assert key in registered_keys
+        assert key not in unregistered_keys
     finally:
-        # Cleanup + restore sibling sessions we snapshotted.
-        server._sessions.clear()
-        server._sessions.update(_saved_sessions)
+        server.handle_request(
+            {"id": "2", "method": "session.close", "params": {"session_id": sid}}
+        )
 
 
 def test_get_db_degrades_cleanly_when_sessiondb_init_fails(monkeypatch):
@@ -6518,8 +6503,8 @@ def test_browser_manage_connect_default_local_reports_launch_hint(monkeypatch):
                 "lliam_cli.browser_connect.try_launch_chrome_debug", return_value=False
             ),
             patch(
-                "lliam_cli.browser_connect.get_chrome_debug_candidates",
-                return_value=[],
+                "lliam_cli.browser_connect.manual_chrome_debug_command",
+                return_value=None,
             ),
         ):
             resp = server.handle_request(

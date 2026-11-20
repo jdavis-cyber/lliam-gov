@@ -784,6 +784,9 @@ def _serve_plugin_skill(
         )
 
     try:
+        from tools.skill_attestation import verified_directory
+        directory = verified_directory("skill", f"{namespace}:{bare}", skill_md.parent)
+        skill_md = directory / skill_md.name
         content = skill_md.read_text(encoding="utf-8")
     except Exception as e:
         return json.dumps(
@@ -1132,6 +1135,13 @@ def skill_view(
         try:
             content = skill_md.read_text(encoding="utf-8")
         except Exception as e:
+            from tools.skill_attestation import active_policy, record_refusal
+            try:
+                signed_only = active_policy() is not None
+            except Exception:
+                signed_only = True
+            if signed_only:
+                record_refusal("skill", name, str(e))
             return json.dumps(
                 {
                     "success": False,
@@ -1187,6 +1197,16 @@ def skill_view(
 
         # Check if the skill is disabled by the user
         resolved_name = parsed_frontmatter.get("name", skill_md.parent.name)
+        try:
+            from tools.skill_attestation import verified_directory
+            directory = verified_directory("skill", str(resolved_name), skill_dir)
+            if directory is not None and directory != skill_dir:
+                skill_dir = directory
+                skill_md = skill_dir / skill_md.name
+                if content != skill_md.read_text(encoding="utf-8"):
+                    raise PermissionError("Skill content changed during verification")
+        except (OSError, ValueError) as exc:
+            return json.dumps({"success": False, "error": str(exc)})
         from tools.tool_policy import skill_load_decision
         decision, reason = skill_load_decision(str(resolved_name), skill_dir, parsed_frontmatter)
         if decision != "allow":

@@ -549,7 +549,7 @@ delegation:
 governance:
   role_bindings:
     caio: jdavis@agency.mil                 # [additive @ P1.6] LG-GV-05
-    isso: jdavis@agency.mil                 #   ISSO co-held by the operator in eval (tracked)
+    isso: jdavis@agency.mil                 #   demo co-holding is blocked pending separate appointments
     ai_risk_owner: jdavis@agency.mil
     approver: jdavis@agency.mil             #   human HITL approver (dashboard_auth principal)
     engineer: "npe:lliam-gov"               #   the acting party is the NPE agent — Approver ≠ Engineer ✓
@@ -573,6 +573,11 @@ governance:
   # library, not in this repository. Set either path to have strict
   # startup also check that file.
   authorization_id: LG-ATO-2026-001        # [additive @ P4.1] LG-GV-06 go/no-go of record
+  # SR-14 runtime deviations come from deviation-register.yaml in the IT-managed
+  # directory (default /etc/hermes). Each deviations[] row binds id, profile,
+  # dotted key, from, to, approved status, justification, approver and ISO expiry. List values
+  # use sorted unique names. A custom profile is identified by its absolute
+  # profile home. The register and its path must be administrator-controlled.
   registers:                               # [additive @ P4.1] register bindings of record
     authorization: policy/governed/authorization-record.yaml # LG-GV-06
     waiver: policy/governed/waiver-register.yaml             # LG-GV-10

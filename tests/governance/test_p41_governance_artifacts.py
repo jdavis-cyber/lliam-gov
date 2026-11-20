@@ -263,15 +263,21 @@ def test_high_risk_enablement_without_waiver_blocks(tmp_path):
             config=_enable(_cfg(), "web-pentest"), repo_root=tmp_path)
 
 
-def test_high_risk_enablement_with_valid_waiver_passes(tmp_path):
-    _write_artifacts(tmp_path, waivers=[{
-        "waiver_id": "LG-WVR-2026-001", "capability": "web-pentest",
+def test_high_risk_enablement_with_valid_waiver_passes(tmp_path, monkeypatch):
+    from agent import governance_audit as audit
+    ledger = audit.GovernanceLedger(tmp_path / "audit.jsonl")
+    monkeypatch.setattr(audit, "get_ledger", lambda: ledger)
+    _write_artifacts(tmp_path, baseline_denied=["sample"], waivers=[{
+        "waiver_id": "LG-WVR-2026-001", "capability": "sample",
         "justification": "authorized red-team mission",
         "compensating_controls": ["scoped egress allowlist"],
         "signed_by": "jdavis@agency.mil", "granted": "2026-07-16",
         "expires": _future()}])
     assert sas.enforce_governance_artifacts_at_startup(
-        config=_enable(_cfg(), "web-pentest"), repo_root=tmp_path) is None
+        config=_cfg(), repo_root=tmp_path) is None
+    record, = audit.iter_records(ledger.path)
+    assert record["resource"]["name"] == "LG-WVR-2026-001"
+    assert record["parameters"]["target"] == "sample"
 
 
 def test_expired_waiver_blocks(tmp_path):

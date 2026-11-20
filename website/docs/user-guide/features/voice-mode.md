@@ -48,9 +48,6 @@ cd ~/.lliam/lliam-gov-agent && uv pip install -e ".[messaging]"
 # Premium TTS (ElevenLabs)
 cd ~/.lliam/lliam-gov-agent && uv pip install -e ".[tts-premium]"
 
-# Local TTS (NeuTTS, optional)
-python -m pip install -U neutts[all]
-
 # Everything at once
 cd ~/.lliam/lliam-gov-agent && uv pip install -e ".[all]"
 ```
@@ -61,7 +58,9 @@ cd ~/.lliam/lliam-gov-agent && uv pip install -e ".[all]"
 | `messaging` | `discord.py[voice]`, `python-telegram-bot`, `aiohttp` | Discord & Telegram bots |
 | `tts-premium` | `elevenlabs` | ElevenLabs TTS provider |
 
-Optional local TTS provider: install `neutts` separately with `python -m pip install -U neutts[all]`. On first use it downloads the model automatically.
+Ordinary profiles can use a separately installed NeuTTS runtime. It downloads model assets on first use.
+
+Governed NeuTTS synthesis is unavailable when strict posture requires safe serialization. The built-in provider selects a repository codec to encode reference audio, and a local GGUF backbone alone cannot satisfy that requirement. NeuTTS 1.4.1 also requires Transformers 5.1.0, a release with published security advisories. Supporting this provider in governed mode requires a compatible patched runtime and offline verification of both the codec and the backbone. [NeuTTS 1.4.1 dependency declaration](https://pypi.org/pypi/neutts/1.4.1/json) · [Transformers 5.1.0 advisory records](https://pypi.org/pypi/transformers/5.1.0/json)
 
 :::info
 `discord.py[voice]` installs **PyNaCl** (for voice encryption) and **opus bindings** automatically. This is required for Discord voice channel support.
@@ -102,7 +101,17 @@ ELEVENLABS_API_KEY=***           # ElevenLabs — premium quality
 ```
 
 :::tip
-If `faster-whisper` is installed, voice mode works with **zero API keys** for STT. The model (~150 MB for `base`) downloads automatically on first use.
+If `faster-whisper` is installed, voice mode works with **zero API keys** for STT. In an ordinary profile the model (~150 MB for `base`) downloads automatically on first use.
+
+#### Governed offline transcription
+
+When `security.safe_serialization_only` is enabled in strict posture, provision the faster-whisper runtime and a CTranslate2 Whisper directory before using voice mode. Set `stt.provider` to `local` and `stt.local.model` to the directory's canonical absolute path.
+
+Add one operator-reviewed entry to the configured model-card index (`security.model_cards_path`, under `models`). It must contain a nonempty `id`, `provider: faster-whisper`, `serialization: ctranslate2`, `cui_eligible: true`, and a `path` matching the configured directory. Its `files` mapping must list each file by its basename, with the value `sha256:` followed by its lowercase, 64-character hexadecimal SHA-256 digest.
+
+Provision the native Whisper `model.bin`, `config.json`, `tokenizer.json`, and `vocabulary.json` or `vocabulary.txt`. Include `preprocessor_config.json` when the model supplies it. Keep the directory flat and include only these reviewed regular files. The loader uses the default feature extractor when the preprocessor file is absent.
+
+The approving authority adds its `signer` and `signature` using the existing model-manifest HMAC-SHA256 convention. The signature covers the canonical JSON of the entire card except those two fields, and its key must be provisioned in `security.trusted_signers`. Acquisition and approval take place outside transcription. The governed backend loads the reviewed bytes offline.
 :::
 
 ---

@@ -548,3 +548,46 @@ class TestPerToolThresholds:
             assert val == 100_000
         except ImportError:
             pytest.skip("file_tools not importable in test env")
+
+
+def test_governed_spill_is_private_masked_and_expires(tmp_path, monkeypatch):
+    import json
+    import re
+    import time
+
+    from tools.file_tools import read_file_tool
+
+    policy = {"security": {"posture": "strict", "data_protection": {
+        "at_rest_encryption": True, "result_retention_ttl_seconds": 60,
+    }}}
+    monkeypatch.setenv("LLIAM_HOME", str(tmp_path))
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda *a, **kw: policy)
+    result = maybe_persist_tool_result(
+        "private test fact\nSSN 123-45-6789", "demo", "example", threshold=1, task_id="alice",
+    )
+    saved_path = re.search(r"Full output saved to: (.+)", result)
+    assert saved_path is not None, result
+    reference = saved_path.group(1)
+    assert "123-45-6789" not in result
+    assert all(b"private test fact" not in p.read_bytes() for p in tmp_path.rglob("*") if p.is_file())
+    assert "error" in json.loads(read_file_tool(reference, task_id="bob"))
+    first_page = json.loads(read_file_tool(reference, offset=1, limit=1, task_id="alice"))
+    assert first_page["content"] == "1|private test fact"
+    assert first_page["truncated"]
+    from model_tools import handle_function_call
+    second_page = json.loads(handle_function_call(
+        "read_file", {"path": reference, "offset": 2, "limit": 1},
+        task_id="next-turn", session_id="alice",
+    ))
+    assert second_page["content"] == "2|SSN [REDACTED-SSN]"
+    end = time.time() + 61
+    monkeypatch.setattr(time, "time", lambda: end)
+    from cron.scheduler import tick
+    from tools.protected_tool_results import _database
+    import sqlite3
+    from contextlib import closing
+
+    tick()
+    with closing(sqlite3.connect(_database())) as conn:
+        assert conn.execute("SELECT count(*) FROM results").fetchone()[0] == 0
+    assert "error" in json.loads(read_file_tool(reference, task_id="alice"))

@@ -9,7 +9,6 @@ is named here.
 
 from __future__ import annotations
 
-import importlib
 from contextlib import contextmanager
 from typing import Optional
 
@@ -23,7 +22,10 @@ def _resolve_flow(provider: str):
     if not provider.isidentifier():
         raise HTTPException(status_code=404, detail=f"unknown memory provider {provider!r}")
     try:
-        return importlib.import_module(f"plugins.memory.{provider}.oauth_flow")
+        from tools.skill_attestation import load_bundled_plugin_module
+        return load_bundled_plugin_module("memory", provider, "oauth_flow")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="Memory provider held by policy") from exc
     except ImportError:
         raise HTTPException(status_code=404, detail=f"{provider} does not support OAuth connect")
 
@@ -58,11 +60,11 @@ def _scope_to_profile(profile: Optional[str]):
 async def start_memory_oauth(provider: str, profile: Optional[str] = None):
     """Begin a provider's zero-CLI OAuth flow — opens the browser and captures
     the grant via the loopback listener. Returns immediately; poll status."""
-    flow = _resolve_flow(provider)
     try:
         # The flow resolves its config path eagerly inside this scope; the worker
         # thread it spawns outlives the request and the override.
         with _scope_to_profile(profile):
+            flow = _resolve_flow(provider)
             return flow.start_loopback_flow_background()
     except HTTPException:
         raise
@@ -73,9 +75,9 @@ async def start_memory_oauth(provider: str, profile: Optional[str] = None):
 @router.get("/{provider}/oauth/status")
 async def memory_oauth_status(provider: str, profile: Optional[str] = None):
     """Poll a provider's OAuth flow: idle | pending | connected | error."""
-    flow = _resolve_flow(provider)
     try:
         with _scope_to_profile(profile):
+            flow = _resolve_flow(provider)
             return flow.get_flow_status()
     except HTTPException:
         raise
