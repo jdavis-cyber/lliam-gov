@@ -107,9 +107,9 @@ def _has_provider_env_config(content: str) -> bool:
 def _honcho_is_configured_for_doctor() -> bool:
     """Return True when Honcho is configured, even if this process has no active session."""
     try:
-        from plugins.memory.honcho.client import HonchoClientConfig
+        from tools.skill_attestation import load_bundled_plugin_module
 
-        cfg = HonchoClientConfig.from_global_config()
+        cfg = load_bundled_plugin_module("memory", "honcho", "client").HonchoClientConfig.from_global_config()
         return bool(cfg.enabled and (cfg.api_key or cfg.base_url))
     except Exception:
         return False
@@ -2151,9 +2151,10 @@ def run_doctor(args):
         check_ok("Built-in memory active", "(no external provider configured — this is fine)")
     elif _active_memory_provider == "honcho":
         try:
-            from plugins.memory.honcho.client import HonchoClientConfig, resolve_config_path
-            hcfg = HonchoClientConfig.from_global_config()
-            _honcho_cfg_path = resolve_config_path()
+            from tools.skill_attestation import load_bundled_plugin_module
+            client = load_bundled_plugin_module("memory", "honcho", "client")
+            hcfg = client.HonchoClientConfig.from_global_config()
+            _honcho_cfg_path = client.resolve_config_path()
 
             if not _honcho_cfg_path.exists():
                 # Config file missing — but env var fallback may have resolved it.
@@ -2175,10 +2176,9 @@ def run_doctor(args):
                     issues,
                 )
             else:
-                from plugins.memory.honcho.client import get_honcho_client, reset_honcho_client
-                reset_honcho_client()
+                client.reset_honcho_client()
                 try:
-                    get_honcho_client(hcfg)
+                    client.get_honcho_client(hcfg)
                     check_ok(
                         "Honcho connected",
                         f"workspace={hcfg.workspace_id} mode={hcfg.recall_mode} freq={hcfg.write_frequency}",
@@ -2196,8 +2196,8 @@ def run_doctor(args):
             check_warn("Honcho check failed", str(_e))
     elif _active_memory_provider == "mem0":
         try:
-            from plugins.memory.mem0 import _load_config as _load_mem0_config
-            mem0_cfg = _load_mem0_config()
+            from tools.skill_attestation import load_bundled_plugin_module
+            mem0_cfg = load_bundled_plugin_module("memory", "mem0")._load_config()
             mem0_key = mem0_cfg.get("api_key", "")
             if mem0_key:
                 check_ok("Mem0 API key configured")

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import importlib
+import importlib.machinery
+import importlib.util
 import logging
 import os
 import stat
@@ -11,6 +14,7 @@ import sys
 import tempfile
 import threading
 from pathlib import Path, PurePosixPath
+from types import ModuleType
 from typing import overload
 
 from agent.attestation import verify_manifest
@@ -26,6 +30,8 @@ else:
 
 _log = logging.getLogger(__name__)
 _lock = threading.Lock()
+_import_lock = threading.RLock()
+_BUNDLED_PLUGINS = Path(__file__).resolve().parents[1] / "plugins"
 _snapshots: dict[str, tuple[tempfile.TemporaryDirectory, Path]] = {}
 _snapshot_ids: dict[Path, str] = {}
 
@@ -180,3 +186,42 @@ def verified_directory(kind: str, name: str, path: Path | None, *, check_only: b
         if not check_only:
             record_refusal(kind, name, str(exc))
         raise PermissionError(f"{kind} {name!r} held: {exc}") from exc
+
+
+def load_bundled_plugin_module(category: str, provider: str, submodule: str | None = None) -> ModuleType:
+    """Import from the verified revision under hold, and the normal package otherwise."""
+    parts = (category, provider) if submodule is None else (category, provider, submodule)
+    if not all(part.isidentifier() for part in parts):
+        raise ImportError("Invalid bundled plugin module name")
+    base = f"plugins.{category}.{provider}"
+    directory = verified_directory("plugin", f"{category}/{provider}", _BUNDLED_PLUGINS / category / provider)
+    package = verified_module_name(base, directory)
+    if package == base:
+        return importlib.import_module(f"{base}.{submodule}" if submodule else base)
+
+    with _import_lock:
+        cached = sys.modules.get(package)
+        if submodule:
+            if cached is None:
+                shell = importlib.machinery.ModuleSpec(package, loader=None, is_package=True)
+                shell.submodule_search_locations = [str(directory)]
+                sys.modules[package] = importlib.util.module_from_spec(shell)
+            return importlib.import_module(f"{package}.{submodule}")
+        if cached is not None and getattr(cached, "__file__", None):
+            return cached
+        spec = importlib.util.spec_from_file_location(
+            package, directory / "__init__.py", submodule_search_locations=[str(directory)]
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load bundled package {base!r}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[package] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            if cached is None:
+                sys.modules.pop(package, None)
+            else:
+                sys.modules[package] = cached
+            raise
+        return module
