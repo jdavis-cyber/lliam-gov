@@ -102,7 +102,7 @@ def start(
 
     Returns a dict summarizing the started bot.
     """
-    from lliam_cli.verified_meet import bot_command
+    from lliam_cli.plugin_worker import worker_command
     from .meet_bot import _is_safe_meet_url, _meeting_id_from_url
 
     if not _is_safe_meet_url(url):
@@ -115,7 +115,9 @@ def start(
         }
 
     try:
-        command = bot_command(Path(__file__).resolve().parent)
+        command = worker_command(
+            "google_meet", "meet_bot", "run_bot", directory=Path(__file__).resolve().parent
+        )
     except PermissionError as exc:
         return {"ok": False, "error": str(exc)}
 

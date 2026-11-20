@@ -311,20 +311,51 @@ def test_unapproved_meet_refuses_detached_child_before_side_effects(governed_ski
     assert "attestation" in result["error"]
 
 
-def test_detached_meet_reverifies_signed_worker_in_fresh_interpreter(governed_skills, tmp_path, monkeypatch):
+def test_ordinary_meet_worker_preserves_module_command(governed_skills, tmp_path):
+    import sys
+
+    from lliam_cli.plugin_worker import worker_command
+
+    _, policy = governed_skills
+    policy["policy"]["unlisted_disposition"] = "log"
+    assert worker_command("google_meet", "meet_bot", "run_bot", directory=tmp_path) == [
+        sys.executable, "-m", "plugins.google_meet.meet_bot",
+    ]
+
+
+@pytest.mark.parametrize("plugin,module,function", [
+    ("../fixture", "worker", "run"),
+    ("fixture", ".worker", "run"),
+    ("fixture", "worker", "run.other"),
+    ("fixture", "worker", "__getattr__"),
+])
+def test_detached_worker_rejects_nonlocal_names(plugin, module, function):
+    from lliam_cli.plugin_worker import run_verified_worker
+
+    with pytest.raises(ValueError):
+        run_verified_worker(plugin, module, function, "fixture-revision")
+
+
+def test_detached_worker_verifies_installed_bundle_after_parent_exits(governed_skills, tmp_path, monkeypatch):
     import subprocess
+    import sys
 
     import yaml
 
-    from lliam_cli.verified_meet import bot_command
-
     _, policy = governed_skills
-    bundle = tmp_path / "google_meet"
-    bundle.mkdir()
+    installed = tmp_path / "installed"
+    bundle = installed / "fixtures" / "example"
+    bundle.mkdir(parents=True)
     (bundle / "__init__.py").write_text("", encoding="utf-8")
-    (bundle / "meet_bot.py").write_text(
-        "def run_bot():\n    print(__file__)\n    return 0\n", encoding="utf-8")
-    policy["security"]["plugin_allowlist"] = [_signed_entry("google_meet", bundle, kind="plugin")]
+    (bundle / "worker.py").write_text(
+        "from .message import message\nimport sys\n"
+        "def run():\n    print(__file__, message(), len(sys.argv), sep='|')\n    return 0\n",
+        encoding="utf-8")
+    sibling = bundle / "message.py"
+    sibling.write_text("def message():\n    return 'approved fixture'\n", encoding="utf-8")
+    policy["security"]["plugin_allowlist"] = [_signed_entry("fixtures/example", bundle, kind="plugin")]
+    # Omitted from the approved inventory but physically present in the installed bundle.
+    (bundle / "omitted.py").write_text("def run():\n    return 0\n", encoding="utf-8")
     policy_path = tmp_path / "skill-policy.yaml"
     policy_path.write_text(yaml.safe_dump(policy), encoding="utf-8")
     config_path = tmp_path / "config.yaml"
@@ -334,15 +365,46 @@ def test_detached_meet_reverifies_signed_worker_in_fresh_interpreter(governed_sk
     monkeypatch.setenv("LLIAM_HOME", str(tmp_path))
     monkeypatch.setenv("LLIAM_CONFIG", str(config_path))
     monkeypatch.setenv("LLIAM_SKILL_POLICY", str(policy_path))
+    monkeypatch.setenv("LLIAM_BUNDLED_PLUGINS", str(installed))
 
-    command = bot_command(bundle)
+    parent_source = """\
+import json
+from lliam_cli.plugin_worker import worker_command
+from lliam_cli.plugins import get_bundled_plugins_dir
+from tools.skill_attestation import verified_directory
+
+name = "fixtures/example"
+snapshot = verified_directory("plugin", name, get_bundled_plugins_dir() / name)
+command = worker_command(name, "worker", "run", directory=snapshot)
+print(json.dumps([str(snapshot), command]))
+"""
+    parent = subprocess.run(
+        [sys.executable, "-c", parent_source], cwd=Path(__file__).resolve().parents[2],
+        capture_output=True, text=True, timeout=20, check=True)
+    parent_snapshot, command = json.loads(parent.stdout)
+    assert not Path(parent_snapshot).exists()
     assert command[1] == "-I"
-    child = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, timeout=20, check=True)
-    child_file = Path(child.stdout.strip())
-    assert child_file.parts[-2:] == ("google_meet", "meet_bot.py")
-    assert child_file.parent not in (bundle, Path(command[-2]))
 
-    mismatched = subprocess.run(
-        [*command[:-1], "unmatched-fixture-revision"], cwd=tmp_path, capture_output=True, text=True, timeout=20)
-    assert mismatched.returncode != 0
-    assert "same approved plugin" in mismatched.stderr
+    def launch(argv):
+        return subprocess.run(argv, cwd=tmp_path, capture_output=True, text=True, timeout=20)
+
+    child = launch(command)
+    assert child.returncode == 0, child.stderr
+    child_file, message, argc = child.stdout.strip().split("|")
+    assert Path(child_file).parts[-2:] == ("example", "worker.py")
+    assert Path(child_file).parent not in (bundle, Path(parent_snapshot))
+    assert (message, argc) == ("approved fixture", "1")
+
+    for argv, reason in [
+        ([*command[:-1], "different-revision"], "same approved plugin"),
+        (command[:-1], "Expected plugin"),
+        ([*command[:-3], "omitted", *command[-2:]], "absent from the approved plugin"),
+        ([*command[:-2], "message", command[-1]], "absent from the approved module"),
+    ]:
+        refused = launch(argv)
+        assert refused.returncode != 0
+        assert reason in refused.stderr
+    sibling.write_text("def message():\n    return 'updated fixture'\n", encoding="utf-8")
+    changed = launch(command)
+    assert changed.returncode != 0
+    assert "differs from approved digest" in changed.stderr
