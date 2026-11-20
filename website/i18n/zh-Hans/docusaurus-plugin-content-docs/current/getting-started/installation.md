@@ -139,7 +139,7 @@ lliam-gov setup --portal
 :::
 
 :::tip Nix 用户
-如果你使用 Nix（在 NixOS、macOS 或 Linux 上），有专门的配置路径，包含 Nix flake、声明式 NixOS 模块和可选容器模式。请参阅 **[Nix & NixOS 配置](./nix-setup.md)** 指南。
+请按照 [Nix 桌面安装指南](./nix-setup.md) 从本仓库的 flake 安装桌面软件包。
 :::
 
 ---
