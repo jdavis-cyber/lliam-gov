@@ -22,8 +22,8 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from plugins.memory.honcho import oauth
-from plugins.memory.honcho.client import resolve_active_host, resolve_config_path
+from . import oauth
+from .client import resolve_active_host, resolve_config_path
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def resolve_endpoints(
     """
     if environment is None or base_url is None:
         try:
-            from plugins.memory.honcho.client import HonchoClientConfig
+            from .client import HonchoClientConfig
 
             cfg = HonchoClientConfig.from_global_config()
             environment = environment or cfg.environment
@@ -225,7 +225,7 @@ def complete_authorization(
         now=now,
     )
     # Drop the singleton so the next acquisition builds with the new token.
-    from plugins.memory.honcho.client import reset_honcho_client
+    from .client import reset_honcho_client
 
     reset_honcho_client()
     logger.info("Honcho OAuth grant installed for host %s", target_host)
@@ -371,7 +371,7 @@ _flow_thread: threading.Thread | None = None
 def _detect_connection() -> tuple[bool, str | None]:
     """Report whether a credential is already stored: 'oauth', 'apikey', or none."""
     try:
-        from plugins.memory.honcho.client import HonchoClientConfig
+        from .client import HonchoClientConfig
 
         cfg = HonchoClientConfig.from_global_config()
         block = (cfg.raw.get("hosts") or {}).get(cfg.host) or {}

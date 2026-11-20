@@ -19,8 +19,21 @@ from typing import Optional
 
 from lliam_constants import get_lliam_home
 
-from plugins.google_meet import process_manager as pm
-from plugins.google_meet.meet_bot import _is_safe_meet_url
+# Preserve the standalone file entry point for ordinary installations.
+if __name__ == "__main__" and not __package__:
+    directory = Path(__file__).resolve().parent
+    if sys.path and Path(sys.path[0]).resolve() == directory:
+        # Put the package root on the path; the sibling tools.py is not the
+        # host's top-level tools package.
+        sys.path[0] = str(directory.parents[1])
+    from tools.skill_attestation import active_policy
+
+    if active_policy() is not None:
+        raise SystemExit("Use the managed lliam-gov meet command with signed plugins.")
+    __package__ = "plugins.google_meet"
+
+from . import process_manager as pm
+from .meet_bot import _is_safe_meet_url
 
 
 def _auth_state_path() -> Path:
@@ -86,7 +99,7 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
         help="Manage remote meet node hosts (run/list/approve/remove/status/ping)",
     )
     try:
-        from plugins.google_meet.node.cli import register_cli as _register_node_cli
+        from .node.cli import register_cli as _register_node_cli
         _register_node_cli(node_p)
     except Exception as e:  # pragma: no cover — defensive
         # If the node module fails to import for any reason (optional dep
@@ -383,8 +396,8 @@ def _cmd_join(
     if node:
         # Remote: go through NodeClient.
         try:
-            from plugins.google_meet.node.registry import NodeRegistry
-            from plugins.google_meet.node.client import NodeClient
+            from .node.registry import NodeRegistry
+            from .node.client import NodeClient
         except ImportError as e:
             print(f"node module unavailable: {e}")
             return 1
@@ -424,8 +437,8 @@ def _cmd_say(text: str, node: Optional[str] = None) -> int:
         return 2
     if node:
         try:
-            from plugins.google_meet.node.registry import NodeRegistry
-            from plugins.google_meet.node.client import NodeClient
+            from .node.registry import NodeRegistry
+            from .node.client import NodeClient
         except ImportError as e:
             print(f"node module unavailable: {e}")
             return 1

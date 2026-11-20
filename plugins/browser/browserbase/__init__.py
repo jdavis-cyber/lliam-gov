@@ -7,7 +7,7 @@ instantiates and registers it via the plugin context.
 
 from __future__ import annotations
 
-from plugins.browser.browserbase.provider import BrowserbaseBrowserProvider
+from .provider import BrowserbaseBrowserProvider
 
 
 def register(ctx) -> None:

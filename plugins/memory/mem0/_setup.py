@@ -298,7 +298,7 @@ def _setup_platform(lliam_home: str, config: dict, flags: dict[str, str]) -> Non
     config["memory"]["provider"] = "mem0"
     save_config(config)
 
-    from plugins.memory.mem0 import Mem0MemoryProvider
+    from . import Mem0MemoryProvider
     provider = Mem0MemoryProvider()
     provider.save_config(provider_config, lliam_home)
 

@@ -750,7 +750,7 @@ def _apply_fresh_oauth_token(config: HonchoClientConfig) -> None:
     is left in place and the existing 401 handling degrades gracefully).
     """
     try:
-        from plugins.memory.honcho import oauth
+        from . import oauth
 
         token, _ = oauth.ensure_fresh_token(resolve_config_path(), config.host)
         if token:
@@ -766,7 +766,7 @@ def _refresh_cached_oauth(client: "Honcho", config: HonchoClientConfig | None) -
     reset so the next acquisition rebuilds with the fresh token.
     """
     try:
-        from plugins.memory.honcho import oauth
+        from . import oauth
 
         host = config.host if config is not None else resolve_active_host()
         token, refreshed = oauth.ensure_fresh_token(resolve_config_path(), host)

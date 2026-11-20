@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from lliam_constants import get_lliam_home
-from plugins.google_meet.node import protocol as _proto
+from . import protocol as _proto
 
 
 def _default_token_path() -> Path:
@@ -113,7 +113,7 @@ class NodeServer:
         payload = msg["payload"]
 
         # Import lazily so test mocks can monkeypatch freely.
-        from plugins.google_meet import process_manager as pm
+        from .. import process_manager as pm
 
         try:
             if t == "ping":

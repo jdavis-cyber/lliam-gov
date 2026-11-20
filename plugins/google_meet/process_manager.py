@@ -15,7 +15,6 @@ import json
 import os
 import signal
 import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -103,7 +102,8 @@ def start(
 
     Returns a dict summarizing the started bot.
     """
-    from plugins.google_meet.meet_bot import _is_safe_meet_url, _meeting_id_from_url
+    from lliam_cli.verified_meet import bot_command
+    from .meet_bot import _is_safe_meet_url, _meeting_id_from_url
 
     if not _is_safe_meet_url(url):
         return {
@@ -113,6 +113,11 @@ def start(
                 "got: " + repr(url)
             ),
         }
+
+    try:
+        command = bot_command(Path(__file__).resolve().parent)
+    except PermissionError as exc:
+        return {"ok": False, "error": str(exc)}
 
     existing = _read_active()
     if existing and _pid_alive(int(existing.get("pid", 0))):
@@ -133,6 +138,7 @@ def start(
                 pass
 
     env = os.environ.copy()
+    env["LLIAM_HOME"] = str(get_lliam_home())
     env["LLIAM_MEET_URL"] = url
     env["LLIAM_MEET_OUT_DIR"] = str(out)
     env["LLIAM_MEET_GUEST_NAME"] = guest_name
@@ -161,7 +167,7 @@ def start(
     log_fh = open(log_path, "ab", buffering=0)
     try:
         proc = subprocess.Popen(
-            [sys.executable, "-m", "plugins.google_meet.meet_bot"],
+            command,
             stdin=subprocess.DEVNULL,
             stdout=log_fh,
             stderr=subprocess.STDOUT,

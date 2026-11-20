@@ -1,4 +1,5 @@
 """TC-REQ-12: strict skill policy at real public seams; isolated synthetic skills."""
+import ast
 import json
 import hashlib
 from pathlib import Path
@@ -244,3 +245,88 @@ def test_discovery_uses_signed_plugin_descriptor(governed_skills, tmp_path):
     assert manager._scan_directory(tmp_path, "user") == []
     policy["security"]["plugin_allowlist"] = [_signed_entry("described", root, kind="plugin")]
     assert [m.key for m in manager._scan_directory(tmp_path, "user")] == ["described"]
+
+
+def test_bundled_plugins_import_their_own_modules_relative_to_the_loaded_package():
+    plugins = Path(__file__).resolve().parents[2] / "plugins"
+    absolute_imports = []
+    for manifest in plugins.rglob("plugin.yaml"):
+        bundle = manifest.parent
+        package = ".".join(bundle.relative_to(plugins.parent).parts).replace("-", "_")
+        for source in bundle.rglob("*.py"):
+            tree = ast.parse(source.read_bytes(), filename=str(source))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                    imports = [f"{node.module}.{alias.name}" for alias in node.names]
+                elif isinstance(node, ast.Import):
+                    imports = [alias.name for alias in node.names]
+                else:
+                    continue
+                if any(name == package or name.startswith(package + ".") for name in imports):
+                    absolute_imports.append(f"{source.relative_to(plugins.parent)}:{node.lineno}")
+    assert not absolute_imports, absolute_imports
+
+
+def test_honcho_cli_and_its_client_load_from_the_same_verified_bundle(governed_skills, monkeypatch):
+    import sys
+
+    from plugins import memory
+    from tools.skill_attestation import verified_directory
+
+    _, policy = governed_skills
+    bundle = Path(memory.__file__).parent / "honcho"
+    policy["security"]["plugin_allowlist"] = [_signed_entry("memory/honcho", bundle, kind="plugin")]
+    monkeypatch.setattr(memory, "_get_active_memory_provider", lambda: "honcho")
+    snapshot = verified_directory("plugin", "memory/honcho", bundle)
+    [command] = memory.discover_plugin_cli_commands()
+    cli = sys.modules[command["setup_fn"].__module__]
+    client = sys.modules[cli._host_block.__module__]
+    assert cli.__file__ == str(snapshot / "cli.py")
+    assert client.__file__ == str(snapshot / "client.py")
+
+
+def test_unapproved_meet_refuses_detached_child_before_side_effects(governed_skills, monkeypatch):
+    from plugins.google_meet import process_manager
+
+    monkeypatch.setattr(process_manager, "_read_active", lambda: pytest.fail("touched meeting state"))
+    monkeypatch.setattr(process_manager.subprocess, "Popen", lambda *a, **kw: pytest.fail("launched a bot"))
+    result = process_manager.start("https://meet.google.com/abc-defg-hij")
+    assert result["ok"] is False
+    assert "attestation" in result["error"]
+
+
+def test_detached_meet_reverifies_signed_worker_in_fresh_interpreter(governed_skills, tmp_path, monkeypatch):
+    import subprocess
+
+    import yaml
+
+    from lliam_cli.verified_meet import bot_command
+
+    _, policy = governed_skills
+    bundle = tmp_path / "google_meet"
+    bundle.mkdir()
+    (bundle / "__init__.py").write_text("", encoding="utf-8")
+    (bundle / "meet_bot.py").write_text(
+        "def run_bot():\n    print(__file__)\n    return 0\n", encoding="utf-8")
+    policy["security"]["plugin_allowlist"] = [_signed_entry("google_meet", bundle, kind="plugin")]
+    policy_path = tmp_path / "skill-policy.yaml"
+    policy_path.write_text(yaml.safe_dump(policy), encoding="utf-8")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump({"security": {
+        "posture": "strict", "trusted_signers": {_SIGNER: _KEY},
+    }}), encoding="utf-8")
+    monkeypatch.setenv("LLIAM_HOME", str(tmp_path))
+    monkeypatch.setenv("LLIAM_CONFIG", str(config_path))
+    monkeypatch.setenv("LLIAM_SKILL_POLICY", str(policy_path))
+
+    command = bot_command(bundle)
+    assert command[1] == "-I"
+    child = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, timeout=20, check=True)
+    child_file = Path(child.stdout.strip())
+    assert child_file.parts[-2:] == ("google_meet", "meet_bot.py")
+    assert child_file.parent not in (bundle, Path(command[-2]))
+
+    mismatched = subprocess.run(
+        [*command[:-1], "unmatched-fixture-revision"], cwd=tmp_path, capture_output=True, text=True, timeout=20)
+    assert mismatched.returncode != 0
+    assert "same approved plugin" in mismatched.stderr

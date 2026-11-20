@@ -285,7 +285,7 @@ def _start_realtime_speaker(
     device selected as default input.
     """
     try:
-        from plugins.google_meet.realtime.openai_client import (
+        from .realtime.openai_client import (
             RealtimeSession,
             RealtimeSpeaker,
         )
@@ -502,7 +502,7 @@ def run_bot() -> int:  # noqa: C901 — orchestration, explicit branches
             rt["enabled"] = False
         else:
             try:
-                from plugins.google_meet.audio_bridge import AudioBridge
+                from .audio_bridge import AudioBridge
                 bridge = AudioBridge()
                 rt["bridge_info"] = bridge.setup()
                 rt["bridge"] = bridge
@@ -856,4 +856,13 @@ def _parse_duration(raw: str) -> Optional[float]:
 
 
 if __name__ == "__main__":  # pragma: no cover — subprocess entry point
+    if not __package__:
+        directory = Path(__file__).resolve().parent
+        if sys.path and Path(sys.path[0]).resolve() == directory:
+            sys.path[0] = str(directory.parents[1])
+        __package__ = "plugins.google_meet"
+    from tools.skill_attestation import active_policy
+
+    if active_policy() is not None:
+        sys.exit("Launch the signed Meet bot through the managed lliam-gov meet command.")
     sys.exit(run_bot())
