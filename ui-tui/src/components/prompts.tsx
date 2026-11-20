@@ -3,13 +3,14 @@ import { useState } from 'react'
 
 import { isMac } from '../lib/platform.js'
 import type { Theme } from '../theme.js'
-import type { ApprovalReq, ClarifyReq, ConfirmReq } from '../types.js'
+import type { AnswerApproval, ApprovalReq, ClarifyReq, ConfirmReq } from '../types.js'
 
 import { TextInput } from './textInput.js'
 
 const APPROVAL_OPTS = ['once', 'session', 'always', 'deny'] as const
 // tirith warning present → backend downgrades "always" to session scope, so drop it.
 const APPROVAL_OPTS_NO_ALWAYS = APPROVAL_OPTS.filter(o => o !== 'always')
+const APPROVAL_OPTS_ONCE = ['once', 'deny'] as const
 const LABELS = { always: 'Always allow', deny: 'Deny', once: 'Allow once', session: 'Allow this session' } as const
 const CMD_PREVIEW_LINES = 10
 
@@ -68,13 +69,19 @@ export function approvalAction(
 
 export function ApprovalPrompt({ cols = 80, onChoice, req, t }: ApprovalPromptProps) {
   const [sel, setSel] = useState(0)
-  const opts = req.allowPermanent === false ? APPROVAL_OPTS_NO_ALWAYS : APPROVAL_OPTS
+
+  const opts =
+    req.requestId || req.allowSession === false
+      ? APPROVAL_OPTS_ONCE
+      : req.allowPermanent === false
+        ? APPROVAL_OPTS_NO_ALWAYS
+        : APPROVAL_OPTS
 
   useInput((ch, key) => {
     const action = approvalAction(ch, key, sel, opts)
 
     if (action.kind === 'choose') {
-      onChoice(action.choice)
+      onChoice(action.choice, req)
     } else if (action.kind === 'move') {
       setSel(s => s + action.delta)
     }
@@ -271,7 +278,7 @@ export function ConfirmPrompt({ onCancel, onConfirm, req, t }: ConfirmPromptProp
 
 interface ApprovalPromptProps {
   cols?: number
-  onChoice: (s: string) => void
+  onChoice: AnswerApproval
   req: ApprovalReq
   t: Theme
 }

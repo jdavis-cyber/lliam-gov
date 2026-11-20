@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createApprovalResponder } from '../app/approvalResponse.js'
 import { createGatewayEventHandler } from '../app/createGatewayEventHandler.js'
 import { getOverlayState, patchOverlayState, resetOverlayState } from '../app/overlayStore.js'
 import { turnController } from '../app/turnController.js'
@@ -932,6 +933,122 @@ describe('createGatewayEventHandler', () => {
     } as any)
 
     expect(getOverlayState().approval).toMatchObject({ allowPermanent: true })
+  })
+
+  it('keeps the session and request identity of a one-time approval', () => {
+    const onEvent = createGatewayEventHandler(buildCtx([]))
+    onEvent({
+      payload: {
+        allow_permanent: false,
+        allow_session: false,
+        command: 'save report',
+        description: 'Approve this write',
+        request_id: 'report-7'
+      },
+      session_id: 'session-1',
+      type: 'approval.request'
+    })
+    expect(getOverlayState().approval).toMatchObject({
+      allowSession: false,
+      requestId: 'report-7',
+      sessionId: 'session-1'
+    })
+  })
+
+  it.each(['once', 'deny'])('sends the displayed policy request when choosing %s', async choice => {
+    patchUiState({ sid: 'sid-1' })
+    const ctx = buildCtx([])
+    const onEvent = createGatewayEventHandler(ctx)
+    onEvent({
+      payload: { command: 'save report', description: 'Review', request_id: 'req-7' },
+      session_id: 'sid-1',
+      type: 'approval.request'
+    })
+    ctx.gateway.rpc.mockResolvedValue({ resolved: 1 })
+    await createApprovalResponder(ctx.gateway.rpc)(choice, getOverlayState().approval!)
+    expect(ctx.gateway.rpc).toHaveBeenCalledWith('approval.respond', {
+      choice,
+      request_id: 'req-7',
+      session_id: 'sid-1'
+    })
+    expect(getOverlayState().approval).toBeNull()
+    expect(getTurnState().outcome).toBe(choice === 'deny' ? 'denied' : 'approved (once)')
+  })
+
+  it('omits the ID for an unnumbered request and accepts its legacy acknowledgment', async () => {
+    patchUiState({ sid: 'sid-1' })
+    const ctx = buildCtx([])
+    createGatewayEventHandler(ctx)({
+      payload: { command: 'check files', description: 'Review' },
+      type: 'approval.request'
+    })
+    ctx.gateway.rpc.mockResolvedValue({ ok: true })
+    await createApprovalResponder(ctx.gateway.rpc)('deny', getOverlayState().approval!)
+    expect(ctx.gateway.rpc).toHaveBeenCalledWith('approval.respond', { choice: 'deny', session_id: 'sid-1' })
+    expect(getTurnState().outcome).toBe('denied')
+  })
+
+  it('keeps a refused or unacknowledged prompt retryable and does not report an expired approval as granted', async () => {
+    patchUiState({ sid: 'sid-1' })
+    const ctx = buildCtx([])
+    createGatewayEventHandler(ctx)({
+      payload: { command: 'save report', description: 'Review', request_id: 'req-7' },
+      type: 'approval.request'
+    })
+    const displayed = getOverlayState().approval!
+    const answer = createApprovalResponder(ctx.gateway.rpc)
+    ctx.gateway.rpc
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ resolved: 0 })
+    await answer('once', displayed)
+    expect(getOverlayState().approval).toBe(displayed)
+    await answer('once', displayed)
+    expect(getOverlayState().approval).toBe(displayed)
+    await answer('once', displayed)
+    expect(getOverlayState().approval).toBeNull()
+    expect(getTurnState().outcome).toBe('')
+    expect(getUiState().status).toContain('already answered')
+  })
+
+  it.each([
+    [0, 'sid-1'],
+    [0, 'sid-2'],
+    [1, 'sid-1'],
+    [1, 'sid-2']
+  ] as const)('a late acknowledgment with resolved=%i leaves the next prompt in %s', async (resolved, nextSession) => {
+    const ctx = buildCtx([])
+    const onEvent = createGatewayEventHandler(ctx)
+    const answer = createApprovalResponder(ctx.gateway.rpc)
+    let finish!: (value: { resolved: number }) => void
+    ctx.gateway.rpc.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          finish = resolve
+        })
+    )
+
+    const notify = (sid: string, id: string) => {
+      patchUiState({ sid })
+      onEvent({
+        payload: { command: 'save report', description: 'Review', request_id: id },
+        session_id: sid,
+        type: 'approval.request'
+      })
+    }
+
+    notify('sid-1', 'req-7')
+    const first = getOverlayState().approval!
+    const pending = answer('once', first)
+    await answer('deny', first)
+    notify(nextSession, 'req-8')
+    await answer('deny', first)
+    finish({ resolved })
+    await pending
+    expect(ctx.gateway.rpc).toHaveBeenCalledTimes(1)
+    expect(getOverlayState().approval?.requestId).toBe('req-8')
+    expect(getTurnState().outcome).toBe('')
+    expect(getUiState().status).toBe('approval needed')
   })
 
   it('preserves allow_permanent=false on approval overlays (tirith warning)', () => {
