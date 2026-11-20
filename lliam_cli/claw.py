@@ -168,13 +168,13 @@ def _find_migration_script() -> Path | None:
 
 def _load_migration_module(script_path: Path):
     """Dynamically load the migration script as a module."""
-    from tools.skill_attestation import verified_directory
+    from tools.skill_attestation import artifact_module_spec, verified_directory
     try:
         root = verified_directory("skill", "openclaw-migration", script_path.parent.parent)
     except PermissionError:
         return None
     script = root / script_path.parent.name / script_path.name
-    spec = importlib.util.spec_from_file_location("openclaw_to_hermes", script)
+    spec = artifact_module_spec("openclaw_to_hermes", script)
     if spec is None or spec.loader is None:
         return None
     mod = importlib.util.module_from_spec(spec)

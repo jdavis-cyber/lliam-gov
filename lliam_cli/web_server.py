@@ -11639,7 +11639,8 @@ def _mount_plugin_api_routes():
             continue
         try:
             module_name = f"hermes_dashboard_plugin_{plugin['name']}"
-            spec = importlib.util.spec_from_file_location(module_name, api_path)
+            from tools.skill_attestation import artifact_module_spec
+            spec = artifact_module_spec(module_name, api_path)
             if spec is None or spec.loader is None:
                 continue
             mod = importlib.util.module_from_spec(spec)

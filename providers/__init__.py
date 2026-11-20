@@ -104,7 +104,7 @@ def _import_plugin_dir(plugin_dir: Path, source: str) -> None:
 
     ``source`` is "bundled" or "user", used only for log messages.
     """
-    from tools.skill_attestation import verified_directory, verified_module_name
+    from tools.skill_attestation import artifact_module_spec, verified_directory, verified_module_name
     try:
         plugin_dir = verified_directory("plugin", f"model-providers/{plugin_dir.name}", plugin_dir)
     except PermissionError:
@@ -128,7 +128,7 @@ def _import_plugin_dir(plugin_dir: Path, source: str) -> None:
         return  # already imported
 
     try:
-        spec = importlib.util.spec_from_file_location(
+        spec = artifact_module_spec(
             module_name, init_file, submodule_search_locations=[str(plugin_dir)]
         )
         if spec is None or spec.loader is None:

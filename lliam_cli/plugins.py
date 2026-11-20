@@ -1562,7 +1562,7 @@ class PluginManager:
 
         key = manifest.key or manifest.name
         slug = key.replace("/", "__").replace("-", "_")
-        from tools.skill_attestation import verified_module_name
+        from tools.skill_attestation import artifact_module_spec, verified_module_name
         scoped_name = f"{_NS_PARENT}.{slug}"
         module_name = verified_module_name(scoped_name, plugin_dir)
         if manifest.source == "bundled" and module_name == scoped_name:
@@ -1573,7 +1573,7 @@ class PluginManager:
                 module = importlib.import_module(public)
                 sys.modules[scoped_name] = module
                 return module
-        spec = importlib.util.spec_from_file_location(
+        spec = artifact_module_spec(
             module_name,
             init_file,
             submodule_search_locations=[str(plugin_dir)],

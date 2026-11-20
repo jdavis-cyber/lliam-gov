@@ -224,7 +224,7 @@ def _load_provider_from_dir(provider_dir: Path) -> Optional["CronScheduler"]:  #
     # collide with bundled providers in sys.modules.
     _is_bundled = _CRON_PLUGINS_DIR in provider_dir.parents or provider_dir.parent == _CRON_PLUGINS_DIR
     module_name = f"plugins.cron_providers.{name}" if _is_bundled else f"{_USER_NAMESPACE}.{name}"
-    from tools.skill_attestation import verified_directory, verified_module_name
+    from tools.skill_attestation import artifact_module_spec, verified_directory, verified_module_name
     provider_dir = verified_directory("plugin", f"cron_providers/{name}", provider_dir)
     module_name = verified_module_name(module_name, provider_dir)
     init_file = provider_dir / "__init__.py"
@@ -264,7 +264,7 @@ def _load_provider_from_dir(provider_dir: Path) -> Optional["CronScheduler"]:  #
             _register_synthetic_package(_USER_NAMESPACE, [])
 
         # Now load the provider module
-        spec = importlib.util.spec_from_file_location(
+        spec = artifact_module_spec(
             module_name, str(init_file),
             submodule_search_locations=[str(provider_dir)]
         )
@@ -283,7 +283,7 @@ def _load_provider_from_dir(provider_dir: Path) -> Optional["CronScheduler"]:  #
             sub_name = sub_file.stem
             full_sub_name = f"{module_name}.{sub_name}"
             if full_sub_name not in sys.modules:
-                sub_spec = importlib.util.spec_from_file_location(
+                sub_spec = artifact_module_spec(
                     full_sub_name, str(sub_file)
                 )
                 if sub_spec:

@@ -217,7 +217,7 @@ def _load_provider_from_dir(provider_dir: Path) -> Optional["MemoryProvider"]:
     # collide with bundled providers in sys.modules.
     _is_bundled = _MEMORY_PLUGINS_DIR in provider_dir.parents or provider_dir.parent == _MEMORY_PLUGINS_DIR
     module_name = f"plugins.memory.{name}" if _is_bundled else f"{_USER_NAMESPACE}.{name}"
-    from tools.skill_attestation import verified_directory, verified_module_name
+    from tools.skill_attestation import artifact_module_spec, verified_directory, verified_module_name
     provider_dir = verified_directory("plugin", f"memory/{name}", provider_dir)
     module_name = verified_module_name(module_name, provider_dir)
     init_file = provider_dir / "__init__.py"
@@ -259,7 +259,7 @@ def _load_provider_from_dir(provider_dir: Path) -> Optional["MemoryProvider"]:
             _register_synthetic_package(_USER_NAMESPACE, [])
 
         # Now load the provider module
-        spec = importlib.util.spec_from_file_location(
+        spec = artifact_module_spec(
             module_name, str(init_file),
             submodule_search_locations=[str(provider_dir)]
         )
@@ -277,7 +277,7 @@ def _load_provider_from_dir(provider_dir: Path) -> Optional["MemoryProvider"]:
             sub_name = sub_file.stem
             full_sub_name = f"{module_name}.{sub_name}"
             if full_sub_name not in sys.modules:
-                sub_spec = importlib.util.spec_from_file_location(
+                sub_spec = artifact_module_spec(
                     full_sub_name, str(sub_file)
                 )
                 if sub_spec:
@@ -384,7 +384,7 @@ def discover_plugin_cli_commands() -> List[dict]:
     if not plugin_dir:
         return results
 
-    from tools.skill_attestation import verified_directory, verified_module_name
+    from tools.skill_attestation import artifact_module_spec, verified_directory, verified_module_name
     _is_bundled = _MEMORY_PLUGINS_DIR in plugin_dir.parents
     try:
         plugin_dir = verified_directory("plugin", f"memory/{active_provider}", plugin_dir)
@@ -413,7 +413,7 @@ def discover_plugin_cli_commands() -> List[dict]:
                 _register_synthetic_package(_USER_NAMESPACE, [])
             if not _is_bundled or package != base:
                 _register_synthetic_package(package, [str(plugin_dir)])
-            spec = importlib.util.spec_from_file_location(
+            spec = artifact_module_spec(
                 module_name, str(cli_file)
             )
             if not spec or not spec.loader:

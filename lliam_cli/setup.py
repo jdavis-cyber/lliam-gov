@@ -1820,13 +1820,13 @@ def _load_openclaw_migration_module():
     if not _OPENCLAW_SCRIPT.exists():
         return None
 
-    from tools.skill_attestation import verified_directory
+    from tools.skill_attestation import artifact_module_spec, verified_directory
     try:
         root = verified_directory("skill", "openclaw-migration", _OPENCLAW_SCRIPT.parent.parent)
     except PermissionError:
         return None
     script = root / _OPENCLAW_SCRIPT.parent.name / _OPENCLAW_SCRIPT.name
-    spec = importlib.util.spec_from_file_location(
+    spec = artifact_module_spec(
         "openclaw_to_hermes", script
     )
     if spec is None or spec.loader is None:

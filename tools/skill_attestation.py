@@ -14,7 +14,7 @@ import sys
 import tempfile
 import threading
 from pathlib import Path, PurePosixPath
-from types import ModuleType
+from types import CodeType, ModuleType
 from typing import overload
 
 from agent.attestation import verify_manifest
@@ -34,6 +34,34 @@ _import_lock = threading.RLock()
 _BUNDLED_PLUGINS = Path(__file__).resolve().parents[1] / "plugins"
 _snapshots: dict[str, tuple[tempfile.TemporaryDirectory, Path]] = {}
 _snapshot_ids: dict[Path, str] = {}
+_snapshot_directories: set[str] = set()
+
+
+class _SnapshotSourceLoader(importlib.machinery.SourceFileLoader):
+    """Compile approved source directly, without reading or writing a bytecode cache."""
+
+    def get_code(self, fullname: str) -> CodeType:
+        path = self.get_filename(fullname)
+        return self.source_to_code(self.get_data(path), path)
+
+
+def _snapshot_path_hook(path: str) -> importlib.machinery.FileFinder:
+    """Let normal imports use their usual finders outside published snapshots."""
+    if path not in _snapshot_directories:
+        raise ImportError
+    return importlib.machinery.FileFinder(
+        path,
+        (importlib.machinery.ExtensionFileLoader, importlib.machinery.EXTENSION_SUFFIXES),
+        (_SnapshotSourceLoader, importlib.machinery.SOURCE_SUFFIXES),
+    )
+
+
+def artifact_module_spec(name: str, path: str | Path, **options) -> importlib.machinery.ModuleSpec | None:
+    """Choose the same source-only loader for explicit snapshot file imports."""
+    source = Path(path)
+    if str(source.parent) in _snapshot_directories and source.suffix in importlib.machinery.SOURCE_SUFFIXES:
+        options["loader"] = _SnapshotSourceLoader(name, str(source))
+    return importlib.util.spec_from_file_location(name, path, **options)
 
 
 def verified_module_name(name: str, directory: Path) -> str:
@@ -169,7 +197,7 @@ def verified_directory(kind: str, name: str, path: Path | None, *, check_only: b
                 _check_snapshot(snapshot, files, executables)
                 return snapshot
             temporary = tempfile.TemporaryDirectory(prefix="lliam-attested-")
-            snapshot = Path(temporary.name) / (root.name or "bundle")
+            snapshot = Path(temporary.name).resolve() / (root.name or "bundle")
             snapshot.mkdir()
             for label, data in files.items():
                 target = snapshot / label
@@ -177,8 +205,15 @@ def verified_directory(kind: str, name: str, path: Path | None, *, check_only: b
                 with target.open("xb") as out:
                     out.write(data)
                 target.chmod(0o500 if label in executables else 0o400)
-            for directory, _, _ in os.walk(snapshot, topdown=False):
+            directories = [directory for directory, _, _ in os.walk(snapshot, topdown=False)]
+            for directory in directories:
                 Path(directory).chmod(0o500)
+                sys.path_importer_cache.pop(directory, None)
+            # Relative imports use the package's normal search path, including
+            # lazy imports after importlib invalidates its finder caches.
+            _snapshot_directories.update(directories)
+            if _snapshot_path_hook not in sys.path_hooks:
+                sys.path_hooks.insert(0, _snapshot_path_hook)
             _snapshots[signature] = temporary, snapshot
             _snapshot_ids[snapshot] = signature
             return snapshot
@@ -209,7 +244,7 @@ def load_bundled_plugin_module(category: str, provider: str, submodule: str | No
             return importlib.import_module(f"{package}.{submodule}")
         if cached is not None and getattr(cached, "__file__", None):
             return cached
-        spec = importlib.util.spec_from_file_location(
+        spec = artifact_module_spec(
             package, directory / "__init__.py", submodule_search_locations=[str(directory)]
         )
         if spec is None or spec.loader is None:

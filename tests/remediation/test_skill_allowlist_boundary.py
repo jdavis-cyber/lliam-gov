@@ -231,6 +231,48 @@ def test_changed_cached_snapshot_is_refused(governed_skills):
         file.chmod(0o400)
 
 
+def test_imports_leave_even_writable_verified_snapshots_unchanged(governed_skills, tmp_path, monkeypatch):
+    import importlib.util
+    import sys
+
+    from lliam_cli.plugins import PluginManager, PluginManifest
+    from tools.skill_attestation import verified_directory
+
+    _, policy = governed_skills
+    source = tmp_path / "fixture_provider"
+    nested = source / "nested"
+    nested.mkdir(parents=True)
+    (source / "__init__.py").write_text("from .nested import read\n", encoding="utf-8")
+    (nested / "__init__.py").write_text(
+        "def read():\n    from .values import LABEL\n    return LABEL\n", encoding="utf-8")
+    (nested / "values.py").write_text("LABEL = 'approved fixture'\n", encoding="utf-8")
+    policy["security"]["plugin_allowlist"] = [_signed_entry("fixture_provider", source, kind="plugin")]
+    snapshot = verified_directory("plugin", "fixture_provider", source)
+    before = {p.relative_to(snapshot) for p in snapshot.rglob("*")}
+    manifest = PluginManifest(name="fixture_provider", source="user", path=str(snapshot))
+    monkeypatch.setattr(sys, "dont_write_bytecode", False)
+    monkeypatch.setattr(sys, "pycache_prefix", None)
+    # Give this unprivileged test the same ability to write these two directory
+    # entries as a privileged interpreter, without changing file permissions.
+    for directory in (snapshot, snapshot / "nested"):
+        directory.chmod(0o700)
+    try:
+        package = PluginManager()._load_directory_module(manifest)
+        importlib.invalidate_caches()
+        monkeypatch.delitem(sys.path_importer_cache, str(snapshot / "nested"), raising=False)
+        assert package.read() == "approved fixture"
+        assert {p.relative_to(snapshot) for p in snapshot.rglob("*")} == before
+        assert not sys.dont_write_bytecode
+        ordinary = PluginManager()._load_directory_module(
+            PluginManifest(name="ordinary_fixture", source="user", path=str(source)))
+        assert ordinary.read() == "approved fixture"
+        assert Path(importlib.util.cache_from_source(str(nested / "values.py"))).is_file()
+    finally:
+        for directory in (snapshot, snapshot / "nested"):
+            directory.chmod(0o500)
+    assert verified_directory("plugin", "fixture_provider", source) == snapshot
+
+
 def test_discovery_uses_signed_plugin_descriptor(governed_skills, tmp_path):
     from lliam_cli.plugins import PluginManager
 
