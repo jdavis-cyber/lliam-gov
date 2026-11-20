@@ -1,5 +1,6 @@
 """Approved config-error regression coverage; no network or command execution."""
 import pytest
+import yaml
 
 
 def unavailable_config(*args, **kwargs):
@@ -72,19 +73,30 @@ def test_selected_overlay_required_for_startup(tmp_path, monkeypatch, contents):
 
 
 @pytest.mark.parametrize("same_as_home", [False, True])
-def test_governance_overlay_pins_posture_above_managed_scope(tmp_path, monkeypatch, same_as_home):
-    from lliam_cli import config, managed_scope
+@pytest.mark.parametrize("selector", ["LLIAM_CONFIG", "HERMES_CONFIG"])
+@pytest.mark.parametrize(("managed_security", "key"), [
+    ({"posture": "low"}, "security.posture"),
+    (None, "security.posture"),
+    ({"require_tls": False}, "security.require_tls"),
+    ({"posture_findings_blocking": False}, "security.posture_findings_blocking"),
+])
+def test_incompatible_managed_pin_refuses_strict_profile(tmp_path, monkeypatch, same_as_home,
+                                                        selector, managed_security, key):
+    from lliam_cli import config, startup_posture
 
     managed = tmp_path / "managed"
     managed.mkdir()
-    (managed / "config.yaml").write_text("security:\n  posture: low\n", encoding="utf-8")
+    (managed / "config.yaml").write_text(yaml.safe_dump({"security": managed_security}))
     monkeypatch.setenv("LLIAM_HOME", str(tmp_path))
     overlay = tmp_path / ("config.yaml" if same_as_home else "governed.yaml")
     overlay.write_text("security:\n  posture: strict\n", encoding="utf-8")
-    monkeypatch.setenv("HERMES_MANAGED_DIR", str(managed))
-    monkeypatch.setenv("LLIAM_CONFIG", str(overlay))
-    managed_scope.invalidate_managed_cache()
-    assert config.load_config()["security"]["posture"] == "strict"
+    monkeypatch.setenv("LLIAM_MANAGED_DIR", str(managed))
+    monkeypatch.delenv("LLIAM_CONFIG", raising=False)
+    monkeypatch.setenv(selector, str(overlay))
+    monkeypatch.setattr(startup_posture, "_STARTUP_POSTURE_ENFORCED", False)
+    for read in (config.load_config, config.load_config_readonly, startup_posture.enforce_startup_posture):
+        with pytest.raises(config.GovernanceOverlayError, match=key):
+            read()
 
 
 def test_oversight_requires_authenticated_approver_on_config_fault(monkeypatch):

@@ -49,6 +49,23 @@ def test_workload_start_refuses_unregistered_expansions(deployment, section, key
         startup_posture.enforce_startup_posture()
 
 
+def test_managed_air_gap_tightens_governed_egress_at_startup_and_reload(deployment):
+    from tools.egress_policy import check_egress
+
+    _, register = deployment
+    managed = register.with_name("config.yaml")
+    managed.write_text("security: {egress: {mode: deny_all}}\n")
+    startup_posture.enforce_startup_posture()
+    assert config.load_config_readonly()["security"]["egress"]["mode"] == "deny_all"
+    decision = check_egress("https://service.invalid")
+    assert decision.disposition == "deny" and "deny_all" in decision.reason
+    assert not register.exists()
+
+    managed.write_text("security: {egress: {mode: unrecognized}}\n")
+    with pytest.raises(deviations.DeviationError, match="security.egress.mode"):
+        config.load_config()
+
+
 def test_runtime_reload_rechecks_register_scope_and_expiry(deployment, monkeypatch):
     overlay, register = deployment
     startup_posture.enforce_startup_posture()

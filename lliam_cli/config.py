@@ -5552,17 +5552,19 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
 
         from lliam_cli import posture_resolver
 
-        # A governed deployment pins the overlay above managed settings. For
-        # ordinary profiles the administrator still has the final say.
-        managed_config = managed_scope.load_managed_config()
-        if posture_resolver.is_strict(overlay_config):
-            config = _deep_merge(config, managed_config or {})
-            managed_config = None
         config = _deep_merge(config, overlay_config)
         normalized = _normalize_root_model_keys(_normalize_max_turns_config(config))
         expanded = _expand_env_vars(normalized)
-        if managed_config:
-            expanded = _deep_merge(expanded, _expand_env_vars(managed_config))
+        managed = managed_scope.expanded_managed_config()
+        if managed:
+            selected_strict = posture_resolver.is_strict(expanded)
+            expanded = _deep_merge(expanded, managed)
+            if selected_strict and not posture_resolver.is_strict(expanded):
+                raise GovernanceOverlayError("Managed security.posture conflicts with the strict profile")
+            if posture_resolver.is_strict(expanded):
+                conflict = posture_resolver.conflicting_strict_pin(managed)
+                if conflict:
+                    raise GovernanceOverlayError(f"Managed {conflict} conflicts with strict posture")
         # Lliam-GOV strict-posture coherence (LG-CH-02 / LG-CH-09): coerce the
         # fail-open guards to fail-closed AFTER every merge so the secure state
         # cannot be half-configured. No-op unless security.posture == strict.

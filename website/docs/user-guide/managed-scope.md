@@ -72,6 +72,11 @@ For the keys a managed layer specifies, the order is (highest wins):
 | 2 | `~/.lliam/config.yaml` (user) | `~/.lliam/.env` (user) |
 | 3 | built-in defaults | pre-existing shell environment |
 
+A profile selected with `LLIAM_CONFIG` or `HERMES_CONFIG` takes precedence
+over the home config. Administrator pins take precedence over both. If a pin
+conflicts with strict posture or a guard that strict posture requires, Lliam-GOV
+refuses to load the profile and names the conflicting key.
+
 Merging is **leaf-level**: pinning `model.default` does not freeze the rest of
 `model.*`. A managed `config.yaml` of:
 

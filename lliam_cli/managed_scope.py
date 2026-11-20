@@ -135,6 +135,20 @@ def load_managed_env() -> Dict[str, str]:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def expanded_managed_config() -> dict:
+    """Return administrator pins with environment references and model aliases resolved."""
+    raw = load_managed_config()
+    if not raw:
+        return {}
+    from lliam_cli.config import _expand_env_vars, _normalize_root_model_keys
+
+    managed = _normalize_root_model_keys(_expand_env_vars(raw))
+    # A bare model id pins model.default, leaving sibling settings available.
+    if isinstance(managed.get("model"), str):
+        managed["model"] = {"default": managed["model"]}
+    return managed
+
+
 def apply_managed_overlay(config: dict) -> dict:
     """Overlay administrator-pinned config values on top of an already-built dict.
 
@@ -156,23 +170,12 @@ def apply_managed_overlay(config: dict) -> dict:
     returns ``config`` (callers pass a dict they own).
     """
     try:
-        managed = load_managed_config()
+        managed = expanded_managed_config()
         if not managed:
             return config
-        # Imported lazily to avoid an import cycle (config imports managed_scope).
-        from lliam_cli.config import _deep_merge, _expand_env_vars, _normalize_root_model_keys
+        from lliam_cli.config import _deep_merge
 
-        managed_expanded = _normalize_root_model_keys(_expand_env_vars(managed))
-        # A bare ``model: x/y`` string in the managed file must merge as
-        # ``model.default`` — otherwise _deep_merge would replace the caller's
-        # ``model`` dict with a string and break every ``cfg["model"]["..."]``
-        # read. _normalize_root_model_keys only promotes the string when there
-        # are root provider/base_url keys to migrate, so handle the bare case
-        # here (matches cli.py's own string-model handling).
-        if isinstance(managed_expanded.get("model"), str):
-            managed_expanded = dict(managed_expanded)
-            managed_expanded["model"] = {"default": managed_expanded["model"]}
-        return _deep_merge(config, managed_expanded)
+        return _deep_merge(config, managed)
     except Exception:  # noqa: BLE001 — overlay must never break a caller
         logger.warning("managed scope: failed to apply config overlay", exc_info=True)
         return config

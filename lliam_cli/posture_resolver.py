@@ -99,11 +99,11 @@ LAST_RESOLUTION: Optional[PostureResolution] = None
 _LOGGED_ONCE = False
 
 
-def _get(config: Dict[str, Any], dotted: str) -> Any:
+def _get(config: Dict[str, Any], dotted: str, default: Any = None) -> Any:
     cur: Any = config
     for part in dotted.split("."):
         if not isinstance(cur, dict) or part not in cur:
-            return None
+            return default
         cur = cur[part]
     return cur
 
@@ -132,6 +132,18 @@ def get_posture(config: Optional[Dict[str, Any]]) -> Optional[str]:
 
 def is_strict(config: Optional[Dict[str, Any]]) -> bool:
     return get_posture(config) == STRICT
+
+
+def conflicting_strict_pin(managed: Dict[str, Any]) -> Optional[str]:
+    """Identify an administrator pin that strict posture would have to replace."""
+    required = {key: value for key, value, _ in _STRICT_COERCIONS}
+    required[_FINDINGS_BLOCKING_PATH] = True
+    missing = object()
+    for key, value in required.items():
+        pin = _get(managed, key, missing)
+        if pin is not missing and (type(pin) is not type(value) or pin != value):
+            return key
+    return None
 
 
 def strict_status() -> Tuple[bool, bool]:

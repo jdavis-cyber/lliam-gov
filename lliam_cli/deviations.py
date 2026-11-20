@@ -114,6 +114,9 @@ def _changes(config, base):
             raise DeviationError(f"Missing governed setting {key}")
         if type(before) is type(after) and before == after:
             continue
+        if key == "security.egress.mode" and before == "allowlist" and after == "deny_all":
+            # Air-gapped mode accepts no destinations, including allowlisted ones.
+            continue
         if type(before) in (int, float):
             # These fields are release-pinned upper bounds. Zero can disable a
             # guard; only a positive, tighter ceiling is inherently acceptable.
