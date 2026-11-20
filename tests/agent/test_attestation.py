@@ -13,6 +13,7 @@ No-op on low-side postures (capability preserving).
 
 from __future__ import annotations
 
+import json
 import textwrap
 from pathlib import Path
 
@@ -484,8 +485,29 @@ def test_governed_neutts_validates_codec_in_originating_profile(strict_att, monk
     backbone = tmp_path / "sample.gguf"
     backbone.touch()
     monkeypatch.setattr(tts_tool.subprocess, "run", lambda *a, **kw: pytest.fail("unexpected child"))
-    with pytest.raises(ValueError, match="provisioned model file"):
+    with pytest.raises(ValueError, match="verified local codec"):
         tts_tool._generate_neutts("review", "spoken.wav", {"neutts": {"model": str(backbone)}})
+
+
+def test_governed_neutts_missing_package_reports_codec_policy(strict_att, monkeypatch, tmp_path):
+    from tools import tts_tool
+
+    monkeypatch.setattr(tts_tool, "_check_neutts_available", lambda: False)
+    monkeypatch.setattr(tts_tool, "_load_tts_config", lambda: {"provider": "neutts"})
+    result = json.loads(tts_tool.text_to_speech_tool("review", str(tmp_path / "voice.wav")))
+    assert result["success"] is False
+    assert "verified local codec" in result["error"]
+    assert "pip install" not in result["error"]
+
+
+def test_standalone_governed_neutts_reports_codec_policy_before_reading_reference(strict_att, monkeypatch):
+    import sys
+    from tools import neutts_synth
+
+    monkeypatch.setattr(sys, "argv", ["neutts_synth", "--text", "review", "--out", "voice.wav",
+                                      "--ref-audio", "absent.wav", "--ref-text", "absent.txt"])
+    with pytest.raises(ValueError, match="verified local codec"):
+        neutts_synth.main()
 
 
 def test_neutts_child_resolves_source_modules_and_relative_files(tmp_path, monkeypatch):

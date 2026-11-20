@@ -21,6 +21,18 @@ from pathlib import Path
 CODEC_REPO = "neuphonic/neucodec"
 
 
+def check_codec_source() -> None:
+    from agent.attestation import require_safe_local_model
+
+    try:
+        require_safe_local_model(CODEC_REPO)
+    except ValueError as exc:
+        raise ValueError(
+            "Governed NeuTTS needs a verified local codec for reference audio. "
+            "The built-in provider selects a repository codec (LG-MP-07)."
+        ) from exc
+
+
 def _write_wav(path: str, samples, sample_rate: int = 24000) -> None:
     """Write a WAV file from float32 samples (no soundfile dependency)."""
     import numpy as np
@@ -62,6 +74,10 @@ def main():
     parser.add_argument("--device", default="cpu", help="Device (cpu/cuda/mps)")
     args = parser.parse_args()
 
+    from agent.attestation import require_safe_local_model
+    check_codec_source()
+    require_safe_local_model(args.model)
+
     # Validate inputs
     ref_audio = Path(args.ref_audio).expanduser()
     ref_text_path = Path(args.ref_text).expanduser()
@@ -73,10 +89,6 @@ def main():
         sys.exit(1)
 
     ref_text = ref_text_path.read_text(encoding="utf-8").strip()
-
-    from agent.attestation import require_safe_local_model
-    require_safe_local_model(args.model)
-    require_safe_local_model(CODEC_REPO)
 
     # Import and run NeuTTS
     try:

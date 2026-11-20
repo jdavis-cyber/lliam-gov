@@ -1843,9 +1843,9 @@ def _generate_neutts(text: str, output_path: str, tts_config: Dict[str, Any]) ->
     ref_text = neutts_config.get("ref_text", "") or _default_neutts_ref_text()
     model = neutts_config.get("model", "neuphonic/neutts-air-q4-gguf")
     from agent.attestation import require_safe_local_model
-    from tools.neutts_synth import CODEC_REPO
+    from tools.neutts_synth import check_codec_source
+    check_codec_source()
     require_safe_local_model(model)
-    require_safe_local_model(CODEC_REPO)
     device = neutts_config.get("device", "cpu")
 
     # NeuTTS outputs WAV natively — use a .wav path for generation,
@@ -2319,6 +2319,8 @@ def text_to_speech_tool(
 
         elif provider == "neutts":
             if not _check_neutts_available():
+                from tools.neutts_synth import check_codec_source
+                check_codec_source()
                 return json.dumps({
                     "success": False,
                     "error": "NeuTTS provider selected but neutts is not installed. "

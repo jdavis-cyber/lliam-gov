@@ -48,9 +48,6 @@ cd ~/.lliam/lliam-gov-agent && uv pip install -e ".[messaging]"
 # Premium TTS (ElevenLabs)
 cd ~/.lliam/lliam-gov-agent && uv pip install -e ".[tts-premium]"
 
-# Local TTS (NeuTTS, optional)
-python -m pip install -U neutts[all]
-
 # Everything at once
 cd ~/.lliam/lliam-gov-agent && uv pip install -e ".[all]"
 ```
@@ -61,7 +58,9 @@ cd ~/.lliam/lliam-gov-agent && uv pip install -e ".[all]"
 | `messaging` | `discord.py[voice]`, `python-telegram-bot`, `aiohttp` | Discord & Telegram bots |
 | `tts-premium` | `elevenlabs` | ElevenLabs TTS provider |
 
-Optional local TTS provider: install `neutts` separately with `python -m pip install -U neutts[all]`. On first use it downloads the model automatically.
+Ordinary profiles can use a separately installed NeuTTS runtime. It downloads model assets on first use.
+
+Governed NeuTTS synthesis is unavailable when strict posture requires safe serialization. The built-in provider selects a repository codec to encode reference audio, and a local GGUF backbone alone cannot satisfy that requirement. NeuTTS 1.4.1 also requires Transformers 5.1.0, a release with published security advisories. Supporting this provider in governed mode requires a compatible patched runtime and offline verification of both the codec and the backbone. [NeuTTS 1.4.1 dependency declaration](https://pypi.org/pypi/neutts/1.4.1/json) · [Transformers 5.1.0 advisory records](https://pypi.org/pypi/transformers/5.1.0/json)
 
 :::info
 `discord.py[voice]` installs **PyNaCl** (for voice encryption) and **opus bindings** automatically. This is required for Discord voice channel support.
