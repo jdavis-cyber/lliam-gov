@@ -187,9 +187,22 @@ def run_assurance(*, repo_root: Path = _REPO_ROOT,
         except Exception as e:
             beat["errors"].append(f"scheduled_redteam: {e}")
 
+    # Verify the same ledger used by dispatch before interpreting its metrics.
+    from agent import governance_audit as audit
+    audit_config = config.get("audit") or {}
+    ledger = audit.resolve_ledger_path(audit_config, home=home)
+    if audit.ledger_enabled(audit_config):
+        try:
+            result = audit.verify_chain(ledger)
+            beat["audit_chain"] = result.as_dict()
+            if not result.ok or not result.checked:
+                detail = result.reason or "configured ledger is absent or empty"
+                beat["errors"].append(f"audit chain: {detail} ({ledger})")
+        except Exception as exc:
+            beat["errors"].append(f"audit chain: cannot verify {ledger}: {exc}")
+
     # 3. metrics
-    ledger = home / "logs" / "agent-audit.log"
-    if ledger.is_file():
+    if ledger.is_file() and not any(e.startswith("audit chain:") for e in beat["errors"]):
         try:
             beat["metrics"] = gm.compute_metrics(ledger_path=ledger)
         except Exception as e:

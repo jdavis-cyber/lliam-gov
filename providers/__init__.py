@@ -104,6 +104,11 @@ def _import_plugin_dir(plugin_dir: Path, source: str) -> None:
 
     ``source`` is "bundled" or "user", used only for log messages.
     """
+    from tools.skill_attestation import verified_directory, verified_module_name
+    try:
+        plugin_dir = verified_directory("plugin", f"model-providers/{plugin_dir.name}", plugin_dir)
+    except PermissionError:
+        return
     init_file = plugin_dir / "__init__.py"
     if not init_file.exists():
         return
@@ -118,6 +123,7 @@ def _import_plugin_dir(plugin_dir: Path, source: str) -> None:
     else:
         module_name = f"_hermes_user_provider_{safe_name}"
 
+    module_name = verified_module_name(module_name, plugin_dir)
     if module_name in sys.modules:
         return  # already imported
 
@@ -175,6 +181,10 @@ def _discover_providers() -> None:
     #    editable install, it still works without the plugin layout.
     try:
         import pkgutil
+
+        from tools.skill_attestation import active_policy
+        if active_policy() is not None:
+            return  # single-file imports lack a signed bundle
 
         import providers as _pkg
 

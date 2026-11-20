@@ -165,6 +165,7 @@ _YAML_ASSIGN_RE = re.compile(
 
 # JSON field patterns: "apiKey": "value", "token": "value", etc.
 _JSON_KEY_NAMES = r"(?:api_?[Kk]ey|token|secret|password|access_token|refresh_token|auth_token|bearer|secret_value|raw_secret|secret_input|key_material)"
+_JSON_SECRET_KEY_RE = re.compile(_JSON_KEY_NAMES, re.IGNORECASE)
 _JSON_FIELD_RE = re.compile(
     rf'("{_JSON_KEY_NAMES}")\s*:\s*"([^"]+)"',
     re.IGNORECASE,
@@ -428,6 +429,11 @@ def _mask_token_nonreusable(token: str) -> str:
             label = sub
             break
     return f"«redacted:{label}…»" if label else "«redacted-secret»"
+
+
+def is_secret_json_field(name: str) -> bool:
+    """Recognize credential fields in a parsed tool result."""
+    return isinstance(name, str) and _JSON_SECRET_KEY_RE.fullmatch(name) is not None
 
 
 def redact_sensitive_text(

@@ -172,7 +172,7 @@ def ledger_enabled(cfg: Optional[dict] = None) -> bool:
     return bool(cfg.get("ledger_enabled", False))
 
 
-def resolve_ledger_path(cfg: Optional[dict] = None) -> Path:
+def resolve_ledger_path(cfg: Optional[dict] = None, *, home: Optional[Path] = None) -> Path:
     """Ledger path from config, defaulting to ``<home>/logs/agent-audit.log``.
 
     A ``$HERMES_HOME`` / ``$LLIAM_HOME`` prefix in the configured value is
@@ -189,7 +189,7 @@ def resolve_ledger_path(cfg: Optional[dict] = None) -> Path:
     cfg = _audit_config() if cfg is None else cfg
     from lliam_constants import get_lliam_home
 
-    home = get_lliam_home()
+    home = get_lliam_home() if home is None else home
     default = home / "logs" / "agent-audit.log"
     raw = str(cfg.get("ledger_path") or "").strip()
     if not raw:
@@ -942,6 +942,17 @@ def emit(
         risk_scope=risk_scope,
         **fields,
     )
+
+
+def record_policy_exception(kind: str, reference: str, target: str, *, source: str) -> None:
+    """A decision relying on a governance exception requires a persisted receipt."""
+    record = emit(
+        "approval.decision", action=f"governance.{kind}", decision="allow",
+        severity="notice", resource={"type": kind, "name": reference},
+        parameters={"target": target}, risk_scope={"high_impact"}, source_module=source,
+    )
+    if record is None:
+        raise AuditWriteError(f"Cannot record {kind} {reference!r} in the audit ledger")
 
 
 def iter_records(path: Optional[Path] = None) -> Iterator[dict]:

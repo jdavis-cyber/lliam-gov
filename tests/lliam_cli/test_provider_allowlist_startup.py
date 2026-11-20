@@ -52,6 +52,7 @@ def _cfg(tmp_path, extra):
     policy = tmp_path / "provider-allowlist.yaml"
     policy.write_text(_POLICY, encoding="utf-8")
     base = {"security": {"posture": "strict",
+                         "allowed_providers": ["lmstudio"],
                          "provider_allowlist_enforce": True,
                          "provider_allowlist_path": str(policy)}}
     base.update(extra)

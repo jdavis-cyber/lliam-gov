@@ -9486,6 +9486,7 @@ def _(rid, params: dict) -> dict:
                 params.get("choice", "deny"),
                 resolve_all=params.get("all", False),
                 raise_on_refusal=True,
+                request_id=params.get("request_id"),
             )
         except ApprovalRefused as e:
             # LG-GV-05: this connection carries no authenticated approver.

@@ -1142,6 +1142,7 @@ def enforce_governance_artifacts_at_startup(
     root = _gov_repo_root(repo_root)
     gov = eff.get("governance") or {}
     blocking: list[str] = []
+    used_waivers = []
 
     if not gov:
         blocking.append("governance block missing from effective config "
@@ -1272,8 +1273,18 @@ def enforce_governance_artifacts_at_startup(
                             f"high-risk skill '{skill}' is enabled without a "
                             f"valid, signed, unexpired CAIO waiver (LG-GV-10)")
 
-    _GOVERNANCE_ARTIFACTS_CHECKED = True
+                    else:
+                        used_waivers.append((str(valid_waivers[skill]["waiver_id"]), str(skill)))
+
+    if not blocking and used_waivers:
+        from agent.governance_audit import record_policy_exception
+        try:
+            for waiver_id, skill in used_waivers:
+                record_policy_exception("waiver", waiver_id, skill, source=__name__)
+        except Exception as exc:
+            blocking.append(f"waiver use could not be recorded: {exc}")
     if not blocking:
+        _GOVERNANCE_ARTIFACTS_CHECKED = True
         return None
 
     for f in blocking:

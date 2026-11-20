@@ -1168,7 +1168,7 @@ def _build_snapshot_entry(
 # Skills index
 # =========================================================================
 
-def _parse_skill_file(skill_file: Path) -> tuple[bool, dict, str]:
+def _parse_skill_file(skill_file: Path, *, signed_only: bool = False) -> tuple[bool, dict, str]:
     """Read a SKILL.md once and return platform compatibility, frontmatter, and description.
 
     Returns (is_compatible, frontmatter, description). On any error, returns
@@ -1177,6 +1177,12 @@ def _parse_skill_file(skill_file: Path) -> tuple[bool, dict, str]:
     try:
         raw = skill_file.read_text(encoding="utf-8")
         frontmatter, _ = parse_frontmatter(raw)
+        if signed_only:
+            from tools.skill_attestation import verified_directory
+            name = str(frontmatter.get("name") or skill_file.parent.name)
+            root = verified_directory("skill", name, skill_file.parent)
+            if root is None or (root / "SKILL.md").read_text(encoding="utf-8") != raw:
+                return False, {}, ""
 
         if not skill_matches_platform(frontmatter):
             return False, frontmatter, ""
@@ -1191,7 +1197,7 @@ def _parse_skill_file(skill_file: Path) -> tuple[bool, dict, str]:
         return True, frontmatter, extract_skill_description(frontmatter)
     except Exception as e:
         logger.warning("Failed to parse skill file %s: %s", skill_file, e)
-        return True, {}, ""
+        return not signed_only, {}, ""
 
 
 def _skill_should_show(
@@ -1265,9 +1271,15 @@ def build_skills_system_prompt(
         or get_session_env("HERMES_SESSION_PLATFORM")
         or ""
     )
+    from tools.skill_attestation import active_policy
+    try:
+        signed_only = active_policy() is not None
+    except Exception:
+        return ""
     disabled = get_disabled_skill_names(_platform_hint or None)
     cache_key = (
         str(skills_dir.resolve()),
+        signed_only,
         tuple(str(d) for d in external_dirs),
         tuple(sorted(str(t) for t in (available_tools or set()))),
         tuple(sorted(str(ts) for ts in (available_toolsets or set()))),
@@ -1277,12 +1289,12 @@ def build_skills_system_prompt(
     )
     with _SKILLS_PROMPT_CACHE_LOCK:
         cached = _SKILLS_PROMPT_CACHE.get(cache_key)
-        if cached is not None:
+        if not signed_only and cached is not None:
             _SKILLS_PROMPT_CACHE.move_to_end(cache_key)
             return cached
 
     # ── Layer 2: disk snapshot ────────────────────────────────────────
-    snapshot = _load_skills_snapshot(skills_dir)
+    snapshot = None if signed_only else _load_skills_snapshot(skills_dir)
 
     skills_by_category: dict[str, list[tuple[str, str]]] = {}
     category_descriptions: dict[str, str] = {}
@@ -1317,7 +1329,7 @@ def build_skills_system_prompt(
         # Cold path: full filesystem scan + write snapshot for next time
         skill_entries: list[dict] = []
         for skill_file in iter_skill_index_files(skills_dir, "SKILL.md"):
-            is_compatible, frontmatter, desc = _parse_skill_file(skill_file)
+            is_compatible, frontmatter, desc = _parse_skill_file(skill_file, signed_only=signed_only)
             entry = _build_snapshot_entry(skill_file, skills_dir, frontmatter, desc)
             skill_entries.append(entry)
             if not is_compatible:
@@ -1336,7 +1348,7 @@ def build_skills_system_prompt(
             )
 
         # Read category-level DESCRIPTION.md files
-        for desc_file in iter_skill_index_files(skills_dir, "DESCRIPTION.md"):
+        for desc_file in (() if signed_only else iter_skill_index_files(skills_dir, "DESCRIPTION.md")):
             try:
                 content = desc_file.read_text(encoding="utf-8")
                 fm, _ = parse_frontmatter(content)
@@ -1349,12 +1361,10 @@ def build_skills_system_prompt(
             except Exception as e:
                 logger.debug("Could not read skill description %s: %s", desc_file, e)
 
-        _write_skills_snapshot(
-            skills_dir,
-            _build_skills_manifest(skills_dir),
-            skill_entries,
-            category_descriptions,
-        )
+        if not signed_only:
+            _write_skills_snapshot(
+                skills_dir, _build_skills_manifest(skills_dir), skill_entries, category_descriptions,
+            )
 
     # ── External skill directories ─────────────────────────────────────
     # Scan external dirs directly (no snapshot caching — they're read-only
@@ -1370,7 +1380,7 @@ def build_skills_system_prompt(
             continue
         for skill_file in iter_skill_index_files(ext_dir, "SKILL.md"):
             try:
-                is_compatible, frontmatter, desc = _parse_skill_file(skill_file)
+                is_compatible, frontmatter, desc = _parse_skill_file(skill_file, signed_only=signed_only)
                 if not is_compatible:
                     continue
                 entry = _build_snapshot_entry(skill_file, ext_dir, frontmatter, desc)
@@ -1394,7 +1404,7 @@ def build_skills_system_prompt(
                 logger.debug("Error reading external skill %s: %s", skill_file, e)
 
         # External category descriptions
-        for desc_file in iter_skill_index_files(ext_dir, "DESCRIPTION.md"):
+        for desc_file in (() if signed_only else iter_skill_index_files(ext_dir, "DESCRIPTION.md")):
             try:
                 content = desc_file.read_text(encoding="utf-8")
                 fm, _ = parse_frontmatter(content)

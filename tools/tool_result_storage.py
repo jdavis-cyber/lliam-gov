@@ -126,6 +126,7 @@ def maybe_persist_tool_result(
     env=None,
     config: BudgetConfig = DEFAULT_BUDGET,
     threshold: int | float | None = None,
+    task_id: str = "default",
 ) -> str:
     """Layer 2: persist oversized result into the sandbox, return preview + path.
 
@@ -144,6 +145,9 @@ def maybe_persist_tool_result(
     Returns:
         Original content if small, or <persisted-output> replacement.
     """
+    from agent import data_protection
+
+    content = data_protection.mask_tool_result(content)
     effective_threshold = threshold if threshold is not None else config.resolve_threshold(tool_name)
 
     if effective_threshold == float("inf"):
@@ -155,6 +159,16 @@ def maybe_persist_tool_result(
     storage_dir = _resolve_storage_dir(env)
     remote_path = f"{storage_dir}/{tool_use_id}.txt"
     preview, has_more = generate_preview(content, max_chars=config.preview_size)
+
+    if data_protection.requires_protected_results():
+        from tools.protected_tool_results import store_result
+
+        try:
+            reference = store_result(content, task_id or "default", data_protection.result_retention_ttl_seconds())
+            return _build_persisted_message(preview, has_more, len(content), reference)
+        except Exception:
+            logger.warning("Could not securely persist tool result")
+            return f"{preview}\n\n[Truncated: secure storage unavailable.]"
 
     if env is not None:
         try:
@@ -182,6 +196,7 @@ def enforce_turn_budget(
     tool_messages: list[dict],
     env=None,
     config: BudgetConfig = DEFAULT_BUDGET,
+    task_id: str = "default",
 ) -> list[dict]:
     """Layer 3: enforce aggregate budget across all tool results in a turn.
 
@@ -219,6 +234,7 @@ def enforce_turn_budget(
             env=env,
             config=config,
             threshold=0,
+            task_id=task_id,
         )
         if replacement != content:
             total_size -= size

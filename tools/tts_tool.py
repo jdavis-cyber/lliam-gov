@@ -1842,6 +1842,8 @@ def _generate_neutts(text: str, output_path: str, tts_config: Dict[str, Any]) ->
     ref_audio = neutts_config.get("ref_audio", "") or _default_neutts_ref_audio()
     ref_text = neutts_config.get("ref_text", "") or _default_neutts_ref_text()
     model = neutts_config.get("model", "neuphonic/neutts-air-q4-gguf")
+    from agent.attestation import require_safe_local_model
+    require_safe_local_model(model)
     device = neutts_config.get("device", "cpu")
 
     # NeuTTS outputs WAV natively — use a .wav path for generation,
@@ -1984,6 +1986,9 @@ def _generate_piper_tts(text: str, output_path: str, tts_config: Dict[str, Any])
 
     model_path = _resolve_piper_voice_path(voice_name, download_dir)
 
+    from agent.attestation import require_safe_local_model
+    require_safe_local_model(model_path)
+
     # Tolerant speaker_id parse: drop bad input (non-int strings, lists, dicts)
     # to 0 (Piper's own default). Booleans are rejected outright — True/False
     # would silently coerce to 1/0 and hide a config mistake.
@@ -2089,6 +2094,8 @@ def _generate_kittentts(text: str, output_path: str, tts_config: Dict[str, Any])
     KittenTTS = _import_kittentts()
     kt_config = tts_config.get("kittentts", {})
     model_name = kt_config.get("model", DEFAULT_KITTENTTS_MODEL)
+    from agent.attestation import require_safe_local_model
+    require_safe_local_model(model_name)
     voice = kt_config.get("voice", DEFAULT_KITTENTTS_VOICE)
     speed = kt_config.get("speed", 1.0)
     clean_text = kt_config.get("clean_text", True)

@@ -459,3 +459,40 @@ def test_control_effectiveness_passes_when_reintroduced_server_withholds(tmp_pat
     _reintroduce_mcp_serve(tmp_path, monkeypatch, ["conversations_list"])
     r = ce.effectiveness_report(repo_root=_REPO)
     assert r["mcp_permissions_respond_withheld"] is True
+
+
+@pytest.mark.parametrize("choice,permitted", [("once", True), ("deny", False)])
+def test_pdp_request_requires_named_request_and_bound_operator(
+    clean_env, clean_queues, gov_ledger, monkeypatch, choice, permitted
+):
+    from agent.governance_audit_hooks import set_operator_subject
+    from tools import approval as ap, tool_policy as tp
+
+    monkeypatch.setattr("lliam_cli.config.load_config", lambda: _GOV)
+    monkeypatch.setattr("agent.file_safety.get_safe_write_roots", lambda: ["/approved"])
+    key = "synthetic-review"
+    token = ap.set_current_session_key(key)
+    monkeypatch.setenv("LLIAM_EXEC_ASK", "1")
+
+    def answer(data):
+        assert not data["allow_permanent"] and not data["allow_session"]
+        assert "report.txt" in data["command"]
+        assert ap.resolve_gateway_approval(key, "once") == 0
+        assert ap.resolve_gateway_approval(key, "once", request_id=data["request_id"]) == 0
+        _authenticate("reviewer@example.test")
+        try:
+            assert ap.resolve_gateway_approval(key, choice, request_id=data["request_id"]) == 1
+        finally:
+            set_operator_subject(None)
+
+    ap.register_gateway_notify(key, answer)
+    try:
+        decision = tp.pdp_gate("write_file", {"path": "/external/report.txt", "content": "sample"},
+                               session_id=key)
+        assert (decision is None) is permitted
+        rows = [row for row in _decisions(gov_ledger) if row["outcome"]["origin"] == "policy"]
+        assert rows[-1]["decision"] == ("approve" if permitted else "deny")
+        assert rows[-1]["approver"]["id"] == "reviewer@example.test"
+    finally:
+        ap.unregister_gateway_notify(key)
+        ap.reset_current_session_key(token)

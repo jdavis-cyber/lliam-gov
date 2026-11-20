@@ -43,7 +43,7 @@ from lliam_cli.env_compat import getenv_compat
 import sys
 import threading
 import types
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
@@ -1315,10 +1315,19 @@ class PluginManager:
             if yaml is None:
                 logger.warning("PyYAML not installed – cannot load %s", manifest_file)
                 return None
-            data = yaml.safe_load(manifest_file.read_text(encoding="utf-8")) or {}
+            raw_manifest = manifest_file.read_bytes()
+            data = yaml.safe_load(raw_manifest.decode("utf-8")) or {}
 
             name = data.get("name", plugin_dir.name)
             key = f"{prefix}/{plugin_dir.name}" if prefix else name
+
+            from tools.skill_attestation import verified_directory, record_refusal
+            verified = verified_directory("plugin", key, plugin_dir)
+            if verified != plugin_dir:
+                descriptor = verified / manifest_file.name
+                if not descriptor.is_file() or descriptor.read_bytes() != raw_manifest:
+                    record_refusal("plugin", key, "Plugin descriptor differs from signed inventory")
+                    return None
 
             raw_kind = data.get("kind", "standalone")
             if not isinstance(raw_kind, str):
@@ -1338,7 +1347,7 @@ class PluginManager:
             # heuristic in plugins/memory/__init__.py:_is_memory_provider_dir.
             # Bundled memory providers are already skipped via skip_names.
             if kind == "standalone" and "kind" not in data:
-                init_file = plugin_dir / "__init__.py"
+                init_file = verified / "__init__.py"
                 if init_file.exists():
                     try:
                         source_text = init_file.read_text(errors="replace")[:8192]
@@ -1434,9 +1443,15 @@ class PluginManager:
         )
 
         try:
+            from tools.skill_attestation import verified_directory
+            key = manifest.key or manifest.name
             if manifest.source in {"user", "project", "bundled"}:
+                directory = verified_directory("plugin", key, Path(manifest.path))
+                manifest = replace(manifest, path=str(directory))
                 module = self._load_directory_module(manifest)
             else:
+                # Entry points cannot supply a contained, authenticated bundle.
+                verified_directory("plugin", key, None)
                 module = self._load_entrypoint_module(manifest)
 
             loaded.module = module
@@ -1525,7 +1540,8 @@ class PluginManager:
 
         key = manifest.key or manifest.name
         slug = key.replace("/", "__").replace("-", "_")
-        module_name = f"{_NS_PARENT}.{slug}"
+        from tools.skill_attestation import verified_module_name
+        module_name = verified_module_name(f"{_NS_PARENT}.{slug}", plugin_dir)
         spec = importlib.util.spec_from_file_location(
             module_name,
             init_file,

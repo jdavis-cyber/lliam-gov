@@ -22,10 +22,12 @@ Finding = Tuple[str, int, str, str]
 _IGNORED_DIRS = {"__pycache__", ".venv", "venv", "node_modules"}
 
 
-def _scan_source(content: str, rel_path: str) -> List[Finding]:
+def ast_scan_source(content: str, rel_path: str, *, strict: bool = False) -> List[Finding]:
     try:
         tree = ast.parse(content)
     except (SyntaxError, ValueError, RecursionError):
+        if strict:
+            raise
         return []
 
     findings: List[Finding] = []
@@ -75,6 +77,8 @@ def _scan_source(content: str, rel_path: str) -> List[Finding]:
     try:
         V().visit(tree)
     except (RecursionError, ValueError, RuntimeError):
+        if strict:
+            raise
         # Hostile/pathological input: return what we collected so far.
         pass
 
@@ -94,7 +98,7 @@ def ast_scan_path(path: Path) -> List[Finding]:
             content = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             return []
-        return _scan_source(content, path.name)
+        return ast_scan_source(content, path.name)
 
     if not path.is_dir():
         return []
@@ -111,7 +115,7 @@ def ast_scan_path(path: Path) -> List[Finding]:
             rel = py.relative_to(path).as_posix()
         except ValueError:
             rel = py.name
-        out.extend(_scan_source(content, rel))
+        out.extend(ast_scan_source(content, rel))
     return out
 
 

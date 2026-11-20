@@ -84,6 +84,20 @@ describe('PendingToolApproval', () => {
     expect($approvalRequest.get()).toBeNull()
   })
 
+  it('sends the displayed request ID when approving a policy-gated call', async () => {
+    const request = mockGateway()
+    $activeSessionId.set('sess-1')
+    setApprovalRequest({
+      sessionId: 'sess-1', requestId: 'pending-report', command: 'write_file report.txt',
+      description: 'Review external write', allowSession: false, allowPermanent: false
+    })
+    render(<PendingApprovalFallback />)
+    fireEvent.click(screen.getByRole('button', { name: /Run/ }))
+    await waitFor(() => expect(request).toHaveBeenCalledWith('approval.respond', {
+      choice: 'once', session_id: 'sess-1', request_id: 'pending-report'
+    }))
+  })
+
   it('reveals the full command inline when the Command toggle is clicked', () => {
     const longCommand = 'python -c "' + 'x'.repeat(400) + '"'
     setRequest(longCommand)

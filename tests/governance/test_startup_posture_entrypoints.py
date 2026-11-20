@@ -120,6 +120,8 @@ def _record_gates(monkeypatch, calls, *, raise_at=None, fault_at=None):
                         lambda *, config=None: calls.append(("identity", config)))
     for name in _GATES:
         monkeypatch.setattr(sas, name, _make(name))
+    # Dedicated deviation tests exercise this gate with complete governed profiles.
+    monkeypatch.setattr(sp.deviations, "activate", lambda config: None)
 
 
 def test_sequence_order_and_merged_config(monkeypatch):

@@ -35,7 +35,10 @@ import logging
 import sys
 from typing import Optional
 
+from lliam_cli import deviations
 from lliam_cli import security_audit_startup as _sas
+from lliam_cli.config import GovernanceOverlayError
+from lliam_cli.env_compat import getenv_compat
 
 logger = logging.getLogger("hermes.security_audit")
 
@@ -47,6 +50,8 @@ STARTUP_GATE_ERRORS: tuple[type[BaseException], ...] = (
     _sas.ModelIntegrityError,
     _sas.GovernanceArtifactError,
     _sas.AuditChainVerificationError,
+    GovernanceOverlayError,
+    deviations.DeviationError,
 )
 
 # Exit status for a refused start. Distinct from argparse's 2 so wrappers and
@@ -73,7 +78,11 @@ def _merged_config(fallback: Optional[dict]) -> Optional[dict]:
         from lliam_cli.config import load_config
 
         return load_config()
-    except Exception:
+    except (GovernanceOverlayError, deviations.DeviationError):
+        raise
+    except Exception as exc:
+        if (getenv_compat("CONFIG") or "").strip():
+            raise GovernanceOverlayError("Could not load the selected configuration") from exc
         return fallback
 
 
@@ -96,6 +105,8 @@ def enforce_startup_posture(
     if raw_config is None:
         raw_config = _read_raw_config()
 
+    merged = _merged_config(raw_config)
+
     # LG-IA-02 (additive): record the agent NPE instance identity for this
     # process (no-op when the ledger is disabled). Emitted before the chain
     # verify so the identity binding is on record for the session.
@@ -109,7 +120,7 @@ def enforce_startup_posture(
     # with TLS verification disabled, under strict posture.
     try:
         _sas.enforce_control_plane_auth_at_startup(
-            config=_merged_config(raw_config)
+            config=merged
         )
     except _sas.ControlPlaneAuthError:
         raise
@@ -122,7 +133,7 @@ def enforce_startup_posture(
     # under strict posture + security.provider_allowlist_enforce.
     try:
         _sas.enforce_provider_allowlist_at_startup(
-            config=_merged_config(raw_config)
+            config=merged
         )
     except _sas.ProviderAllowlistError:
         raise
@@ -134,7 +145,7 @@ def enforce_startup_posture(
     # configured primary model lacks a required model card, under strict posture.
     try:
         _sas.enforce_model_integrity_at_startup(
-            config=_merged_config(raw_config)
+            config=merged
         )
     except _sas.ModelIntegrityError:
         raise
@@ -146,7 +157,7 @@ def enforce_startup_posture(
     # is absent or stale. Complete no-op on the low-side posture.
     try:
         _sas.enforce_governance_artifacts_at_startup(
-            config=_merged_config(raw_config)
+            config=merged
         )
     except _sas.GovernanceArtifactError:
         raise
@@ -159,12 +170,13 @@ def enforce_startup_posture(
     # (fail-closed — refuse to rely on a tampered ledger). The MERGED config is
     # passed so the overlay's strict-posture / audit block is visible.
     try:
-        _sas.verify_audit_chain_at_startup(config=_merged_config(raw_config))
+        _sas.verify_audit_chain_at_startup(config=merged)
     except _sas.AuditChainVerificationError:
         raise
     except Exception as _verify_exc:
         logger.debug("Audit-chain startup verify failed (non-fatal): %s", _verify_exc)
 
+    deviations.activate(merged)
     _STARTUP_POSTURE_ENFORCED = True
     return None
 

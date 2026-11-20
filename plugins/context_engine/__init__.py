@@ -106,6 +106,9 @@ def _load_engine_from_dir(engine_dir: Path) -> Optional["ContextEngine"]:
     """
     name = engine_dir.name
     module_name = f"plugins.context_engine.{name}"
+    from tools.skill_attestation import verified_directory, verified_module_name
+    engine_dir = verified_directory("plugin", f"context_engine/{name}", engine_dir)
+    module_name = verified_module_name(module_name, engine_dir)
     init_file = engine_dir / "__init__.py"
 
     if not init_file.exists():

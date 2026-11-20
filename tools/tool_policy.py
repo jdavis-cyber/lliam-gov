@@ -103,7 +103,7 @@ def _candidate_policy_paths() -> List[Path]:
     paths: List[Path] = []
     env = getenv_compat("SKILL_POLICY")
     if env and env.strip():
-        paths.append(Path(env).expanduser())
+        return [Path(env).expanduser()]
     home = getenv_compat("HOME")
     if home:
         paths.append(Path(home).expanduser() / "policy" / _POLICY_FILENAME)
@@ -295,7 +295,7 @@ def ast_audit_clean(skill_dir: Path) -> Tuple[bool, str]:
             return True, "AST audit: no dynamic-import/obfuscation findings"
         return False, format_ast_report(findings, skill_name=Path(skill_dir).name)
     except Exception as e:  # pragma: no cover - audit must not crash the gate
-        return True, f"AST audit unavailable ({e}); not blocking"
+        return False, f"AST audit unavailable ({e})"
 
 
 def _skill_meta(skill_dir: Path) -> Dict[str, Any]:
@@ -341,6 +341,12 @@ def skill_load_decision(
         tag = " (mandatory must-disable)" if mandatory else ""
         return "deny", f"named in least-functionality denylist{tag} (LG-SC-01)"
 
+    from tools.skill_attestation import verified_directory
+    try:
+        verified_directory("skill", nm, skill_dir, check_only=True)
+    except PermissionError as exc:
+        return "hold", str(exc)
+
     if meta is None and skill_dir is not None:
         meta = _skill_meta(skill_dir)
     if meta:
@@ -375,18 +381,27 @@ def policy_held_skill_names() -> Set[str]:
     """
     if not _is_strict():
         return set()
-    pol = load_skill_policy()
-    if str((pol.get("policy") or {}).get("unlisted_disposition", "log")).lower() != "hold":
-        return set()
+    from tools.skill_attestation import active_policy, verified_directory
+    try:
+        policy = active_policy()
+        if policy is None:
+            return set()
+        approved = allowlist_names()
+    except Exception:
+        approved = set()  # an unreadable policy holds all discovered content
     from agent.skill_utils import iter_skill_index_files
-    approved = allowlist_names()
     held = set()
     for root in _skill_dirs():
         for md in iter_skill_index_files(root, "SKILL.md"):
             meta = _skill_meta(md.parent)
             name = str(meta.get("name") or md.parent.name)
             if name not in approved:
-                held.add(name)
+                held.update((name, md.parent.name))
+                continue
+            try:
+                verified_directory("skill", name, md.parent, check_only=True)
+            except PermissionError:
+                held.update((name, md.parent.name))
     return held
 
 
@@ -1050,6 +1065,11 @@ def pdp_gate(
             and _hitl_delegated_to_backend(decision.action_class)
         ):
             return None   # existing backend approval flow is the HITL gate
+        if decision.disposition == "hitl_approve":
+            from tools.approval import request_policy_approval
+            if request_policy_approval(decision.tool_name, function_args or {},
+                                       decision.action_class, decision.reason):
+                return None
         _emit_pdp_ledger_event(
             decision, function_args, session_id=session_id,
             task_id=task_id, tool_call_id=tool_call_id,

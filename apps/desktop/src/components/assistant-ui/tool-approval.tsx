@@ -129,18 +129,25 @@ const ApprovalBar: FC<{ request: ApprovalRequest; surface: 'floating' | 'inline'
       setSubmitting(choice)
 
       try {
-        await gateway.request<{ resolved?: boolean }>('approval.respond', {
+        const response = await gateway.request<{ resolved?: number }>('approval.respond', {
           choice,
+          ...(request.requestId && { request_id: request.requestId }),
           session_id: request.sessionId ?? undefined
         })
+        if (request.requestId && !response?.resolved) {
+          setSubmitting(null)
+          return
+        }
         triggerHaptic(choice === 'deny' ? 'cancel' : 'submit')
-        clearApprovalRequest(request.sessionId)
+        if ($approvalRequest.get() === request) {
+          clearApprovalRequest(request.sessionId)
+        }
       } catch (error) {
         notifyError(error, copy.sendFailed)
         setSubmitting(null)
       }
     },
-    [busy, copy.gatewayDisconnected, copy.sendFailed, gateway, request.sessionId]
+    [busy, copy.gatewayDisconnected, copy.sendFailed, gateway, request]
   )
 
   // ⌘/Ctrl+Enter → Run, Esc → Reject.

@@ -217,6 +217,9 @@ def _load_provider_from_dir(provider_dir: Path) -> Optional["MemoryProvider"]:
     # collide with bundled providers in sys.modules.
     _is_bundled = _MEMORY_PLUGINS_DIR in provider_dir.parents or provider_dir.parent == _MEMORY_PLUGINS_DIR
     module_name = f"plugins.memory.{name}" if _is_bundled else f"{_USER_NAMESPACE}.{name}"
+    from tools.skill_attestation import verified_directory, verified_module_name
+    provider_dir = verified_directory("plugin", f"memory/{name}", provider_dir)
+    module_name = verified_module_name(module_name, provider_dir)
     init_file = provider_dir / "__init__.py"
 
     if not init_file.exists():
@@ -381,12 +384,19 @@ def discover_plugin_cli_commands() -> List[dict]:
     if not plugin_dir:
         return results
 
+    from tools.skill_attestation import verified_directory, verified_module_name
+    _is_bundled = _MEMORY_PLUGINS_DIR in plugin_dir.parents
+    try:
+        plugin_dir = verified_directory("plugin", f"memory/{active_provider}", plugin_dir)
+    except PermissionError:
+        return results
     cli_file = plugin_dir / "cli.py"
     if not cli_file.exists():
         return results
 
-    _is_bundled = _MEMORY_PLUGINS_DIR in plugin_dir.parents or plugin_dir.parent == _MEMORY_PLUGINS_DIR
-    module_name = f"plugins.memory.{active_provider}.cli" if _is_bundled else f"{_USER_NAMESPACE}.{active_provider}.cli"
+    base = f"plugins.memory.{active_provider}" if _is_bundled else f"{_USER_NAMESPACE}.{active_provider}"
+    package = verified_module_name(base, plugin_dir)
+    module_name = f"{package}.cli"
     try:
         # Import the CLI module (lightweight — no SDK needed)
         if module_name in sys.modules:
@@ -401,9 +411,8 @@ def discover_plugin_cli_commands() -> List[dict]:
                 # so _load_provider_from_dir() will still load the real
                 # module later instead of reusing the shell.
                 _register_synthetic_package(_USER_NAMESPACE, [])
-                _register_synthetic_package(
-                    f"{_USER_NAMESPACE}.{active_provider}", [str(plugin_dir)]
-                )
+            if not _is_bundled or package != base:
+                _register_synthetic_package(package, [str(plugin_dir)])
             spec = importlib.util.spec_from_file_location(
                 module_name, str(cli_file)
             )

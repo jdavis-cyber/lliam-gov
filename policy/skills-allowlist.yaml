@@ -91,6 +91,16 @@ skills:
 # require_* below drive the SDL/load gate (LG-SC-02/03).
 # =============================================================================
 security:
+  # In hold mode each exact skill_allowlist/plugin_allowlist entry is a
+  # signed record. Its kind (skill or plugin), name, source, sdl_record,
+  # approver, ISO expires string, and files map are authenticated together.
+  # files maps relative POSIX paths to sha256:<hex> of their exact bytes;
+  # optional executables lists signed paths that must retain execute permission.
+  # Sign the record using agent.attestation.compute_signature (exclude signer
+  # and signature). The signer must appear below AND in security.trusted_signers
+  # of the provisioned configuration. Only files in that record are loaded.
+  # Activate a curated policy on a fresh process so previously registered
+  # plugin hooks and routes cannot outlive the configuration that loaded them.
   skill_allowlist:
     - name: pdf
       source: builtin

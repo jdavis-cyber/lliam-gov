@@ -31,6 +31,7 @@ sys.path.insert(0, str(_REPO / "ci" / "governance-ci-gates"))
 
 import control_effectiveness as ce  # noqa: E402
 import scheduled_assurance as sa  # noqa: E402
+from agent import governance_audit as audit
 from agent import cato_loop as cato  # noqa: E402
 from agent import iscm_sink  # noqa: E402
 from agent import killswitch as ks  # noqa: E402
@@ -253,8 +254,24 @@ def test_assurance_entry_runs_cato_and_suspends_on_break(tmp_path):
                for r in notes)
 
 
+def test_assurance_checks_configured_ledger_and_reports_invalid_chain(tmp_path):
+    overlay, cfg = _overlay(tmp_path)
+    cfg["audit"]["ledger_path"] = "$LLIAM_HOME/logs/custom.log"
+    home = tmp_path / "home"
+    ledger = home / "logs" / "custom.log"
+    ledger.parent.mkdir(parents=True)
+    ledger.write_text("{}\n", encoding="utf-8")
+    beat = sa.run_assurance(home=home, config=cfg, overlay_path=overlay, run_redteam=False)
+    assert not beat["ok"]
+    assert beat["audit_chain"]["ledger_path"] == str(ledger)
+    assert not beat["audit_chain"]["ok"]
+    assert any("audit chain" in error for error in beat["errors"])
+
+
 def test_assurance_entry_steady_state_does_not_suspend(tmp_path):
     overlay, cfg = _overlay(tmp_path)
+    ledger = audit.GovernanceLedger(tmp_path / "home/logs/agent-audit.log")
+    ledger.emit("session.start", action="test.start", source_module=__name__)
     beat = sa.run_assurance(home=tmp_path / "home", config=cfg,
                             overlay_path=overlay, run_redteam=False)
     assert beat["effectiveness_failures"] == []

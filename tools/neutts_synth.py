@@ -71,6 +71,11 @@ def main():
 
     ref_text = ref_text_path.read_text(encoding="utf-8").strip()
 
+    from agent.attestation import require_safe_local_model
+    codec_repo = "neuphonic/neucodec"
+    require_safe_local_model(args.model)
+    require_safe_local_model(codec_repo)
+
     # Import and run NeuTTS
     try:
         from neutts import NeuTTS
@@ -81,7 +86,7 @@ def main():
     tts = NeuTTS(
         backbone_repo=args.model,
         backbone_device=args.device,
-        codec_repo="neuphonic/neucodec",
+        codec_repo=codec_repo,
         codec_device=args.device,
     )
     ref_codes = tts.encode_reference(str(ref_audio))

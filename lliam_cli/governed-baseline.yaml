@@ -1,0 +1,98 @@
+# SR-14 release contract extracted from the authorized commit below.
+commit: c84c93b86f2355fadd2e1f76a10371c8610723bb
+settings:
+  security.tirith_enabled: true
+  security.tirith_fail_open: false
+  security.allow_private_urls: false
+  security.allow_lazy_installs: false
+  security.redact_secrets: true
+  security.deny_on_no_approver: true
+  security.posture_findings_blocking: true
+  security.no_default_credentials: true
+  security.api_server_key_required: true
+  security.require_operator_auth: true
+  security.require_mfa: true
+  security.require_tls: true
+  security.require_authenticated_approver: true
+  security.cert_pinning.enabled: false
+  security.skill_policy.constrain_mobile_code: true
+  security.require_signed_skills: true
+  security.require_ast_audit: true
+  security.require_provenance: true
+  security.tool_risk_policy.enabled: true
+  security.tool_risk_policy.fail_closed: true
+  security.max_mutating_calls.per_turn: 25
+  security.max_mutating_calls.per_session: 200
+  security.spend_ceiling.enabled: true
+  security.spend_ceiling.per_session_tokens: 2000000
+  security.spend_ceiling.per_day_tokens: 20000000
+  security.spend_ceiling.per_session_cost_usd: 10
+  security.spend_ceiling.per_day_cost_usd: 100
+  security.data_protection.result_retention_ttl_seconds: 86400
+  security.schema_validation.max_schema_bytes: 65536
+  memory.governance.retention_ttl_seconds: 604800
+  security.data_protection.cui_redaction: true
+  security.data_protection.dlp_taint_gate: true
+  security.data_protection.at_rest_encryption: true
+  security.egress.proxy_required: true
+  security.egress.fail_closed: true
+  security.website_policy.fail_closed: true
+  security.provider_allowlist_enforce: true
+  security.high_sensitivity_local_only: true
+  security.require_model_card: true
+  security.safe_serialization_only: true
+  security.model_hash_verify: true
+  security.mcp_allowlist_enforce: true
+  security.mcp_require_tls: true
+  security.input_trust.enabled: true
+  security.input_trust.sanitize: true
+  security.input_trust.delimit_untrusted: true
+  security.smart_approval_guard.hardened: true
+  security.inbound_screening.enabled: true
+  security.memory_poisoning_defense.enabled: true
+  security.path_traversal_validation.enabled: true
+  security.path_traversal_validation.fail_closed: true
+  security.require_hashed_install: true
+  security.supply_chain.require_upper_bounds: true
+  security.posture: strict
+  privacy.redact_pii: true
+  terminal.backend: docker
+  terminal.container_cpu: 2
+  terminal.container_memory: 4096
+  terminal.docker_network: false
+  skills.write_approval: true
+  skills.guard_agent_created: true
+  memory.write_approval: true
+  approvals.mode: manual
+  tool_loop_guardrails.hard_stop_enabled: true
+  audit.ledger_enabled: true
+  security.egress.mode: allowlist
+agent.disabled_toolsets:
+- computer_use
+- browser
+security.allowed_providers:
+- lmstudio
+- ollama
+- vllm
+- bedrock
+security.tool_denylist:
+- computer_use
+- browser
+skills.disabled:
+- godmode
+- obliteratus
+hosts:
+  lmstudio:
+  - 127.0.0.1
+  - localhost
+  ollama:
+  - 127.0.0.1
+  - localhost
+  vllm:
+  - 127.0.0.1
+  - localhost
+  bedrock:
+  - bedrock-runtime.us-gov-west-1.amazonaws.com
+  - bedrock-runtime.us-gov-east-1.amazonaws.com
+approvers:
+- jdavis@agency.mil

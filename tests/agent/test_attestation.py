@@ -23,6 +23,7 @@ _CARDS = textwrap.dedent(
     """
     models:
       - id: "lmstudio/llama-3.1-8b-instruct"
+        serialization: safetensors
         architecture: "llama-3.1"
         context_window: 128000
         acceptable_contexts: ["coding", "analysis"]
@@ -252,3 +253,34 @@ def test_runtime_model_switch_refused_against_shipped_manifest(strict_att, monke
     verdict = strict_att.runtime_model_attested("lmstudio/llama-3.1-8b-instruct")
     assert verdict.valid is False
     assert "not provisioned" in verdict.reason
+
+
+def test_governed_local_transcription_refuses_unverified_model_before_install(strict_att, monkeypatch, tmp_path):
+    from tools import transcription_tools as speech
+
+    monkeypatch.setattr(speech, "_HAS_FASTER_WHISPER", False)
+    monkeypatch.setattr(speech, "_try_lazy_install_stt",
+                        lambda: pytest.fail("model refusal must precede optional installation"))
+    result = speech._transcribe_local(str(tmp_path / "unused.wav"), "unprovisioned-alias")
+    assert result["success"] is False
+    assert "provisioned model file" in result["error"]
+
+
+def test_governed_voice_refuses_unknown_serialization_before_loading(strict_att, monkeypatch, tmp_path):
+    from tools import tts_tool
+
+    candidate = tmp_path / "test.onnx"
+    candidate.touch()
+    monkeypatch.setattr(tts_tool, "_import_piper", lambda: None)
+    with pytest.raises(ValueError, match="unrecognized model format"):
+        tts_tool._generate_piper_tts("test", str(tmp_path / "unused.wav"), {
+            "piper": {"voice": str(candidate), "voices_dir": str(tmp_path)}
+        })
+
+
+def test_runtime_local_model_card_requires_approved_serialization(strict_att, tmp_path):
+    card = tmp_path / "model-cards.yaml"
+    card.write_text(_CARDS.replace("serialization: safetensors", "serialization: unsupported"))
+    strict_att.reset_attestation_cache()
+    assert not strict_att.model_cui_eligible("lmstudio/llama-3.1-8b-instruct")
+    assert strict_att.model_cui_eligible("bedrock/anthropic.claude-3-5-sonnet")

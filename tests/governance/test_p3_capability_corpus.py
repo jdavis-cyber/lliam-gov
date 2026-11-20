@@ -43,7 +43,7 @@ def p3_overlay(tmp_path, monkeypatch):
     cards = tmp_path / "model-cards.yaml"
     cards.write_text(textwrap.dedent("""
         models:
-          - {id: "lmstudio/llama-3.1-8b-instruct", cui_eligible: true}
+          - {id: "lmstudio/llama-3.1-8b-instruct", serialization: safetensors, cui_eligible: true}
     """), encoding="utf-8")
     cfg = {"security": {
         "posture": "strict",

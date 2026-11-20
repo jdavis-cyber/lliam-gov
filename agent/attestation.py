@@ -163,13 +163,42 @@ def model_cui_eligible(model_id: str) -> bool:
     mid = (model_id or "").strip()
     for entry in cards.get("models") or []:
         if isinstance(entry, dict) and str(entry.get("id") or "").strip() == mid:
-            return bool(entry.get("cui_eligible", False))
+            if not entry.get("cui_eligible", False):
+                return False
+            # Local inference servers load the carded artifact on the operator's
+            # machine. Govern its declared format before resolving the route.
+            if not _pr_flag("safe_serialization_only"):
+                return True
+            from lliam_cli.provider_allowlist import provider_class
+            deployment = provider_class(mid.partition("/")[0])
+            if not deployment:
+                return False
+            if deployment == "local":
+                declared = str(entry.get("serialization") or "").strip().lower()
+                return ("." + declared) in _SAFE_FORMATS
+            return True
     return False
 
 
 # --------------------------------------------------------------------------- #
 # LG-MP-07 — safe-serialization guard
 # --------------------------------------------------------------------------- #
+
+def require_safe_local_model(artifact: str) -> None:
+    """Check a local loader's resolved input before it can fetch or deserialize it.
+
+    Repository aliases and directories can hide a different serialization
+    format. Only a concrete local file can satisfy the strict loader policy.
+    """
+    if not (_is_strict() and _pr_flag("safe_serialization_only")):
+        return
+    path = Path(artifact).expanduser()
+    if not path.is_file():
+        raise ValueError("Governed local model loading requires a provisioned model file (LG-MP-07)")
+    decision = check_serialization(str(path.resolve(strict=True)))
+    if not decision.allowed:
+        raise ValueError(decision.reason)
+
 
 def check_serialization(artifact: str, *, weights_only: bool = False) -> SerializationDecision:
     """LG-MP-07: allow safetensors/gguf; deny unsafe legacy formats.

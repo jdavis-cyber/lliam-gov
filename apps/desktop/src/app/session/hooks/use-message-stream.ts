@@ -1082,7 +1082,9 @@ export function useMessageStream({
         const command = typeof payload?.command === 'string' ? payload.command : ''
         const description = typeof payload?.description === 'string' ? payload.description : 'dangerous command'
 
+        const requestId = typeof payload?.request_id === 'string' ? payload.request_id : undefined
         setApprovalRequest({
+          requestId,
           // Missing scope flags retain the defaults used by older backends.
           allowPermanent: payload?.allow_permanent !== false,
           allowSession: payload?.allow_session !== false,
@@ -1096,7 +1098,7 @@ export function useMessageStream({
         }
 
         dispatchNativeNotification({
-          actions: [
+          actions: requestId ? undefined : [
             { id: 'approve', text: translateNow('notifications.native.approveAction') },
             { id: 'reject', text: translateNow('notifications.native.rejectAction') }
           ],

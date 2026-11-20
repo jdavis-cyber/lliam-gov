@@ -139,6 +139,12 @@ def _find_provider(policy: Dict[str, Any], provider: str) -> Optional[Dict[str, 
     return None
 
 
+def provider_class(provider: str) -> str | None:
+    """Return the approved provider's deployment class, if known."""
+    entry = _find_provider(_load_policy(), provider)
+    return entry.get("provider_class") if entry else None
+
+
 def _path_enforced(policy: Dict[str, Any], path: str) -> bool:
     paths = ((policy.get("enforcement") or {}).get("paths")) or {}
     entry = paths.get(path)
@@ -174,6 +180,17 @@ def validate_provider(
         return ProviderDecision(disposition="allow", provider=provider, path=path,
                                 reason="enforcement disabled (low-side / flag off)")
 
+    decision = _validate_from_policy(provider, base_url, path=path, cui=cui, high_sensitivity=high_sensitivity)
+    if decision.disposition != "deny":
+        from lliam_cli.deviations import check_provider, DeviationError
+        try:
+            check_provider(config, (provider or "").strip().lower(), _host_of(base_url))
+        except DeviationError as exc:
+            return ProviderDecision(disposition="deny", provider=provider, path=path, reason=str(exc))
+    return decision
+
+
+def _validate_from_policy(provider: str, base_url: str, *, path: str, cui: bool, high_sensitivity: bool) -> ProviderDecision:
     policy = _load_policy()
     if policy.get("__load_error__"):
         return ProviderDecision(disposition="deny", provider=provider, path=path,

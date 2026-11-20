@@ -1118,6 +1118,12 @@ def _transcribe_local(file_path: str, model_name: str) -> Dict[str, Any]:
     """Transcribe using faster-whisper (local, free)."""
     global _local_model, _local_model_name
 
+    from agent.attestation import require_safe_local_model
+    try:
+        require_safe_local_model(model_name)
+    except (OSError, ValueError) as exc:
+        return {"success": False, "transcript": "", "error": str(exc)}
+
     if not _HAS_FASTER_WHISPER:
         if not _try_lazy_install_stt():
             return {"success": False, "transcript": "", "error": "faster-whisper not installed"}
@@ -1221,6 +1227,8 @@ def _transcribe_local_command(file_path: str, model_name: str) -> Dict[str, Any]
     normalized_model = _normalize_local_command_model(model_name)
 
     try:
+        from agent.attestation import require_safe_local_model
+        require_safe_local_model(normalized_model)
         with tempfile.TemporaryDirectory(prefix="hermes-local-stt-") as output_dir:
             prepared_input, prep_error = _prepare_local_audio(file_path, output_dir)
             if prep_error:

@@ -1573,6 +1573,12 @@ def tick(verbose: bool = True, sync: bool = True) -> int:
         return 0
 
     try:
+        from tools.protected_tool_results import expire_results
+        try:
+            expire_results()
+        except Exception:
+            logger.warning("Could not expire stored tool results", exc_info=True)
+
         due_jobs = get_due_jobs()
 
         if verbose and not due_jobs:

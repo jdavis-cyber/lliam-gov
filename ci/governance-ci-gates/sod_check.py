@@ -28,6 +28,8 @@ except Exception as e:  # pragma: no cover
     sys.exit(2)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 
 def _today() -> datetime.date:
@@ -223,6 +225,14 @@ def main(argv: list[str] | None = None) -> int:
         for c in blocking:
             _emit(f"    - {c}", error=True)
         return 1
+    if accepted:
+        from agent.governance_audit import record_policy_exception
+        try:
+            for deviation in accepted:
+                record_policy_exception("sod_deviation", str(args.roles), deviation, source=__name__)
+        except Exception as exc:
+            _emit(f"[SoD] cannot record deviation use: {exc}", error=True)
+            return 2
     _emit("[SoD] OK — no blocking separation-of-duties conflicts "
           f"({len(accepted)} tracked deviation(s)).")
     return 0
