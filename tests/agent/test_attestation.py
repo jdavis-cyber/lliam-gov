@@ -284,3 +284,48 @@ def test_runtime_local_model_card_requires_approved_serialization(strict_att, tm
     strict_att.reset_attestation_cache()
     assert not strict_att.model_cui_eligible("lmstudio/llama-3.1-8b-instruct")
     assert strict_att.model_cui_eligible("bedrock/anthropic.claude-3-5-sonnet")
+
+
+def test_governed_piper_refused_before_download(strict_att, tmp_path, monkeypatch):
+    from tools import tts_tool
+    monkeypatch.setattr(tts_tool, "_import_piper", lambda: object())
+    monkeypatch.setattr(tts_tool.subprocess, "run", lambda *a, **kw: pytest.fail("unexpected voice download"))
+    with pytest.raises(ValueError):
+        tts_tool._generate_piper_tts("test", str(tmp_path / "out.wav"),
+                                     {"piper": {"voice": "sample", "voices_dir": str(tmp_path)}})
+
+
+def test_governed_stt_discovery_leaves_local_install_to_the_loader(strict_att, monkeypatch):
+    from tools import transcription_tools as stt
+    monkeypatch.setattr(stt, "_HAS_FASTER_WHISPER", False)
+    monkeypatch.setattr(stt, "_has_local_command", lambda: False)
+    monkeypatch.setattr(stt, "_try_lazy_install_stt", lambda: pytest.fail("installation during discovery"))
+    stt._get_provider({"provider": "local"})
+    stt._get_provider({})
+
+
+def test_governed_neutts_validates_codec_in_originating_profile(strict_att, monkeypatch, tmp_path):
+    from tools import tts_tool
+    backbone = tmp_path / "sample.gguf"
+    backbone.touch()
+    monkeypatch.setattr(tts_tool.subprocess, "run", lambda *a, **kw: pytest.fail("unexpected child"))
+    with pytest.raises(ValueError, match="provisioned model file"):
+        tts_tool._generate_neutts("review", "spoken.wav", {"neutts": {"model": str(backbone)}})
+
+
+def test_neutts_child_resolves_source_modules_and_relative_files(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from tools import tts_tool
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("agent.attestation._is_strict", lambda: False)
+    calls = []
+    def child(args, **kwargs):
+        calls.append((args, kwargs))
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(tts_tool.subprocess, "run", child)
+    tts_tool._generate_neutts("review", "spoken.wav", {"neutts": {"ref_audio": "sample.wav", "ref_text": "sample.txt"}})
+    (args, kwargs), = calls
+    assert args[1:3] == ["-m", "tools.neutts_synth"]
+    assert (Path(kwargs["cwd"]) / "agent/attestation.py").is_file()
+    for flag, basename in (("--ref-audio", "sample.wav"), ("--ref-text", "sample.txt"), ("--out", "spoken.wav")):
+        assert Path(args[args.index(flag) + 1]) == tmp_path / basename

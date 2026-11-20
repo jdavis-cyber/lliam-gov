@@ -184,13 +184,18 @@ def model_cui_eligible(model_id: str) -> bool:
 # LG-MP-07 — safe-serialization guard
 # --------------------------------------------------------------------------- #
 
+def safe_local_model_required() -> bool:
+    """Whether local deserialization must use provisioned safe formats."""
+    return _is_strict() and _pr_flag("safe_serialization_only")
+
+
 def require_safe_local_model(artifact: str) -> None:
     """Check a local loader's resolved input before it can fetch or deserialize it.
 
     Repository aliases and directories can hide a different serialization
     format. Only a concrete local file can satisfy the strict loader policy.
     """
-    if not (_is_strict() and _pr_flag("safe_serialization_only")):
+    if not safe_local_model_required():
         return
     path = Path(artifact).expanduser()
     if not path.is_file():
@@ -206,7 +211,7 @@ def check_serialization(artifact: str, *, weights_only: bool = False) -> Seriali
     ``weights_only=True`` (the torch.load safeguard) permits a legacy .pt.
     Low-side or safe_serialization_only off → allow (no-op).
     """
-    if not (_is_strict() and _pr_flag("safe_serialization_only")):
+    if not safe_local_model_required():
         return SerializationDecision(allowed=True, artifact=artifact, reason="not enforced (low-side / flag off)")
     name = (artifact or "").strip().lower()
     suffix = Path(name).suffix

@@ -18,6 +18,9 @@ import sys
 from pathlib import Path
 
 
+CODEC_REPO = "neuphonic/neucodec"
+
+
 def _write_wav(path: str, samples, sample_rate: int = 24000) -> None:
     """Write a WAV file from float32 samples (no soundfile dependency)."""
     import numpy as np
@@ -72,9 +75,8 @@ def main():
     ref_text = ref_text_path.read_text(encoding="utf-8").strip()
 
     from agent.attestation import require_safe_local_model
-    codec_repo = "neuphonic/neucodec"
     require_safe_local_model(args.model)
-    require_safe_local_model(codec_repo)
+    require_safe_local_model(CODEC_REPO)
 
     # Import and run NeuTTS
     try:
@@ -86,7 +88,7 @@ def main():
     tts = NeuTTS(
         backbone_repo=args.model,
         backbone_device=args.device,
-        codec_repo=codec_repo,
+        codec_repo=CODEC_REPO,
         codec_device=args.device,
     )
     ref_codes = tts.encode_reference(str(ref_audio))

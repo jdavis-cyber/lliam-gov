@@ -1843,7 +1843,9 @@ def _generate_neutts(text: str, output_path: str, tts_config: Dict[str, Any]) ->
     ref_text = neutts_config.get("ref_text", "") or _default_neutts_ref_text()
     model = neutts_config.get("model", "neuphonic/neutts-air-q4-gguf")
     from agent.attestation import require_safe_local_model
+    from tools.neutts_synth import CODEC_REPO
     require_safe_local_model(model)
+    require_safe_local_model(CODEC_REPO)
     device = neutts_config.get("device", "cpu")
 
     # NeuTTS outputs WAV natively — use a .wav path for generation,
@@ -1852,18 +1854,21 @@ def _generate_neutts(text: str, output_path: str, tts_config: Dict[str, Any]) ->
     if not output_path.endswith(".wav"):
         wav_path = output_path.rsplit(".", 1)[0] + ".wav"
 
-    synth_script = str(Path(__file__).parent / "neutts_synth.py")
+    package_root = Path(__file__).resolve().parents[1]
+    model_path = Path(model).expanduser()
+    if model_path.exists():
+        model = str(model_path.resolve())
     cmd = [
-        sys.executable, synth_script,
+        sys.executable, "-m", "tools.neutts_synth",
         "--text", text,
-        "--out", wav_path,
-        "--ref-audio", ref_audio,
-        "--ref-text", ref_text,
+        "--out", str(Path(wav_path).resolve()),
+        "--ref-audio", str(Path(ref_audio).expanduser().resolve()),
+        "--ref-text", str(Path(ref_text).expanduser().resolve()),
         "--model", model,
         "--device", device,
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
+    result = subprocess.run(cmd, cwd=package_root, capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
     if result.returncode != 0:
         stderr = result.stderr.strip()
         # Filter out the "OK:" line from stderr
@@ -1975,6 +1980,13 @@ def _generate_piper_tts(text: str, output_path: str, tts_config: Dict[str, Any])
     writes a WAV file. Caller is responsible for converting to MP3/Opus
     via ffmpeg when a different output format is required.
     """
+    # Piper always loads ONNX, even when the user supplies only a voice alias.
+    # Decide the format before resolving an alias can download anything.
+    from agent.attestation import check_serialization
+    verdict = check_serialization("voice.onnx")
+    if not verdict.allowed:
+        raise ValueError(verdict.reason)
+
     PiperVoice = _import_piper()
     import wave
 
@@ -2091,11 +2103,11 @@ def _generate_kittentts(text: str, output_path: str, tts_config: Dict[str, Any])
     Returns:
         Path to the saved audio file.
     """
-    KittenTTS = _import_kittentts()
     kt_config = tts_config.get("kittentts", {})
     model_name = kt_config.get("model", DEFAULT_KITTENTTS_MODEL)
     from agent.attestation import require_safe_local_model
     require_safe_local_model(model_name)
+    KittenTTS = _import_kittentts()
     voice = kt_config.get("voice", DEFAULT_KITTENTTS_VOICE)
     speed = kt_config.get("speed", 1.0)
     clean_text = kt_config.get("clean_text", True)

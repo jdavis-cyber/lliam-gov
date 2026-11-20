@@ -751,6 +751,8 @@ def _get_provider(stt_config: dict) -> str:
     honoured — no silent cloud fallback.  When no provider is configured,
     auto-detect tries: local > groq (free) > openai (paid).
     """
+    from agent.attestation import safe_local_model_required
+
     if not is_stt_enabled(stt_config):
         return "none"
 
@@ -766,7 +768,7 @@ def _get_provider(stt_config: dict) -> str:
             if _has_local_command():
                 return "local_command"
             # Try lazy-install before giving up
-            if _try_lazy_install_stt():
+            if not safe_local_model_required() and _try_lazy_install_stt():
                 return "local"
             logger.warning(
                 "STT provider 'local' configured but unavailable "
@@ -839,7 +841,7 @@ def _get_provider(stt_config: dict) -> str:
     if _has_local_command():
         return "local_command"
     # Try lazy-install before falling through to cloud providers
-    if _try_lazy_install_stt():
+    if not safe_local_model_required() and _try_lazy_install_stt():
         return "local"
     if _HAS_OPENAI and get_env_value("GROQ_API_KEY"):
         logger.info("No local STT available, using Groq Whisper API")
