@@ -177,7 +177,7 @@ def test_windows_is_skipped(env, monkeypatch):
     assert env["calls"] == []
 
 
-def _run_doctor(monkeypatch, tmp_path, *, fix, leftover):
+def _run_doctor(monkeypatch, tmp_path, *, fix, leftover, manual=()):
     import contextlib
     import io
     import types
@@ -200,6 +200,7 @@ def _run_doctor(monkeypatch, tmp_path, *, fix, leftover):
         ),
     )
     removed: list[bool] = []
+    monkeypatch.setattr(uninstall, "legacy_gateway_manual_actions", lambda: list(manual))
     monkeypatch.setattr(uninstall, "find_legacy_gateway_services", lambda: list(leftover))
     monkeypatch.setattr(
         uninstall, "remove_legacy_gateway_services", lambda: removed.append(True) or True
@@ -229,4 +230,32 @@ def test_doctor_fix_removes_leftover_service(monkeypatch, tmp_path):
 
     out, removed = _run_doctor(monkeypatch, tmp_path, fix=False, leftover=[])
     assert "Leftover gateway service" not in out
+    assert removed == []
+
+def test_manual_findings_report_unregistered_process_and_system_unit(env, tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(uninstall, "_SYSTEM_UNIT_DIRS", (tmp_path,))
+    unit = tmp_path / "hermes-gateway-coder.service"
+    unit.write_text(_UNIT.replace("main gateway", "main --profile coder gateway"))
+    (tmp_path / "hermes-gateway-other.service").write_text("[Service]\nExecStart=/usr/bin/sleep 10")
+    output = "\n".join([
+        "22 /bin/python3 -m lliam_cli.main --profile coder gateway run",
+        "23 /usr/bin/vim /opt/hermes-gateway",
+        "24 /bin/python3 -m tui_gateway.entry",
+        "25 /usr/bin/lliam-gov gateway status",
+    ])
+    monkeypatch.setattr(uninstall.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, output))
+    actions = uninstall.legacy_gateway_manual_actions()
+    assert len(actions) == 2
+    assert any(str(unit) in action for action in actions)
+    assert any("PID 22" in action for action in actions)
+    assert unit.exists()
+    assert env["kills"] == []
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the check is POSIX-only")
+def test_doctor_fix_reports_remaining_manual_actions(monkeypatch, tmp_path):
+    message = "Stop the leftover gateway process (PID 22)."
+    out, removed = _run_doctor(monkeypatch, tmp_path, fix=True, leftover=[], manual=[message])
+    assert message in out
     assert removed == []

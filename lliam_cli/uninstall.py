@@ -7,6 +7,7 @@ Provides options for:
 """
 
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -205,16 +206,6 @@ _LEGACY_LAUNCHD_MARKERS: tuple[str, ...] = (
 )
 _LEGACY_SYSTEMD_UNIT_BASE = "hermes-gateway"
 _LEGACY_SYSTEMD_UNIT_NAMES: tuple[str, ...] = ("hermes.service",)  # pre-rename
-_LEGACY_SYSTEMD_MARKERS: tuple[str, ...] = (
-    "lliam_cli.main gateway",
-    "lliam_cli/main.py gateway",
-    "hermes_cli.main gateway",
-    "gateway/run.py",
-    " lliam-gov gateway ",
-    "/lliam-gov gateway ",
-    " hermes gateway ",
-    "/hermes gateway ",
-)
 
 
 def _real_user_home() -> Path:
@@ -235,8 +226,7 @@ def _file_names_marker(path: Path, markers: tuple[str, ...]) -> bool:
     return any(marker in text for marker in markers)
 
 
-def _legacy_launchd_plists() -> list[Path]:
-    agents = _real_user_home() / "Library" / "LaunchAgents"
+def _legacy_launchd_plists(agents: Path) -> list[Path]:
     found: list[Path] = []
     for label in _LEGACY_LAUNCHD_LABELS:
         for path in sorted(agents.glob(f"{label}.plist")) + sorted(agents.glob(f"{label}-*.plist")):
@@ -245,17 +235,75 @@ def _legacy_launchd_plists() -> list[Path]:
     return found
 
 
-def _legacy_systemd_user_units() -> list[Path]:
-    unit_dir = Path.home() / ".config" / "systemd" / "user"
+_SYSTEM_UNIT_DIRS = tuple(Path(directory) for directory in (
+    "/etc/systemd/system", "/run/systemd/system", "/usr/local/lib/systemd/system",
+    "/usr/lib/systemd/system", "/lib/systemd/system",
+))
+
+
+def _legacy_gateway_runtime(command: str) -> bool:
+    if "gateway" not in command:
+        return False
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return False
+    if not argv:
+        return False
+    entry = Path(argv.pop(0))
+    if entry.parts[-2:] == ("gateway", "run.py"):
+        return True
+    executable = entry.name
+    if executable.startswith("python") and argv:
+        if argv[:2] in (["-m", "lliam_cli.main"], ["-m", "hermes_cli.main"]):
+            executable, argv = "lliam-gov", argv[2:]
+        else:
+            script = Path(argv.pop(0))
+            if script.parts[-2:] == ("gateway", "run.py"):
+                return True
+            if script.parts[-2:] in (("lliam_cli", "main.py"), ("hermes_cli", "main.py")):
+                executable = "lliam-gov"
+            else:
+                executable = script.name
+    if executable in {"hermes-gateway", "lliam-gov-gateway"}:
+        return True
+    if executable not in {"lliam-gov", "hermes"}:
+        return False
+    # Profile selectors are consumed globally before CLI subcommand parsing.
+    words = iter(argv)
+    args = []
+    for word in words:
+        if word in {"--profile", "-p"}:
+            next(words, None)
+        elif not word.startswith(("--profile=", "-p=")):
+            args.append(word)
+    return args == ["gateway"] or args[:2] in (["gateway", "run"], ["gateway", "restart"])
+
+
+def _legacy_systemd_units(unit_dir: Path, *, system: bool = False) -> list[Path]:
     candidates = (
         sorted(unit_dir.glob(f"{_LEGACY_SYSTEMD_UNIT_BASE}.service"))
         + sorted(unit_dir.glob(f"{_LEGACY_SYSTEMD_UNIT_BASE}-*.service"))
         + [unit_dir / name for name in _LEGACY_SYSTEMD_UNIT_NAMES]
     )
-    return [
-        path for path in candidates
-        if path.is_file() and _file_names_marker(path, _LEGACY_SYSTEMD_MARKERS)
-    ]
+    if system:
+        candidates.append(unit_dir / "hermes-agent.service")  # former NixOS module
+    found = []
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        if system and path.name == "hermes-agent.service" and "Description=Lliam-GOV Gateway (container)" in lines:
+            found.append(path)
+        elif any(
+            _legacy_gateway_runtime(line.strip().removeprefix("ExecStart="))
+            for line in lines if line.strip().startswith("ExecStart=")
+        ):
+            found.append(path)
+    return found
 
 
 def _legacy_gateway_pid_files() -> list[Path]:
@@ -285,10 +333,40 @@ def find_legacy_gateway_services() -> list[Path]:
         return []
     found = _legacy_gateway_pid_files()
     if sys.platform == "darwin":
-        found += _legacy_launchd_plists()
+        found += _legacy_launchd_plists(_real_user_home() / "Library" / "LaunchAgents")
     elif sys.platform.startswith("linux"):
-        found += _legacy_systemd_user_units()
+        found += _legacy_systemd_units(Path.home() / ".config" / "systemd" / "user")
     return found
+
+
+def legacy_gateway_manual_actions() -> list[str]:
+    """Report system registrations and remaining processes without modifying either."""
+    if _is_windows():
+        return []
+    system_units = []
+    if sys.platform.startswith("linux"):
+        for directory in _SYSTEM_UNIT_DIRS:
+            system_units.extend(_legacy_systemd_units(directory, system=True))
+    elif sys.platform == "darwin":
+        for directory in (Path("/Library/LaunchDaemons"), Path("/Library/LaunchAgents")):
+            system_units.extend(_legacy_launchd_plists(directory))
+    actions = [
+        f"Have a system administrator stop and remove the legacy gateway service at {path}."
+        for path in {path.resolve(): path for path in reversed(system_units)}.values()
+    ]
+    try:
+        processes = subprocess.run(
+            ["ps", "-axww", "-o", "pid=,command="],
+            capture_output=True, text=True, errors="replace", check=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        actions.append("Process inspection failed. Check for running legacy gateway processes manually.")
+        return actions
+    for line in processes.stdout.splitlines():
+        fields = line.split(maxsplit=1)
+        if len(fields) == 2 and fields[0].isdigit() and _legacy_gateway_runtime(fields[1]):
+            actions.append(f"Stop the leftover gateway process (PID {fields[0]}).")
+    return actions
 
 
 def _read_pid(pid_path: Path) -> int | None:
@@ -333,7 +411,7 @@ def _stop_gateway_by_pid_file(pid_path: Path) -> None:
     # the OS has since reused for something else is never killed.
     if pid is not None and pid != os.getpid():
         cmdline = _process_command_line(pid)
-        if "gateway" in cmdline and ("lliam" in cmdline or "hermes" in cmdline):
+        if _legacy_gateway_runtime(cmdline):
             try:
                 os.kill(pid, signal.SIGTERM)
                 log_success(f"Stopped leftover gateway process (PID {pid})")

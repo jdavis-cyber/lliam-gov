@@ -1305,12 +1305,13 @@ def run_doctor(args):
 
         # A messaging gateway service registered by an earlier release
         # points at code that no longer exists.
-        try:
-            from lliam_cli.uninstall import (
-                find_legacy_gateway_services,
-                remove_legacy_gateway_services,
-            )
+        from lliam_cli.uninstall import (
+            find_legacy_gateway_services,
+            legacy_gateway_manual_actions,
+            remove_legacy_gateway_services,
+        )
 
+        try:
             _leftover_gateway = find_legacy_gateway_services()
         except Exception:
             _leftover_gateway = []
@@ -1327,6 +1328,8 @@ def run_doctor(args):
                 issues.append(
                     "Remove the leftover gateway service — run 'lliam-gov doctor --fix'"
                 )
+
+        manual_issues.extend(legacy_gateway_manual_actions())
 
     _section("External Tools")
     # Git
